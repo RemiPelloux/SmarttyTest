@@ -42,6 +42,12 @@ export interface UpdateOptions {
   contextKey?: string;
   /** Optional content overrides (e.g. "before" versions). */
   read?: (path: string) => Promise<string>;
+  /**
+   * Parses many files at once (worker threads). Used when at least `parallelThreshold` files need
+   * parsing; analyses must be identical to the analyzers' own.
+   */
+  parseMany?: (jobs: { path: string; content: string }[]) => Promise<FileAnalysis[] | undefined>;
+  parallelThreshold?: number;
 }
 
 export class SymbolIndex {
@@ -134,6 +140,7 @@ export class SymbolIndex {
         removed++;
       }
     }
+    const pending: { path: string; content: string; analyzer: Analyzer }[] = [];
     for (const path of options.files) {
       const analyzer = options.analyzers.find((a) => a.supports(path));
       if (!analyzer) continue;
@@ -176,8 +183,15 @@ export class SymbolIndex {
         reused++;
         continue;
       }
-      this.files.set(path, analyzer.analyze(path, content));
-      changed.add(path);
+      pending.push({ path, content, analyzer });
+    }
+    // Parse: in worker threads when there are many files (cold start), in this thread otherwise.
+    let parallel: FileAnalysis[] | undefined;
+    if (options.parseMany && pending.length >= (options.parallelThreshold ?? 300))
+      parallel = await options.parseMany(pending.map(({ path, content }) => ({ path, content })));
+    for (const [i, job] of pending.entries()) {
+      this.files.set(job.path, parallel?.[i] ?? job.analyzer.analyze(job.path, job.content));
+      changed.add(job.path);
       parsed++;
     }
     // Resolution pass. Deleted targets stay visible (missing: true) for impact analysis.

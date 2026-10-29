@@ -75,6 +75,19 @@ export interface TestConvention {
   mockDirs: string[];
 }
 
+/** How one sub-project (a runner directory) lays out its tests. */
+export interface ProjectTestConvention {
+  dir: string;
+  testFiles: number;
+  colocatedRatio: number;
+  /** Suffix between the source name and its extension for colocated tests (".test", ".server.test"). */
+  suffix?: string;
+  /** Directory (relative to the project) holding most non-colocated tests, if one dominates. */
+  testDir?: string;
+  /** Tests in testDir sit directly in it (no sub-folders). */
+  flat?: boolean;
+}
+
 export interface SourceLayout {
   sourceRoots: string[];
   aliases: Record<string, string[]>;
@@ -100,6 +113,8 @@ export interface ProjectProfile {
   frameworks: Evidence[];
   runners: RunnerInfo[];
   tests: TestConvention;
+  /** Test conventions per runner directory (for repositories with several projects). */
+  projectTests: ProjectTestConvention[];
   layout: SourceLayout;
   vcs: VcsInfo;
   coverage: Evidence[];
@@ -476,6 +491,53 @@ async function detectTests(
   };
 }
 
+function detectProjectTests(
+  dirs: readonly string[],
+  files: string[],
+  isTest: (f: string) => boolean,
+): ProjectTestConvention[] {
+  const fileSet = new Set(files);
+  const out: ProjectTestConvention[] = [];
+  for (const dir of [...new Set(dirs)].filter(Boolean)) {
+    const tests = files.filter((f) => f.startsWith(`${dir}/`) && isTest(f));
+    if (!tests.length) continue;
+    let colocated = 0;
+    const suffixes = new Map<string, number>();
+    const dirsCount = new Map<string, number>();
+    for (const t of tests) {
+      const m = /^(.*\/)?([^/]+?)((?:\.[\w-]+)*\.(?:test|spec))(\.[cm]?[jt]sx?)$/.exec(t);
+      const parent = t.slice(0, t.lastIndexOf("/"));
+      if (m) {
+        const base = `${m[1] ?? ""}${m[2]}`;
+        const sibling = [".ts", ".tsx", ".js", ".jsx", ".mts", ".mjs", ".cjs", ".cts"].some((e) =>
+          fileSet.has(base + e),
+        );
+        if (sibling) {
+          colocated++;
+          suffixes.set(m[3] as string, (suffixes.get(m[3] as string) ?? 0) + 1);
+          continue;
+        }
+      }
+      const rel = parent.slice(dir.length + 1);
+      dirsCount.set(rel, (dirsCount.get(rel) ?? 0) + 1);
+    }
+    const ratio = colocated / tests.length;
+    const topSuffix = [...suffixes].sort((a, b) => b[1] - a[1])[0];
+    const topDir = [...dirsCount].sort((a, b) => b[1] - a[1])[0];
+    const others = tests.length - colocated;
+    out.push({
+      dir,
+      testFiles: tests.length,
+      colocatedRatio: Math.round(ratio * 100) / 100,
+      ...(topSuffix && topSuffix[1] >= colocated * 0.6 ? { suffix: topSuffix[0] } : {}),
+      ...(topDir && others && topDir[1] >= others * 0.6
+        ? { testDir: topDir[0], flat: topDir[1] === others && dirsCount.size === 1 }
+        : {}),
+    });
+  }
+  return out;
+}
+
 async function detectLayout(
   root: string,
   files: string[],
@@ -667,6 +729,11 @@ export async function detectProject(
     frameworks: await detectFrameworks(root, manifests),
     runners,
     tests: await detectTests(root, files, isTest),
+    projectTests: detectProjectTests(
+      runners.map((r) => r.dir),
+      files,
+      isTest,
+    ),
     layout: await detectLayout(root, files, manifest),
     vcs,
     coverage: await detectCoverage(manifests, files),

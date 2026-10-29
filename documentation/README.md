@@ -26,6 +26,7 @@ Product and planning
 - [Roadmap to 1.0.0](planning/roadmap.md)
 - [Foundation backlog](planning/foundation/README.md)
 - [Case study: LeadsIt](case-studies/leadsit.md)
+- [External repositories](case-studies/external-repositories.md)
 
 These pages are also published as a site: https://remipelloux.github.io/SmarttyTest/
 

@@ -80,7 +80,7 @@ Rules can only make the effective mode stricter. The decision always records the
 
 ## 7. Decision & fallback
 
-The result is an `ImpactDecision` containing selected tests with reasons, skipped tests with reasons, `analysisStatus` (`complete | partial | fallback`), `fallbackApplied` and any warnings. Its details also list the dependencies the change adds or removes, tests ruled out by traces, and changed units no test reaches ("unprotected"). When the analysis is incomplete in a way that matters, SmartTest widens the selection or runs everything, and tells you why.
+The result is an `ImpactDecision` containing selected tests with reasons, skipped tests with reasons, `analysisStatus` (`complete | partial | fallback`), `fallbackApplied` and any warnings. Its details also list the dependencies the change adds or removes, tests ruled out by traces, and changed units no test reaches ("unprotected"). When a project's whole suite ran faster last time than an analysis usually takes, `run` skips the graph and runs everything ("Adaptive" in the reasons; `adaptive: false` turns this off). When the analysis is incomplete in a way that matters, SmartTest widens the selection or runs everything, and tells you why.
 
 ## 8. Run & report
 

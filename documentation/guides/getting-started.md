@@ -14,7 +14,7 @@ SmartTest is not on npm yet. Build the package from this repository and install 
 git clone https://github.com/RemiPelloux/SmarttyTest && cd SmarttyTest
 corepack enable && pnpm install && pnpm build && pnpm release:pack
 # in your project:
-npm install -D /path/to/SmarttyTest/packages/cli/.publish/smarttest-0.5.0.tgz
+npm install -D /path/to/SmarttyTest/packages/cli/.publish/smarttest-0.6.0.tgz
 ```
 
 If your repository has no root `package.json` (several independent projects), add a minimal one for repository tooling, as LeadsIt does.
@@ -80,10 +80,20 @@ With fresh traces, a test that can reach a change on paper but never ran the cha
 
 ## Use it in a Git hook
 
-Replace the test steps of your pre-commit hook with:
+`init` plans this for you. To do it separately:
 
 ```bash
-npx --no-install smarttest run --staged --non-interactive
+npx smarttest hook status             # which hook manager, and which steps run whole suites
+npx smarttest hook install --replace  # add SmartTest, comment out the full-suite steps
+npx smarttest hook uninstall          # remove it and restore those steps
+```
+
+It works with husky, lefthook, simple-git-hooks and plain `.git/hooks`. The hook runs `npx --no-install smarttest run --staged --non-interactive`.
+
+## Use it in CI
+
+```bash
+npx smarttest ci                      # picks the base for merge requests and branch builds
 ```
 
 ## Reports and generated tests

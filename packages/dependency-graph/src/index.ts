@@ -439,6 +439,13 @@ export class DependencyGraph {
         this.link(file, from, s.refs, s.uses ?? [], s.escapes ?? [], kind);
         this.linkResources(from, s.resources);
         if (s.parent && !test) {
+          if (s.thisEscapes)
+            this.addDep(key(file, s.parent), {
+              from,
+              kind: "REFERENCES",
+              provenance: "static",
+              confidence: "high",
+            });
           for (const m of s.thisUses ?? []) {
             const mk = this.memberKey(file, s.parent, m);
             if (mk && mk !== from)
@@ -641,9 +648,15 @@ export class DependencyGraph {
     return result;
   }
 
+  /** Whether any test depends on these seeds (stops at the first one). */
+  reachesAnyTest(seeds: readonly Seed[]): boolean {
+    return this.traverse(seeds, new Set(), true).tests.size > 0;
+  }
+
   private traverse(
     seeds: readonly Seed[],
     blocked: ReadonlySet<string>,
+    stopAtFirstTest = false,
   ): TraversalResult & { tests: Map<string, TestHit & { files: string[] }> } {
     const referencesOnly = new Set(seeds.filter((s) => s.referencesOnly).map((s) => s.file));
     const parent = new Map<string, { from: string | undefined; confidence: Confidence }>();
@@ -703,6 +716,7 @@ export class DependencyGraph {
             confidence: parent.get(k)?.confidence ?? "high",
             files,
           });
+          if (stopAtFirstTest) break;
         }
         continue;
       }

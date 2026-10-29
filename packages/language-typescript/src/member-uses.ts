@@ -18,6 +18,8 @@ export interface MemberUses {
   escapes: string[];
   thisUses: string[];
   superUses: string[];
+  /** `this` leaves the method (returned, passed, stored): callers can reach any member. */
+  thisEscapes?: boolean;
 }
 
 /** name -> class name, or null for a local whose type is unknown (shadows outer names). */
@@ -188,6 +190,7 @@ export function collectMemberUses(
   const escapes = new Set<string>();
   const thisUses = new Set<string>();
   const superUses = new Set<string>();
+  let thisEscapes = false;
   const scopes: Scope[] = [module];
   const lookup = (name: string): string | null | undefined => {
     for (let i = scopes.length - 1; i >= 0; i--) {
@@ -256,6 +259,10 @@ export function collectMemberUses(
       for (const a of n.arguments ?? []) visit(a);
       return;
     }
+    if (n.kind === ts.SyntaxKind.ThisKeyword) {
+      thisEscapes = true;
+      return;
+    }
     if (ts.isIdentifier(n)) {
       if (isDeclarationName(n)) return;
       const t = lookup(n.text);
@@ -283,5 +290,6 @@ export function collectMemberUses(
     escapes: [...escapes].sort(),
     thisUses: [...thisUses].sort(),
     superUses: [...superUses].sort(),
+    ...(thisEscapes ? { thisEscapes } : {}),
   };
 }

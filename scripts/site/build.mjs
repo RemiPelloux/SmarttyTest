@@ -67,7 +67,13 @@ const NAV = [
       ["Changelog", "docs/changelog.html"],
     ],
   ],
-  ["Results", [["Case study: LeadsIt", "docs/case-studies/leadsit.html"]]],
+  [
+    "Results",
+    [
+      ["Case study: LeadsIt", "docs/case-studies/leadsit.html"],
+      ["External repositories", "docs/case-studies/external-repositories.html"],
+    ],
+  ],
   [
     "Project",
     [

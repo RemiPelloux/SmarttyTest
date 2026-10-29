@@ -27,6 +27,33 @@ export interface GenerateOptions {
   filter?: { class?: string; module?: string; path?: string; files?: string[] };
   rules: RulesEngine;
   packageOf?: (path: string) => string | undefined;
+  /** Per-project conventions; the deepest project containing a source file wins. */
+  projects?: ProjectConvention[];
+}
+
+export interface ProjectConvention {
+  dir: string;
+  layout?: TestLayout;
+  directory?: string;
+  naming?: string;
+  path?: string;
+}
+
+/** The convention that applies to a file: its project's settings over the top-level ones. */
+export function conventionFor<
+  T extends Pick<GenerateOptions, "layout" | "directory" | "naming" | "projects">,
+>(source: string, opts: T): T & { path?: string } {
+  const p = (opts.projects ?? [])
+    .filter((x) => source.startsWith(`${x.dir}/`))
+    .sort((a, b) => b.dir.length - a.dir.length)[0];
+  if (!p) return opts;
+  return {
+    ...opts,
+    ...(p.layout ? { layout: p.layout } : {}),
+    ...(p.directory !== undefined ? { directory: p.directory } : {}),
+    ...(p.naming ? { naming: p.naming } : {}),
+    ...(p.path ? { path: p.path } : {}),
+  };
 }
 
 export type ItemStatus = "create" | "covered" | "exists" | "collision" | "skipped";
@@ -78,9 +105,14 @@ export function applyTokens(template: string, tokens: Record<string, string>): s
 export function targetPath(
   source: string,
   analysis: FileAnalysis | undefined,
-  opts: Pick<GenerateOptions, "layout" | "directory" | "naming" | "type" | "packageOf">,
-  customPath?: string,
+  baseOpts: Pick<
+    GenerateOptions,
+    "layout" | "directory" | "naming" | "type" | "packageOf" | "projects"
+  >,
+  customPathArg?: string,
 ): string {
+  const opts = conventionFor(source, baseOpts);
+  const customPath = customPathArg ?? opts.path;
   const base = posix.basename(source).replace(/\.[^.]+$/, "");
   const ext = extOf(source);
   const { prefix, rest } = stripSrc(source);
@@ -94,6 +126,10 @@ export function targetPath(
     ModuleName: posix.basename(posix.dirname(source)) || base,
     PackageName: opts.packageOf?.(source) ?? "",
     DomainName: domainOf(rest),
+    ProjectDir:
+      (baseOpts.projects ?? [])
+        .filter((x) => source.startsWith(`${x.dir}/`))
+        .sort((a, b) => b.dir.length - a.dir.length)[0]?.dir ?? "",
     Type: opts.type,
     Extension: ext,
   };
@@ -370,7 +406,10 @@ export function syncReport(
   files: ReadonlyMap<string, FileAnalysis>,
   testFiles: readonly string[],
   renames: readonly { from: string; to: string }[],
-  opts: Pick<GenerateOptions, "layout" | "directory" | "naming" | "type" | "packageOf">,
+  opts: Pick<
+    GenerateOptions,
+    "layout" | "directory" | "naming" | "type" | "packageOf" | "projects"
+  >,
 ): SyncReport {
   const orphaned: SyncReport["orphaned"] = [];
   for (const t of testFiles) {

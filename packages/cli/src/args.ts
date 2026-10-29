@@ -58,6 +58,9 @@ export const OPTIONS = {
   stale: { type: "boolean" },
   status: { type: "boolean" },
   report: { type: "boolean" },
+  // hook
+  replace: { type: "boolean" },
+  manager: { type: "string" },
   // snapshot
   keep: { type: "string" },
   force: { type: "boolean" },

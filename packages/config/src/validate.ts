@@ -36,6 +36,8 @@ const TOP_KEYS: Record<string, string[] | null> = {
   triggers: null,
   rules: null,
   retries: null,
+  adaptive: null,
+  projects: null,
   timeoutMs: null,
   workers: null,
   reports: ["formats", "outputDir"],
@@ -52,6 +54,7 @@ export function validateConfig(raw: unknown): { errors: ConfigIssue[]; warnings:
   const errors: ConfigIssue[] = [];
   const warnings: ConfigIssue[] = [];
   const err = (path: string, message: string) => errors.push({ path, message });
+  const warn = (path: string, message: string) => warnings.push({ path, message });
   if (!isObj(raw)) {
     err("", "configuration must export an object");
     return { errors, warnings };
@@ -82,6 +85,27 @@ export function validateConfig(raw: unknown): { errors: ConfigIssue[]; warnings:
     const v = c[k];
     if (v !== undefined && !(typeof v === "number" && Number.isInteger(v) && v >= 0))
       err(k, "must be a non-negative integer");
+  }
+  if (c.adaptive !== undefined && typeof c.adaptive !== "boolean")
+    err("adaptive", "must be a boolean");
+  if (c.projects !== undefined) {
+    if (!isObj(c.projects)) err("projects", "must be an object keyed by directory");
+    else
+      for (const [dir, p] of Object.entries(c.projects)) {
+        if (!isObj(p)) {
+          err(`projects.${dir}`, "must be an object");
+          continue;
+        }
+        for (const k of Object.keys(p))
+          if (!["tests", "mode", "rules"].includes(k))
+            warn(`projects.${dir}.${k}`, "unknown key (ignored)");
+        if (p.mode !== undefined && !MODES.includes(p.mode as string))
+          err(`projects.${dir}.mode`, `must be one of: ${MODES.join(", ")}`);
+        if (p.tests !== undefined && !isObj(p.tests))
+          err(`projects.${dir}.tests`, "must be an object");
+        if (p.rules !== undefined && !Array.isArray(p.rules))
+          err(`projects.${dir}.rules`, "must be an array");
+      }
   }
   if (c.storeDir !== undefined && typeof c.storeDir !== "string")
     err("storeDir", "must be a string");

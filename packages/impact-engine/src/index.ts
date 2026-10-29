@@ -455,7 +455,10 @@ export function decideImpact(input: ImpactInput): ImpactResult {
     const unprotected: string[] = [];
     for (const { file, unit } of unitList) {
       if (unit === "*") continue;
-      const reached = graph.dependentsOf([{ file, units: [unit] }]).tests.size > 0;
+      // Units already on a path to a selected test are protected; others need a search.
+      const reached =
+        [...selected.values()].some((rs) => rs.some((r) => r.path?.[0] === `${file}#${unit}`)) ||
+        graph.reachesAnyTest([{ file, units: [unit] }]);
       const observed = traces
         ? allTests.some((t) => traces.isFresh(t) && traces.executed(t, file, unit))
         : false;

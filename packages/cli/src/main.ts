@@ -681,6 +681,149 @@ async function cmdInit(ctx: Ctx): Promise<number> {
   return res.validation.ok ? ExitCode.Success : ExitCode.ConfigurationFailure;
 }
 
+async function cmdCi(ctx: Ctx): Promise<number> {
+  const { t, flags } = ctx;
+  const { detectCi, prepareCi } = await import("@smarttest/core");
+  const ci = detectCi(process.env);
+  if (flags.base !== undefined || flags.staged || flags.uncommitted)
+    throw new SmartTestError(
+      "smarttest ci picks the base itself; use smarttest run to choose one",
+      {
+        code: "ST_USAGE",
+        category: "usage",
+      },
+    );
+  const plan = flags.all
+    ? { ci, all: true, steps: [], warnings: [] }
+    : await prepareCi(ctx.root, ci);
+  if (!flags.json && !flags.quiet) {
+    const what = plan.all
+      ? "the full suite"
+      : `${plan.direct ? "changes since" : "the merge-base with"} ${plan.base}`;
+    ctx.out(
+      `${t.cyan("◇")} ${pad(t.dim("CI"), 10)}${ci.provider === "none" ? "none detected" : ci.provider}${ci.isPullRequest ? ` · merge request into ${ci.targetBranch ?? "?"}` : ci.branch ? ` · branch ${ci.branch}` : ""} · comparing with ${what}`,
+    );
+    for (const s of plan.steps) ctx.out(`  ${t.dim(s)}`);
+    for (const w of plan.warnings) ctx.out(`${t.yellow("▲")} ${w}`);
+  }
+  if (flags["dry-run"]) {
+    if (flags.json) ctx.json("ci", plan);
+    return ExitCode.Success;
+  }
+  const st = await ctx.open();
+  if (!plan.all && plan.base) {
+    flags.base = plan.base;
+    flags["base-mode"] = plan.direct ? "direct" : "merge-base";
+  }
+  flags.all = plan.all;
+  flags.format ??= [...new Set([...st.config.reports.formats, "junit", "markdown"])];
+  flags["non-interactive"] = true;
+  return cmdRun({ ...ctx, interactive: false });
+}
+
+async function cmdHook(ctx: Ctx): Promise<number> {
+  const { t, flags } = ctx;
+  const st = await ctx.open();
+  const sub = ctx.positionals[0] ?? "status";
+  const manager = flags.manager as "husky" | "lefthook" | "simple-git-hooks" | "git" | undefined;
+  if (manager && !["husky", "lefthook", "simple-git-hooks", "git"].includes(manager))
+    throw new SmartTestError("--manager must be husky, lefthook, simple-git-hooks or git", {
+      code: "ST_USAGE",
+      category: "usage",
+    });
+  const { previewDiff } = await import("@smarttest/smart-init");
+  if (sub === "status" || sub === "install") {
+    const plan = await st.hookInstallPlan({
+      ...(manager ? { manager } : {}),
+      ...(flags.replace ? { replace: true } : {}),
+    });
+    if (sub === "status") {
+      if (flags.json) ctx.json("hook", { status: plan });
+      else {
+        ctx.out(
+          `${t.bold("Git hook")} · ${plan.manager} · ${plan.file} ${t.dim(`(${plan.evidence})`)}`,
+        );
+        ctx.out(
+          `  ${pad("SmartTest", 12)}${plan.installed ? t.green("installed") : t.yellow("not installed")}`,
+        );
+        for (const r of plan.remaining)
+          ctx.out(`  ${t.yellow("▲")} line ${r.line} runs a whole suite: ${t.dim(r.command)}`);
+        if (!plan.installed) ctx.out(t.dim("  Install: smarttest hook install [--replace]"));
+      }
+      return ExitCode.Success;
+    }
+    if (plan.installed) {
+      if (flags.json) ctx.json("hook", { plan, applied: [] });
+      else ctx.out(`${t.green("✓")} SmartTest already runs in ${plan.file}.`);
+      return ExitCode.Success;
+    }
+    if (!flags.json) {
+      ctx.out(`${t.bold("Git hook")} · ${plan.manager} · ${plan.file}`);
+      for (const l of previewDiff(plan.plan))
+        ctx.out(`    ${l.startsWith("+") ? t.green(l) : t.red(l)}`);
+      for (const r of plan.replaced)
+        ctx.out(`  ${t.yellow("~")} replaces line ${r.line}: ${t.dim(r.command)}`);
+      for (const r of plan.remaining)
+        ctx.out(
+          `  ${t.yellow("▲")} line ${r.line} still runs a whole suite (use --replace): ${t.dim(r.command)}`,
+        );
+      for (const n of plan.notes) ctx.out(`  ${t.dim("•")} ${n}`);
+    }
+    if (flags["dry-run"]) {
+      if (flags.json) ctx.json("hook", { plan, applied: [] });
+      else ctx.out(t.dim("Dry run — nothing was written."));
+      return ExitCode.Success;
+    }
+    if (!flags.yes) {
+      if (!ctx.interactive)
+        throw new SmartTestError("hook install needs confirmation", {
+          code: "ST_INIT_CONFIRMATION_REQUIRED",
+          category: "configuration",
+          hint: "Re-run with --yes, or --dry-run to preview.",
+        });
+      if (!(await confirm(ctx.io, t, `Write ${plan.file}?`))) return ExitCode.Success;
+    }
+    const applied = await st.applyFiles([plan.plan]);
+    if (flags.json) ctx.json("hook", { plan, applied });
+    else {
+      for (const p of applied) ctx.out(`${t.green("✓")} wrote ${p}`);
+      ctx.out(t.dim("Undo: smarttest hook uninstall"));
+    }
+    return ExitCode.Success;
+  }
+  if (sub === "uninstall") {
+    const files = await st.hookUninstallPlan(manager);
+    if (!files.length) {
+      if (flags.json) ctx.json("hook", { removed: [] });
+      else ctx.out("No SmartTest block found in any hook.");
+      return ExitCode.Success;
+    }
+    if (!flags.json)
+      for (const f of files) {
+        ctx.out(`${t.yellow("~")} ${f.path} ${t.dim(f.reason)}`);
+        for (const l of previewDiff(f)) ctx.out(`    ${l.startsWith("+") ? t.green(l) : t.red(l)}`);
+      }
+    if (flags["dry-run"]) return ExitCode.Success;
+    if (!flags.yes && !ctx.interactive)
+      throw new SmartTestError("hook uninstall needs confirmation", {
+        code: "ST_INIT_CONFIRMATION_REQUIRED",
+        category: "configuration",
+        hint: "Re-run with --yes.",
+      });
+    if (!flags.yes && !(await confirm(ctx.io, t, "Remove the SmartTest block?")))
+      return ExitCode.Success;
+    const applied = await st.applyFiles(files);
+    if (flags.json) ctx.json("hook", { removed: applied });
+    else for (const p of applied) ctx.out(`${t.green("✓")} restored ${p}`);
+    return ExitCode.Success;
+  }
+  throw new SmartTestError(`Unknown hook command "${sub}"`, {
+    code: "ST_USAGE",
+    category: "usage",
+    hint: "smarttest hook install | uninstall | status",
+  });
+}
+
 async function cmdUninstall(ctx: Ctx): Promise<number> {
   const { t, flags } = ctx;
   const st = await ctx.open();
@@ -1256,6 +1399,8 @@ const HANDLERS: Record<string, (ctx: Ctx) => Promise<number>> = {
   graph: cmdGraph,
   benchmark: cmdBenchmark,
   trace: cmdTrace,
+  hook: cmdHook,
+  ci: cmdCi,
   shadow: cmdShadow,
   coverage: cmdCoverage,
   report: cmdReport,

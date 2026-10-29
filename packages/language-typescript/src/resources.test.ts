@@ -25,6 +25,14 @@ const { PORT, ...rest } = process.env;`,
     ).toEqual(expect.arrayContaining(["env:*", "env:PORT"]));
   });
 
+  it("does not mistake a local named t for a translation function", () => {
+    const a = analyzeSource(
+      "a.test.ts",
+      'import { take } from "./x";\nit("x", () => { const t = 1; take("a", t); });',
+    );
+    expect(a.topLevelResources).toBeUndefined();
+  });
+
   it("reads translation catalogs, asset reads and mock kinds", () => {
     const cat = analyzeSource(
       "src/locales/en/common.ts",

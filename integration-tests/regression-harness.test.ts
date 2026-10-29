@@ -22,6 +22,9 @@ const fixtures = [
   "pnpm-monorepo",
   "node-test-esm",
   "edges-vitest",
+  "ts-lib-vitest",
+  "react-vitest",
+  "yarn-workspaces-node",
 ];
 
 for (const fixture of fixtures) {

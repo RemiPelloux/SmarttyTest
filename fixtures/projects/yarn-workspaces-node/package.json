@@ -1,0 +1,8 @@
+{
+  "name": "fixture-yarn-workspaces-node",
+  "private": true,
+  "type": "module",
+  "packageManager": "yarn@4.9.1",
+  "workspaces": ["packages/*"],
+  "scripts": { "test": "node --test packages/*/test/" }
+}

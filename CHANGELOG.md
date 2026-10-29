@@ -4,12 +4,27 @@ All notable changes are documented here. Releases are managed with [Changesets](
 
 ## [Unreleased]
 
+## [0.6.0] — adoption
+
 ### Added
 
+- `smarttest hook install | uninstall | status` for husky, lefthook, simple-git-hooks and `.git/hooks`: a marked block runs `smarttest run --staged`; `--replace` comments out full-suite test steps and `uninstall` restores them. `init` plans the hook and lists the replaced steps.
+- `smarttest ci`: detects GitHub Actions, GitLab CI, Jenkins, CircleCI, Azure Pipelines, Bitbucket Pipelines or generic CI, compares merge requests with the merge-base of the target branch and branch builds with the previous revision, deepens shallow clones, writes JUnit and Markdown.
+- `projects` configuration: per-project test layout, naming, minimum mode and rules. `init` detects sub-projects with different conventions.
+- Adaptive policy (`adaptive`, default on): `run` runs everything without building the graph when the last full run was faster than a typical analysis.
+- `release:pack` writes a CycloneDX SBOM (`sbom.cdx.json`, shipped in the package) and runs `npm audit`.
+- Fixtures `ts-lib-vitest`, `react-vitest` and `yarn-workspaces-node` in the regression harness; documentation snippets checked by the test suite.
 - Documentation site at https://remipelloux.github.io/SmarttyTest/, built from `documentation/` by `pnpm site:build` and published to the `gh-pages` branch by `pnpm site:publish`. The landing page shows the real selection for edits to the `nest-auth-vitest` fixture.
+
+### Changed
+
+- Cold start: source files are parsed in worker threads on cold runs of 300 files or more; runners are listed in parallel; a runner whose config sets no test patterns is not started for discovery; module resolution caches file-system lookups; the CLI enables Node's compile cache and loads TypeScript through `require`.
 
 ### Fixed
 
+- A method returning `this` (fluent APIs) hid the members called on its result; its callers now depend on the whole class.
+- `node --test` with a glob that matches directories (`packages/*/test/`) found no tests.
+- Replaced hook steps (`: # smarttest-replaced:`) are no longer reported as test commands.
 - Traces no longer add tests for a changed translation catalog: loading a catalog says nothing about which keys a test read.
 - `run` output keeps a space between a long test path and its result column.
 

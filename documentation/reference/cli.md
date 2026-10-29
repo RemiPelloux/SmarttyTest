@@ -13,6 +13,8 @@
 | `smarttest explain <target>`                                    | Why a test was selected or skipped, or which tests protect a file or symbol                                             |
 | `smarttest validate-selection`                                  | Compare the selection against a full reference run                                                                      |
 | `smarttest benchmark`                                           | Replay recent commits: full run vs project-gated run vs SmartTest, with missed failures re-checked on the parent commit |
+| `smarttest hook install \| uninstall \| status`                 | Put `smarttest run --staged` in the pre-commit hook (husky, lefthook, simple-git-hooks or `.git/hooks`)                 |
+| `smarttest ci`                                                  | Run affected tests in any CI: detects the provider, picks the base, deepens shallow clones, writes JUnit and Markdown   |
 | `smarttest trace`                                               | Record which code each test file runs (V8 coverage, one run per test file)                                              |
 | `smarttest shadow`                                              | Run the full suite next to the selection and record drift; `--report` summarises all runs                               |
 | `smarttest graph`                                               | Query or export the dependency graph                                                                                    |
@@ -79,6 +81,27 @@ Ctrl-C cancels the runner cleanly and reports `cancelled`.
 | `--advanced`                  | Choose layout and mode interactively                                                     |
 | `--layout <l>` / `--mode <m>` | Override recommendations                                                                 |
 | `--rollback`                  | Undo what init changed. Files edited since init are reported and left untouched (exit 5) |
+
+In a Git repository, `init` also plans the pre-commit hook (see `hook`): it adds a marked block that runs `smarttest run --staged`, and comments out the hook's existing full-suite test steps (`jest`, `vitest`, `node --test`). The plan lists them; `smarttest hook uninstall` restores them. `--auto` leaves hooks alone.
+
+When sub-projects lay out their tests differently (LeadsIt has colocated `*.server.test.ts` files in one project and `src/__tests__/` in another), `init` writes a `projects` block so generated tests follow each project's convention.
+
+## `hook`
+
+`smarttest hook status` shows the hook manager, whether SmartTest runs in the hook, and the steps that still run whole suites. `smarttest hook install` adds the marked block (`# >>> smarttest >>>` … `# <<< smarttest <<<`) to `.husky/pre-commit`, a `smarttest` command under `pre-commit` in `lefthook.yml`, the `simple-git-hooks` entry in `package.json`, or `.git/hooks/pre-commit` (respecting `core.hooksPath`). `--replace` comments out the existing full-suite test steps with a `: # smarttest-replaced:` prefix so the script stays valid. `--manager <husky|lefthook|simple-git-hooks|git>` overrides detection; `--dry-run` previews, `--yes` skips the confirmation. `smarttest hook uninstall` removes the block and restores replaced steps. When `node_modules/.bin/smarttest` is missing, the hook prints a notice instead of blocking the commit.
+
+## `ci`
+
+`smarttest ci` runs the affected tests in any CI system. It reads the provider's variables (GitHub Actions, GitLab CI, Jenkins, CircleCI, Azure Pipelines, Bitbucket Pipelines, or any `CI=true`):
+
+| Build                                                                                                                                       | Compared with                                                                                                                                                       |
+| ------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Merge/pull request                                                                                                                          | the merge-base with `origin/<target branch>`; the target branch is fetched and shallow history deepened until the merge-base exists (full history as a last resort) |
+| Branch build with a known previous revision (GitLab `CI_COMMIT_BEFORE_SHA`, Jenkins `GIT_PREVIOUS_SUCCESSFUL_COMMIT`, GitHub push `before`) | that revision                                                                                                                                                       |
+| Other branch builds                                                                                                                         | the parent commit                                                                                                                                                   |
+| No usable history                                                                                                                           | the full suite                                                                                                                                                      |
+
+Reports default to the configured formats plus JUnit and Markdown; on GitHub the Markdown summary is added to the job summary. `--all` runs everything, `--dry-run` prints the provider and the base without running tests.
 
 ## `generate`
 

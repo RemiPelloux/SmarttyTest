@@ -26,7 +26,11 @@ await rm(out, { recursive: true, force: true });
 await mkdir(join(out, "dist"), { recursive: true });
 
 await build({
-  entryPoints: { bin: join(cli, "src/bin.ts"), index: join(cli, "src/index.ts") },
+  entryPoints: {
+    bin: join(cli, "src/bin.ts"),
+    index: join(cli, "src/index.ts"),
+    "parse-worker": join(root, "packages/core/src/parse-worker.ts"),
+  },
   outdir: join(out, "dist"),
   bundle: true,
   platform: "node",
@@ -34,13 +38,31 @@ await build({
   target: "node22",
   splitting: true,
   conditions: ["@smarttest/source"],
-  external: ["typescript"],
+  external: [],
   sourcemap: "linked",
   legalComments: "linked",
   banner: {
     js: "import { createRequire as __stCreateRequire } from 'node:module'; const require = __stCreateRequire(import.meta.url);",
   },
   define: { "process.env.SMARTTEST_BUNDLED": '"1"' },
+  plugins: [
+    {
+      // Load typescript with require(): importing its 9 MB CommonJS file through the ESM loader
+      // makes Node scan it for named exports, which costs about 200 ms per process and worker.
+      name: "typescript-require",
+      setup(b) {
+        b.onResolve({ filter: /^typescript$/ }, (args) =>
+          args.namespace === "ts-require"
+            ? { path: "typescript", external: true }
+            : { path: "typescript", namespace: "ts-require" },
+        );
+        b.onLoad({ filter: /.*/, namespace: "ts-require" }, () => ({
+          contents: 'const ts = require("typescript");\nexport default ts;\n',
+          loader: "js",
+        }));
+      },
+    },
+  ],
   logLevel: "warning",
 });
 

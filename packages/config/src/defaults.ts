@@ -1,4 +1,4 @@
-import type { ResolvedConfig, SmartTestConfig } from "./types.js";
+import type { ResolvedConfig, Rule, SmartTestConfig } from "./types.js";
 
 export const SOURCE_EXTENSIONS = ["ts", "tsx", "mts", "cts", "js", "jsx", "mjs", "cjs"] as const;
 
@@ -77,6 +77,8 @@ export function resolveConfig(config: SmartTestConfig = {}): ResolvedConfig {
     triggers: config.triggers ?? [],
     rules: config.rules ?? [],
     retries: config.retries ?? 0,
+    adaptive: config.adaptive ?? true,
+    projects: config.projects ?? {},
     timeoutMs: config.timeoutMs ?? 10 * 60_000,
     ...(config.workers ? { workers: config.workers } : {}),
     reports: {
@@ -85,4 +87,30 @@ export function resolveConfig(config: SmartTestConfig = {}): ResolvedConfig {
     },
     storeDir: config.storeDir ?? ".smarttest",
   };
+}
+
+/**
+ * Top-level rules plus every project's rules and minimum mode, scoped to the project's directory.
+ */
+export function effectiveRules(config: Pick<ResolvedConfig, "rules" | "projects">): Rule[] {
+  const out = [...config.rules];
+  for (const [dir, p] of Object.entries(config.projects)) {
+    const scope = dir.replace(/\/+$/, "");
+    for (const r of p.rules ?? [])
+      out.push({
+        ...r,
+        name: `${scope}:${r.name}`,
+        match: {
+          ...r.match,
+          path: r.match.path ? `${scope}/${r.match.path.replace(/^\.?\//, "")}` : `${scope}/**`,
+        },
+      });
+    if (p.mode)
+      out.push({
+        name: `${scope}:mode`,
+        match: { path: `${scope}/**` },
+        execution: { mode: p.mode },
+      });
+  }
+  return out;
 }

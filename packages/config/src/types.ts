@@ -48,6 +48,22 @@ export interface GeneratedPolicy {
   from?: string[];
 }
 
+/** Conventions of one sub-project (a directory), overriding the top-level settings inside it. */
+export interface ProjectConfig {
+  tests?: {
+    layout?: TestLayout;
+    directory?: string;
+    naming?: string;
+    /** Custom location template, e.g. "backend/src/__tests__/{FileName}.test.{Extension}". */
+    path?: string;
+    templates?: string;
+  };
+  /** Minimum safety mode for changes inside this project (can only make it stricter). */
+  mode?: SafetyMode;
+  /** Rules scoped to this project; their paths are relative to it. */
+  rules?: Rule[];
+}
+
 export interface SmartTestConfig {
   include?: string[];
   exclude?: string[];
@@ -71,6 +87,10 @@ export interface SmartTestConfig {
   triggers?: string[];
   rules?: Rule[];
   retries?: number;
+  /** Run the whole suite without analysis when it is faster than analysing (default true). */
+  adaptive?: boolean;
+  /** Per-project conventions, keyed by directory ("backend", "apps/web"). */
+  projects?: Record<string, ProjectConfig>;
   timeoutMs?: number;
   workers?: number;
   reports?: { formats?: ReportFormat[]; outputDir?: string };
@@ -97,6 +117,8 @@ export interface ResolvedConfig {
   triggers: string[];
   rules: Rule[];
   retries: number;
+  adaptive: boolean;
+  projects: Record<string, ProjectConfig>;
   timeoutMs: number;
   workers?: number;
   reports: { formats: ReportFormat[]; outputDir: string };

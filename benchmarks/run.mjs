@@ -80,7 +80,7 @@ async function generate(n) {
     );
     await writeFile(
       join(dir, "tests", `m${i}.test.ts`),
-      `import { expect, it } from "vitest";\nimport { Service${i} } from "../src/m${i}";\n\nit("runs", () => expect(new Service${i}().name()).toBe("s${i}"));\n`,
+      `import { expect, it } from "vitest";\nimport { Service${i} } from "../src/m${i}";\n\nit("runs", () => {\n  expect(new Service${i}().name()).toBe("s${i}");\n  expect(typeof new Service${i}().run(1)).toBe("number");\n});\n`,
     );
   }
   const git = (...a) =>
@@ -176,7 +176,8 @@ for (const size of sizes) {
   }, 3);
   r.rssMb = Math.round(process.memoryUsage().rss / 1024 / 1024);
   results[size] = r;
-  await rm(dir, { recursive: true, force: true });
+  if (!process.env.BENCH_KEEP) await rm(dir, { recursive: true, force: true });
+  else console.log(`kept ${dir}`);
   console.log("done");
 }
 

@@ -131,6 +131,8 @@ function translationBindings(root: ts.Node): {
   const bound = new Map<string, string[] | undefined>(); // undefined = dynamic namespace
   const params = new Set<string>();
   const declared = new Set<string>();
+  /** `const t = 1_000`: a local named like a translation function that is not one. */
+  const shadowed = new Set<string>();
   let hocNamespaces: string[] | undefined = [];
   const namespacesOfCall = (call: ts.CallExpression): string[] | undefined => {
     const c = call.expression;
@@ -175,8 +177,8 @@ function translationBindings(root: ts.Node): {
             bound.set(n.name.text, ns);
             declared.add(n.name.text);
           }
-        }
-      }
+        } else if (ts.isIdentifier(n.name) && DEFAULT.has(n.name.text)) shadowed.add(n.name.text);
+      } else if (ts.isIdentifier(n.name) && DEFAULT.has(n.name.text)) shadowed.add(n.name.text);
     }
     if (ts.isCallExpression(n)) {
       const c = n.expression;
@@ -190,7 +192,7 @@ function translationBindings(root: ts.Node): {
   };
   visit(root);
   return {
-    isTranslate: (name) => DEFAULT.has(name) || bound.has(name),
+    isTranslate: (name) => bound.has(name) || (DEFAULT.has(name) && !shadowed.has(name)),
     isParam: (name) => params.has(name) && !declared.has(name),
     namespacesOf: (name) => {
       if (bound.has(name)) return bound.get(name) ?? [];

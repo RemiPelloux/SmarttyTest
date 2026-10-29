@@ -1,0 +1,9 @@
+{
+  "runners": ["vitest"],
+  "vcs": "git",
+  "testFiles": 3,
+  "mutations": [
+    { "file": "src/format.ts", "find": "toFixed(2)", "replace": "toFixed(1)", "expectFailing": ["test/Price.test.tsx", "test/Card.test.tsx"] },
+    { "file": "src/components/Avatar.tsx", "find": "className=\"avatar\">{initials(name)}", "replace": "className=\"avatar\">{initials(name).toLowerCase()}", "expectFailing": ["test/Avatar.test.tsx", "test/Card.test.tsx"] }
+  ]
+}

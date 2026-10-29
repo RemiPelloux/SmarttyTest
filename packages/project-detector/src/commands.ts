@@ -79,7 +79,8 @@ async function scanScript(
   }
   for (const { text: l, line } of lines) {
     // Comments and messages mention runners without running them.
-    if (/^\s*(?:#|echo\b|printf\b|-\s*name:|name:)/.test(l) || /\|\s*grep\b/.test(l)) continue;
+    if (/^\s*(?::\s*)?(?:#|echo\b|printf\b|-\s*name:|name:)/.test(l) || /\|\s*grep\b/.test(l))
+      continue;
     const cd = /^\s*cd\s+["']?([^"'\s;&]+)/.exec(l);
     if (cd) {
       const target = cd[1] as string;

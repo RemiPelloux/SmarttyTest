@@ -5,6 +5,7 @@ import { NodeTestAdapter } from "@smarttest/adapter-node";
 import { VitestAdapter } from "@smarttest/adapter-vitest";
 import {
   BUILTIN_TRIGGERS,
+  effectiveRules,
   type LoadedConfig,
   loadConfig,
   type ResolvedConfig,
@@ -56,6 +57,11 @@ import {
   applyPlan,
   applyUninstall,
   buildPlan,
+  type FilePlan,
+  type HookManager,
+  type HookPlan,
+  planHookInstall,
+  planHookUninstall,
   planUninstall,
   renderSetupReport,
   rollback,
@@ -82,6 +88,7 @@ import {
 import { planExecution, rootKey } from "@smarttest/test-selector";
 import type { ChangeAnalysisInput, ChangeSource } from "@smarttest/vcs-core";
 import { GitAdapter } from "@smarttest/vcs-git";
+import { ParsePool, parallelParsingAvailable } from "./parse-pool.js";
 import {
   cleanDir,
   hashFile,
@@ -104,6 +111,8 @@ export interface OpenOptions {
 export interface AnalyzeOptions {
   source?: ChangeSource;
   mode?: SafetyMode;
+  /** Select every test without building the graph (adaptive policy). */
+  everything?: { reason: string };
 }
 
 export interface Analysis {
@@ -185,6 +194,39 @@ export interface ShadowReport {
   total: number;
   savedPct: number;
   records: ShadowRecord[];
+}
+
+/**
+ * Test files a runner collects with its default patterns, when its configuration sets nothing
+ * about which files are tests (no include/testMatch/projects…). Undefined means "ask the runner".
+ */
+async function staticDefaultDiscovery(
+  projectRoot: string,
+  root: RunnerRoot,
+  cfg: string,
+  pkg: string,
+  candidates: string[],
+): Promise<string[] | undefined> {
+  const rel = (f: string) => (root.dir ? f.slice(root.dir.length + 1) : f);
+  const settings =
+    /\b(include|exclude|testMatch|testRegex|roots|rootDir|projects|workspace|dir|root|preset|testPathIgnorePatterns|mergeConfig|extends)\b/;
+  if (root.adapter === "vitest") {
+    if (settings.test(cfg)) return undefined;
+    if (!root.configFile)
+      for (const v of ["vite.config.ts", "vite.config.js", "vite.config.mjs", "vite.config.mts"])
+        if (await exists(join(projectRoot, root.dir, v))) return undefined;
+    return candidates.filter((f) => /\.(test|spec)\.[cm]?[jt]sx?$/.test(rel(f)));
+  }
+  if (root.adapter === "jest") {
+    if (settings.test(cfg)) return undefined;
+    if (/"jest"\s*:/.test(pkg)) return undefined;
+    return candidates.filter(
+      (f) =>
+        /(^|\/)__tests__\/.+\.[cm]?[jt]sx?$/.test(rel(f)) ||
+        /(^|[/.])(spec|test)\.[cm]?[jt]sx?$/.test(rel(f)),
+    );
+  }
+  return undefined;
 }
 
 const timed = async <T>(
@@ -344,8 +386,14 @@ export class SmartTest {
   // ── Index & graph ───────────────────────────────────────────────────────────────────────
 
   async loadIndex(): Promise<{ index: SymbolIndex; stats: UpdateStats }> {
-    const profile = await this.profile();
     const index = await SymbolIndex.load(this.storeDir);
+    // Cold start (no index, or one from another analyzer version) of a large project: parser
+    // threads start before files are read, so their start-up overlaps with reading.
+    const sample = index.entries().values().next().value as FileAnalysis | undefined;
+    const cold =
+      index.size === 0 ||
+      (sample !== undefined && !ANALYZERS.some((a) => a.version === sample.analyzerVersion));
+    const profile = await this.profile();
     for (const w of index.loadWarnings) this.logger.warn(w);
     const resolver = new TypeScriptResolver(
       this.root,
@@ -365,13 +413,24 @@ export class SmartTest {
       )
     ).join("\n");
     this.resolver = resolver;
-    const stats = await index.update({
-      root: this.root,
-      files: await this.sourceFiles(),
-      analyzers: ANALYZERS,
-      resolver,
-      contextKey,
-    });
+    const files = await this.sourceFiles();
+    const pool =
+      cold && files.length >= 300 && parallelParsingAvailable() ? new ParsePool() : undefined;
+    const stats = await index
+      .update({
+        root: this.root,
+        files,
+        analyzers: ANALYZERS,
+        resolver,
+        contextKey,
+        ...(pool
+          ? {
+              parseMany: async (jobs: { path: string; content: string }[]) =>
+                (await pool.parse(jobs)) as FileAnalysis[] | undefined,
+            }
+          : {}),
+      })
+      .finally(() => pool?.close());
     await index.save();
     return { index, stats };
   }
@@ -434,34 +493,44 @@ export class SmartTest {
       ? {}
       : ((await readJson<Record<string, string[]>>(cachePath)) ?? {});
     const nextCache: Record<string, string[]> = {};
-    for (const root of roots) {
-      const candidates = analysed.filter((f) => inRoot(f, root) && looksLikeTest(f, root)).sort();
-      const cfg = root.configFile ? ((await readText(join(this.root, root.configFile))) ?? "") : "";
-      const pkg = (await readText(join(this.root, root.dir, "package.json"))) ?? "";
-      const key = sha256(
-        [rootKey(root), (root.patterns ?? []).join(","), cfg, pkg, candidates.join("\n")].join(
-          "\u0000",
-        ),
-      );
-      let files = cache[key];
-      if (!files) {
-        try {
-          files = (
-            await this.createAdapter({
-              adapter: root.adapter,
-              dir: root.dir,
-              files: [],
-              ...(root.configFile ? { configFile: root.configFile } : {}),
-              ...(root.patterns ? { patterns: root.patterns } : {}),
-            } as Group).discover()
-          ).map((t) => t.filePath);
-        } catch (error) {
-          warnings.push(
-            `${root.adapter} (${root.dir || "."}) discovery failed — using filename patterns: ${(error as Error).message.split("\n")[0]}`,
-          );
-          files = candidates;
+    // Runners are asked in parallel; a runner whose config sets nothing about test files is not
+    // asked at all: its default patterns are applied here (no process start).
+    const listed = await Promise.all(
+      roots.map(async (root) => {
+        const candidates = analysed.filter((f) => inRoot(f, root) && looksLikeTest(f, root)).sort();
+        const cfg = root.configFile
+          ? ((await readText(join(this.root, root.configFile))) ?? "")
+          : "";
+        const pkg = (await readText(join(this.root, root.dir, "package.json"))) ?? "";
+        const key = sha256(
+          [rootKey(root), (root.patterns ?? []).join(","), cfg, pkg, candidates.join("\n")].join(
+            "\u0000",
+          ),
+        );
+        let files = cache[key];
+        if (!files) files = await staticDefaultDiscovery(this.root, root, cfg, pkg, candidates);
+        if (!files) {
+          try {
+            files = (
+              await this.createAdapter({
+                adapter: root.adapter,
+                dir: root.dir,
+                files: [],
+                ...(root.configFile ? { configFile: root.configFile } : {}),
+                ...(root.patterns ? { patterns: root.patterns } : {}),
+              } as Group).discover()
+            ).map((t) => t.filePath);
+          } catch (error) {
+            warnings.push(
+              `${root.adapter} (${root.dir || "."}) discovery failed — using filename patterns: ${(error as Error).message.split("\n")[0]}`,
+            );
+            files = candidates;
+          }
         }
-      }
+        return { root, key, files };
+      }),
+    );
+    for (const { root, key, files } of listed) {
       nextCache[key] = files;
       let count = 0;
       for (const f of files) {
@@ -483,6 +552,36 @@ export class SmartTest {
     const timings: Record<string, number> = {};
     const input = await timed(timings, "change detection", () => this.changeInput(options.source));
     const { index, stats } = await timed(timings, "index update", () => this.loadIndex());
+    if (options.everything) {
+      const { tests, unassigned, roots, assignment } = await this.discoverTests(index);
+      const reason = { kind: "fallback" as const, message: options.everything.reason };
+      const decision = {
+        selectedTests: tests.map((t) => ({ testId: t, filePath: t, reasons: [reason] })),
+        skippedTests: [],
+        affectedFiles: input.changeSet.changes.map((c) => c.path),
+        affectedSymbols: [],
+        analysisStatus: "fallback" as const,
+        safetyMode: options.mode ?? this.config.mode,
+        requestedMode: options.mode ?? this.config.mode,
+        reasons: [reason],
+        warnings: [],
+        fallbackApplied: true,
+        details: { triggers: [], seeds: [], trivialSkipped: [], ignored: [], uncertainty: [] },
+      } satisfies ImpactResult;
+      return {
+        input,
+        index,
+        indexStats: stats,
+        graph: new DependencyGraph(new Map(), this.isTest),
+        diffs: new Map(),
+        testFiles: tests,
+        unassignedTests: unassigned,
+        runnerRoots: roots,
+        assignment,
+        decision,
+        timings,
+      };
+    }
     const graph = await timed(timings, "graph build", () => this.buildGraph(index));
     const {
       tests,
@@ -508,7 +607,7 @@ export class SmartTest {
         isTest: this.isTest,
         mode: options.mode ?? this.config.mode,
         triggers: [...BUILTIN_TRIGGERS, ...this.config.triggers],
-        rules: new RulesEngine(this.config.rules),
+        rules: new RulesEngine(effectiveRules(this.config)),
         packageOf: this.packageOf,
         resources,
         generated: this.config.generated
@@ -807,8 +906,32 @@ export class SmartTest {
   async run(options: RunOptions = {}): Promise<RunOutcome> {
     const started = new Date();
     const runId = newRunId();
-    const analysis = await this.analyze(options);
+    // Adaptive policy: when the whole suite ran faster last time than an analysis usually takes,
+    // running everything is both cheaper and complete.
+    const statsPath = join(this.storeDir, "state", "timings.json");
+    const recorded =
+      (await readJson<{ analysisMs?: number[]; fullRunMs?: number }>(statsPath)) ?? {};
+    const typicalAnalysis = recorded.analysisMs?.length
+      ? [...recorded.analysisMs].sort((a, b) => a - b)[Math.floor(recorded.analysisMs.length / 2)]
+      : undefined;
+    const adaptive =
+      !options.all &&
+      this.config.adaptive !== false &&
+      recorded.fullRunMs !== undefined &&
+      typicalAnalysis !== undefined &&
+      recorded.fullRunMs < typicalAnalysis;
+    const analysis = await this.analyze({
+      ...options,
+      ...(adaptive
+        ? {
+            everything: {
+              reason: `Adaptive: the full suite took ${Math.round(recorded.fullRunMs ?? 0)} ms last time, less than a typical analysis (${Math.round(typicalAnalysis ?? 0)} ms), so everything runs`,
+            },
+          }
+        : {}),
+    });
     const timings = analysis.timings;
+    const analysisMs = Object.values(timings).reduce((a, b) => a + b, 0);
     if (options.all) {
       const reason = { kind: "fallback" as const, message: "Full suite requested (--all)" };
       analysis.decision.selectedTests = analysis.testFiles.map((t) => ({
@@ -894,6 +1017,18 @@ export class SmartTest {
       if (e.status !== "cancelled" && e.status !== "infrastructure-error")
         durations[e.file] = Math.round(e.durationMs);
     await writeJson(durationsPath, durations);
+    // Timings for the adaptive policy: typical analysis time, and the last full-suite wall time.
+    const fullRun = analysis.decision.skippedTests.length === 0 && analysis.testFiles.length > 0;
+    await writeJson(statsPath, {
+      analysisMs: adaptive
+        ? (recorded.analysisMs ?? [])
+        : [...(recorded.analysisMs ?? []), Math.round(analysisMs)].slice(-7),
+      ...(fullRun
+        ? { fullRunMs: Math.round(timings["test execution"] ?? 0) }
+        : recorded.fullRunMs !== undefined
+          ? { fullRunMs: recorded.fullRunMs }
+          : {}),
+    });
     const durationMs = Object.values(timings).reduce((a, b) => a + b, 0);
     const report: RunReport = {
       schemaVersion: 1,
@@ -1036,7 +1171,7 @@ export class SmartTest {
       });
     }
     const hits = graph.dependentsOf([{ file, units: [unit] }]);
-    const policy = new RulesEngine(this.config.rules).evaluateAll([
+    const policy = new RulesEngine(effectiveRules(this.config)).evaluateAll([
       { path: file },
       ...(index.get(file)?.symbols ?? []).map((s) => ({
         path: file,
@@ -1131,8 +1266,15 @@ export class SmartTest {
         ...(options.module ? { module: options.module } : {}),
         ...(options.path ? { path: options.path } : {}),
       },
-      rules: new RulesEngine(this.config.rules),
+      rules: new RulesEngine(effectiveRules(this.config)),
       packageOf: this.packageOf,
+      projects: Object.entries(this.config.projects).map(([dir, p]) => ({
+        dir: dir.replace(/\/+$/, ""),
+        ...(p.tests?.layout ? { layout: p.tests.layout } : {}),
+        ...(p.tests?.directory !== undefined ? { directory: p.tests.directory } : {}),
+        ...(p.tests?.naming ? { naming: p.tests.naming } : {}),
+        ...(p.tests?.path ? { path: p.tests.path } : {}),
+      })),
     };
     const items = await planGeneration(index.entries(), tests, graph, genOpts);
     let sync: SyncReport | undefined;
@@ -1155,7 +1297,7 @@ export class SmartTest {
   // ── Rules ───────────────────────────────────────────────────────────────────────────────
 
   rules(): RulesEngine {
-    return new RulesEngine(this.config.rules);
+    return new RulesEngine(effectiveRules(this.config));
   }
 
   async explainRules(target: string) {
@@ -1228,7 +1370,47 @@ export class SmartTest {
     const globalConfigFiles = files.filter(
       (f) => BUILTIN_TRIGGERS.some((t) => matchGlob(f, t)) && !/lock|package\.json/.test(f),
     );
-    return buildPlan(profile, sources, { untestedModules: untested, globalConfigFiles, overrides });
+    const plan = await buildPlan(profile, sources, {
+      untestedModules: untested,
+      globalConfigFiles,
+      overrides,
+    });
+    // Offer the Git hook, replacing the full-suite test steps the hook runs today.
+    if (profile.vcs.provider === "git") {
+      const hook = await planHookInstall(this.root, {
+        replace: true,
+        testCommands: profile.testCommands,
+      });
+      if (!hook.installed) {
+        plan.files.push(hook.plan);
+        if (hook.replaced.length)
+          plan.warnings.push(
+            `${hook.file}: ${hook.replaced.length} test step(s) would be commented out and replaced by \`smarttest run --staged\` (${hook.replaced.map((r) => `line ${r.line}`).join(", ")}); \`smarttest hook uninstall\` restores them`,
+          );
+      }
+    }
+    return plan;
+  }
+
+  /** Plans `smarttest hook install`. */
+  async hookInstallPlan(
+    options: { manager?: HookManager; replace?: boolean } = {},
+  ): Promise<HookPlan> {
+    const profile = await this.profile();
+    return planHookInstall(this.root, { ...options, testCommands: profile.testCommands });
+  }
+
+  async hookUninstallPlan(manager?: HookManager): Promise<FilePlan[]> {
+    return planHookUninstall(this.root, manager);
+  }
+
+  /** Applies hook file changes (recorded in the init journal, so `init --rollback` undoes them too). */
+  async applyFiles(files: FilePlan[]): Promise<string[]> {
+    const plan = { summary: "", recommendations: [], warnings: [], files, config: {} } as SetupPlan;
+    const journal = await applyPlan(this.root, this.storeDir, plan);
+    return files
+      .filter((f) => f.action !== "skip" && journal.entries.some((e) => e.path === f.path))
+      .map((f) => f.path);
   }
 
   async initApply(

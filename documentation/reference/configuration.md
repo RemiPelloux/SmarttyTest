@@ -53,6 +53,29 @@ export default defineConfig({
 | `workers`                | `number`                                          | runner default                      | Passed as `--maxWorkers`                                                                                                                                                                                                                 |
 | `reports.formats`        | `("html" \| "json" \| "junit" \| "markdown")[]`   | `["html","json"]`                   |                                                                                                                                                                                                                                          |
 | `reports.outputDir`      | `string`                                          | `".smarttest/reports"`              |                                                                                                                                                                                                                                          |
+| `adaptive`               | `boolean`                                         | `true`                              | `run` selects every test without building the graph when the last full run took less time than a typical analysis (small suites)                                                                                                         |
+| `projects`               | `Record<dir, { tests?, mode?, rules? }>`          | —                                   | Per-project conventions. `tests` (`layout`, `directory`, `naming`, `path`) applies to generated tests in that directory; `mode` is a minimum mode for its changes; `rules` are scoped to it (paths relative to the project)              |
 | `storeDir`               | `string`                                          | `".smarttest"`                      | Local state. Git-ignored by init                                                                                                                                                                                                         |
 
 Unknown keys produce warnings instead of being silently accepted.
+
+## Per-project conventions
+
+```ts
+import { defineConfig } from "smarttest";
+
+export default defineConfig({
+  tests: { layout: "mirror", directory: "tests" },
+  projects: {
+    "FrontLeadsIt/app": {
+      tests: { layout: "colocated", naming: "{FileName}.server.test.{Extension}" },
+    },
+    backend: {
+      tests: { layout: "custom", path: "backend/src/__tests__/{FileName}.test.{Extension}" },
+      mode: "safe",
+    },
+  },
+});
+```
+
+`{ProjectDir}` is available in `path` and `naming` templates.

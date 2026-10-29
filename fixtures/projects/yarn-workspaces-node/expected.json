@@ -1,0 +1,10 @@
+{
+  "runners": ["node"],
+  "vcs": "git",
+  "testFiles": 2,
+  "packageManager": "yarn",
+  "mutations": [
+    { "file": "packages/money/src/index.js", "find": "Math.round((a + b) * 100) / 100", "replace": "a + b", "expectFailing": ["packages/money/test/money.test.js", "packages/cart/test/cart.test.js"] },
+    { "file": "packages/money/src/index.js", "find": "toFixed(2)", "replace": "toFixed(1)", "expectFailing": ["packages/money/test/money.test.js"] }
+  ]
+}

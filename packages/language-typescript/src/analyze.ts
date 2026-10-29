@@ -7,7 +7,7 @@ import { collectMemberUses, type MemberUses, moduleScope, thisScope } from "./me
 import { catalogKeys, collectResources, MODEL_MODULES } from "./resources.js";
 import { StaticPathEvaluator } from "./static-path.js";
 
-export const ANALYZER_VERSION = "ts-6";
+export const ANALYZER_VERSION = "ts-9";
 
 function scriptKind(path: string): ts.ScriptKind {
   if (path.endsWith(".tsx")) return ts.ScriptKind.TSX;
@@ -20,21 +20,27 @@ function scriptKind(path: string): ts.ScriptKind {
 const hash = (s: string) => sha256(s).slice(0, 16);
 
 /** Hash of the token stream: identical for comment/whitespace-only edits. */
+const scanners = new Map<boolean, ts.Scanner>();
 export function tokenHash(text: string, jsx: boolean): string {
-  const scanner = ts.createScanner(
-    ts.ScriptTarget.Latest,
-    true,
-    jsx ? ts.LanguageVariant.JSX : ts.LanguageVariant.Standard,
-    text,
-  );
-  const parts: string[] = [];
+  let scanner = scanners.get(jsx);
+  if (!scanner) {
+    scanner = ts.createScanner(
+      ts.ScriptTarget.Latest,
+      true,
+      jsx ? ts.LanguageVariant.JSX : ts.LanguageVariant.Standard,
+    );
+    scanners.set(jsx, scanner);
+  }
+  scanner.setText(text);
+  let acc = "";
   let token = scanner.scan();
   let guard = 0;
   while (token !== ts.SyntaxKind.EndOfFileToken && guard++ < 1_000_000) {
-    parts.push(scanner.getTokenText());
+    acc += `${scanner.getTokenText()}\u0001`;
     token = scanner.scan();
   }
-  return hash(parts.join("\u0001"));
+  scanner.setText(undefined);
+  return hash(acc);
 }
 
 function hasModifier(node: ts.Node, kind: ts.SyntaxKind): boolean {
@@ -140,6 +146,11 @@ function classShellHash(cls: ts.ClassDeclaration, sf: ts.SourceFile, jsx: boolea
 export function analyzeSource(path: string, content: string): FileAnalysis {
   const kind = scriptKind(path);
   const sf = ts.createSourceFile(path, content, ts.ScriptTarget.Latest, true, kind);
+  // Resource reads (env, models, translations) are only looked for when the text can contain one.
+  const scanResources =
+    /process\.env|import\.meta\.env|\.entities\.|\bprisma\b|\bdb\.|(?:^|[^\w$.])\$?t[(),]|\.t\b|translate\(|i18n|useTranslation|withTranslation|getFixedT/.test(
+      content,
+    );
   const jsx = kind === ts.ScriptKind.TSX || kind === ts.ScriptKind.JSX;
   const language =
     kind === ts.ScriptKind.JS || kind === ts.ScriptKind.JSX ? "javascript" : "typescript";
@@ -172,12 +183,14 @@ export function analyzeSource(path: string, content: string): FileAnalysis {
       heritage?: { extends?: string; implements?: string[] };
       thisTypes?: Map<string, string>;
       memberUses?: MemberUses;
+      /** Classes: only these parts (decorators) count for refs and resources; members carry theirs. */
+      shell?: ts.Node[];
     },
   ): SymbolRecord => {
     const qualifiedName = opts.parent ? `${opts.parent}.${name}` : name;
     const text = node.getText(sf);
     const refs = new Set<string>();
-    collectRefs(node, refs);
+    for (const n of opts.shell ?? [node]) collectRefs(n, refs);
     refs.delete(name);
     const rec: SymbolRecord = {
       id: `${path}#${qualifiedName}`,
@@ -201,8 +214,11 @@ export function analyzeSource(path: string, content: string): FileAnalysis {
     if (mu.escapes.length) rec.escapes = mu.escapes.filter((e) => e !== name || !!opts.parent);
     if (mu.thisUses.length) rec.thisUses = mu.thisUses;
     if (mu.superUses.length) rec.superUses = mu.superUses;
-    const res = collectResources(node);
-    if (res.length) rec.resources = res;
+    if (mu.thisEscapes && opts.parent) rec.thisEscapes = true;
+    if (scanResources) {
+      const res = [...new Set((opts.shell ?? [node]).flatMap((n) => collectResources(n)))].sort();
+      if (res.length) rec.resources = res;
+    }
     symbols.push(rec);
     return rec;
   };
@@ -407,6 +423,7 @@ export function analyzeSource(path: string, content: string): FileAnalysis {
         exportNames: exportNamesFor(stmt, name),
         signature: `${decoratorsOf(stmt, sf).join(" ")} class ${heritage}`.trim(),
         heritage: { ...(ext ? { extends: ext } : {}), implements: impl },
+        shell: shellParts,
         memberUses: {
           uses: [...new Set(shellUses.flatMap((u) => u.uses))],
           escapes: [...new Set(shellUses.flatMap((u) => u.escapes))],
@@ -415,11 +432,6 @@ export function analyzeSource(path: string, content: string): FileAnalysis {
         },
       });
       classRec.shellHash = classShellHash(stmt, sf, jsx);
-      // Members are linked one by one; the class itself only references its heritage and decorators.
-      const shellRefs = new Set<string>();
-      for (const n of shellParts) collectRefs(n, shellRefs);
-      shellRefs.delete(name);
-      classRec.refs = [...shellRefs].sort();
       const thisTypes = thisScope(stmt);
       if (hasModifier(stmt, ts.SyntaxKind.ExportKeyword)) esm = true;
       for (const m of stmt.members) {
@@ -545,7 +557,7 @@ export function analyzeSource(path: string, content: string): FileAnalysis {
     const tu = collectMemberUses(stmt, modScope);
     for (const u of tu.uses) topUses.add(u);
     for (const e of tu.escapes) topEscapes.add(e);
-    for (const r of collectResources(stmt)) topResources.add(r);
+    if (scanResources) for (const r of collectResources(stmt)) topResources.add(r);
     topTokens.push(tokenHash(stmt.getText(sf), jsx));
     const text = stmt.getText(sf);
     if (/\b(?:module\.exports|exports\.[A-Za-z_$])/.test(text)) cjs = true;

@@ -43,10 +43,11 @@ export interface RunnerRoot {
 export function expandNodePatterns(patterns: readonly string[] | undefined): string[] {
   if (!patterns?.length) return NODE_TEST_DEFAULTS;
   return patterns.flatMap((p) => {
-    if (/[*?{[]/.test(p)) return [p];
-    if (/\.[cm]?[jt]s$/.test(p)) return [p];
+    if (/\.[cm]?[jt]s$/.test(p) || /\*\.\{?[cm]?[jt]s/.test(p)) return [p];
+    // A directory, or a glob that matches directories ("packages/*/test/"): Node searches them.
     const dir = p.replace(/\/$/, "");
-    return NODE_TEST_DEFAULTS.map((d) => `${dir}/${d}`);
+    const inDir = NODE_TEST_DEFAULTS.map((d) => `${dir}/${d}`);
+    return /[*?{[]/.test(p) && !p.endsWith("/") ? [p, ...inDir] : inDir;
   });
 }
 

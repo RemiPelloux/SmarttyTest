@@ -61,6 +61,26 @@ export const COMMANDS: Record<string, { summary: string; usage: string; flags?: 
       "-o file.md  also write the Markdown report there",
     ],
   },
+  ci: {
+    summary:
+      "Run affected tests in any CI: detects the provider, picks the base, deepens shallow clones",
+    usage: "smarttest ci [--all] [--mode m] [--format f] [--dry-run] [--json]",
+    flags: [
+      "merge/pull request: compares with the merge-base of origin/<target branch>",
+      "branch build: compares with the previous revision the CI reports, else the parent commit",
+      "--dry-run  print the provider and the base without running tests",
+    ],
+  },
+  hook: {
+    summary:
+      "Install SmartTest in the pre-commit hook (husky, lefthook, simple-git-hooks or .git/hooks)",
+    usage:
+      "smarttest hook install | uninstall | status [--replace] [--manager m] [--dry-run] [--yes]",
+    flags: [
+      "--replace  comment out the hook's full-suite test steps (uninstall restores them)",
+      "--manager m  husky, lefthook, simple-git-hooks or git (default: detected)",
+    ],
+  },
   trace: {
     summary: "Record which code each test file runs (V8 coverage, one run per test file)",
     usage: "smarttest trace [files…] [--stale] [--workers n] [--status] [--json]",

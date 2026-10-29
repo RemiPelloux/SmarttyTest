@@ -1,7 +1,7 @@
 /**
  * @smarttest/smart-init — explained, previewable, idempotent and reversible setup (spec §5).
  */
-import { readFile, rm } from "node:fs/promises";
+import { chmod, readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import type { Rule, SmartTestConfig } from "@smarttest/config";
 import { findConfigFile } from "@smarttest/config";
@@ -15,6 +15,8 @@ import {
   writeFileAtomic,
   writeJson,
 } from "@smarttest/shared";
+
+export * from "./hooks.js";
 
 export interface Recommendation {
   key: string;
@@ -31,6 +33,8 @@ export interface FilePlan {
   after?: string;
   /** Low-risk changes are applied by `init --auto`. */
   risk: "low" | "medium";
+  /** File mode to set after writing (executable hooks). */
+  mode?: number;
 }
 
 export interface SetupPlan {
@@ -156,6 +160,41 @@ export async function buildPlan(
       : "no existing tests — mirror keeps tests separate from sources",
     evidence: [`${profile.tests.testFiles} test files detected`],
   });
+  // Per-project conventions when sub-projects lay out their tests differently.
+  const conventions: [string, NonNullable<SmartTestConfig["projects"]>[string]][] = [];
+  for (const p of profile.projectTests ?? []) {
+    if (p.testFiles < 3) continue;
+    if (p.colocatedRatio >= 0.7) {
+      const naming =
+        p.suffix && p.suffix !== ".test" ? `{FileName}${p.suffix}.{Extension}` : undefined;
+      conventions.push([p.dir, { tests: { layout: "colocated", ...(naming ? { naming } : {}) } }]);
+    } else if (p.colocatedRatio <= 0.3 && p.testDir !== undefined && p.flat) {
+      conventions.push([
+        p.dir,
+        { tests: { layout: "custom", path: `${p.dir}/${p.testDir}/{FileName}.test.{Extension}` } },
+      ]);
+    } else if (p.colocatedRatio <= 0.3 && p.testDir !== undefined) {
+      conventions.push([p.dir, { tests: { layout: "mirror", directory: p.testDir } }]);
+    }
+  }
+  const distinct = new Set(conventions.map(([, c]) => JSON.stringify(c)));
+  const projects =
+    conventions.length >= 2 && distinct.size >= 2 ? Object.fromEntries(conventions) : undefined;
+  if (projects)
+    recs.push({
+      key: "Project tests",
+      value: Object.entries(projects)
+        .map(
+          ([d, c]) =>
+            `${d}: ${c.tests?.layout}${c.tests?.naming ? ` ${c.tests.naming}` : ""}${c.tests?.path ? ` ${c.tests.path}` : ""}`,
+        )
+        .join(" · "),
+      reason:
+        "sub-projects lay out their tests differently; generated tests follow each project's own convention",
+      evidence: (profile.projectTests ?? []).map(
+        (p) => `${p.dir}: ${p.testFiles} tests, ${Math.round(p.colocatedRatio * 100)}% colocated`,
+      ),
+    });
   if (adapters.length) {
     recs.push({
       key: "Adapter",
@@ -246,6 +285,7 @@ export async function buildPlan(
     ...(adapters.length ? { adapters } : {}),
     vcs: { provider: "auto", snapshots: true },
     tests: { layout, directory: testDir },
+    ...(projects ? { projects } : {}),
     ...(exclude.length ? { exclude } : {}),
     ...(rules.length ? { rules } : {}),
     reports: { formats: ["html", "json", "junit"] },
@@ -382,6 +422,7 @@ export async function applyPlan(
     if (fp.action === "create" && current !== undefined) continue; // appeared meanwhile — never overwrite
     if (fp.action === "modify" && current !== fp.before) continue; // changed since planning — skip safely
     await writeFileAtomic(abs, fp.after);
+    if (fp.mode !== undefined) await chmod(abs, fp.mode);
     const prior = entries.find((e) => e.path === fp.path);
     if (prior) prior.afterHash = sha256(fp.after);
     else

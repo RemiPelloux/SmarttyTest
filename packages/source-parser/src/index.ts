@@ -61,6 +61,8 @@ export interface SymbolRecord {
   /** Members reached through this. and super. (class members only). */
   thisUses?: string[];
   superUses?: string[];
+  /** Methods: `this` leaves the method (fluent APIs), so callers can reach any member. */
+  thisEscapes?: boolean;
   /** Classes: token hash of the class with method/constructor bodies removed. */
   shellHash?: string;
   /** Non-code resources read: "env:NAME", "env:*", "model:Name", "i18n:key". */

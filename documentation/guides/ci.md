@@ -10,6 +10,14 @@ SmartTest is a CLI. It works in any CI system that can run Node.js 22.12 or newe
 
 ## Commands
 
+`smarttest ci` does the CI-specific work for you: it detects the provider, decides what to compare against (merge-base with the target branch for merge requests, the previous revision for branch builds), deepens shallow clones until that history is there, and writes JUnit and Markdown reports.
+
+```bash
+npx smarttest ci
+```
+
+The same can be done by hand:
+
 ```bash
 # merge request / pull request: tests affected by the branch
 npx smarttest run --base origin/main --non-interactive --format junit --format html
@@ -42,8 +50,7 @@ test:
   image: node:24
   script:
     - npm ci
-    - git fetch --depth=200 origin "$CI_MERGE_REQUEST_TARGET_BRANCH_NAME" || true
-    - npx smarttest run --base "origin/${CI_MERGE_REQUEST_TARGET_BRANCH_NAME:-main}" --non-interactive --format junit
+    - npx smarttest ci
   artifacts:
     when: always
     reports:
@@ -55,8 +62,7 @@ test:
 ```bash
 set -e
 npm ci
-git fetch --depth=200 origin main
-npx smarttest run --base origin/main --non-interactive --format junit --format html
+npx smarttest ci
 ```
 
 ## Traces and Shadow Mode in CI

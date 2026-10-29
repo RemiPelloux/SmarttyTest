@@ -61,7 +61,11 @@ function pickExport(value: unknown, subpath: string): string | undefined {
 }
 
 /** Maps a built artifact path (dist/*.js, *.d.ts) back to its source when possible. */
-function toSource(absPkgDir: string, rel: string): string | undefined {
+function toSource(
+  absPkgDir: string,
+  rel: string,
+  fileExists: (p: string) => boolean = isFile,
+): string | undefined {
   const candidates: string[] = [];
   const clean = rel.replace(/^\.\//, "");
   candidates.push(clean);
@@ -72,7 +76,7 @@ function toSource(absPkgDir: string, rel: string): string | undefined {
   for (const e of [".ts", ".tsx", ".js", ".mjs"]) candidates.push(`src/index${e}`);
   for (const c of candidates) {
     const abs = join(absPkgDir, c);
-    if (isFile(abs) && !/\.d\.[cm]?ts$/.test(c) && !/^(dist|build|out)\//.test(c)) return abs;
+    if (fileExists(abs) && !/\.d\.[cm]?ts$/.test(c) && !/^(dist|build|out)\//.test(c)) return abs;
   }
   return undefined;
 }
@@ -83,6 +87,47 @@ export class TypeScriptResolver implements ModuleResolver {
   private configByPath = new Map<string, ts.CompilerOptions>();
   private readonly workspaces: (WorkspaceEntry & { abs: string })[];
   private readonly realRoot: string;
+  // File-system lookups are memoized for the lifetime of the resolver (one index update).
+  private readonly files = new Map<string, boolean>();
+  private readonly dirs = new Map<string, boolean>();
+  private readonly reals = new Map<string, string>();
+  private readonly host: ts.ModuleResolutionHost = {
+    fileExists: (p) => this.isFile(p),
+    readFile: (p) => ts.sys.readFile(p),
+    directoryExists: (p) => {
+      let v = this.dirs.get(p);
+      if (v === undefined) {
+        v = ts.sys.directoryExists(p);
+        this.dirs.set(p, v);
+      }
+      return v;
+    },
+    realpath: (p) => this.realpath(p),
+    getCurrentDirectory: () => this.root,
+    getDirectories: (p) => ts.sys.getDirectories(p),
+  };
+
+  private isFile(p: string): boolean {
+    let v = this.files.get(p);
+    if (v === undefined) {
+      v = isFile(p);
+      this.files.set(p, v);
+    }
+    return v;
+  }
+
+  private realpath(p: string): string {
+    let v = this.reals.get(p);
+    if (v === undefined) {
+      try {
+        v = realpathSync(p);
+      } catch {
+        v = p;
+      }
+      this.reals.set(p, v);
+    }
+    return v;
+  }
 
   constructor(
     private readonly root: string,
@@ -95,12 +140,7 @@ export class TypeScriptResolver implements ModuleResolver {
   }
 
   private rel(abs: string): string | undefined {
-    let real = abs;
-    try {
-      real = realpathSync(abs);
-    } catch {
-      /* keep */
-    }
+    const real = this.realpath(abs);
     return relPosix(this.realRoot, real) ?? relPosix(this.root, abs);
   }
 
@@ -161,13 +201,13 @@ export class TypeScriptResolver implements ModuleResolver {
   }
 
   private probe(absBase: string): string | undefined {
-    if (isFile(absBase)) return absBase;
+    if (this.isFile(absBase)) return absBase;
     const noJs = absBase.replace(/\.(?:[cm]?js|jsx)$/, "");
     for (const base of noJs !== absBase ? [noJs, absBase] : [absBase]) {
-      for (const e of PROBE_EXTS) if (isFile(base + e)) return base + e;
+      for (const e of PROBE_EXTS) if (this.isFile(base + e)) return base + e;
     }
     for (const e of PROBE_EXTS)
-      if (isFile(join(absBase, `index${e}`))) return join(absBase, `index${e}`);
+      if (this.isFile(join(absBase, `index${e}`))) return join(absBase, `index${e}`);
     return undefined;
   }
 
@@ -205,7 +245,8 @@ export class TypeScriptResolver implements ModuleResolver {
               ? (ws.manifest.source ?? ws.manifest.module ?? ws.manifest.main ?? "index.js")
               : sub);
           const src =
-            toSource(ws.abs, target) ?? (sub !== "." ? this.probe(join(ws.abs, sub)) : undefined);
+            toSource(ws.abs, target, (p) => this.isFile(p)) ??
+            (sub !== "." ? this.probe(join(ws.abs, sub)) : undefined);
           if (src) return this.finish(src, specifier);
           return { reason: `workspace package "${ws.name}" entry "${target}" has no source file` };
         }
@@ -213,7 +254,7 @@ export class TypeScriptResolver implements ModuleResolver {
     }
 
     const opts = this.optionsFor(dirname(absFrom));
-    const res = ts.resolveModuleName(specifier, absFrom, opts, ts.sys, this.cacheFor(opts));
+    const res = ts.resolveModuleName(specifier, absFrom, opts, this.host, this.cacheFor(opts));
     const resolved = res.resolvedModule;
     if (resolved && !(resolved.isExternalLibraryImport && !this.rel(resolved.resolvedFileName))) {
       const out = this.finish(resolved.resolvedFileName, specifier);

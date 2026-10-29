@@ -1,0 +1,11 @@
+{
+  "runners": ["vitest"],
+  "vcs": "git",
+  "testFiles": 4,
+  "mutations": [
+    { "file": "src/util/strings.ts", "find": "s.charAt(0).toUpperCase()", "replace": "s.charAt(0)", "expectFailing": ["test/strings.test.ts", "test/labeler.test.ts"] },
+    { "file": "src/util/numbers.ts", "find": "Math.min(max", "replace": "Math.max(max", "expectFailing": ["test/numbers.test.ts"] },
+    { "file": "src/core/Cache.ts", "find": "return this.items.size;", "replace": "return this.items.size + 1;", "expectFailing": ["test/cache.test.ts"] },
+    { "file": "src/util/strings.ts", "find": "\"$1-$2\"", "replace": "\"$1_$2\"", "expectFailing": ["test/strings.test.ts"] }
+  ]
+}
