@@ -179,5 +179,6 @@ export async function prompt(io: IO, t: Theme, question: string): Promise<string
 export function pad(s: string, n: number): string {
   // biome-ignore lint/suspicious/noControlCharactersInRegex: strips ANSI colour codes to measure visible width
   const visible = s.replace(/\u001b\[[0-9;]*m/g, "");
-  return visible.length >= n ? s : s + " ".repeat(n - visible.length);
+  // Always keep at least one space after the text, so columns never run together.
+  return visible.length >= n ? `${s} ` : s + " ".repeat(n - visible.length);
 }
