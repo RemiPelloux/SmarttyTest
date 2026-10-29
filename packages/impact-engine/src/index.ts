@@ -18,7 +18,7 @@ import type {
 } from "@smarttest/shared";
 import { matchGlob } from "@smarttest/shared";
 import type { FileAnalysis } from "@smarttest/source-parser";
-import { topLevelSymbols } from "@smarttest/source-parser";
+import { unitOf } from "@smarttest/source-parser";
 
 export interface ImpactInput {
   changeSet: ChangeSet;
@@ -45,6 +45,8 @@ export interface ImpactDetails {
   trivialSkipped: string[];
   ignored: string[];
   uncertainty: { file: string; reasons: string[] }[];
+  /** Internal dependencies added or removed by the change, per changed file. */
+  graphDiff?: { file: string; added: string[]; removed: string[] }[];
 }
 
 export type ImpactResult = ImpactDecision & { details: ImpactDetails };
@@ -146,9 +148,13 @@ export function decideImpact(input: ImpactInput): ImpactResult {
       else
         details.seeds.push({
           file: path,
-          units: topLevelSymbols(input.files.get(path) as FileAnalysis)
-            .filter((s) => diff.changes.some((c) => c.symbolId === s.id))
-            .map((s) => s.qualifiedName),
+          units: [
+            ...new Set(
+              (input.files.get(path) as FileAnalysis).symbols
+                .filter((s) => diff.changes.some((c) => c.symbolId === s.id))
+                .map((s) => unitOf(s)),
+            ),
+          ],
         });
       if (diff.confidence === "low") partial = true;
       continue;
@@ -172,10 +178,9 @@ export function decideImpact(input: ImpactInput): ImpactResult {
     const [origin] = hit.path;
     select(hit.test, {
       kind: direct ? "direct-dependency" : "transitive-dependency",
-      message: direct
-        ? `Directly depends on ${origin}`
-        : `Transitively depends on ${origin} (${hit.depth} hops)`,
+      message: `${direct ? `Directly depends on ${origin}` : `Transitively depends on ${origin} (${hit.depth} hops)`}${hit.confidence !== "high" ? `, confidence ${hit.confidence}` : ""}`,
       path: hit.path,
+      confidence: hit.confidence,
     });
   }
 

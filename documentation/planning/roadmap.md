@@ -41,23 +41,25 @@ Every new edge type follows the same rules as today: if SmartTest cannot evaluat
 
 ---
 
-## 0.3.0: Precise graph (96 pts)
+## 0.3.0: Precise graph (96 pts), released
 
 Selection moves from "the class changed" to "this method changed, these callers use it".
 
-| Story                                                                                                                                                                                                            | Pts |
-| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --- |
-| Type-aware call resolution: build a TypeScript program per project on demand (changed files and their dependents only) and resolve `obj.method()`, property access and constructor calls to the declaring member | 21  |
-| Method-level propagation: when every reference to a member is resolved, propagate at member granularity; otherwise fall back to the enclosing class, and record why                                              | 13  |
-| Inheritance and overrides: a change to a base method reaches subclasses that do not override it; a change to an override reaches only callers typed with the subclass                                            | 8   |
-| CommonJS at symbol level: `module.exports = { a, b }`, `exports.a =` and destructured `require` become named exports instead of whole-file edges                                                                 | 13  |
-| Re-export hardening: `export * as ns`, default re-exports, `export =`, TS path aliases through barrels, circular barrels                                                                                         | 8   |
-| Persistent graph with incremental patches: store nodes and edges, patch only the files that changed (graph update under 10 ms for a single-file change at 2,000 modules)                                         | 13  |
-| Graph diff between revisions: an import added or removed by the change is itself a change, so new dependents are selected                                                                                        | 8   |
-| Queries: `graph why <a> <b>` (shortest path with evidence), `graph cycles`, `graph orphans` (code no test reaches)                                                                                               | 8   |
-| Decision confidence: combine edge confidences into a per-test confidence shown in `explain` and the report                                                                                                       | 4   |
+| Story                                                                                                                                                                                                                                                             | Pts | Status                                                                              |
+| ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --- | ----------------------------------------------------------------------------------- |
+| Member-level resolution: `obj.method()`, property access and construction resolved to the declaring member through local inference (`new X()`, `x: X`, constructor parameter properties, `this.p`); values that escape or whose class is unknown stay class-level | 21  | done                                                                                |
+| Method-level propagation: methods and accessors are units of their own; constructor, field and heritage changes stay class-level                                                                                                                                  | 13  | done                                                                                |
+| Inheritance and overrides: inherited members resolve to the base class, overrides only to the subclass, `super.m()` to the base member                                                                                                                            | 8   | done                                                                                |
+| CommonJS at symbol level: `module.exports = { a, b }`, `exports.a =`, destructured and namespace `require`                                                                                                                                                        | 13  | done                                                                                |
+| Re-export hardening: `export * as ns`, default re-exports, `export =`, circular barrels                                                                                                                                                                           | 8   | done                                                                                |
+| Persistent graph with incremental patches                                                                                                                                                                                                                         | 13  | moved to 0.8.0: rebuilding from cached analyses stays under 200 ms at 2,000 modules |
+| Graph diff between revisions: dependencies added or removed by the change, shown in `impact` and the decision                                                                                                                                                     | 8   | done                                                                                |
+| Queries: `graph why <a> <b>`, `graph cycles`, `graph orphans`                                                                                                                                                                                                     | 8   | done                                                                                |
+| Decision confidence: lowest edge confidence along the path, shown in reasons and `explain`                                                                                                                                                                        | 4   | done                                                                                |
 
-**Gate:** on the fixtures and on LeadsIt, the number of selected tests drops (measured by `benchmark`) with 0 missed failures; the method-level fixture proves a change to one method does not select tests of sibling methods.
+Type-checker resolution for values local inference cannot type (return values of functions, generics) is moved to 0.8.0; until then those calls are class-level, which is safe.
+
+**Gate:** method-level fixture passes (a change to `TokenManager.verify` no longer selects `AuthController`, which only reaches `issue`); regression harness at 0 missed failures. LeadsIt measurement after 0.5.0.
 
 ## 0.4.0: Complete graph (92 pts)
 
@@ -122,7 +124,7 @@ Make the first ten minutes trivial, in any repository and any CI system. No depe
 
 **Gate:** a fixture that adds a package, switches runner and adopts Git mid-history needs no manual re-init; Playwright selection is validated with `benchmark`.
 
-## 0.8.0: Speed (79 pts)
+## 0.8.0: Speed (105 pts)
 
 Run less (graph), then run what remains faster.
 

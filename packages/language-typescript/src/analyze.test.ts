@@ -56,7 +56,9 @@ describe("analyzeSource", () => {
     );
     const cls = a.symbols.find((s) => s.qualifiedName === "AuthService");
     expect(cls?.exportNames).toEqual(["AuthService"]);
-    expect(cls?.refs).toContain("TokenManager");
+    expect(a.symbols.find((s) => s.qualifiedName === "AuthService.constructor")?.refs).toContain(
+      "TokenManager",
+    );
     expect(a.symbols.find((s) => s.qualifiedName === "AuthService.secret")?.visibility).toBe(
       "private",
     );

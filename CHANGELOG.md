@@ -2,6 +2,21 @@
 
 All notable changes are documented here. Releases are managed with [Changesets](https://github.com/changesets/changesets). The project follows [Semantic Versioning](https://semver.org/).
 
+## [0.3.0] — precise graph
+
+### Added
+
+- Member-level graph: methods and accessors are nodes; calls are resolved to the declaring member through local inference (`new X()`, annotations, constructor parameter properties, `this.p`). A change to one method no longer selects tests that only use its siblings.
+- Inheritance: inherited members resolve to the base class, overrides to the subclass, `super.m()` to the base member; base construction changes reach subclass users.
+- CommonJS exports (`module.exports = { … }`, `exports.x =`) and namespace/`require` member access at symbol level.
+- `graph why <from> <to>`, `graph cycles`, `graph orphans`.
+- Graph diff: dependencies added or removed by a change, shown by `impact`.
+- Per-test confidence (lowest edge confidence along the path) in reasons and `explain`.
+
+### Changed
+
+- Importers of a module are affected when its module-level code changes, even if they use none of its exports.
+
 ## [Unreleased]
 
 ### Changed

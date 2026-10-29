@@ -52,7 +52,7 @@ describe("history benchmark", () => {
     const b = await benchmarkHistory(st, { commits: 2 });
     expect(b.commits.map((c) => c.subject)).toEqual(["catalog: reorder sum", "email: cap length"]);
     expect(b.commits[0]?.selectedTests).toBe(1);
-    expect(b.commits[1]?.selectedTests).toBe(5);
+    expect(b.commits[1]?.selectedTests).toBe(4);
     expect(b.totals.missed).toBe(0);
     expect(b.totals.smarttestMs).toBeGreaterThan(0);
   }, 180_000);

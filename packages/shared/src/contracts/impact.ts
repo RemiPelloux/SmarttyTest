@@ -1,4 +1,4 @@
-import type { SafetyMode } from "../primitives.js";
+import type { Confidence, SafetyMode } from "../primitives.js";
 
 export type SelectionReasonKind =
   | "modified-symbol"
@@ -17,6 +17,8 @@ export interface SelectionReason {
   /** Path through the graph that justifies the reason, if any. */
   path?: string[];
   ruleName?: string;
+  /** Lowest edge confidence along the path. */
+  confidence?: Confidence;
 }
 
 export interface SelectedTest {

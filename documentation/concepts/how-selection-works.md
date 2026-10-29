@@ -24,6 +24,10 @@ The graph holds files, symbols, tests and configuration. Its edges are `IMPORTS`
 - Tests: each runner (Jest, Vitest, `node --test`) is asked which files it collects, with its own config. A file named `*.test.ts` that no runner collects never runs, and `doctor` reports it.
 - Computed imports: ``import(`${SCRIPTS}x.mjs`)``, `new URL("../tpl/", import.meta.url)` and `resolve(__dirname, "fixtures")` are evaluated statically. A partially known path becomes a bounded glob (`templates/*.ts`). Only truly unknowable imports (`import(file)`) remain uncertainty.
 
+### Member-level precision
+
+Methods and accessors are units of their own. `this.tokens.verify()` is linked to `TokenManager.verify` when the class of `this.tokens` is known locally (`new X()`, `x: X`, constructor parameter properties). A change to `verify` then reaches only callers of `verify`, not every user of `TokenManager`. Values that leave a function (returned, passed, stored) or whose class cannot be inferred are linked to the whole class. Constructor, field and heritage changes affect the whole class. Inherited members resolve to the base class; `super.m()` to the base member.
+
 ## 4. Rules & safety
 
 [Rules](rules.md) add risk levels, always-run tests and mode overrides. Mandatory triggers widen the selection for changes with global impact:

@@ -1,19 +1,29 @@
 /**
- * @smarttest/dependency-graph — hybrid dependency graph with provenance and confidence (spec §10).
+ * @smarttest/dependency-graph — dependency graph with provenance and confidence (spec §10).
  *
- * Granularity: top-level units (class, function, variable…). Edges point from a dependent unit to
- * what it depends on. A unit of "*" means "the whole file"; dependents registered on a file mean
- * "depends on any part of that file" (namespace, side-effect, require, mocks).
+ * Node keys:
+ *   file#X          a top-level symbol (function, variable, class as a whole)
+ *   file#C.m        a class member (method, accessor, property)
+ *   file#C.@init    construction of C (constructor, field initializers, heritage)
+ *   file#*          the whole file (module-level code, side-effect imports, tests)
+ *
+ * An edge points from a dependent key to what it depends on. Member-level edges come from the
+ * analyzer's member uses; anything less precise (escapes, unknown members, non-class targets)
+ * falls back to the class or symbol as a whole. Dependents registered on `file#C` (imprecise users
+ * of C) are affected by any change to any member of C.
  */
 import type { Confidence, GraphEdge, GraphNode, Provenance } from "@smarttest/shared";
-import type { FileAnalysis } from "@smarttest/source-parser";
+import type { FileAnalysis, SymbolRecord } from "@smarttest/source-parser";
 import { topLevelSymbols } from "@smarttest/source-parser";
 
 export const WHOLE = "*";
+const ANY = "@any";
+const INIT = "@init";
 
 export interface Seed {
   file: string;
-  units: string[]; // ["*"] = whole file
+  /** Units: "*" (whole file), "X" (top-level symbol / whole class), "C.m" (member). */
+  units: string[];
 }
 
 export interface TestHit {
@@ -21,6 +31,7 @@ export interface TestHit {
   /** Human-readable path from a changed unit to the test. */
   path: string[];
   depth: number;
+  /** Lowest confidence along the path. */
   confidence: Confidence;
 }
 
@@ -28,39 +39,43 @@ export interface TraversalResult {
   tests: Map<string, TestHit>;
   affectedFiles: Set<string>;
   affectedUnits: Set<string>;
+  /** Path (labels) from the seeds to a reached file, if reached. */
+  pathTo(file: string): string[] | undefined;
 }
 
 interface Dep {
-  /** dependent key: "file#unit" */
   from: string;
   kind: GraphEdge["kind"];
   provenance: Provenance;
   confidence: Confidence;
 }
 
+type LocalTarget = { file: string; unit: string } | { file: string; namespace: true };
+
 const key = (file: string, unit: string) => `${file}#${unit}`;
 const splitKey = (k: string): [string, string] => {
-  const i = k.lastIndexOf("#");
+  const i = k.indexOf("#");
   return [k.slice(0, i), k.slice(i + 1)];
 };
+const RANK: Confidence[] = ["high", "medium", "low", "unknown"];
+const weakest = (a: Confidence, b: Confidence): Confidence =>
+  RANK.indexOf(a) >= RANK.indexOf(b) ? a : b;
 
 export class DependencyGraph {
-  /** target unit key -> dependents */
-  private unitDependents = new Map<string, Dep[]>();
-  /** target file -> dependents on any part of it */
+  private deps = new Map<string, Dep[]>();
   private fileDependents = new Map<string, Dep[]>();
-  /** file -> unit -> same-file units that reference it */
-  private intra = new Map<string, Map<string, Set<string>>>();
-  /** file -> units referenced by module-level code */
-  private topLevelUsed = new Map<string, Set<string>>();
-  /** target file -> files that re-export from it */
+  /** Importers affected when a file's module-level code changes (imports run that code). */
+  private moduleDependents = new Map<string, string[]>();
   private reexporters = new Map<string, Set<string>>();
-  /** file -> resolved internal import targets */
   private forward = new Map<string, Set<string>>();
   private forwardClosure = new Map<string, Set<string>>();
+  private exportCache = new Map<string, Map<string, string>>();
+  private localCache = new Map<string, Map<string, LocalTarget>>();
+  private reachingUncertainty: Set<string> | undefined;
   readonly uncertainty = new Map<string, string[]>();
   readonly deletedFiles = new Set<string>();
   private edgeCount = 0;
+  private memberEdgeCount = 0;
 
   constructor(
     private readonly files: ReadonlyMap<string, FileAnalysis>,
@@ -69,23 +84,16 @@ export class DependencyGraph {
     this.build();
   }
 
-  private addUnitDep(target: string, dep: Dep): void {
-    const list = this.unitDependents.get(target) ?? [];
-    list.push(dep);
-    this.unitDependents.set(target, list);
-    this.edgeCount++;
+  // ── lookups ─────────────────────────────────────────────────────────────────────────────
+
+  private topSymbol(file: string, name: string): SymbolRecord | undefined {
+    return this.files.get(file)?.symbols.find((s) => !s.parent && s.qualifiedName === name);
   }
 
-  private addFileDep(target: string, dep: Dep): void {
-    const list = this.fileDependents.get(target) ?? [];
-    list.push(dep);
-    this.fileDependents.set(target, list);
-    this.edgeCount++;
+  private member(file: string, cls: string, name: string): SymbolRecord | undefined {
+    return this.files.get(file)?.symbols.find((s) => s.parent === cls && s.name === name);
   }
 
-  private exportCache = new Map<string, Map<string, string>>();
-
-  /** Directly exported names of a file → defining top-level unit (cached). */
   private exportsOf(file: string, a: FileAnalysis): Map<string, string> {
     let m = this.exportCache.get(file);
     if (!m) {
@@ -107,13 +115,12 @@ export class DependencyGraph {
     if (seen.has(visitKey)) return undefined;
     seen.add(visitKey);
     const a = this.files.get(file);
-    if (!a || a.moduleKind === "cjs") return undefined;
+    if (!a) return undefined;
     const direct = this.exportsOf(file, a).get(name);
     if (direct) return { file, unit: direct };
     const local = a.localExports.find((e) => e.exported === name);
     if (local) {
-      const sym = topLevelSymbols(a).find((s) => s.qualifiedName === local.local);
-      if (sym) return { file, unit: sym.qualifiedName };
+      if (this.topSymbol(file, local.local)) return { file, unit: local.local };
       for (const imp of a.imports) {
         const b = imp.bindings.find((x) => x.local === local.local);
         if (b && imp.resolved && b.imported !== "*")
@@ -123,20 +130,19 @@ export class DependencyGraph {
               unit: WHOLE,
             }
           );
+        if (b && imp.resolved) return { file: imp.resolved, unit: WHOLE };
       }
     }
     for (const imp of a.imports) {
-      if (!imp.resolved) continue;
-      if (imp.kind === "reexport") {
-        const b = imp.bindings.find((x) => x.local === name);
-        if (b)
-          return b.imported === "*"
-            ? { file: imp.resolved, unit: WHOLE }
-            : (this.resolveExport(imp.resolved, b.imported, seen) ?? {
-                file: imp.resolved,
-                unit: WHOLE,
-              });
-      }
+      if (!imp.resolved || imp.kind !== "reexport") continue;
+      const b = imp.bindings.find((x) => x.local === name);
+      if (b)
+        return b.imported === "*"
+          ? { file: imp.resolved, unit: WHOLE }
+          : (this.resolveExport(imp.resolved, b.imported, seen) ?? {
+              file: imp.resolved,
+              unit: WHOLE,
+            });
     }
     if (name !== "default") {
       for (const imp of a.imports) {
@@ -149,84 +155,160 @@ export class DependencyGraph {
     return undefined;
   }
 
+  /** What a name means inside a file: a same-file symbol, an imported unit, or a namespace. */
+  private localTarget(file: string, name: string): LocalTarget | undefined {
+    let cache = this.localCache.get(file);
+    if (!cache) {
+      cache = new Map();
+      const a = this.files.get(file);
+      if (a) {
+        for (const imp of a.imports) {
+          if (!imp.resolved || imp.kind === "reexport" || imp.kind === "reexport-all") continue;
+          for (const b of imp.bindings) {
+            if (b.imported === "*") cache.set(b.local, { file: imp.resolved, namespace: true });
+            else {
+              const r = this.resolveExport(imp.resolved, b.imported);
+              cache.set(b.local, r ?? { file: imp.resolved, unit: WHOLE });
+            }
+          }
+        }
+        for (const s of a.symbols)
+          if (!s.parent) cache.set(s.qualifiedName, { file, unit: s.qualifiedName });
+      }
+      this.localCache.set(file, cache);
+    }
+    return cache.get(name);
+  }
+
+  /** Key of `cls.member`, following `extends` for inherited members. */
+  private memberKey(
+    file: string,
+    cls: string,
+    member: string,
+    seen = new Set<string>(),
+  ): string | undefined {
+    if (member === "constructor") return key(file, `${cls}.${INIT}`);
+    if (seen.has(`${file}:${cls}`)) return undefined;
+    seen.add(`${file}:${cls}`);
+    if (this.member(file, cls, member)) return key(file, `${cls}.${member}`);
+    const base = this.topSymbol(file, cls)?.extends;
+    if (!base || !/^[A-Za-z_$][\w$]*$/.test(base)) return undefined;
+    const t = this.localTarget(file, base);
+    if (!t || "namespace" in t || t.unit === WHOLE) return undefined;
+    if (this.topSymbol(t.file, t.unit)?.kind !== "class") return undefined;
+    return this.memberKey(t.file, t.unit, member, seen);
+  }
+
+  // ── build ───────────────────────────────────────────────────────────────────────────────
+
+  private addDep(target: string, dep: Dep): void {
+    const list = this.deps.get(target) ?? [];
+    list.push(dep);
+    this.deps.set(target, list);
+    this.edgeCount++;
+  }
+
+  private addFileDep(target: string, dep: Dep): void {
+    const list = this.fileDependents.get(target) ?? [];
+    list.push(dep);
+    this.fileDependents.set(target, list);
+    this.edgeCount++;
+  }
+
+  /** Links one dependent key to everything its references, member uses and escapes reach. */
+  private link(
+    file: string,
+    from: string,
+    refs: readonly string[],
+    uses: readonly string[],
+    escapes: readonly string[],
+    kind: GraphEdge["kind"],
+  ): void {
+    const usesByName = new Map<string, Set<string>>();
+    for (const u of uses) {
+      const i = u.indexOf(".");
+      const n = u.slice(0, i);
+      const set = usesByName.get(n) ?? new Set();
+      set.add(u.slice(i + 1));
+      usesByName.set(n, set);
+    }
+    const escaped = new Set(escapes);
+    const names = new Set([...refs, ...usesByName.keys(), ...escapes]);
+    const dep = (confidence: Confidence = "high"): Dep => ({
+      from,
+      kind,
+      provenance: "static",
+      confidence,
+    });
+    for (const name of names) {
+      const t = this.localTarget(file, name);
+      if (!t) continue;
+      if (t.file === file && !("namespace" in t) && key(file, t.unit) === from) continue; // self
+      const members = usesByName.get(name);
+      if ("namespace" in t) {
+        if (escaped.has(name) || !members?.size) {
+          this.addFileDep(t.file, dep());
+          continue;
+        }
+        for (const m of members) {
+          const r = this.resolveExport(t.file, m);
+          if (r && r.unit !== WHOLE) {
+            this.addDep(key(r.file, r.unit), dep());
+            this.memberEdgeCount++;
+          } else this.addFileDep(t.file, dep("medium"));
+        }
+        continue;
+      }
+      if (t.unit === WHOLE) {
+        this.addFileDep(t.file, dep("medium"));
+        continue;
+      }
+      const isClass = this.topSymbol(t.file, t.unit)?.kind === "class";
+      if (!isClass || escaped.has(name) || !members?.size) {
+        this.addDep(key(t.file, t.unit), dep());
+        continue;
+      }
+      for (const m of members) {
+        const mk = this.memberKey(t.file, t.unit, m);
+        if (mk) this.memberEdgeCount++;
+        this.addDep(mk ?? key(t.file, t.unit), dep());
+      }
+    }
+  }
+
   private build(): void {
     for (const [file, a] of this.files) {
-      const units = topLevelSymbols(a).map((s) => s.qualifiedName);
-      const unitSet = new Set(units);
       const test = this.isTest(file);
       const fwd = new Set<string>();
       this.forward.set(file, fwd);
       const unc: string[] = [...a.dynamicUnresolved.map((d) => `dynamic import/require (${d})`)];
-      // local name -> targets
-      const localTargets = new Map<
-        string,
-        { target: string; kind: "unit" | "file"; typeOnly: boolean; confidence: Confidence }[]
-      >();
       for (const imp of a.imports) {
         if (imp.unresolved && !imp.missing)
           unc.push(`unresolved import "${imp.specifier}" (${imp.unresolved})`);
         if (!imp.resolved) continue;
         fwd.add(imp.resolved);
         if (imp.missing) this.deletedFiles.add(imp.resolved);
-        const prov: Provenance = "static";
+        if (!imp.typeOnly)
+          this.moduleDependents.set(imp.resolved, [
+            ...(this.moduleDependents.get(imp.resolved) ?? []),
+            key(file, WHOLE),
+          ]);
         if (imp.kind === "reexport" || imp.kind === "reexport-all") {
           const set = this.reexporters.get(imp.resolved) ?? new Set();
           set.add(file);
           this.reexporters.set(imp.resolved, set);
           continue;
         }
-        if (
-          imp.kind === "named" ||
-          (imp.kind === "require" &&
-            imp.bindings.length &&
-            imp.bindings.every((b) => b.imported !== "*"))
-        ) {
-          for (const b of imp.bindings) {
-            const r = b.imported === "*" ? undefined : this.resolveExport(imp.resolved, b.imported);
-            const entry =
-              r && r.unit !== WHOLE
-                ? {
-                    target: key(r.file, r.unit),
-                    kind: "unit" as const,
-                    typeOnly: imp.typeOnly,
-                    confidence: "high" as Confidence,
-                  }
-                : {
-                    target: r?.file ?? imp.resolved,
-                    kind: "file" as const,
-                    typeOnly: imp.typeOnly,
-                    confidence: (r ? "high" : "medium") as Confidence,
-                  };
-            const list = localTargets.get(b.local) ?? [];
-            list.push(entry);
-            localTargets.set(b.local, list);
-          }
-          continue;
-        }
-        if (imp.kind === "namespace" || imp.kind === "require") {
-          for (const b of imp.bindings) {
-            const list = localTargets.get(b.local) ?? [];
-            list.push({
-              target: imp.resolved,
-              kind: "file",
-              typeOnly: imp.typeOnly,
-              confidence: "high",
-            });
-            localTargets.set(b.local, list);
-          }
-          if (imp.bindings.length) continue;
-        }
-        // side-effect, bare require, dynamic, mock: the whole file depends on the target
+        if (imp.bindings.length && imp.kind !== "dynamic" && imp.kind !== "mock") continue; // linked through names
         this.addFileDep(imp.resolved, {
           from: key(file, WHOLE),
           kind: imp.kind === "mock" ? "REFERENCES" : "IMPORTS",
-          provenance: prov,
+          provenance: "static",
           confidence: imp.kind === "dynamic" || imp.kind === "mock" ? "medium" : "high",
         });
       }
       for (const d of a.dynamicUnmatched ?? [])
         unc.push(`dynamic import matched no project file (${d})`);
-      // Statically evaluated dynamic imports: the whole file may load each target.
       for (const target of a.dynamicTargets ?? []) {
         fwd.add(target);
         this.addFileDep(target, {
@@ -238,41 +320,7 @@ export class DependencyGraph {
       }
       if (unc.length) this.uncertainty.set(file, unc);
 
-      const link = (fromUnit: string, refs: readonly string[]) => {
-        for (const r of refs) {
-          for (const t of localTargets.get(r) ?? []) {
-            const dep: Dep = {
-              from: key(file, fromUnit),
-              kind: test ? "TESTS" : "REFERENCES",
-              provenance: "static",
-              confidence: t.confidence,
-            };
-            if (t.kind === "unit") this.addUnitDep(t.target, dep);
-            else this.addFileDep(t.target, dep);
-          }
-        }
-      };
-      const intraMap = new Map<string, Set<string>>();
-      const memberRefsByParent = new Map<string, string[]>();
-      for (const m of a.symbols)
-        if (m.parent)
-          memberRefsByParent.set(m.parent, [
-            ...(memberRefsByParent.get(m.parent) ?? []),
-            ...m.refs,
-          ]);
-      for (const s of topLevelSymbols(a)) {
-        const memberRefs = memberRefsByParent.get(s.qualifiedName) ?? [];
-        const refs = [...new Set([...s.refs, ...memberRefs])];
-        link(test ? WHOLE : s.qualifiedName, refs);
-        for (const r of refs) {
-          if (r !== s.qualifiedName && unitSet.has(r)) {
-            const set = intraMap.get(r) ?? new Set();
-            set.add(s.qualifiedName);
-            intraMap.set(r, set);
-          }
-        }
-      }
-      // Locally re-exported imports: `import { x } from "./y"; export { x }` → this file re-exports y.
+      // Re-exported locals: `import { x } from "./y"; export { x }` makes this file a re-exporter of y.
       for (const le of a.localExports) {
         for (const imp of a.imports) {
           if (imp.resolved && imp.bindings.some((b) => b.local === le.local)) {
@@ -282,14 +330,87 @@ export class DependencyGraph {
           }
         }
       }
-      link(WHOLE, a.topLevelRefs);
-      this.intra.set(file, intraMap);
-      this.topLevelUsed.set(file, new Set(a.topLevelRefs.filter((r) => unitSet.has(r))));
+
+      const kind: GraphEdge["kind"] = test ? "TESTS" : "REFERENCES";
+      for (const s of a.symbols) {
+        const from = test
+          ? key(file, WHOLE)
+          : key(file, s.parent ? `${s.parent}.${s.name}` : s.qualifiedName);
+        this.link(file, from, s.refs, s.uses ?? [], s.escapes ?? [], kind);
+        if (s.parent && !test) {
+          for (const m of s.thisUses ?? []) {
+            const mk = this.memberKey(file, s.parent, m);
+            if (mk && mk !== from)
+              this.addDep(mk, {
+                from,
+                kind: "REFERENCES",
+                provenance: "static",
+                confidence: "high",
+              });
+          }
+          const base = this.topSymbol(file, s.parent)?.extends;
+          for (const m of s.superUses ?? []) {
+            const t = base ? this.localTarget(file, base) : undefined;
+            const mk =
+              t && !("namespace" in t) && t.unit !== WHOLE
+                ? this.memberKey(t.file, t.unit, m)
+                : undefined;
+            this.addDep(mk ?? key(file, s.parent), {
+              from,
+              kind: "REFERENCES",
+              provenance: "static",
+              confidence: mk ? "high" : "medium",
+            });
+          }
+        }
+        if (s.kind === "class" && !s.parent && s.extends && !test) {
+          const t = this.localTarget(file, s.extends.split(/[<(]/)[0] as string);
+          const target =
+            t &&
+            !("namespace" in t) &&
+            t.unit !== WHOLE &&
+            this.topSymbol(t.file, t.unit)?.kind === "class"
+              ? key(t.file, `${t.unit}.${INIT}`)
+              : undefined;
+          if (target)
+            this.addDep(target, {
+              from: key(file, s.qualifiedName),
+              kind: "EXTENDS",
+              provenance: "static",
+              confidence: "high",
+            });
+          else if (t && "namespace" in t)
+            this.addFileDep(t.file, {
+              from: key(file, s.qualifiedName),
+              kind: "EXTENDS",
+              provenance: "static",
+              confidence: "medium",
+            });
+        }
+      }
+      // Analyses without member uses (older analyzer) treat every reference as an escape.
+      const hasMemberInfo =
+        a.topLevelUses !== undefined ||
+        a.topLevelEscapes !== undefined ||
+        !["ts-1", "ts-2"].includes(a.analyzerVersion);
+      this.link(
+        file,
+        key(file, WHOLE),
+        a.topLevelRefs,
+        a.topLevelUses ?? [],
+        a.topLevelEscapes ?? (hasMemberInfo ? [] : a.topLevelRefs),
+        kind,
+      );
     }
   }
 
-  get stats(): { files: number; edges: number; uncertainFiles: number } {
-    return { files: this.files.size, edges: this.edgeCount, uncertainFiles: this.uncertainty.size };
+  get stats(): { files: number; edges: number; memberEdges: number; uncertainFiles: number } {
+    return {
+      files: this.files.size,
+      edges: this.edgeCount,
+      memberEdges: this.memberEdgeCount,
+      uncertainFiles: this.uncertainty.size,
+    };
   }
 
   hasFile(file: string): boolean {
@@ -311,8 +432,6 @@ export class DependencyGraph {
     this.forwardClosure.set(file, out);
     return out;
   }
-
-  private reachingUncertainty: Set<string> | undefined;
 
   /** Files whose transitive imports include a file with uncertainty (computed once, reverse BFS). */
   private filesReachingUncertainty(): Set<string> {
@@ -345,14 +464,17 @@ export class DependencyGraph {
     return out;
   }
 
+  // ── traversal ───────────────────────────────────────────────────────────────────────────
+
   /** Reverse traversal from changed units to everything that depends on them (cycle-safe BFS). */
   dependentsOf(seeds: readonly Seed[]): TraversalResult {
-    const parent = new Map<string, string | undefined>();
+    const parent = new Map<string, { from: string | undefined; confidence: Confidence }>();
     const queue: string[] = [];
     let head = 0;
-    const push = (k: string, from: string | undefined) => {
+    const push = (k: string, from: string | undefined, confidence: Confidence = "high") => {
       if (parent.has(k)) return;
-      parent.set(k, from);
+      const inherited = from ? (parent.get(from)?.confidence ?? "high") : "high";
+      parent.set(k, { from, confidence: weakest(inherited, confidence) });
       queue.push(k);
     };
     for (const s of seeds)
@@ -363,64 +485,130 @@ export class DependencyGraph {
     const affectedUnits = new Set<string>();
     const label = (k: string) => {
       const [file, unit] = splitKey(k);
-      return unit === WHOLE || unit === "@any" ? file : `${file}#${unit}`;
+      return unit === WHOLE || unit === ANY
+        ? file
+        : `${file}#${unit.replace(`.${INIT}`, ".constructor")}`;
     };
-    const pathTo = (k: string): string[] => {
+    const pathOfKey = (k: string): string[] => {
       const out: string[] = [];
       let cur: string | undefined = k;
       while (cur !== undefined) {
         const l = label(cur);
         if (out[0] !== l) out.unshift(l);
-        cur = parent.get(cur);
+        cur = parent.get(cur)?.from;
       }
       // "file → file#Unit" is one hop, not two: keep the more precise label.
       if (out.length > 1 && !out[0]?.includes("#") && out[1]?.startsWith(`${out[0]}#`)) out.shift();
       return out;
+    };
+    const firstKeyOfFile = new Map<string, string>();
+    const pushDeps = (target: string, from: string) => {
+      for (const d of this.deps.get(target) ?? []) push(d.from, from, d.confidence);
     };
 
     while (head < queue.length) {
       const k = queue[head++] as string;
       const [file, unit] = splitKey(k);
       affectedFiles.add(file);
+      if (!firstKeyOfFile.has(file)) firstKeyOfFile.set(file, k);
       if (this.isTest(file)) {
         if (!tests.has(file)) {
-          const path = pathTo(k);
-          tests.set(file, { test: file, path, depth: path.length - 1, confidence: "high" });
+          const path = pathOfKey(k);
+          tests.set(file, {
+            test: file,
+            path,
+            depth: path.length - 1,
+            confidence: parent.get(k)?.confidence ?? "high",
+          });
         }
         continue;
       }
+      affectedUnits.add(k);
       const a = this.files.get(file);
-      let units: string[];
-      if (unit === "@any") units = [];
-      else if (unit === WHOLE) units = a ? topLevelSymbols(a).map((s) => s.qualifiedName) : [];
-      else units = [unit];
-      // same-file propagation
-      const intra = this.intra.get(file);
-      const topUsed = this.topLevelUsed.get(file);
-      const expanded = new Set(units);
-      const stack = [...units];
-      while (stack.length) {
-        const u = stack.pop() as string;
-        for (const d of intra?.get(u) ?? [])
-          if (!expanded.has(d)) {
-            expanded.add(d);
-            stack.push(d);
-          }
+      if (unit === WHOLE) {
+        for (const s of a ? topLevelSymbols(a) : []) push(key(file, s.qualifiedName), k);
+        pushDeps(k, k);
+        for (const importer of this.moduleDependents.get(file) ?? []) push(importer, k);
+      } else if (unit === ANY) {
+        // only file-level dependents and re-exporters below
+      } else if (unit.includes(".")) {
+        const cls = unit.slice(0, unit.indexOf("."));
+        pushDeps(k, k);
+        pushDeps(key(file, cls), k); // imprecise users of the class
+      } else {
+        const sym = a ? this.topSymbol(file, unit) : undefined;
+        if (sym?.kind === "class" && a) {
+          for (const m of a.symbols) if (m.parent === unit) push(key(file, `${unit}.${m.name}`), k);
+          push(key(file, `${unit}.${INIT}`), k);
+        }
+        pushDeps(k, k);
       }
-      if (unit !== WHOLE && unit !== "@any" && [...expanded].some((u) => topUsed?.has(u)))
-        push(key(file, WHOLE), k);
-      for (const u of expanded) {
-        affectedUnits.add(key(file, u));
-        if (u !== unit) push(key(file, u), k);
-        for (const d of this.unitDependents.get(key(file, u)) ?? []) push(d.from, key(file, u));
-      }
-      for (const d of this.fileDependents.get(file) ?? []) push(d.from, k);
-      for (const g of this.reexporters.get(file) ?? []) push(key(g, "@any"), k);
+      for (const d of this.fileDependents.get(file) ?? []) push(d.from, k, d.confidence);
+      for (const g of this.reexporters.get(file) ?? []) push(key(g, ANY), k);
     }
-    return { tests, affectedFiles, affectedUnits };
+    return {
+      tests,
+      affectedFiles,
+      affectedUnits,
+      pathTo: (file: string) => {
+        const k = firstKeyOfFile.get(file);
+        return k ? pathOfKey(k) : undefined;
+      },
+    };
   }
 
-  /** Nodes and edges for export (JSON/DOT) and future visualisation (spec §10.8). */
+  // ── queries ─────────────────────────────────────────────────────────────────────────────
+
+  /** Shortest dependency path from a changed unit (`file` or `file#Unit`) to another file. */
+  why(from: string, to: string): string[] | undefined {
+    const [file, unit] = from.includes("#") ? (from.split("#") as [string, string]) : [from, WHOLE];
+    return this.dependentsOf([{ file, units: [unit] }]).pathTo(to.split("#")[0] as string);
+  }
+
+  /** Import cycles (strongly connected components with more than one file, or self-imports). */
+  cycles(): string[][] {
+    let index = 0;
+    const idx = new Map<string, number>();
+    const low = new Map<string, number>();
+    const stack: string[] = [];
+    const onStack = new Set<string>();
+    const out: string[][] = [];
+    const strong = (v: string) => {
+      idx.set(v, index);
+      low.set(v, index);
+      index++;
+      stack.push(v);
+      onStack.add(v);
+      for (const w of this.forward.get(v) ?? []) {
+        if (!this.files.has(w)) continue;
+        if (!idx.has(w)) {
+          strong(w);
+          low.set(v, Math.min(low.get(v) as number, low.get(w) as number));
+        } else if (onStack.has(w)) low.set(v, Math.min(low.get(v) as number, idx.get(w) as number));
+      }
+      if (low.get(v) === idx.get(v)) {
+        const comp: string[] = [];
+        let w: string;
+        do {
+          w = stack.pop() as string;
+          onStack.delete(w);
+          comp.push(w);
+        } while (w !== v);
+        if (comp.length > 1 || this.forward.get(v)?.has(v)) out.push(comp.sort());
+      }
+    };
+    for (const f of [...this.files.keys()].sort()) if (!idx.has(f)) strong(f);
+    return out.sort((a, b) => b.length - a.length);
+  }
+
+  /** Source files that no test reaches through static dependencies. */
+  orphans(testFiles: readonly string[]): string[] {
+    const reached = new Set<string>();
+    for (const t of testFiles) for (const f of this.dependenciesOf(t)) reached.add(f);
+    return [...this.files.keys()].filter((f) => !this.isTest(f) && !reached.has(f)).sort();
+  }
+
+  /** Nodes and edges for export (JSON/DOT) and visualisation (spec §10.8). */
   toGraph(): { nodes: GraphNode[]; edges: GraphEdge[] } {
     const nodes: GraphNode[] = [];
     const edges: GraphEdge[] = [];
@@ -431,28 +619,37 @@ export class DependencyGraph {
         label: file,
         filePath: file,
       });
-      for (const s of topLevelSymbols(a)) {
+      for (const s of a.symbols) {
+        const id = key(file, s.parent ? `${s.parent}.${s.name}` : s.qualifiedName);
         nodes.push({
-          id: key(file, s.qualifiedName),
-          kind: s.kind === "class" ? "class" : s.kind === "function" ? "function" : "module",
+          id,
+          kind:
+            s.kind === "class"
+              ? "class"
+              : s.kind === "method"
+                ? "method"
+                : s.kind === "function"
+                  ? "function"
+                  : "module",
           label: s.qualifiedName,
           filePath: file,
         });
       }
     }
-    for (const [target, deps] of this.unitDependents)
-      for (const d of deps)
+    const clean = (k: string) => k.replace(/#\*$/, "");
+    for (const [target, ds] of this.deps)
+      for (const d of ds)
         edges.push({
-          from: d.from.replace(/#\*$/, ""),
+          from: clean(d.from),
           to: target,
           kind: d.kind,
           provenance: d.provenance,
           confidence: d.confidence,
         });
-    for (const [target, deps] of this.fileDependents)
-      for (const d of deps)
+    for (const [target, ds] of this.fileDependents)
+      for (const d of ds)
         edges.push({
-          from: d.from.replace(/#\*$/, ""),
+          from: clean(d.from),
           to: target,
           kind: d.kind,
           provenance: d.provenance,

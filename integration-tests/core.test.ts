@@ -8,14 +8,14 @@ const selectedOf = (st: { decision: { selectedTests: { filePath: string }[] } })
   st.decision.selectedTests.map((t) => t.filePath).sort();
 
 describe("nest-auth-vitest (git)", () => {
-  it("selects only the tests that depend on a changed method's class", async () => {
+  it("selects only the tests that reach the changed method (not its siblings)", async () => {
     const dir = await materialize("nest-auth-vitest", { git: true });
     await edit(dir, "src/modules/auth/TokenManager.ts", "token.length > 8", "token.length > 7");
     const st = await SmartTest.open({ root: dir });
     const a = await st.analyze();
+    // AuthController only reaches TokenManager.issue (login), not verify: it is not selected.
     expect(selectedOf(a)).toEqual([
       "test/routes/ProtectedRoutes.test.ts",
-      "tests/unit/modules/auth/AuthController.test.ts",
       "tests/unit/modules/auth/AuthService.test.ts",
       "tests/unit/modules/auth/TokenManager.test.ts",
     ]);
@@ -24,16 +24,33 @@ describe("nest-auth-vitest (git)", () => {
       a.decision.selectedTests.find((t) => t.filePath === "test/routes/ProtectedRoutes.test.ts")
         ?.reasons ?? [];
     expect(protectedReasons[0]?.path).toEqual([
-      "src/modules/auth/TokenManager.ts#TokenManager",
-      "src/modules/auth/AuthService.ts#AuthService",
-      "src/modules/auth/AuthenticationMiddleware.ts#auth",
+      "src/modules/auth/TokenManager.ts#TokenManager.verify",
+      "src/modules/auth/AuthService.ts#AuthService.validateToken",
       "src/modules/auth/AuthenticationMiddleware.ts#authenticate",
       "src/routes/protected.ts#protectedRoute",
       "test/routes/ProtectedRoutes.test.ts",
     ]);
     expect(a.decision.skippedTests.map((t) => t.filePath)).toContain(
-      "tests/unit/modules/catalog/CatalogService.test.ts",
+      "tests/unit/modules/auth/AuthController.test.ts",
     );
+  }, 60_000);
+
+  it("a change to TokenManager.issue selects the login paths only", async () => {
+    const dir = await materialize("nest-auth-vitest", { git: true });
+    await edit(
+      dir,
+      "src/modules/auth/TokenManager.ts",
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: source code being edited
+      "return `${TOKEN_PREFIX}${userId}",
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: source code being edited
+      "return `${TOKEN_PREFIX}${userId.trim()}",
+    );
+    const a = await (await SmartTest.open({ root: dir })).analyze();
+    expect(selectedOf(a)).toEqual([
+      "tests/unit/modules/auth/AuthController.test.ts",
+      "tests/unit/modules/auth/AuthService.test.ts",
+      "tests/unit/modules/auth/TokenManager.test.ts",
+    ]);
   }, 60_000);
 
   it("ignores comment-only changes in FAST mode but not in BALANCED", async () => {
@@ -72,9 +89,9 @@ describe("nest-auth-vitest (git)", () => {
     const a = await (await SmartTest.open({ root: dir })).analyze({
       source: { kind: "base", ref: "main" },
     });
-    // ProtectedRoutes → authenticate → AuthService → isEmail: transitively affected.
+    // isEmail is reached by AuthService.login and UserService.register; ProtectedRoutes only uses
+    // validateToken, so it is not affected.
     expect(selectedOf(a)).toEqual([
-      "test/routes/ProtectedRoutes.test.ts",
       "tests/unit/modules/auth/AuthController.test.ts",
       "tests/unit/modules/auth/AuthService.test.ts",
       "tests/unit/modules/users/UserService.test.ts",
@@ -110,15 +127,14 @@ describe("nest-auth-vitest (git)", () => {
 });
 
 describe("express-cjs-jest (git)", () => {
-  it("handles CommonJS at file level and runs Jest", async () => {
+  it("handles CommonJS at symbol level and runs Jest", async () => {
     const dir = await materialize("express-cjs-jest", { git: true });
     await edit(dir, "src/utils/format.js", "toLowerCase()", "toLowerCase().trim()");
     const st = await SmartTest.open({ root: dir });
     const out = await st.run({ formats: ["json"] });
+    // slug() is only used by format.test.js; formatName users (app, userService) are not affected.
     expect(out.report.decision.selectedTests.map((t) => t.filePath).sort()).toEqual([
-      "__tests__/app.test.js",
       "__tests__/format.test.js",
-      "__tests__/userService.test.js",
     ]);
     expect(out.report.executions.every((e) => e.status === "passed")).toBe(true);
     expect(out.exitCode).toBe(0);

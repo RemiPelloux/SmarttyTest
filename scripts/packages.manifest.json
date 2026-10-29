@@ -1,7 +1,7 @@
 {
   "$comment": "Source of truth for the v1.0.0 package map. Edit, then run `pnpm scaffold:package --all` (idempotent: never overwrites existing src/ files).",
   "scope": "@smarttest",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "packages": [
     {
       "name": "shared",

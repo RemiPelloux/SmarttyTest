@@ -52,6 +52,15 @@ export interface SymbolRecord {
   /** Identifiers referenced inside the declaration. */
   refs: string[];
   decorators: string[];
+  /** "Name.member" uses (member-level precision); see language-typescript/member-uses. */
+  uses?: string[];
+  /** Names referenced as a whole (class-level / unit-level dependency). */
+  escapes?: string[];
+  /** Members reached through this. and super. (class members only). */
+  thisUses?: string[];
+  superUses?: string[];
+  /** Classes: token hash of the class with method/constructor bodies removed. */
+  shellHash?: string;
   visibility?: "public" | "protected" | "private";
   extends?: string;
   implements?: string[];
@@ -66,6 +75,9 @@ export interface FileAnalysis {
   symbols: SymbolRecord[];
   localExports: { exported: string; local: string }[];
   topLevelRefs: string[];
+  /** Member-level uses and escapes of module-level code. */
+  topLevelUses?: string[];
+  topLevelEscapes?: string[];
   topLevelHash: string;
   importsHash: string;
   /** Descriptions of non-literal dynamic imports/requires — sources of uncertainty. */
@@ -102,8 +114,26 @@ export function topLevelSymbols(analysis: FileAnalysis): SymbolRecord[] {
   return analysis.symbols.filter((s) => !s.parent);
 }
 
+/**
+ * Unit a changed symbol propagates from. Methods and accessors are their own units ("C.m");
+ * constructors and properties change every instance, so they make the whole class the unit.
+ */
 export function unitOf(symbol: SymbolRecord): string {
-  return symbol.parent ?? symbol.qualifiedName;
+  if (!symbol.parent) return symbol.qualifiedName;
+  return symbol.kind === "method" && symbol.name !== "constructor"
+    ? `${symbol.parent}.${symbol.name}`
+    : symbol.parent;
+}
+
+/** Every file-level name a symbol mentions: references, member-use owners and escapes. */
+export function namesUsedBy(symbol: SymbolRecord): string[] {
+  return [
+    ...new Set([
+      ...symbol.refs,
+      ...(symbol.escapes ?? []),
+      ...(symbol.uses ?? []).map((u) => u.slice(0, u.indexOf("."))),
+    ]),
+  ];
 }
 
 export function rangesOverlap(a: SourceRange, b: SourceRange): boolean {

@@ -4,7 +4,7 @@
  */
 import type { SemanticChange, SemanticChangeKind, SourceRange } from "@smarttest/shared";
 import type { FileAnalysis, SymbolRecord } from "@smarttest/source-parser";
-import { rangesOverlap, topLevelSymbols, unitOf } from "@smarttest/source-parser";
+import { namesUsedBy, rangesOverlap, topLevelSymbols, unitOf } from "@smarttest/source-parser";
 
 export const WHOLE_FILE = "*";
 
@@ -79,13 +79,6 @@ export function diffFile(input: DiffInput): FileSemanticDiff {
   if (before.hash === after.hash)
     return { path, changes: [], units: [], trivialOnly: true, confidence: "high" };
   if (after.parseErrors > 0) return whole(path, "unclassifiable", "low", "file has syntax errors");
-  if (after.moduleKind === "cjs" || before.moduleKind === "cjs")
-    return whole(
-      path,
-      "potential-behavioral",
-      "medium",
-      "CommonJS module — analysed at file level",
-    );
 
   const changes: SemanticChange[] = [];
   const units = new Set<string>();
@@ -113,6 +106,17 @@ export function diffFile(input: DiffInput): FileSemanticDiff {
       add(a, hasCommentDelta(b, a, beforeText, afterText) ? "comment-only" : "formatting");
       continue;
     }
+    // A class whose shell (heritage, decorators, fields, member list) is unchanged changed only
+    // inside method bodies: its members carry the precise units.
+    if (
+      a.kind === "class" &&
+      !a.parent &&
+      a.shellHash !== undefined &&
+      a.shellHash === b.shellHash &&
+      a.exportNames.join() === b.exportNames.join() &&
+      a.decorators.join() === b.decorators.join()
+    )
+      continue;
     if (a.exportNames.join() !== b.exportNames.join()) add(a, "exported-api");
     else if (a.decorators.join() !== b.decorators.join()) add(a, "decorator");
     else if (
@@ -141,7 +145,7 @@ export function diffFile(input: DiffInput): FileSemanticDiff {
         confidence: "high",
         notes: "removed",
       });
-      units.add(b.parent && afterBy.has(b.parent) ? b.parent : b.qualifiedName);
+      units.add(b.parent && !afterBy.has(b.parent) ? b.parent : unitOf(b));
     }
   }
   // A class whose only change is inside members: drop the class-level duplicate "implementation"
@@ -194,8 +198,8 @@ export function diffFile(input: DiffInput): FileSemanticDiff {
       notes: changedImports.map((i) => i.specifier).join(", "),
     });
     if (sideEffects || after.topLevelRefs.some((r) => locals.has(r))) units.add(WHOLE_FILE);
-    for (const s of topLevelSymbols(after))
-      if (s.refs.some((r) => locals.has(r))) units.add(s.qualifiedName);
+    for (const s of after.symbols)
+      if (namesUsedBy(s).some((r) => locals.has(r))) units.add(unitOf(s));
   }
   const exportKey = (a: FileAnalysis) =>
     a.localExports

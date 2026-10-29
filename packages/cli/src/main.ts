@@ -304,6 +304,11 @@ async function cmdImpact(ctx: Ctx): Promise<number> {
       `  ${t.dim(c.type.padEnd(9))}${c.path}${d ? t.dim(`  ${[...new Set(d.changes.map((x) => x.kind))].join(", ")}`) : ""}`,
     );
   }
+  for (const g of a.decision.details.graphDiff ?? []) {
+    ctx.out(
+      `  ${t.dim("deps")}     ${g.file}${g.added.map((x) => t.green(` +${x}`)).join("")}${g.removed.map((x) => t.red(` -${x}`)).join("")}`,
+    );
+  }
   for (const w of a.decision.warnings) ctx.out(`${t.yellow("▲")} ${w}`);
   ctx.out();
   ctx.out(`  ${t.pass("SELECTED")}  ${a.decision.selectedTests.length}`);
@@ -944,6 +949,39 @@ async function cmdBenchmark(ctx: Ctx): Promise<number> {
 async function cmdGraph(ctx: Ctx): Promise<number> {
   const { t, flags } = ctx;
   const st = await ctx.open();
+  const sub = ctx.positionals[0];
+  if (sub === "why" || sub === "cycles" || sub === "orphans") {
+    const { graph, tests } = await st.graphInsights();
+    if (sub === "why") {
+      const [from, to] = ctx.positionals.slice(1);
+      if (!from || !to)
+        throw new SmartTestError("Usage: smarttest graph why <from file[#Symbol]> <to file>", {
+          code: "ST_USAGE",
+          category: "usage",
+        });
+      const path = graph.why(from, to);
+      if (flags.json) ctx.json("graph", { why: { from, to, path: path ?? null } });
+      else if (!path) ctx.out(`${to} does not depend on ${from} (statically).`);
+      else for (const [i, p] of path.entries()) ctx.out(`${i === 0 ? " " : "→"} ${p}`);
+      return ExitCode.Success;
+    }
+    if (sub === "cycles") {
+      const cycles = graph.cycles();
+      if (flags.json) ctx.json("graph", { cycles });
+      else if (!cycles.length) ctx.out("No import cycles.");
+      else for (const c of cycles) ctx.out(`${t.yellow("cycle")} (${c.length}) ${c.join(" ↔ ")}`);
+      return ExitCode.Success;
+    }
+    const orphans = graph.orphans(tests);
+    if (flags.json) ctx.json("graph", { orphans });
+    else {
+      ctx.out(`${orphans.length} source file(s) not reached by any test:`);
+      for (const o of orphans.slice(0, flags.verbose ? undefined : 40)) ctx.out(`  ${o}`);
+      if (!flags.verbose && orphans.length > 40)
+        ctx.out(t.dim(`  … ${orphans.length - 40} more (--verbose)`));
+    }
+    return ExitCode.Success;
+  }
   const direction = (flags.direction ?? "dependents") as "dependents" | "dependencies";
   if (!["dependents", "dependencies"].includes(direction))
     throw new SmartTestError("--direction must be dependents or dependencies", {

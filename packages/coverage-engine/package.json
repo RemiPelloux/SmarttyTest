@@ -1,6 +1,6 @@
 {
   "name": "@smarttest/coverage-engine",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Coverage ingestion with explicit scope (full / selected).",
   "license": "Apache-2.0",
   "type": "module",

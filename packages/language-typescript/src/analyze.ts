@@ -2,9 +2,10 @@ import type { SymbolKind } from "@smarttest/shared";
 import { sha256 } from "@smarttest/shared";
 import type { FileAnalysis, ImportRecord, SymbolRecord } from "@smarttest/source-parser";
 import ts from "typescript";
+import { collectMemberUses, type MemberUses, moduleScope, thisScope } from "./member-uses.js";
 import { StaticPathEvaluator } from "./static-path.js";
 
-export const ANALYZER_VERSION = "ts-2";
+export const ANALYZER_VERSION = "ts-3";
 
 function scriptKind(path: string): ts.ScriptKind {
   if (path.endsWith(".tsx")) return ts.ScriptKind.TSX;
@@ -92,6 +93,26 @@ function functionSignature(node: ts.SignatureDeclarationBase, sf: ts.SourceFile)
   return `${tps}(${params})${ret}`;
 }
 
+/** Token hash of a class with method, accessor and constructor bodies removed. */
+function classShellHash(cls: ts.ClassDeclaration, sf: ts.SourceFile, jsx: boolean): string {
+  const start = cls.getStart(sf);
+  let text = cls.getText(sf);
+  const bodies = cls.members
+    .map((m) =>
+      ts.isMethodDeclaration(m) ||
+      ts.isGetAccessorDeclaration(m) ||
+      ts.isSetAccessorDeclaration(m) ||
+      ts.isConstructorDeclaration(m)
+        ? m.body
+        : undefined,
+    )
+    .filter((b): b is ts.Block => !!b)
+    .sort((a, b) => b.getStart(sf) - a.getStart(sf));
+  for (const b of bodies)
+    text = `${text.slice(0, b.getStart(sf) - start)}{}${text.slice(b.getEnd() - start)}`;
+  return tokenHash(text, jsx);
+}
+
 export function analyzeSource(path: string, content: string): FileAnalysis {
   const kind = scriptKind(path);
   const sf = ts.createSourceFile(path, content, ts.ScriptTarget.Latest, true, kind);
@@ -106,6 +127,9 @@ export function analyzeSource(path: string, content: string): FileAnalysis {
   const dynamicUnresolved: string[] = [];
   const dynamicHints: { pattern: string; line: number; expr: string }[] = [];
   const pathEval = new StaticPathEvaluator(sf, path);
+  const modScope = moduleScope(sf);
+  const topUses = new Set<string>();
+  const topEscapes = new Set<string>();
   let esm = false;
   let cjs = false;
   const lineOf = (n: ts.Node) => sf.getLineAndCharacterOfPosition(n.getStart(sf)).line;
@@ -120,6 +144,8 @@ export function analyzeSource(path: string, content: string): FileAnalysis {
       signature?: string;
       visibility?: SymbolRecord["visibility"];
       heritage?: { extends?: string; implements?: string[] };
+      thisTypes?: Map<string, string>;
+      memberUses?: MemberUses;
     },
   ): SymbolRecord => {
     const qualifiedName = opts.parent ? `${opts.parent}.${name}` : name;
@@ -144,8 +170,74 @@ export function analyzeSource(path: string, content: string): FileAnalysis {
     if (opts.visibility) rec.visibility = opts.visibility;
     if (opts.heritage?.extends) rec.extends = opts.heritage.extends;
     if (opts.heritage?.implements?.length) rec.implements = opts.heritage.implements;
+    const mu = opts.memberUses ?? collectMemberUses(node, modScope, opts.thisTypes);
+    if (mu.uses.length) rec.uses = mu.uses;
+    if (mu.escapes.length) rec.escapes = mu.escapes.filter((e) => e !== name || !!opts.parent);
+    if (mu.thisUses.length) rec.thisUses = mu.thisUses;
+    if (mu.superUses.length) rec.superUses = mu.superUses;
     symbols.push(rec);
     return rec;
+  };
+
+  /** `module.exports = …`, `module.exports.x = …`, `exports.x = …` become exports, not module code. */
+  const handleCommonJsExport = (stmt: ts.Statement): boolean => {
+    if (!ts.isExpressionStatement(stmt)) return false;
+    const e = stmt.expression;
+    if (!ts.isBinaryExpression(e) || e.operatorToken.kind !== ts.SyntaxKind.EqualsToken)
+      return false;
+    const left = e.left;
+    const right = e.right;
+    const isModuleExports = (n: ts.Expression) =>
+      ts.isPropertyAccessExpression(n) &&
+      ts.isIdentifier(n.expression) &&
+      n.expression.text === "module" &&
+      n.name.text === "exports";
+    const kindOf = (v: ts.Expression): SymbolKind =>
+      ts.isArrowFunction(v) || ts.isFunctionExpression(v)
+        ? "function"
+        : ts.isClassExpression(v)
+          ? "class"
+          : "property";
+    if (isModuleExports(left)) {
+      if (ts.isObjectLiteralExpression(right)) {
+        for (const p of right.properties) {
+          if (ts.isShorthandPropertyAssignment(p))
+            localExports.push({ exported: p.name.text, local: p.name.text });
+          else if (
+            ts.isPropertyAssignment(p) &&
+            ts.isIdentifier(p.initializer) &&
+            (ts.isIdentifier(p.name) || ts.isStringLiteral(p.name))
+          )
+            localExports.push({ exported: p.name.text, local: p.initializer.text });
+          else if (
+            (ts.isPropertyAssignment(p) || ts.isMethodDeclaration(p)) &&
+            (ts.isIdentifier(p.name) || ts.isStringLiteral(p.name))
+          ) {
+            const k = ts.isMethodDeclaration(p)
+              ? "function"
+              : kindOf((p as ts.PropertyAssignment).initializer);
+            addSymbol(p, p.name.text, k, { exportNames: [p.name.text] });
+          } else return false; // spread or computed keys: keep as module code (whole file)
+        }
+        return true;
+      }
+      if (ts.isIdentifier(right)) {
+        localExports.push({ exported: "default", local: right.text });
+        return true;
+      }
+      addSymbol(stmt, "default", kindOf(right), { exportNames: ["default"] });
+      return true;
+    }
+    const target =
+      ts.isPropertyAccessExpression(left) &&
+      (isModuleExports(left.expression) ||
+        (ts.isIdentifier(left.expression) && left.expression.text === "exports"))
+        ? left.name.text
+        : undefined;
+    if (!target) return false;
+    if (ts.isIdentifier(right)) localExports.push({ exported: target, local: right.text });
+    else addSymbol(stmt, target, kindOf(right), { exportNames: [target] });
+    return true;
   };
 
   const exportNamesFor = (node: ts.Node, name: string): string[] => {
@@ -279,11 +371,28 @@ export function analyzeSource(path: string, content: string): FileAnalysis {
         }
       }
       const heritage = norm((stmt.heritageClauses ?? []).map((h) => h.getText(sf)).join(" "));
-      addSymbol(stmt, name, "class", {
+      // Class-level dependencies: decorators only. Members carry their own; `extends` is linked
+      // by the graph to the base's construction, with inherited members resolved individually.
+      const shellParts: ts.Node[] = [...(ts.getDecorators(stmt) ?? [])];
+      const shellUses = shellParts.map((n) => collectMemberUses(n, modScope));
+      const classRec = addSymbol(stmt, name, "class", {
         exportNames: exportNamesFor(stmt, name),
         signature: `${decoratorsOf(stmt, sf).join(" ")} class ${heritage}`.trim(),
         heritage: { ...(ext ? { extends: ext } : {}), implements: impl },
+        memberUses: {
+          uses: [...new Set(shellUses.flatMap((u) => u.uses))],
+          escapes: [...new Set(shellUses.flatMap((u) => u.escapes))],
+          thisUses: [],
+          superUses: [],
+        },
       });
+      classRec.shellHash = classShellHash(stmt, sf, jsx);
+      // Members are linked one by one; the class itself only references its heritage and decorators.
+      const shellRefs = new Set<string>();
+      for (const n of shellParts) collectRefs(n, shellRefs);
+      shellRefs.delete(name);
+      classRec.refs = [...shellRefs].sort();
+      const thisTypes = thisScope(stmt);
       if (hasModifier(stmt, ts.SyntaxKind.ExportKeyword)) esm = true;
       for (const m of stmt.members) {
         let mName: string | undefined;
@@ -316,6 +425,7 @@ export function analyzeSource(path: string, content: string): FileAnalysis {
           parent: name,
           signature: `${visibility} ${isStatic}${sig}`.trim(),
           visibility,
+          thisTypes,
         });
       }
       continue;
@@ -397,8 +507,16 @@ export function analyzeSource(path: string, content: string): FileAnalysis {
       }
       continue;
     }
+    // CommonJS exports are declarations, not module-level code.
+    if (handleCommonJsExport(stmt)) {
+      cjs = true;
+      continue;
+    }
     // Any other top-level statement: module-level code.
     collectRefs(stmt, topRefs);
+    const tu = collectMemberUses(stmt, modScope);
+    for (const u of tu.uses) topUses.add(u);
+    for (const e of tu.escapes) topEscapes.add(e);
     topTokens.push(tokenHash(stmt.getText(sf), jsx));
     const text = stmt.getText(sf);
     if (/\b(?:module\.exports|exports\.[A-Za-z_$])/.test(text)) cjs = true;
@@ -470,6 +588,8 @@ export function analyzeSource(path: string, content: string): FileAnalysis {
     symbols,
     localExports,
     topLevelRefs: [...topRefs].sort(),
+    ...(topUses.size ? { topLevelUses: [...topUses].sort() } : {}),
+    ...(topEscapes.size ? { topLevelEscapes: [...topEscapes].sort() } : {}),
     topLevelHash: hash(topTokens.join("|")),
     importsHash: hash(importsKey),
     dynamicUnresolved,

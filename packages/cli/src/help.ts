@@ -59,7 +59,7 @@ export const COMMANDS: Record<string, { summary: string; usage: string; flags?: 
   graph: {
     summary: "Query or export the dependency graph",
     usage:
-      "smarttest graph [--from <file|file#Symbol>] [--direction dependents|dependencies] [--depth n] [--format json|dot] [-o file]",
+      "smarttest graph [why <from> <to> | cycles | orphans] [--from <file|file#Symbol>] [--direction dependents|dependencies] [--depth n] [--format json|dot] [-o file]",
   },
   generate: {
     summary: "Generate or sync the test architecture (never overwrites)",

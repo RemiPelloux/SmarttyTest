@@ -17,13 +17,6 @@ const { release, sprints, milestones, epics, stories } = data;
 const impl = data.implementation ?? { default: "todo", overrides: {} };
 const statusOf = (s) => impl.overrides[s.id]?.status ?? impl.default;
 const noteOf = (s) => impl.overrides[s.id]?.note;
-const STATUS_ICON = {
-  done: "done",
-  partial: "partial",
-  todo: "todo",
-  changed: "changed",
-  dropped: "dropped",
-};
 const donePts = (arr) => arr.filter((s) => statusOf(s) === "done").reduce((a, s) => a + s.pts, 0);
 const check = process.argv.includes("--check");
 

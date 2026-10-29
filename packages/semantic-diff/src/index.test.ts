@@ -35,12 +35,17 @@ describe("semantic diff", () => {
     expect(d.changes.map((c) => c.kind)).toEqual(["formatting"]);
   });
 
-  it("attributes implementation changes to the enclosing class unit", () => {
+  it("attributes method changes to the method unit", () => {
     const d = diff(base.replace("return dep(t);", "return !dep(t);"));
-    expect(d.units).toEqual(["AuthService"]);
+    expect(d.units).toEqual(["AuthService.validateToken"]);
     expect(d.changes.find((c) => c.symbolId === "a.ts#AuthService.validateToken")?.kind).toBe(
       "implementation",
     );
+  });
+
+  it("makes field and constructor changes class-level", () => {
+    const d = diff(base.replace("other() { return 1; }", "other() { return 1; }\n  limit = 3;"));
+    expect(d.units).toEqual(["AuthService"]);
   });
 
   it("detects exported signature changes", () => {

@@ -93,6 +93,8 @@ Ctrl-C cancels the runner cleanly and reports `cancelled`.
 
 ## `graph`
 
+`graph why <from> <to>` prints the shortest dependency path (from a file or `file#Symbol` to a file), `graph cycles` lists import cycles, `graph orphans` lists source files no test reaches.
+
 `--from <file | file#Symbol>`, `--direction dependents|dependencies`, `--depth <n>`, `--format json|dot`, `-o <file>`. Without `--from` the whole graph is exported.
 
 ## `snapshot`

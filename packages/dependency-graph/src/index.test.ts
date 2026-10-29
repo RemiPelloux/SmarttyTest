@@ -52,7 +52,8 @@ describe("DependencyGraph", () => {
     expect([...r.tests.keys()].sort()).toEqual(["test/auth.test.ts", "test/middleware.test.ts"]);
     expect(r.tests.get("test/middleware.test.ts")?.path).toEqual([
       "src/token.ts#TokenManager",
-      "src/auth.ts#AuthService",
+      "src/token.ts#TokenManager.verify",
+      "src/auth.ts#AuthService.validateToken",
       "src/middleware.ts#authenticate",
       "test/middleware.test.ts",
     ]);
@@ -80,5 +81,53 @@ describe("DependencyGraph", () => {
     expect([...cyc.dependentsOf([{ file: "b.ts", units: ["b"] }]).tests.keys()]).toEqual([
       "a.test.ts",
     ]);
+  });
+
+  it("propagates at member level, through inheritance and super calls", () => {
+    const g2 = graph(
+      {
+        "src/base.ts": "export class Repo { find() { return 1; } save() { return 2; } }",
+        "src/users.ts":
+          'import { Repo } from "./base";\nexport class UserRepo extends Repo { save() { return super.save() + 1; } }',
+        "src/svc.ts":
+          'import { UserRepo } from "./users";\nexport class Svc { constructor(private repo = new UserRepo()) {} get() { return this.repo.find(); } put() { return this.repo.save(); } }',
+        "test/get.test.ts": 'import { Svc } from "../src/svc";\nnew Svc().get();',
+        "test/put.test.ts": 'import { Svc } from "../src/svc";\nnew Svc().put();',
+      },
+      {
+        "src/users.ts:./base": "src/base.ts",
+        "src/svc.ts:./users": "src/users.ts",
+        "test/get.test.ts:../src/svc": "src/svc.ts",
+        "test/put.test.ts:../src/svc": "src/svc.ts",
+      },
+    );
+    // find is inherited: users of UserRepo.find resolve to Repo.find
+    expect([
+      ...g2.dependentsOf([{ file: "src/base.ts", units: ["Repo.find"] }]).tests.keys(),
+    ]).toEqual(["test/get.test.ts"]);
+    // save is overridden and calls super.save: put reaches it, get does not
+    expect([
+      ...g2.dependentsOf([{ file: "src/base.ts", units: ["Repo.save"] }]).tests.keys(),
+    ]).toEqual(["test/put.test.ts"]);
+    // constructor/field changes of the base reach every subclass user
+    expect(
+      [...g2.dependentsOf([{ file: "src/base.ts", units: ["Repo"] }]).tests.keys()].sort(),
+    ).toEqual(["test/get.test.ts", "test/put.test.ts"]);
+  });
+
+  it("answers why, cycles and orphans", () => {
+    expect(g.why("src/token.ts#TokenManager", "test/middleware.test.ts")?.at(-1)).toBe(
+      "test/middleware.test.ts",
+    );
+    const cyc = graph(
+      {
+        "a.ts": 'import { b } from "./b";\nexport const a = () => b();\n',
+        "b.ts": 'import { a } from "./a";\nexport const b = () => a();\n',
+        "lone.ts": "export const z = 1;",
+      },
+      { "a.ts:./b": "b.ts", "b.ts:./a": "a.ts" },
+    );
+    expect(cyc.cycles()).toEqual([["a.ts", "b.ts"]]);
+    expect(g.orphans(["test/auth.test.ts"])).toContain("src/catalog.ts");
   });
 });

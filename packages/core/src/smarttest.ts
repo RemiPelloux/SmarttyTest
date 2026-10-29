@@ -158,6 +158,7 @@ const timed = async <T>(
 
 export class SmartTest {
   private profileCache: ProjectProfile | undefined;
+  private resolver: TypeScriptResolver | undefined;
   readonly storeDir: string;
 
   private constructor(
@@ -319,6 +320,7 @@ export class SmartTest {
         ),
       )
     ).join("\n");
+    this.resolver = resolver;
     const stats = await index.update({
       root: this.root,
       files: await this.sourceFiles(),
@@ -445,7 +447,10 @@ export class SmartTest {
       assignment,
       warnings: discoveryWarnings,
     } = await this.discoverTests(index);
-    const diffs = await timed(timings, "semantic diff", () => this.semanticDiffs(input, index));
+    const graphDiff: { file: string; added: string[]; removed: string[] }[] = [];
+    const diffs = await timed(timings, "semantic diff", () =>
+      this.semanticDiffs(input, index, graphDiff),
+    );
     const decision = await timed(timings, "impact analysis", () =>
       decideImpact({
         changeSet: input.changeSet,
@@ -460,6 +465,7 @@ export class SmartTest {
         packageOf: this.packageOf,
       }),
     );
+    if (graphDiff.length) decision.details.graphDiff = graphDiff;
     decision.warnings.push(...discoveryWarnings);
     if (unassigned.length)
       decision.warnings.push(
@@ -498,6 +504,7 @@ export class SmartTest {
   private async semanticDiffs(
     input: ChangeAnalysisInput,
     index: SymbolIndex,
+    graphDiff: { file: string; added: string[]; removed: string[] }[] = [],
   ): Promise<Map<string, FileSemanticDiff>> {
     const diffs = new Map<string, FileSemanticDiff>();
     const { readFile } = await import("node:fs/promises");
@@ -530,7 +537,23 @@ export class SmartTest {
         beforeText !== undefined
           ? analyzer.analyze(change.previousPath ?? change.path, beforeText)
           : undefined;
-      if (before) before.path = change.path;
+      if (before) {
+        before.path = change.path;
+        // Graph diff: internal dependencies this change adds or removes.
+        if (this.resolver) {
+          const beforeTargets = new Set(
+            before.imports
+              .map((i) => this.resolver?.resolve(change.path, i.specifier).resolved)
+              .filter((r): r is string => !!r),
+          );
+          const afterTargets = new Set(
+            after.imports.map((i) => i.resolved).filter((r): r is string => !!r),
+          );
+          const added = [...afterTargets].filter((t) => !beforeTargets.has(t)).sort();
+          const removed = [...beforeTargets].filter((t) => !afterTargets.has(t)).sort();
+          if (added.length || removed.length) graphDiff.push({ file: change.path, added, removed });
+        }
+      }
       diffs.set(
         change.path,
         diffFile({
@@ -838,6 +861,14 @@ export class SmartTest {
       rules: policy.matched.map((m) => m.rule.name),
       risk: policy.risk,
     };
+  }
+
+  /** Shortest dependency path, import cycles and untested files (`smarttest graph why|cycles|orphans`). */
+  async graphInsights(): Promise<{ graph: DependencyGraph; tests: string[] }> {
+    const { index } = await this.loadIndex();
+    const graph = this.buildGraph(index);
+    const { tests } = await this.discoverTests(index);
+    return { graph, tests };
   }
 
   async graphQuery(options: {
