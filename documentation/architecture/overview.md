@@ -1,8 +1,8 @@
 # Architecture overview
 
-> SmartTest is an intelligent layer **on top of** existing test runners. It works out what changed, what depends on it and which tests protect it, then lets Jest, Vitest or `node --test` do the running.
+> SmartTest is an intelligent layer **on top of** existing test runners. It works out what changed, what depends on it and which tests protect it, then lets Jest, Vitest, `node --test`, Playwright or Cypress do the running.
 
-This document describes the **v1.0.0** architecture. The full long-term architecture (AI, Studio, Cloud) is in [PRD §4](../product/PRD.md#4-system-architecture). Decisions are recorded in [ADRs](adr/README.md).
+This document describes the architecture as of 0.8.0, which is the 1.0.0 architecture minus Studio (0.9.0). The full long-term architecture (AI, Studio, Cloud) is in [PRD §4](../product/PRD.md#4-system-architecture). Decisions are recorded in [ADRs](adr/README.md).
 
 ## Layers
 
@@ -24,6 +24,8 @@ flowchart TB
   subgraph Change["Change engine"]
     VCSCORE["vcs-core"]
     GIT["vcs-git"]
+    SVN["vcs-svn"]
+    HG["vcs-hg"]
     SNAP["native-snapshots"]
   end
 
@@ -48,6 +50,8 @@ flowchart TB
     VIT["adapter-vitest"]
     JEST["adapter-jest"]
     NODE["adapter-node"]
+    PW["adapter-playwright"]
+    CY["adapter-cypress"]
     COV["coverage-engine"]
     GEN["test-generator"]
   end
@@ -108,7 +112,7 @@ sequenceDiagram
   CLI-->>Dev: 12 selected · 474 skipped (not run) · why? smarttest explain
 ```
 
-## Package map (v1.0.0)
+## Package map
 
 | Package                                          | Responsibility                                                     | Epic |
 | ------------------------------------------------ | ------------------------------------------------------------------ | ---- |
@@ -119,6 +123,7 @@ sequenceDiagram
 | `@smarttest/smart-init`                          | Recommendation engine, plan, safe writes, journal, rollback        | INI  |
 | `@smarttest/vcs-core`                            | `VersionControlAdapter`, `ChangeSet` utilities                     | VCS  |
 | `@smarttest/vcs-git`                             | Git adapter                                                        | VCS  |
+| `@smarttest/vcs-svn` / `vcs-hg`                  | Subversion and Mercurial adapters                                  | VCS  |
 | `@smarttest/native-snapshots`                    | Snapshots, fingerprints, comparisons                               | VCS  |
 | `@smarttest/source-parser`                       | Language-neutral parse pipeline & cache                            | SRC  |
 | `@smarttest/language-typescript` / `-javascript` | Language adapters                                                  | SRC  |
@@ -131,6 +136,7 @@ sequenceDiagram
 | `@smarttest/test-discovery`                      | Normalized discovery                                               | EXE  |
 | `@smarttest/test-executor`                       | Scheduling, timeouts, cancellation, retries                        | EXE  |
 | `@smarttest/adapter-vitest` / `-jest` / `-node`  | Runner adapters (Vitest, Jest, `node --test`)                      | EXE  |
+| `@smarttest/adapter-playwright` / `-cypress`     | End-to-end runner adapters                                         | EXE  |
 | `@smarttest/coverage-engine`                     | Coverage ingestion with scope                                      | REP  |
 | `@smarttest/test-generator`                      | Layouts, templates, scaffolds, sync                                | GEN  |
 | `@smarttest/report-engine`                       | JSON / HTML / JUnit / Markdown + integrity                         | REP  |
@@ -146,12 +152,15 @@ sequenceDiagram
 │   ├── discovery.json         files each runner collects (cached per config and file list)
 │   ├── durations.json         last measured duration per test file
 │   ├── traces.json            observed execution per test file (smarttest trace)
+│   ├── history.json           last results per test (fail-fast order, smarttest flaky)
+│   ├── timings.json           typical analysis time and last full run (adaptive policy)
 │   ├── snapshots/             snapshot manifests (hashes; content optional)
 │   ├── blobs/                 deduplicated gzip content (when snapshots.storeContent)
 │   └── init-journal.json      what init changed → rollback
 ├── runs/                      latest.json, <runId>.json, last-decision.json, coverage.json, flaky.json
 ├── reports/                   report.html · report.json · junit.xml · summary.md · setup.md
 ├── shadow/                    history.jsonl (smarttest shadow)
+├── cache/                     results.json: validated passing results (ADR-0009)
 ├── coverage/                  raw coverage per runner root
 └── logs/                      smarttest.log (JSON, redacted, rotated at 1 MB)
 ```
@@ -160,7 +169,7 @@ See [ADR-0003](adr/0003-local-store-sqlite.md) for why this is a JSON store and 
 
 ## Distribution
 
-Internal `@smarttest/*` packages are private. `scripts/release/bundle-cli.mjs` bundles the CLI and every engine into one ESM package, `smarttest`, with `typescript` as its only runtime dependency. The engine is loaded lazily, so `--help` and `--version` start in under 100 ms.
+Internal `@smarttest/*` packages are private. `scripts/release/bundle-cli.mjs` bundles the CLI and every engine into one ESM package, `smarttest`, with `typescript` as its only runtime dependency (loaded with `require`, so Node does not scan it for ESM exports). A separate `parse-worker.js` entry parses files in worker threads on cold starts. The engine is loaded lazily and Node's compile cache is enabled, so `--help` and `--version` start in under 100 ms. `release:pack` also writes a CycloneDX SBOM and runs `npm audit`.
 
 ## Where the spec contracts live
 

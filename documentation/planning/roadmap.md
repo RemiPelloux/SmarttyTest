@@ -1,4 +1,4 @@
-# Roadmap: 0.2.0 to 1.0.0
+# Roadmap to 1.0.0
 
 1.0.0 is the version we can recommend for any TypeScript/JavaScript repository: selection precise enough to matter on large codebases, never wrong in a way that hides a failure, fast enough to sit in a pre-commit hook, and installable from npm.
 
@@ -6,36 +6,38 @@ The dependency graph is the product. Most of this roadmap makes it more precise 
 
 Planning is in story points. One sprint is about 40 points. Each version has an exit gate; a version ships when the gate is met, not on a date.
 
-## Where 0.2.0 stands
+## Where 0.8.0 stands
 
-- Done: the [foundation backlog](foundation/README.md) (386 of 422 points), plus everything the LeadsIt migration exposed ([case study](../case-studies/leadsit.md)).
-- Graph today: file and top-level-symbol nodes; static `import`/`require`/re-export edges; barrels; workspace `exports`; statically evaluated computed imports. A change inside a method selects every test that uses the enclosing class.
-- Known gaps, all scheduled below: no type information (method calls are not resolved), no edges for configuration, environment variables, assets, framework conventions or database schemas, no runtime evidence, graph rebuilt on every run.
+- Released: 0.3.0 to 0.8.0 on top of the [foundation backlog](foundation/README.md). Sprint-by-sprint results, partial items and what moved: [delivery log](delivery.md).
+- Graph today: files, top-level symbols and class members; imports, re-exports, barrels, workspace packages, CommonJS, inheritance; environment keys, Prisma models, translation keys, assets, snapshots, manual mocks, Wasp operations, Next.js routes and the URLs end-to-end specs visit; runtime traces as observed evidence. Unresolved relationships are uncertainty and select the test.
+- Runners: Jest, Vitest, `node --test`, Playwright, Cypress. Version control: Git, Subversion, Mercurial, native snapshots.
+- Real-world checks: LeadsIt (706 tests) and four public repositories set up with `init --yes`, 0 missed failures in every replay.
+- Still open before 1.0.0: npm publication (name decision), macOS and Windows validation, cold start and warm analysis at 2,000+ modules, and the 0.5.0/0.8.0 performance targets, which were not reached on LeadsIt.
 
 ## Overview
 
-| Version | Theme              | Points | Gate                                                                                                      |
-| ------- | ------------------ | ------ | --------------------------------------------------------------------------------------------------------- |
-| 0.3.0   | Precise graph      | 83     | Released (13 pts moved to 0.8.0): member-level selection, CommonJS symbols, graph queries                 |
-| 0.4.0   | Complete graph     | 84     | Released (8 pts moved to 0.7.0): env, asset, Wasp, Prisma, translation, mock and snapshot edges           |
-| 0.5.0   | Runtime evidence   | 71     | Released: traces, hybrid selection, Shadow Mode; reduction target not reached on LeadsIt                  |
-| 0.6.0   | Adoption           | 66     | Installed from npm and adopted in five external repositories without config edits                         |
-| 0.7.0   | Adaptation and E2E | 84     | Released: sync, watch, migrate, Playwright and Cypress, Next.js routes; TypeScript 7 not available        |
-| 0.8.0   | Speed              | 105    | Released: result cache, parallel groups, shards, flaky history, SVN and Mercurial; 30% target not reached |
-| 0.9.0   | Interfaces         | 76     | Studio and VS Code cover run, explain, impact and coverage                                                |
-| 1.0.0   | Stable             | 52     | Frozen contracts, published benchmarks, security review                                                   |
-|         | Total              | 621    | About 16 sprints                                                                                          |
+| Version | Theme              | Points | Gate                                                                                                                              |
+| ------- | ------------------ | ------ | --------------------------------------------------------------------------------------------------------------------------------- |
+| 0.3.0   | Precise graph      | 83     | Released (13 pts moved to 0.8.0): member-level selection, CommonJS symbols, graph queries                                         |
+| 0.4.0   | Complete graph     | 84     | Released (8 pts moved to 0.7.0): env, asset, Wasp, Prisma, translation, mock and snapshot edges                                   |
+| 0.5.0   | Runtime evidence   | 71     | Released: traces, hybrid selection, Shadow Mode; reduction target not reached on LeadsIt                                          |
+| 0.6.0   | Adoption           | 66     | Released: hooks, `smarttest ci`, per-project conventions, five repositories at 0 misses; npm publish blocked                      |
+| 0.7.0   | Adaptation and E2E | 84     | Released: sync, watch, migrate, Playwright and Cypress, Next.js routes; TypeScript 7 not available                                |
+| 0.8.0   | Speed              | 105    | Released: result cache, parallel groups, shards, flaky history, SVN and Mercurial; 30% target not reached                         |
+| 0.9.0   | Interfaces         | 76     | Next: SmartTest Studio and VS Code cover run, explain, impact and coverage                                                        |
+| 1.0.0   | Stable             | 52     | Frozen contracts, published benchmarks, security review                                                                           |
+|         | Remaining          | 128    | About 3–4 sprints (0.9.0 and 1.0.0); 0.3.0 to 0.8.0 delivered 472 of 514 points, 57 of them partial ([delivery log](delivery.md)) |
 
-## Graph model at 1.0.0
+## Graph model
 
-| Layer          | 0.2.0                                                         | 1.0.0                                                                                                         |
-| -------------- | ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| Nodes          | files, top-level symbols, tests                               | plus methods, properties, routes, operations, env keys, schema models, i18n keys, assets, fixtures, snapshots |
-| Code edges     | imports, re-exports, barrels, references to top-level symbols | plus type-resolved calls, member access, inheritance and overrides, DI injection                              |
-| Non-code edges | none                                                          | config, environment, assets, framework conventions, database schema, translations, test infrastructure        |
-| Evidence       | static only                                                   | static, type-checked and observed at runtime, each edge with provenance and confidence                        |
-| Storage        | rebuilt from cached analyses on every run                     | persistent, patched incrementally, diffable between revisions                                                 |
-| Queries        | dependents, dependencies, export                              | plus shortest path (`why`), cycles, orphans, untested code, graph diff                                        |
+| Layer          | 0.2.0                                              | 0.8.0 (now)                                                                                                                                  | 1.0.0                                                                |
+| -------------- | -------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| Nodes          | files, top-level symbols, tests                    | plus methods and accessors, env keys, Prisma models, translation keys, routes, assets, snapshots, manual mocks                               | same, plus fixtures as first-class nodes                             |
+| Code edges     | imports, re-exports, barrels, top-level references | plus member access through local inference, inheritance and `super`, CommonJS symbols, fluent `this`, Wasp operations, constructor injection | plus edge-provider plugins (SDK 1.0); type-checked calls after 1.0.0 |
+| Non-code edges | none                                               | environment, assets, Prisma schema, translations, Next.js routes and E2E visits, snapshots, `__mocks__`, generator inputs                    | same                                                                 |
+| Evidence       | static only                                        | static and observed at runtime (traces), with provenance and confidence                                                                      | same                                                                 |
+| Storage        | rebuilt from cached analyses on every run          | rebuilt per run (about 60 ms at 2,000 modules), patched in memory in `watch`                                                                 | persisted between runs                                               |
+| Queries        | dependents, dependencies, export                   | plus `why`, cycles, orphans, unprotected changes, graph diff                                                                                 | same                                                                 |
 
 Every new edge type follows the same rules as today: if SmartTest cannot evaluate a relationship, it records uncertainty and selects the test instead of guessing.
 
@@ -143,27 +145,34 @@ Run less (graph), then run what remains faster.
 
 **Gate:** not met. On LeadsIt's last 12 commits, SmartTest's time went from 47.2 s (groups one after another, no cache) to 43.4 s (8% less), with 0 cache-integrity violations and 0 missed failures. Parallel groups help on the commits that run several projects; on single-project commits nothing changes. The result cache never hits when replaying history, because every commit changes the inputs of the tests it selects; it pays off on repeated runs of the same state (re-running after a fix elsewhere, CI retries, switching back to a branch), where a second run of an unchanged selection takes milliseconds.
 
-## 0.9.0: Interfaces (76 pts)
+## 0.9.0: Interfaces (76 pts), next
 
-| Story                                                                                                                    | Pts |
-| ------------------------------------------------------------------------------------------------------------------------ | --- |
-| `smarttest studio`: local web app bound to loopback with a session token; overview and test explorer                     | 21  |
-| Impact map: interactive graph with path highlighting, filters and export                                                 | 13  |
-| Live runner and coverage viewer (annotated source, changed lines)                                                        | 21  |
-| VS Code extension: "protected by N tests" on each symbol, run affected tests for the current file, explanations on hover | 21  |
+SmartTest Studio and the VS Code extension: everything the CLI shows, without the CLI. Studio runs locally (`smarttest studio`), uses the same engine as the CLI through `@smarttest/core`, and follows the [design system](../design/design-system.md) of the HTML report and the documentation site. Nothing leaves the machine.
 
-**Gate:** run, explain, inspect impact and read coverage without the CLI; local security review passed.
+| Story                                                                                                                                                                                          | Pts |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --- |
+| `smarttest studio`: local web app bound to loopback with a session token and origin checks; project overview (runners, last run, cache, traces, flaky tests) and test explorer                 | 21  |
+| Impact map: the dependency graph of the current change, path highlighting from a changed method to each selected test, reasons and confidence, filters, export                                 | 13  |
+| Live runner and coverage viewer: run affected, all or one test file; results stream in, cached results marked; source annotated with changed lines, observed execution and unprotected changes | 21  |
+| VS Code extension: "protected by N tests" above each function and method, run the affected tests of the current file, explanations on hover, uses the local `smarttest`                        | 21  |
 
-## 1.0.0: Stable (52 pts)
+Built on what exists: `--json` outputs (`impact`, `explain`, `run`), the HTML report, `watch` (in-memory graph patches) and traces.
 
-| Story                                                                                                            | Pts |
-| ---------------------------------------------------------------------------------------------------------------- | --- |
-| Plugin SDK 1.0: frozen adapter contracts (language, runner, VCS, edge providers), conformance kit, documentation | 13  |
-| Freeze public contracts: config schema, exit codes, `--json` schemas; semver policy and migration notes          | 5   |
-| Published benchmarks on at least five real repositories, LeadsIt included, with 0 missed failures                | 13  |
-| Performance on a 10,000-module repository: warm analysis under one second                                        | 8   |
-| Security review: file writes, process execution, Studio                                                          | 8   |
-| Documentation complete                                                                                           | 5   |
+**Gate:** run, explain, inspect impact and read coverage without the CLI; local security review of Studio passed.
+
+## 1.0.0: Stable (52 pts, plus items carried from 0.6.0 to 0.8.0)
+
+| Story                                                                                                                                                                         | Pts |
+| ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --- |
+| Plugin SDK 1.0: frozen adapter contracts (language, runner, VCS, edge providers), conformance kit, documentation                                                              | 13  |
+| Freeze public contracts: config schema, exit codes, `--json` schemas; semver policy and migration notes                                                                       | 5   |
+| Published benchmarks on at least five real repositories, LeadsIt included, with 0 missed failures; the 0.5.0 (observed execution) and 0.8.0 (speed) targets re-measured there | 13  |
+| Performance: warm analysis under one second at 10,000 modules, cold start under one second at 2,000; the graph persisted between runs                                         | 8   |
+| Security review: file writes, process execution, Studio                                                                                                                       | 8   |
+| Documentation complete                                                                                                                                                        | 5   |
+| Carried: publish on npm (needs ADR-0007), `pnpm verify` on macOS and Windows, Cypress adapter checked against a real install                                                  | —   |
+
+TypeScript 7 stays a watch item: the analyzer moves when TypeScript 7 offers a parser API usable from Node.
 
 **Gate:** all of the above, and no open defect that can make a failing test be skipped.
 
@@ -171,6 +180,7 @@ Run less (graph), then run what remains faster.
 
 ## Not before 1.0.0
 
+- Type-checker resolution for values local inference cannot type (moved from 0.3.0 and 0.8.0); until then such calls are class-level, which is safe.
 - AI test generation and audit (PRD Release 3): 2.0.0, built on the generator's `it.todo` scaffolds. The deterministic core never depends on it (ADR-0004).
 - Cloud and team analytics (PRD Release 5).
 - Other languages (PRD Release 6). The edge-provider SDK in 1.0.0 is designed for them.

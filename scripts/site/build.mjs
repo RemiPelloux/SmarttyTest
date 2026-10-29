@@ -79,6 +79,7 @@ const NAV = [
     "Project",
     [
       ["Roadmap", "docs/planning/roadmap.html"],
+      ["Delivery log", "docs/planning/delivery.html"],
       ["Architecture", "docs/architecture/overview.html"],
       ["Decision records", "docs/architecture/adr/index.html"],
       ["Design system", "docs/design/design-system.html"],

@@ -67,11 +67,11 @@ Used in the hero and the impact map, and later in the Studio when an impact is r
 
 ## Motion in the product
 
-| Surface            | Motion                                                                                                                                                                             |
-| ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| CLI                | Spinner only while waiting > 300 ms. Results appear line by line (no artificial delay). No animation in non-TTY                                                                    |
-| HTML report (1.0)  | Section reveal on first paint (base, staggered). Reason accordions (fast). Status chips never animate after the first paint, so a status never "changes" on screen without a cause |
-| Studio (Release 4) | Impact sequence on recompute (scaled to 600–900 ms total). Live Runner rows enter with stagger. Graph re-layout at slow duration with ease-in-out                                  |
+| Surface           | Motion                                                                                                                                                                             |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| CLI               | Spinner only while waiting > 300 ms. Results appear line by line (no artificial delay). No animation in non-TTY                                                                    |
+| HTML report (1.0) | Section reveal on first paint (base, staggered). Reason accordions (fast). Status chips never animate after the first paint, so a status never "changes" on screen without a cause |
+| Studio (0.9.0)    | Impact sequence on recompute (scaled to 600–900 ms total). Live Runner rows enter with stagger. Graph re-layout at slow duration with ease-in-out                                  |
 
 ## Don'ts
 

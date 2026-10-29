@@ -91,9 +91,19 @@ What changed compared with 0.2.0:
 
 A wider run, `smarttest benchmark --commits 200 --sample 40` (40 commits spread over the last 200), found 0 missed failures. SmartTest ran 522 of 3,052 test-file runs (17%), 354 of 2,884 on the 38 commits without a lockfile change, and saved 63% of the full-run time. Against the project-gated baseline it was 6% slower: on single-project commits the old hook runs one small suite, and SmartTest's analysis time is counted in full.
 
+## Update: 0.6.0 to 0.8.0
+
+| Version | What changed on LeadsIt                                                                                                                                    | Measured                                                                                                                                                                                                                 |
+| ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 0.6.0   | `smarttest hook status` recognises the existing husky hook; `smarttest ci` picks the base by itself; parse in worker threads and parallel runner discovery | cold `scan` 5.5 s → 3.6 s; 12-commit replay at 0 missed failures                                                                                                                                                         |
+| 0.7.0   | `sync`, `watch`, `migrate`; Playwright and Cypress adapters (LeadsIt has no end-to-end suite in its hook)                                                  | 706/706 through SmartTest                                                                                                                                                                                                |
+| 0.8.0   | Runner groups (Jest, Vitest, two `node --test` projects) run in parallel; validated result cache                                                           | full suite 7.7 s → 5.2 s; a repeated run of the same state 4.1 s → 1.2 s (93 of 100 files from the cache, labelled "cached, not run"); 12-commit replay 47.2 s → 43.4 s, 0 missed failures, 0 cache-integrity violations |
+
+LeadsIt vendors each release in `tools/smarttest/` (currently `smarttest-0.8.0.tgz`) until the package is on npm.
+
 ## Caveats
 
 - LeadsIt's suites are already fast (about 5–8 s for everything), so the absolute saving per commit is seconds, not minutes. The percentage is what carries over to larger suites.
-- The first run in a fresh checkout pays a cold start (about 3.5 s: parsing ~1,600 files and asking each runner for its file list). Both are cached afterwards. A faster cold start is planned for 0.6.0.
+- The first run in a fresh checkout pays a cold start: about 3.6 s with 0.6.0 (it was 5.5 s), for parsing about 1,600 files and asking each runner for its file list. Both are cached afterwards.
 - Commits outside tested projects run nothing. That's correct, but it also means "gated" can be 0 ms on those commits, and the old hook didn't run anything for them either.
 - Root `package.json`, lockfile and `tsconfig` changes run the full suite or the project's suite. That's deliberate: they're mandatory triggers.

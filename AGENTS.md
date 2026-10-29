@@ -1,12 +1,12 @@
 # Instructions for coding agents
 
-SmartTest selects the tests a change can affect in TypeScript/JavaScript repositories and runs them through Jest, Vitest or `node --test`.
+SmartTest selects the tests a change can affect in TypeScript/JavaScript repositories and runs them through Jest, Vitest, `node --test`, Playwright or Cypress.
 
 ## Sources of truth
 
 1. [`documentation/product/PRD.md`](documentation/product/PRD.md): specification. Cite sections as `§11.4`.
 2. [`documentation/architecture/adr/`](documentation/architecture/adr/README.md): accepted decisions.
-3. [`documentation/planning/roadmap.md`](documentation/planning/roadmap.md): what to build next, in points, with exit gates.
+3. [`documentation/planning/roadmap.md`](documentation/planning/roadmap.md): what to build next, in points, with exit gates; [`delivery.md`](documentation/planning/delivery.md) records what each version actually delivered.
 4. [`scripts/packages.manifest.json`](scripts/packages.manifest.json): packages and their allowed dependencies.
 
 ## Rules
@@ -17,6 +17,8 @@ SmartTest selects the tests a change can affect in TypeScript/JavaScript reposit
 - Adapters declare capabilities; never emulate a missing one (ADR-0005).
 - Errors are `SmartTestError` with a stable `code`, a `category` and a `hint`. Exit codes are a public contract (`packages/shared/src/errors.ts`).
 - Every new graph edge type needs a fixture where a targeted change selects only the affected tests, and must keep the regression harness at 0 missed failures.
+- Cached results are `cached-pass`, never `passed` (ADR-0009). Traces never rule out tests in SAFE mode (ADR-0008).
+- After a release: update the roadmap statuses, the delivery log, the changelog, rebuild the site (`pnpm site:publish`).
 
 ## Workflow
 

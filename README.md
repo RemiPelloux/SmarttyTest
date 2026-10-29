@@ -15,7 +15,7 @@ SmartTest runs only the tests a change can affect. It builds a dependency graph 
 
 Documentation site: [remipelloux.github.io/SmarttyTest](https://remipelloux.github.io/SmarttyTest/). It has a live example of the selection on the first screen.
 
-Status: 0.8.0 alpha. It runs in the pre-commit hook of [LeadsIt](documentation/case-studies/leadsit.md). It is not on npm yet (the package name is still being decided, [ADR-0007](documentation/architecture/adr/0007-name-license-distribution.md)). Next steps are in the [roadmap to 1.0.0](documentation/planning/roadmap.md).
+Status: 0.8.0 alpha. It runs in the pre-commit hook of [LeadsIt](documentation/case-studies/leadsit.md). It is not on npm yet (the package name is still being decided, [ADR-0007](documentation/architecture/adr/0007-name-license-distribution.md)). Next is 0.9.0: SmartTest Studio (a local web app) and a VS Code extension ([roadmap to 1.0.0](documentation/planning/roadmap.md), [what each version delivered](documentation/planning/delivery.md)).
 
 ## Usage
 
@@ -120,10 +120,10 @@ The 2,000-module repository has 4,000 files (one test per module), and a change 
 The same pages are published at [remipelloux.github.io/SmarttyTest](https://remipelloux.github.io/SmarttyTest/) (built by `pnpm site:build`, published to the `gh-pages` branch by `pnpm site:publish`).
 
 - [Getting started](documentation/guides/getting-started.md), [CI](documentation/guides/ci.md)
-- [How selection works](documentation/concepts/how-selection-works.md), [runtime evidence](documentation/concepts/runtime-evidence.md), [safety model](documentation/concepts/safety-model.md), [change tracking](documentation/concepts/change-tracking.md), [rules](documentation/concepts/rules.md)
+- [How selection works](documentation/concepts/how-selection-works.md), [runtime evidence](documentation/concepts/runtime-evidence.md), [running less, faster](documentation/concepts/speed.md), [safety model](documentation/concepts/safety-model.md), [change tracking](documentation/concepts/change-tracking.md), [rules](documentation/concepts/rules.md)
 - [CLI reference](documentation/reference/cli.md), [configuration](documentation/reference/configuration.md)
 - [Architecture](documentation/architecture/overview.md), [decision records](documentation/architecture/adr/README.md)
-- [Roadmap to 1.0.0](documentation/planning/roadmap.md), [changelog](CHANGELOG.md), [case study: LeadsIt](documentation/case-studies/leadsit.md), [specification](documentation/product/PRD.md)
+- [Roadmap to 1.0.0](documentation/planning/roadmap.md) (next: SmartTest Studio and VS Code in 0.9.0), [delivery log](documentation/planning/delivery.md), [changelog](CHANGELOG.md), [case study: LeadsIt](documentation/case-studies/leadsit.md), [external repositories](documentation/case-studies/external-repositories.md), [specification](documentation/product/PRD.md)
 
 ## Development
 
@@ -138,7 +138,7 @@ pnpm site:serve        # documentation site on http://localhost:4173
 node benchmarks/run.mjs
 ```
 
-Packages live in `packages/` (27 workspace packages, mapped in `scripts/packages.manifest.json`). Fixture projects used by the integration tests and the regression harness live in `fixtures/projects/`. See [CONTRIBUTING.md](CONTRIBUTING.md) and, for coding agents, [AGENTS.md](AGENTS.md).
+Packages live in `packages/` (31 workspace packages, mapped in `scripts/packages.manifest.json`). Fixture projects used by the integration tests and the regression harness live in `fixtures/projects/`. See [CONTRIBUTING.md](CONTRIBUTING.md) and, for coding agents, [AGENTS.md](AGENTS.md).
 
 ## License
 

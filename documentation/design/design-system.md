@@ -1,6 +1,6 @@
 # Design system
 
-One visual language for the README, the docs, the HTML report (1.0) and SmartTest Studio (Release 4). Tokens are defined once and mirrored in [`scripts/brand/build-readme-assets.mjs`](../../scripts/brand/build-readme-assets.mjs). The HTML report (ST-086) reads the same values as CSS custom properties.
+One visual language for the README, the docs, the HTML report (1.0) and SmartTest Studio (roadmap 0.9.0). Tokens are defined once and mirrored in [`scripts/brand/build-readme-assets.mjs`](../../scripts/brand/build-readme-assets.mjs). The HTML report (ST-086) reads the same values as CSS custom properties.
 
 <p align="center"><img src="../assets/logo.svg" width="72" alt="SmartTest logo"></p>
 

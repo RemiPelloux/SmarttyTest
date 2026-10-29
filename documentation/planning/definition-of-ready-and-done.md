@@ -23,7 +23,7 @@ This is PRD §36, adapted to the repository.
 
 **Quality**
 - [ ] Unit tests and the relevant integration tests pass (`pnpm verify`).
-- [ ] Regression harness still reports 0 missed failures (once ST-095 exists).
+- [ ] The regression harness still reports 0 missed failures, and new edge types or runners come with a fixture in it.
 - [ ] No new `any` and no `// @ts-ignore` without a linked issue.
 - [ ] Performance is measured where relevant, with numbers in the PR description.
 
@@ -37,16 +37,16 @@ This is PRD §36, adapted to the repository.
 - [ ] Public APIs are typed and documented (TSDoc).
 - [ ] The CLI reference and configuration reference are updated for new commands and options.
 - [ ] Examples still run.
-- [ ] A Changeset is added for user-visible changes.
+- [ ] `CHANGELOG.md` has an entry for user-visible changes.
 
 **Review**
-- [ ] At least one approving review, or two for changes to `impact-engine`, `rules-engine` or the report integrity suite.
+- [ ] Changes to `impact-engine`, `dependency-graph`, `rules-engine` or the report integrity suite are checked against a real repository (`benchmark` on LeadsIt or an external repository) before release.
 - [ ] `pnpm verify` passes locally (the pre-push hook runs it); before a release, on Linux, macOS and Windows.
 
 ## Definition of Done (sprint level)
 
 - [ ] Sprint goal met, or the gap has been explained at review.
-- [ ] Demo script from `sprints.md` executed live.
-- [ ] `main` is releasable. Pre-release published to `next` at milestone sprints.
+- [ ] The version's gate is measured and the result written in the [delivery log](delivery.md), including what was not met.
+- [ ] `main` is releasable: `pnpm verify` passes, the version is tagged, docs and the site are rebuilt.
 - [ ] Risks and assumptions in `risks.md` reviewed.
 - [ ] Unfinished stories re-estimated and moved explicitly. Nothing carries over silently.

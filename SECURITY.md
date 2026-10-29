@@ -25,4 +25,4 @@ We aim to acknowledge reports within **3 business days** and to agree a disclosu
 
 ## Our commitments
 
-No telemetry. No network calls from the core. Secret redaction in every log sink. Releases are built locally from a verified tree (`pnpm verify`); an SBOM is planned for 0.6.0.
+No telemetry. No network calls from the core. Secret redaction in every log sink. Releases are built locally from a verified tree (`pnpm verify`); `release:pack` writes a CycloneDX SBOM (`sbom.cdx.json`, shipped in the package) and runs `npm audit` on the runtime dependencies.

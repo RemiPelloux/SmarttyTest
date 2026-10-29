@@ -14,16 +14,17 @@ No static analysis can guarantee that a skipped test would have passed. SmartTes
 
 ## How each guarantee is enforced
 
-| Guarantee                  | Mechanism                                                                                                                            | Story              |
-| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ | ------------------ |
-| Skipped ≠ passed           | Separate status `skipped by selection`. Report integrity suite in CI                                                                 | ST-051, ST-090     |
-| Unknown ≠ unrelated        | Unresolved imports and dynamic patterns are stored as uncertainty and trigger fallback per mode                                      | ST-038, ST-059     |
-| Global changes widen scope | Built-in mandatory triggers that can't be removed by rules                                                                           | ST-058, ST-066     |
-| Partial ≠ full coverage    | Every coverage figure is labelled `full` or `selected`, and the two are never merged                                                 | ST-088             |
-| No silent destruction      | Dry-run equals the real plan. Atomic writes. Init journal and rollback. Generator never overwrites                                   | ST-072–076, ST-082 |
-| Evidence before trust      | `validate-selection`, `shadow` and `benchmark` compare against full runs. The regression harness runs in the pre-push gate           | ST-064, ST-095     |
-| No stale evidence          | A trace is used only while every file it loaded is unchanged and the runtime/lockfile fingerprint matches                            | 0.5.0              |
-| Observed skips are bounded | Traces never rule out tests in SAFE mode, never for env, translation or asset changes, and only tests selected by static edges alone | 0.5.0              |
+| Guarantee                  | Mechanism                                                                                                                                                                                                                              | Story              |
+| -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------ |
+| Skipped ≠ passed           | Separate status `skipped by selection`. Report integrity suite in CI                                                                                                                                                                   | ST-051, ST-090     |
+| Unknown ≠ unrelated        | Unresolved imports and dynamic patterns are stored as uncertainty and trigger fallback per mode                                                                                                                                        | ST-038, ST-059     |
+| Global changes widen scope | Built-in mandatory triggers that can't be removed by rules                                                                                                                                                                             | ST-058, ST-066     |
+| Partial ≠ full coverage    | Every coverage figure is labelled `full` or `selected`, and the two are never merged                                                                                                                                                   | ST-088             |
+| No silent destruction      | Dry-run equals the real plan. Atomic writes. Init journal and rollback. Generator never overwrites                                                                                                                                     | ST-072–076, ST-082 |
+| Evidence before trust      | `validate-selection`, `shadow` and `benchmark` compare against full runs. The regression harness runs in the pre-push gate                                                                                                             | ST-064, ST-095     |
+| Cached ≠ fresh             | Cached results have their own status (`cached-pass`), counted apart and labelled "cached, not run"; keys cover every input; `benchmark` checks them against full runs ([ADR-0009](../architecture/adr/0009-validated-result-cache.md)) | 0.8.0              |
+| No stale evidence          | A trace is used only while every file it loaded is unchanged and the runtime/lockfile fingerprint matches                                                                                                                              | 0.5.0              |
+| Observed skips are bounded | Traces never rule out tests in SAFE mode, never for env, translation or asset changes, and only tests selected by static edges alone                                                                                                   | 0.5.0              |
 
 ## Adoption path we recommend
 

@@ -14,7 +14,7 @@
 
 > This is the master specification, kept as the source of truth. It covers the intelligent testing engine, automated setup, Git/SVN/native version tracking, AI-powered test engineering, a Cypress-like GUI, multi-language architecture and the commercial SaaS model.
 > It is written for developers, AI coding agents, architects and QA engineers.
-> **Scope for v1.0.0** is defined in [`../planning/foundation/README.md`](../planning/foundation/README.md). Section numbers (§) are what the backlog and ADRs cite.
+> **Scope for v1.0.0** is defined in the [roadmap](../planning/roadmap.md) (what is built so far: [delivery log](../planning/delivery.md); the first 103 stories: [foundation backlog](../planning/foundation/README.md)). Section numbers (§) are what the backlog and ADRs cite.
 
 ---
 
