@@ -549,9 +549,149 @@ async function cmdScan(ctx: Ctx): Promise<number> {
   return ExitCode.Success;
 }
 
+async function cmdWatch(ctx: Ctx): Promise<number> {
+  const { t, flags } = ctx;
+  const st = await ctx.open();
+  const mode = modeOf(flags);
+  ctx.out(
+    `${t.cyan("◇")} Watching ${rel(ctx, st.root) || "."} · each save runs the tests it can affect · Ctrl-C to stop`,
+  );
+  const watcher = await st.watch({
+    ...(mode ? { mode } : {}),
+    onAnalysis: (a) => {
+      const sel = a.decision.selectedTests.length;
+      ctx.out();
+      ctx.out(
+        `${t.cyan("◇")} ${new Date().toLocaleTimeString()} · ${a.input.changeSet.changes.map((c) => c.path).join(", ")} · ${t.pass("SELECTED")} ${sel} of ${sel + a.decision.skippedTests.length}`,
+      );
+    },
+    onRun: (outcome) => {
+      const s = outcome.report.summary;
+      if (!outcome.report.executions.length) ctx.out(t.dim("  no test reaches these changes"));
+      for (const e of outcome.report.executions)
+        ctx.out(
+          `  ${e.status === "passed" ? t.green("✓") : e.status === "skipped" ? t.dim("○") : t.red("✕")} ${e.file}`,
+        );
+      if (outcome.report.executions.length)
+        ctx.out(
+          `  ${s.failed ? t.red(`${s.failed} failed`) : t.green(`${s.passed} passed`)} · ${s.skippedBySelection} not run`,
+        );
+    },
+    onError: (e) => ctx.err(`${t.red("✕")} ${e.message}`),
+  });
+  await new Promise<void>((resolve) => {
+    process.once("SIGINT", () => {
+      watcher.close();
+      resolve();
+    });
+  });
+  return ExitCode.Success;
+}
+
+async function cmdMigrate(ctx: Ctx): Promise<number> {
+  const { t, flags } = ctx;
+  if (flags.to !== "vitest")
+    throw new SmartTestError("smarttest migrate supports --to vitest (from Jest)", {
+      code: "ST_USAGE",
+      category: "usage",
+      hint: "smarttest migrate --to vitest [--dir <project>] [--dry-run] [--yes]",
+    });
+  const st = await ctx.open();
+  const plan = await st.migratePlan({
+    to: "vitest",
+    ...(flags.dir !== undefined ? { dir: flags.dir } : {}),
+  });
+  const { previewDiff } = await import("@smarttest/smart-init");
+  if (flags.json && (flags["dry-run"] || !flags.yes)) ctx.json("migrate", { plan });
+  else {
+    ctx.out(`${t.bold("Migrate Jest → Vitest")} · ${plan.files.length} file(s)`);
+    for (const f of plan.files) {
+      ctx.out(
+        `  ${f.action === "create" ? t.green("+") : t.yellow("~")} ${pad(f.path, 30)}${t.dim(f.reason)}`,
+      );
+      if (flags["dry-run"] || flags.verbose)
+        for (const l of previewDiff(f))
+          ctx.out(`      ${l.startsWith("+") ? t.green(l) : t.red(l)}`);
+    }
+    for (const n of plan.notes) ctx.out(`  ${t.yellow("▲")} ${n.file}:${n.line} ${n.message}`);
+    if (plan.install) ctx.out(`  ${t.dim("Then install Vitest:")} ${plan.install}`);
+  }
+  if (!plan.files.length || flags["dry-run"]) return ExitCode.Success;
+  if (!flags.yes) {
+    if (!ctx.interactive)
+      throw new SmartTestError("migrate needs confirmation", {
+        code: "ST_INIT_CONFIRMATION_REQUIRED",
+        category: "configuration",
+        hint: "Re-run with --yes, or --dry-run to preview.",
+      });
+    if (!(await confirm(ctx.io, t, "Apply the migration?"))) return ExitCode.Success;
+  }
+  const applied = await st.applyFiles(plan.files);
+  if (flags.json) ctx.json("migrate", { plan, applied });
+  else {
+    for (const p of applied) ctx.out(`${t.green("✓")} wrote ${p}`);
+    ctx.out(t.dim("Undo: smarttest init --rollback"));
+  }
+  return ExitCode.Success;
+}
+
+async function cmdSync(ctx: Ctx): Promise<number> {
+  const { t, flags } = ctx;
+  const st = await ctx.open();
+  const r = await st.syncPlan();
+  if (flags.json) ctx.json("sync", { drift: r.drift, manual: r.manual, changes: !!r.after });
+  else if (!r.drift.length) ctx.out(`${t.green("✓")} Configuration matches the project.`);
+  else {
+    ctx.out(t.bold("Configuration drift"));
+    for (const d of r.drift)
+      ctx.out(
+        `  ${t.yellow("~")} ${pad(d.key, 16)}${d.current} → ${t.bold(d.proposed)}  ${t.dim(d.reason)}`,
+      );
+    const { previewDiff } = await import("@smarttest/smart-init");
+    if (r.after && r.path)
+      for (const l of previewDiff({
+        path: r.path,
+        action: "modify",
+        reason: "",
+        before: r.before ?? "",
+        after: r.after,
+        risk: "medium",
+      }))
+        ctx.out(`    ${l.startsWith("+") ? t.green(l) : t.red(l)}`);
+    for (const m of r.manual) ctx.out(`  ${t.yellow("▲")} by hand: ${m}`);
+  }
+  if (!r.drift.length) return ExitCode.Success;
+  if (flags.check) return ExitCode.ConfigurationFailure;
+  if (flags["dry-run"] || !r.after) return ExitCode.Success;
+  if (!flags.yes) {
+    if (!ctx.interactive)
+      throw new SmartTestError("sync needs confirmation", {
+        code: "ST_INIT_CONFIRMATION_REQUIRED",
+        category: "configuration",
+        hint: "Re-run with --yes, --dry-run to preview, or --check in CI.",
+      });
+    if (!(await confirm(ctx.io, t, "Update the configuration?"))) return ExitCode.Success;
+  }
+  const ok = await st.applySync(r);
+  if (!flags.json)
+    ctx.out(
+      ok
+        ? `${t.green("✓")} updated ${rel(ctx, r.path ?? "")}`
+        : t.yellow("▲ the config changed meanwhile; nothing written"),
+    );
+  return ExitCode.Success;
+}
+
 async function cmdDoctor(ctx: Ctx): Promise<number> {
   const { t } = ctx;
   const st = await ctx.open();
+  if (ctx.flags.fix) {
+    const fixed = await st.doctorFix();
+    if (!ctx.flags.json) {
+      for (const f of fixed) ctx.out(`${t.green("✓")} fixed: ${f}`);
+      if (!fixed.length) ctx.out(t.dim("Nothing to fix."));
+    }
+  }
   const findings = await st.doctor();
   if (ctx.flags.json) ctx.json("doctor", { findings });
   else {
@@ -1400,6 +1540,9 @@ const HANDLERS: Record<string, (ctx: Ctx) => Promise<number>> = {
   benchmark: cmdBenchmark,
   trace: cmdTrace,
   hook: cmdHook,
+  sync: cmdSync,
+  migrate: cmdMigrate,
+  watch: cmdWatch,
   ci: cmdCi,
   shadow: cmdShadow,
   coverage: cmdCoverage,
@@ -1407,9 +1550,6 @@ const HANDLERS: Record<string, (ctx: Ctx) => Promise<number>> = {
 };
 
 const LATER: Record<string, string> = {
-  sync: "`sync` is planned for 0.7.0.",
-  migrate: "`migrate` is planned for 0.7.0.",
-  watch: "Watch mode is planned for 0.7.0.",
   ai: "AI features are planned after 1.0.0. SmartTest never requires them.",
   autopilot: "Autopilot is planned after 1.0.0.",
   studio: "Studio is planned for 0.9.0. For now: `smarttest report --open`.",

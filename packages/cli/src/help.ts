@@ -13,7 +13,8 @@ export const COMMANDS: Record<string, { summary: string; usage: string; flags?: 
   },
   doctor: {
     summary: "Diagnose setup, runners, store and environment",
-    usage: "smarttest doctor [--json]",
+    usage: "smarttest doctor [--fix] [--json]",
+    flags: ["--fix  safe repairs: ignore .smarttest/, remove unreadable state, apply `sync`"],
   },
   scan: {
     summary: "Show what SmartTest understands about the project (read-only)",
@@ -60,6 +61,24 @@ export const COMMANDS: Record<string, { summary: string; usage: string; flags?: 
       "--traces  trace the tests at each parent commit so selection uses observed execution",
       "-o file.md  also write the Markdown report there",
     ],
+  },
+  watch: {
+    summary: "Rerun the tests affected by each save",
+    usage: "smarttest watch [--mode m]",
+    flags: ["a save is compared with the previous save of that file (or HEAD the first time)"],
+  },
+  migrate: {
+    summary: "Move a Jest project to Vitest, keeping SmartTest rules and history",
+    usage: "smarttest migrate --to vitest [--dir <project>] [--dry-run] [--yes]",
+    flags: [
+      "rewrites jest.* to vi.*, writes a vitest config with Jest-style globals, updates scripts and adapters",
+      "--dir <project>  only the Jest project in that directory",
+    ],
+  },
+  sync: {
+    summary: "Update the configuration after the project changed (new runners, packages, Git)",
+    usage: "smarttest sync [--check] [--dry-run] [--yes] [--json]",
+    flags: ["--check  exit 3 when the configuration is out of date (for CI)"],
   },
   ci: {
     summary:

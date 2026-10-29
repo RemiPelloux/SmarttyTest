@@ -3,10 +3,10 @@
  */
 import { matchGlob } from "@smarttest/shared";
 
-export type AdapterId = "vitest" | "jest" | "node";
+export type AdapterId = "vitest" | "jest" | "node" | "playwright" | "cypress";
 
 /** Union of Vitest and Jest default test patterns. */
-const DEFAULT_TEST_FILE = /(?:^|\/)(?:__tests__\/.+|[^/]+\.(?:test|spec))\.[cm]?[jt]sx?$/;
+const DEFAULT_TEST_FILE = /(?:^|\/)(?:__tests__\/.+|[^/]+\.(?:test|spec|cy))\.[cm]?[jt]sx?$/;
 const TEST_FILE_IN_TESTS_DIR = /(?:^|\/)__tests__\/[^/]+\.[cm]?[jt]sx?$/;
 
 export function isTestFile(path: string, match?: readonly string[]): boolean {

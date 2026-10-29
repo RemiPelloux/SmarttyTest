@@ -74,6 +74,12 @@
       "path": "../adapter-node"
     },
     {
+      "path": "../adapter-cypress"
+    },
+    {
+      "path": "../adapter-playwright"
+    },
+    {
       "path": "../coverage-engine"
     },
     {

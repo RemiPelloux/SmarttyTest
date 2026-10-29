@@ -15,6 +15,10 @@
  */
 import type { Confidence, GraphEdge, GraphNode, Provenance } from "@smarttest/shared";
 import { matchGlob } from "@smarttest/shared";
+import { type RouteDef, routeMatches, routeUnder } from "./routes.js";
+
+export { nextRoutes, type RouteDef, routeMatches, routeUnder } from "./routes.js";
+
 import type { FileAnalysis, SymbolRecord } from "@smarttest/source-parser";
 import { topLevelSymbols } from "@smarttest/source-parser";
 
@@ -37,6 +41,13 @@ export function i18nKeyMatches(reader: string, changed: string): boolean {
   if (dot > 0) candidates.push(changed.slice(dot + 1)); // without namespace
   if (r.endsWith("*")) return candidates.some((c) => c.startsWith(r.slice(0, -1)));
   return candidates.some((c) => c === r || c.startsWith(`${r}.`) || c.startsWith(`${r}_`));
+}
+
+export interface GraphOptions {
+  /** Routes from framework conventions (see routes.ts). */
+  routes?: readonly RouteDef[];
+  /** Test files run by end-to-end runners (Playwright, Cypress). */
+  e2eTests?: ReadonlySet<string>;
 }
 
 export interface Seed {
@@ -108,8 +119,64 @@ export class DependencyGraph {
   constructor(
     private readonly files: ReadonlyMap<string, FileAnalysis>,
     private readonly isTest: (path: string) => boolean,
+    private readonly options: GraphOptions = {},
   ) {
     this.build();
+    this.linkRoutes();
+  }
+
+  /**
+   * End-to-end specs reach the pages they visit: a visited URL is linked to the route files that
+   * serve it (and their layouts and middleware). A spec whose visits cannot all be matched is
+   * uncertain, so it is never ruled out.
+   */
+  private linkRoutes(): void {
+    const routes = this.options.routes ?? [];
+    const pages = routes.filter((r) => r.kind === "page" || r.kind === "api");
+    const unmatched = new Set<string>();
+    for (const v of this.resourceKeys) {
+      if (!v.startsWith("route:")) continue;
+      const url = v.slice("route:".length);
+      if (url === "*") {
+        unmatched.add(v);
+        continue;
+      }
+      const hits = pages.filter((p) => routeMatches(url, p.route));
+      if (!hits.length) unmatched.add(v);
+      for (const p of hits) {
+        const dep = {
+          from: key(RESOURCE, v),
+          kind: "REFERENCES" as const,
+          provenance: "static" as const,
+          confidence: "medium" as const,
+        };
+        this.addFileDep(p.file, dep);
+        for (const l of routes)
+          if ((l.kind === "layout" || l.kind === "middleware") && routeUnder(p.route, l.route))
+            this.addFileDep(l.file, dep);
+      }
+    }
+    for (const t of this.options.e2eTests ?? []) {
+      const a = this.files.get(t);
+      if (!a) continue;
+      const visits = [
+        ...new Set([
+          ...(a.topLevelResources ?? []),
+          ...a.symbols.flatMap((s) => s.resources ?? []),
+        ]),
+      ].filter((r) => r.startsWith("route:"));
+      const reasons: string[] = [];
+      if (!visits.length && !(this.forward.get(t)?.size ?? 0))
+        reasons.push("end-to-end spec with no page visits SmartTest can read and no imports");
+      for (const v of visits)
+        if (unmatched.has(v))
+          reasons.push(
+            v === "route:*"
+              ? "visits a URL built at run time"
+              : `visits ${v.slice(6)}, which no known route serves`,
+          );
+      if (reasons.length) this.uncertainty.set(t, [...(this.uncertainty.get(t) ?? []), ...reasons]);
+    }
   }
 
   // ── lookups ─────────────────────────────────────────────────────────────────────────────

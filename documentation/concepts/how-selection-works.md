@@ -44,6 +44,10 @@ Some changes are not code. SmartTest links them to the code that reads them:
 
 Translation keys are qualified by the namespace bound with `useTranslation("ns")` (per binding, so `const { t: tl } = useTranslation("landing")` reads `landing` keys). A translation function received as a parameter, as in `getNav(t)`, reads in its callers' namespaces: the caller records that it passes `t` on.
 
+### End-to-end specs
+
+Playwright and Cypress specs rarely import application code; they visit URLs. SmartTest reads the visits (`page.goto("/users")`, ``request.get(`/users/${id}`)``, `cy.visit("/about")`) and links each URL to the files that serve it. Next.js conventions are understood: `app/**/page.*` and `route.*` (route groups, `[param]`, `[...slug]`), `pages/**`, and layouts, `_app`, `_document` and `middleware` for every route below them. A change to a page, or to anything it imports, selects the specs that visit it. A spec whose visits cannot all be matched (a URL built at run time, a route SmartTest does not know) is uncertain, so it is never ruled out in BALANCED or SAFE mode.
+
 A test that replaces module M with a factory mock (`vi.mock("./m", () => …)`, `jest.mock` with a factory that does not load the original) never runs M. Implementation changes in M, or in modules only reached through M, do not select it. A change to what M exports still does.
 
 ## 4. Rules & safety

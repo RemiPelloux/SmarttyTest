@@ -1,7 +1,9 @@
 import { createHash } from "node:crypto";
-import { join } from "node:path";
+import { join, relative } from "node:path";
+import { CypressAdapter } from "@smarttest/adapter-cypress";
 import { JestAdapter } from "@smarttest/adapter-jest";
 import { NodeTestAdapter } from "@smarttest/adapter-node";
+import { PlaywrightAdapter } from "@smarttest/adapter-playwright";
 import { VitestAdapter } from "@smarttest/adapter-vitest";
 import {
   BUILTIN_TRIGGERS,
@@ -11,7 +13,7 @@ import {
   type ResolvedConfig,
 } from "@smarttest/config";
 import { type CoverageReport, ingestIstanbul } from "@smarttest/coverage-engine";
-import { DependencyGraph } from "@smarttest/dependency-graph";
+import { DependencyGraph, nextRoutes } from "@smarttest/dependency-graph";
 import { decideImpact, explainTest, type ImpactResult } from "@smarttest/impact-engine";
 import { javascriptAnalyzer } from "@smarttest/language-javascript";
 import { TypeScriptResolver, typescriptAnalyzer } from "@smarttest/language-typescript";
@@ -60,8 +62,10 @@ import {
   type FilePlan,
   type HookManager,
   type HookPlan,
+  type MigratePlan,
   planHookInstall,
   planHookUninstall,
+  planMigrate,
   planUninstall,
   renderSetupReport,
   rollback,
@@ -89,6 +93,7 @@ import { planExecution, rootKey } from "@smarttest/test-selector";
 import type { ChangeAnalysisInput, ChangeSource } from "@smarttest/vcs-core";
 import { GitAdapter } from "@smarttest/vcs-git";
 import { ParsePool, parallelParsingAvailable } from "./parse-pool.js";
+import { detectDrift, patchConfig, type SyncResult } from "./sync.js";
 import {
   cleanDir,
   hashFile,
@@ -99,6 +104,7 @@ import {
   type TraceStore,
   TraceView,
 } from "./traces.js";
+import { type Watcher, watchProject } from "./watch.js";
 
 const ANALYZERS: Analyzer[] = [typescriptAnalyzer, javascriptAnalyzer];
 
@@ -113,6 +119,8 @@ export interface AnalyzeOptions {
   mode?: SafetyMode;
   /** Select every test without building the graph (adaptive policy). */
   everything?: { reason: string };
+  /** A ready-made change set (watch mode) instead of `source`. */
+  input?: ChangeAnalysisInput;
 }
 
 export interface Analysis {
@@ -435,8 +443,20 @@ export class SmartTest {
     return { index, stats };
   }
 
-  buildGraph(index: SymbolIndex): DependencyGraph {
-    return new DependencyGraph(index.entries(), this.isTest);
+  buildGraph(index: SymbolIndex, e2eTests?: ReadonlySet<string>): DependencyGraph {
+    const files = [...index.entries().keys()];
+    // Next.js projects: directories with a next.config, or the root when Next.js was detected.
+    const nextRoots = new Set(
+      files
+        .filter((f) => /(?:^|\/)next\.config\.[cm]?[jt]s$/.test(f))
+        .map((f) => (f.includes("/") ? f.slice(0, f.lastIndexOf("/")) : "")),
+    );
+    if (this.profileCache?.frameworks.some((f) => f.value === "Next.js")) nextRoots.add("");
+    const routes = nextRoots.size ? nextRoutes(files, [...nextRoots]) : [];
+    return new DependencyGraph(index.entries(), this.isTest, {
+      ...(routes.length ? { routes } : {}),
+      ...(e2eTests?.size ? { e2eTests } : {}),
+    });
   }
 
   /**
@@ -535,7 +555,9 @@ export class SmartTest {
       let count = 0;
       for (const f of files) {
         if (!analysedSet.has(f)) continue; // excluded by smarttest config
-        if (!assignment.has(f)) assignment.set(f, root);
+        // Several runners may collect the same file: the deepest project owns it.
+        const prev = assignment.get(f);
+        if (!prev || root.dir.length > prev.dir.length) assignment.set(f, root);
         count++;
       }
       perRoot.set(rootKey(root), count);
@@ -550,7 +572,9 @@ export class SmartTest {
 
   async analyze(options: AnalyzeOptions = {}): Promise<Analysis> {
     const timings: Record<string, number> = {};
-    const input = await timed(timings, "change detection", () => this.changeInput(options.source));
+    const input = options.input
+      ? this.withoutOwnState(options.input)
+      : await timed(timings, "change detection", () => this.changeInput(options.source));
     const { index, stats } = await timed(timings, "index update", () => this.loadIndex());
     if (options.everything) {
       const { tests, unassigned, roots, assignment } = await this.discoverTests(index);
@@ -582,7 +606,6 @@ export class SmartTest {
         timings,
       };
     }
-    const graph = await timed(timings, "graph build", () => this.buildGraph(index));
     const {
       tests,
       unassigned,
@@ -590,6 +613,12 @@ export class SmartTest {
       assignment,
       warnings: discoveryWarnings,
     } = await this.discoverTests(index);
+    const e2eTests = new Set(
+      [...assignment]
+        .filter(([, r]) => r.adapter === "playwright" || r.adapter === "cypress")
+        .map(([t]) => t),
+    );
+    const graph = await timed(timings, "graph build", () => this.buildGraph(index, e2eTests));
     const graphDiff: { file: string; added: string[]; removed: string[] }[] = [];
     const resources = new Map<string, ResourceChange>();
     const diffs = await timed(timings, "semantic diff", () =>
@@ -617,6 +646,16 @@ export class SmartTest {
     );
     if (graphDiff.length) decision.details.graphDiff = graphDiff;
     decision.warnings.push(...discoveryWarnings);
+    const profileNow = this.profileCache;
+    if (profileNow) {
+      const drift = detectDrift(this.config, this.loaded.raw, profileNow).filter(
+        (d) => d.key === "adapters" || d.key === "vcs.provider",
+      );
+      if (drift.length)
+        decision.warnings.push(
+          `Configuration is out of date (${drift.map((d) => `${d.key}: ${d.reason}`).join("; ")}) — run \`smarttest sync\``,
+        );
+    }
     if (unassigned.length)
       decision.warnings.push(
         `${unassigned.length} file(s) look like tests but no runner collects them, so they never run (e.g. ${unassigned.slice(0, 2).join(", ")})`,
@@ -883,6 +922,9 @@ export class SmartTest {
     };
     if (group.adapter === "jest") return new JestAdapter(base);
     if (group.adapter === "vitest") return new VitestAdapter(base);
+    if (group.adapter === "playwright") return new PlaywrightAdapter(base);
+    if (group.adapter === "cypress")
+      return new CypressAdapter({ ...base, files: () => this.sourceFilesForSnapshots() });
     if (group.adapter === "node")
       return new NodeTestAdapter({
         projectRoot: this.root,
@@ -1246,7 +1288,9 @@ export class SmartTest {
     const { index } = await this.loadIndex();
     const graph = this.buildGraph(index);
     const { tests, roots } = await this.discoverTests(index);
-    const runner = roots[0]?.adapter ?? "vitest";
+    const runner = (roots.find(
+      (r) => r.adapter === "vitest" || r.adapter === "jest" || r.adapter === "node",
+    )?.adapter ?? "vitest") as "vitest" | "jest" | "node";
     const pkg = await readJson<{ type?: string }>(join(this.root, "package.json"));
     const layout =
       this.config.tests.layout ?? (profile.tests.layout === "colocated" ? "colocated" : "mirror");
@@ -1479,9 +1523,159 @@ export class SmartTest {
     return { plan, done: await applyUninstall(this.root, plan) };
   }
 
+  /** `smarttest watch`: reruns affected tests after each batch of saves until closed. */
+  async watch(options: {
+    onRun: (outcome: RunOutcome, files: string[]) => void;
+    onAnalysis?: (analysis: Analysis) => void;
+    onError?: (error: Error) => void;
+    mode?: SafetyMode;
+  }): Promise<Watcher> {
+    const git = (await this.provider()) === "git";
+    return watchProject(this.root, {
+      exclude: this.config.exclude,
+      git,
+      ...(options.onError ? { onError: options.onError } : {}),
+      onCycle: async ({ files, input }) => {
+        const outcome = await this.run({
+          input,
+          command: "watch",
+          ...(options.mode ? { mode: options.mode } : {}),
+          ...(options.onAnalysis ? { onAnalysis: options.onAnalysis } : {}),
+        });
+        options.onRun(outcome, files);
+      },
+    });
+  }
+
+  /** `smarttest migrate --to vitest`: plan for every Jest project (or the one in `dir`). */
+  async migratePlan(options: { to: "vitest"; dir?: string }): Promise<MigratePlan> {
+    const profile = await this.profile();
+    const { index } = await this.loadIndex();
+    const { assignment } = await this.discoverTests(index);
+    const jestRoots = [
+      ...new Set([...assignment.values()].filter((r) => r.adapter === "jest")),
+    ].filter((r) => options.dir === undefined || r.dir === options.dir);
+    const plan: MigratePlan = { files: [], notes: [], install: "" };
+    const installs: string[] = [];
+    for (const r of jestRoots) {
+      const testFiles = [...assignment].filter(([, x]) => x === r).map(([t]) => t);
+      const p = await planMigrate(this.root, {
+        dir: r.dir,
+        testFiles,
+        packageManager: profile.packageManager.name,
+        typescript: profile.layout.typescript,
+      });
+      plan.files.push(...p.files);
+      plan.notes.push(...p.notes);
+      installs.push(p.install);
+    }
+    plan.install = installs.join(" && ");
+    // SmartTest's own configuration: same rules, Vitest instead of Jest.
+    const path = this.loaded.path;
+    if (path && this.loaded.raw.adapters?.includes("jest")) {
+      const { readFile } = await import("node:fs/promises");
+      const before = await readFile(path, "utf8");
+      const next = [...new Set(this.loaded.raw.adapters.map((a) => (a === "jest" ? "vitest" : a)))];
+      const { after } = patchConfig(before, [
+        {
+          key: "adapters",
+          current: "",
+          proposed: `[${next.map((a) => JSON.stringify(a)).join(", ")}]`,
+          reason: "",
+        },
+      ]);
+      if (after !== before)
+        plan.files.push({
+          path: relative(this.root, path).split("\\").join("/"),
+          action: "modify",
+          reason: "adapters: jest → vitest (rules and history are kept)",
+          before,
+          after,
+          risk: "medium",
+        });
+    }
+    return plan;
+  }
+
+  /** `smarttest sync`: configuration drift against the project as it is now, and the patch. */
+  async syncPlan(): Promise<SyncResult> {
+    this.profileCache = undefined; // detect again
+    const profile = await this.profile();
+    const detectedProjects = this.loaded.raw.projects
+      ? (await this.initPlan()).config.projects
+      : undefined;
+    const drift = detectDrift(this.config, this.loaded.raw, profile, detectedProjects);
+    const path = this.loaded.path;
+    if (!drift.length || !path) return { drift, manual: [], ...(path ? { path } : {}) };
+    const { readFile } = await import("node:fs/promises");
+    const before = await readFile(path, "utf8");
+    const { after, manual } = patchConfig(before, drift, detectedProjects);
+    return { drift, manual, path, before, ...(after !== before ? { after } : {}) };
+  }
+
+  /** Writes the sync patch (recorded in the init journal). */
+  async applySync(result: SyncResult): Promise<boolean> {
+    if (!result.after || !result.path || result.before === undefined) return false;
+    const rel = relative(this.root, result.path).split("\\").join("/");
+    const applied = await this.applyFiles([
+      {
+        path: rel,
+        action: "modify",
+        reason: "sync configuration with the project",
+        before: result.before,
+        after: result.after,
+        risk: "medium",
+      },
+    ]);
+    return applied.length > 0;
+  }
+
+  /** `doctor --fix`: safe repairs only (ignore file, unreadable local state, configuration drift). */
+  async doctorFix(): Promise<string[]> {
+    const fixed: string[] = [];
+    const { readFile, readdir, rm, writeFile: wf } = await import("node:fs/promises");
+    const gi = join(this.root, ".gitignore");
+    const storeRel = relative(this.root, this.storeDir).split("\\").join("/");
+    if ((await this.provider()) === "git" && storeRel && !storeRel.startsWith("..")) {
+      const text = await readFile(gi, "utf8").catch(() => "");
+      if (
+        !text
+          .split(/\r?\n/)
+          .some((l) => l.trim().replace(/^\//, "").replace(/\/$/, "") === storeRel)
+      ) {
+        await wf(gi, `${text}${text && !text.endsWith("\n") ? "\n" : ""}${storeRel}/\n`);
+        fixed.push(`.gitignore: ignore ${storeRel}/`);
+      }
+    }
+    const stateDir = join(this.storeDir, "state");
+    for (const f of await readdir(stateDir).catch(() => [] as string[])) {
+      if (!f.endsWith(".json")) continue;
+      try {
+        JSON.parse(await readFile(join(stateDir, f), "utf8"));
+      } catch {
+        await rm(join(stateDir, f), { force: true });
+        fixed.push(`removed unreadable ${storeRel}/state/${f} (rebuilt on the next run)`);
+      }
+    }
+    const sync = await this.syncPlan();
+    if (sync.after && (await this.applySync(sync)))
+      fixed.push(...sync.drift.map((d) => `config ${d.key}: ${d.current} → ${d.proposed}`));
+    return fixed;
+  }
+
   async doctor(): Promise<DoctorFinding[]> {
     const out: DoctorFinding[] = [];
     const profile = await this.profile();
+    {
+      const drift = detectDrift(this.config, this.loaded.raw, profile);
+      if (drift.length)
+        out.push({
+          check: "sync",
+          severity: "warn",
+          message: `configuration out of date: ${drift.map((d) => `${d.key} (${d.reason})`).join("; ")}`,
+          hint: "Run `smarttest sync` to update it, or `smarttest doctor --fix`.",
+        });
+    }
     out.push(
       profile.runtime.nodeSupported
         ? {

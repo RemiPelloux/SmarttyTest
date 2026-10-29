@@ -3,7 +3,7 @@ import type { SafetyMode } from "@smarttest/shared";
 export type TestLayout = "mirror" | "colocated" | "domain" | "custom";
 export type TestCategory = "unit" | "integration" | "e2e";
 export type RiskLevel = "low" | "medium" | "high" | "critical";
-export type AdapterId = "vitest" | "jest" | "node";
+export type AdapterId = "vitest" | "jest" | "node" | "playwright" | "cypress";
 
 /** Explicit runner declaration (overrides detection). */
 export interface RunnerDeclaration {

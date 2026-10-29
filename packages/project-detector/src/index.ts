@@ -57,7 +57,7 @@ export interface PackageManifest {
 }
 
 export interface RunnerInfo {
-  adapter: "vitest" | "jest" | "node";
+  adapter: "vitest" | "jest" | "node" | "playwright" | "cypress";
   dir: string;
   configFile?: string;
   /** Test file patterns given on the command line (node --test). */
@@ -410,6 +410,32 @@ async function detectRunners(
       // A runner used without any config file runs with its defaults — only when no explicit config exists.
       if (!configs.size && depEvidence.length) add({ adapter, dir, evidence: depEvidence });
     }
+    // End-to-end runners: Playwright Test and Cypress.
+    const deps = allDeps(manifest);
+    const pwConfig = entries.find((e) => /^playwright\.config\.[cm]?[jt]s$/.test(e));
+    if (pwConfig || deps["@playwright/test"])
+      add({
+        adapter: "playwright",
+        dir,
+        ...(pwConfig ? { configFile: `${prefix(dir)}${pwConfig}` } : {}),
+        evidence: [
+          pwConfig
+            ? `config ${prefix(dir)}${pwConfig}`
+            : `${prefix(dir)}package.json depends on @playwright/test`,
+        ],
+      });
+    const cyConfig = entries.find((e) => /^cypress\.config\.[cm]?[jt]s$/.test(e));
+    if (cyConfig || deps.cypress)
+      add({
+        adapter: "cypress",
+        dir,
+        ...(cyConfig ? { configFile: `${prefix(dir)}${cyConfig}` } : {}),
+        evidence: [
+          cyConfig
+            ? `config ${prefix(dir)}${cyConfig}`
+            : `${prefix(dir)}package.json depends on cypress`,
+        ],
+      });
     // Node's built-in runner: `node --test [patterns]`
     const nodeScript = scripts.find(([, cmd]) => /\bnode\b[^&|;]*\s--test\b/.test(cmd));
     if (nodeScript) {
@@ -709,7 +735,7 @@ export async function detectProject(
     warnings.push(`Node ${runtime.node} is not supported — use Node 22.12+ or 24 LTS`);
   const isTest =
     options.isTestFile ??
-    ((f: string) => /(?:^|\/)(?:__tests__\/.+|[^/]+\.(?:test|spec))\.[cm]?[jt]sx?$/.test(f));
+    ((f: string) => /(?:^|\/)(?:__tests__\/.+|[^/]+\.(?:test|spec|cy))\.[cm]?[jt]sx?$/.test(f));
   const runners = await detectRunners(root, manifests);
   if (!runners.length)
     warnings.push("No Jest or Vitest setup detected — install one to run tests through SmartTest");

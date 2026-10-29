@@ -1,7 +1,7 @@
 {
   "$comment": "Source of truth for the v1.0.0 package map. Edit, then run `pnpm scaffold:package --all` (idempotent: never overwrites existing src/ files).",
   "scope": "@smarttest",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "packages": [
     {
       "name": "shared",
@@ -151,6 +151,18 @@
       "description": "Node.js built-in test runner (node --test) adapter."
     },
     {
+      "name": "adapter-playwright",
+      "epic": "EXE",
+      "deps": ["shared", "plugin-sdk"],
+      "description": "Playwright Test adapter: discovery, file selection, traces in the report."
+    },
+    {
+      "name": "adapter-cypress",
+      "epic": "EXE",
+      "deps": ["shared", "plugin-sdk"],
+      "description": "Cypress adapter: spec discovery and file selection through `cypress run`."
+    },
+    {
       "name": "coverage-engine",
       "epic": "REP",
       "deps": ["shared"],
@@ -202,6 +214,8 @@
         "adapter-vitest",
         "adapter-jest",
         "adapter-node",
+        "adapter-cypress",
+        "adapter-playwright",
         "coverage-engine",
         "test-generator",
         "report-engine"

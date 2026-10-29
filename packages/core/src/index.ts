@@ -16,3 +16,5 @@ export {
   type HistoryBenchmark,
 } from "./history.js";
 export * from "./smarttest.js";
+export { type Drift, detectDrift, patchConfig, type SyncResult } from "./sync.js";
+export { type WatchCycle, type Watcher, watchProject } from "./watch.js";

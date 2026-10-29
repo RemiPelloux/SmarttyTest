@@ -17,6 +17,7 @@ import {
 } from "@smarttest/shared";
 
 export * from "./hooks.js";
+export * from "./migrate.js";
 
 export interface Recommendation {
   key: string;
@@ -50,7 +51,7 @@ export interface PlanInputs {
   globalConfigFiles: string[];
   overrides?: Partial<Pick<SmartTestConfig, "mode">> & {
     layout?: "mirror" | "colocated" | "domain" | "custom";
-    adapters?: ("vitest" | "jest" | "node")[];
+    adapters?: ("vitest" | "jest" | "node" | "playwright" | "cypress")[];
   };
 }
 
@@ -145,7 +146,13 @@ export async function buildPlan(
   const warnings = [...profile.warnings];
   const adapters =
     inputs.overrides?.adapters ??
-    ([...new Set(profile.runners.map((r) => r.adapter))] as ("vitest" | "jest" | "node")[]);
+    ([...new Set(profile.runners.map((r) => r.adapter))] as (
+      | "vitest"
+      | "jest"
+      | "node"
+      | "playwright"
+      | "cypress"
+    )[]);
   const layout =
     inputs.overrides?.layout ?? (profile.tests.colocatedRatio >= 0.5 ? "colocated" : "mirror");
   const testDir =
@@ -371,7 +378,7 @@ export async function buildPlan(
   const lang = profile.layout.typescript ? "TypeScript" : "JavaScript";
   const pm =
     profile.packageManager.name === "unknown" ? "no lockfile" : profile.packageManager.name;
-  const summary = `${fw} + ${lang}${adapters.length ? ` + ${adapters.map((a) => ({ vitest: "Vitest", jest: "Jest", node: "node:test" })[a]).join(" + ")}` : ""} · ${pm}${profile.workspaces.length ? (profile.workspaces.every((w) => w.kind === "nested") ? ` · ${profile.workspaces.length} independent projects` : ` workspace (${profile.workspaces.length} packages)`) : ""} · ${profile.vcs.provider === "git" ? "Git" : "no VCS"}`;
+  const summary = `${fw} + ${lang}${adapters.length ? ` + ${adapters.map((a) => ({ vitest: "Vitest", jest: "Jest", node: "node:test", playwright: "Playwright", cypress: "Cypress" })[a]).join(" + ")}` : ""} · ${pm}${profile.workspaces.length ? (profile.workspaces.every((w) => w.kind === "nested") ? ` · ${profile.workspaces.length} independent projects` : ` workspace (${profile.workspaces.length} packages)`) : ""} · ${profile.vcs.provider === "git" ? "Git" : "no VCS"}`;
   return { summary, recommendations: recs, warnings, files, config };
 }
 

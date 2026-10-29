@@ -7,7 +7,7 @@ import { collectMemberUses, type MemberUses, moduleScope, thisScope } from "./me
 import { catalogKeys, collectResources, MODEL_MODULES } from "./resources.js";
 import { StaticPathEvaluator } from "./static-path.js";
 
-export const ANALYZER_VERSION = "ts-9";
+export const ANALYZER_VERSION = "ts-10";
 
 function scriptKind(path: string): ts.ScriptKind {
   if (path.endsWith(".tsx")) return ts.ScriptKind.TSX;
@@ -148,7 +148,7 @@ export function analyzeSource(path: string, content: string): FileAnalysis {
   const sf = ts.createSourceFile(path, content, ts.ScriptTarget.Latest, true, kind);
   // Resource reads (env, models, translations) are only looked for when the text can contain one.
   const scanResources =
-    /process\.env|import\.meta\.env|\.entities\.|\bprisma\b|\bdb\.|(?:^|[^\w$.])\$?t[(),]|\.t\b|translate\(|i18n|useTranslation|withTranslation|getFixedT/.test(
+    /process\.env|import\.meta\.env|\.entities\.|\bprisma\b|\bdb\.|(?:^|[^\w$.])\$?t[(),]|\.t\b|translate\(|i18n|useTranslation|withTranslation|getFixedT|\.goto\(|\.visit\(|request\./.test(
       content,
     );
   const jsx = kind === ts.ScriptKind.TSX || kind === ts.ScriptKind.JSX;

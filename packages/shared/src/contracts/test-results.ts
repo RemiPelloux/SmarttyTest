@@ -43,6 +43,8 @@ export interface TestExecution {
   durationMs: number;
   attempts: number;
   error?: { message: string; stack?: string };
+  /** Files the runner produced for this test (Playwright traces, screenshots, videos). */
+  artifacts?: { name: string; path: string }[];
 }
 
 export interface TestRunResult {

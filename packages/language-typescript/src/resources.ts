@@ -62,6 +62,33 @@ export function collectResources(root: ts.Node): string[] {
           ? c.name.text
           : "";
       const arg = n.arguments[0];
+      // End-to-end visits: page.goto("/x"), cy.visit("/x"), request.get("/api/x").
+      const recv = ts.isPropertyAccessExpression(c) ? c.expression : undefined;
+      const recvName =
+        recv && ts.isIdentifier(recv)
+          ? recv.text
+          : recv && ts.isPropertyAccessExpression(recv)
+            ? recv.name.text
+            : "";
+      const visit =
+        (name === "goto" && /page|frame/i.test(recvName)) ||
+        (name === "visit" && recvName === "cy") ||
+        (["get", "post", "put", "patch", "delete", "head", "fetch"].includes(name) &&
+          /request|api/i.test(recvName)) ||
+        (name === "request" && recvName === "cy");
+      if (visit && arg) {
+        const url = (t: string) => t.replace(/^https?:\/\/[^/]+/, "").replace(/[?#].*$/, "") || "/";
+        if (ts.isStringLiteralLike(arg)) {
+          if (arg.text.startsWith("/") || /^https?:/.test(arg.text))
+            out.add(`route:${url(arg.text)}`);
+          else out.add("route:*");
+        } else if (
+          ts.isTemplateExpression(arg) &&
+          (arg.head.text.startsWith("/") || /^https?:/.test(arg.head.text))
+        )
+          out.add(`route:${url(arg.head.text)}*`);
+        else out.add("route:*");
+      }
       // A translation function received as a parameter reads in its caller's namespaces: the
       // caller records that when it passes the function on (below).
       if (tr.isTranslate(name) && arg && !(ts.isIdentifier(c) && tr.isParam(name))) {

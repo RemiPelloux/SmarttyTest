@@ -1,6 +1,6 @@
 {
   "name": "@smarttest/core",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "Application core: orchestrates engines behind a stable API used by the CLI and (later) Studio.",
   "license": "Apache-2.0",
   "type": "module",
@@ -45,6 +45,8 @@
     "@smarttest/adapter-vitest": "workspace:*",
     "@smarttest/adapter-jest": "workspace:*",
     "@smarttest/adapter-node": "workspace:*",
+    "@smarttest/adapter-cypress": "workspace:*",
+    "@smarttest/adapter-playwright": "workspace:*",
     "@smarttest/coverage-engine": "workspace:*",
     "@smarttest/test-generator": "workspace:*",
     "@smarttest/report-engine": "workspace:*"

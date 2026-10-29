@@ -58,6 +58,10 @@ export const OPTIONS = {
   stale: { type: "boolean" },
   status: { type: "boolean" },
   report: { type: "boolean" },
+  check: { type: "boolean" },
+  to: { type: "string" },
+  dir: { type: "string" },
+  fix: { type: "boolean" },
   // hook
   replace: { type: "boolean" },
   manager: { type: "string" },

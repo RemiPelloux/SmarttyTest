@@ -3,19 +3,19 @@
 </p>
 
 <p align="center">
-  <img alt="Status: alpha 0.6.0" src="https://img.shields.io/badge/status-alpha%200.6.0-FBBF24?style=flat-square&amp;labelColor=0E1530">
+  <img alt="Status: alpha 0.7.0" src="https://img.shields.io/badge/status-alpha%200.7.0-FBBF24?style=flat-square&amp;labelColor=0E1530">
   <a href="LICENSE"><img alt="License: Apache-2.0" src="https://img.shields.io/badge/license-Apache--2.0-8B5CF6?style=flat-square&amp;labelColor=0E1530"></a>
   <img alt="Node 22.12 or newer" src="https://img.shields.io/badge/node-22.12%2B-34D399?style=flat-square&amp;labelColor=0E1530">
-  <img alt="Runners: Jest, Vitest, node:test" src="https://img.shields.io/badge/runners-Jest%20%7C%20Vitest%20%7C%20node%3Atest-22D3EE?style=flat-square&amp;labelColor=0E1530">
+  <img alt="Runners: Jest, Vitest, node:test, Playwright, Cypress" src="https://img.shields.io/badge/runners-Jest%20%7C%20Vitest%20%7C%20node%3Atest%20%7C%20Playwright%20%7C%20Cypress-22D3EE?style=flat-square&amp;labelColor=0E1530">
 </p>
 
 # SmartTest
 
-SmartTest runs only the tests a change can affect. It builds a dependency graph of a TypeScript or JavaScript repository (files, symbols, imports, tests), finds what a change reaches, and runs those tests through the project's own runner: Jest, Vitest or `node --test`. Every selected or skipped test comes with the reason.
+SmartTest runs only the tests a change can affect. It builds a dependency graph of a TypeScript or JavaScript repository (files, symbols, imports, tests), finds what a change reaches, and runs those tests through the project's own runner: Jest, Vitest, `node --test`, Playwright or Cypress. Every selected or skipped test comes with the reason.
 
 Documentation site: [remipelloux.github.io/SmarttyTest](https://remipelloux.github.io/SmarttyTest/). It has a live example of the selection on the first screen.
 
-Status: 0.6.0 alpha. It runs in the pre-commit hook of [LeadsIt](documentation/case-studies/leadsit.md). It is not on npm yet (the package name is still being decided, [ADR-0007](documentation/architecture/adr/0007-name-license-distribution.md)). Next steps are in the [roadmap to 1.0.0](documentation/planning/roadmap.md).
+Status: 0.7.0 alpha. It runs in the pre-commit hook of [LeadsIt](documentation/case-studies/leadsit.md). It is not on npm yet (the package name is still being decided, [ADR-0007](documentation/architecture/adr/0007-name-license-distribution.md)). Next steps are in the [roadmap to 1.0.0](documentation/planning/roadmap.md).
 
 ## Usage
 
@@ -28,6 +28,7 @@ npx smarttest run --staged        # tests affected by staged changes (pre-commit
 npx smarttest run --base main     # tests affected by the current branch
 npx smarttest hook install        # run affected tests in the pre-commit hook (husky, lefthook, …)
 npx smarttest ci                  # affected tests in any CI, base picked automatically
+npx smarttest watch               # rerun affected tests on every save
 npx smarttest run --all           # every test, through the same pipeline
 
 npx smarttest explain <test|file> # why a test was selected or skipped, or which tests cover a file
@@ -35,7 +36,7 @@ npx smarttest trace               # record which code each test runs; later sele
 npx smarttest benchmark           # replay recent commits: full run vs SmartTest, with misses checked
 ```
 
-Until the package is published, build it from this repository (see [Development](#development)) and install the tarball: `pnpm release:pack`, then `npm install -D <path>/smarttest-0.6.0.tgz`.
+Until the package is published, build it from this repository (see [Development](#development)) and install the tarball: `pnpm release:pack`, then `npm install -D <path>/smarttest-0.7.0.tgz`.
 
 ## How it works
 
@@ -82,7 +83,7 @@ Four public repositories (commander.js, path-to-regexp, ufo, defu) set up with `
 
 SmartTest saved 63% of the full-run time. It was 6% slower than the previous hook over these commits: on single-project commits the hook runs one small suite, and SmartTest's analysis time counts in full. On the 12 most recent commits, with `--traces`, it also found 0 missed failures. Details and caveats: [case study](documentation/case-studies/leadsit.md).
 
-## Features in 0.6.0
+## Features in 0.7.0
 
 | Area      | What it does                                                                                                                                                              | Commands                                                        |
 | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------- |
@@ -91,7 +92,7 @@ SmartTest saved 63% of the full-run time. It was 6% slower than the previous hoo
 | Analysis  | TS/JS symbols and class members, imports, CommonJS, JSX, decorators, semantic diff, env/Prisma/translation/asset edges, Wasp operations, mock awareness                   | `scan`, `graph`, `graph why\|cycles\|orphans`                   |
 | Selection | Direct and transitive dependents, fast/balanced/safe modes, mandatory triggers, conservative fallbacks                                                                    | `impact`, `run`                                                 |
 | Rules     | Policies by path, package, class, method or decorator                                                                                                                     | `rules list`, `rules validate`, `rules explain`                 |
-| Runners   | Jest, Vitest, `node --test`; custom configs; discovery asks each runner which files it collects                                                                           | `run`                                                           |
+| Runners   | Jest, Vitest, `node --test`, Playwright, Cypress; custom configs; discovery asks each runner which files it collects; end-to-end specs mapped to the pages they visit     | `run`, `watch`, `migrate`                                       |
 | Evidence  | Reasons per test, runtime traces, unprotected changes, comparison with a full run, Shadow Mode, history replay                                                            | `explain`, `trace`, `validate-selection`, `shadow`, `benchmark` |
 | Generator | Missing test files as `it.todo` scaffolds; never overwrites                                                                                                               | `generate`                                                      |
 | Reports   | HTML, JSON, JUnit, Markdown; coverage labelled full or selected                                                                                                           | `report`, `coverage`                                            |

@@ -68,6 +68,12 @@
       "path": "packages/adapter-node"
     },
     {
+      "path": "packages/adapter-playwright"
+    },
+    {
+      "path": "packages/adapter-cypress"
+    },
+    {
       "path": "packages/coverage-engine"
     },
     {

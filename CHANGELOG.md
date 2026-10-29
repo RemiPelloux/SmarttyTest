@@ -4,6 +4,21 @@ All notable changes are documented here. Releases are managed with [Changesets](
 
 ## [Unreleased]
 
+## [0.7.0] — adaptation and end-to-end
+
+### Added
+
+- `smarttest sync [--check]`: patches `adapters`, `vcs.provider` and `projects` when the project changed; `run` and `doctor` warn when the configuration is out of date; `doctor --fix` applies safe repairs.
+- `smarttest watch`: reruns the tests affected by each save, comparing with the previous save of the file.
+- `smarttest migrate --to vitest`: `jest.*` to `vi.*`, a Vitest config with Jest-style globals, scripts and adapters updated; rules and history kept.
+- Playwright adapter (`--list` discovery, JSON results, retries and flaky tests, traces and screenshots linked in the HTML report) and Cypress adapter (`specPattern` discovery, one JUnit file per spec).
+- End-to-end mapping: URLs visited by specs are linked to Next.js routes (`app/`, `pages/`, layouts, middleware). Specs with visits SmartTest cannot match are uncertain, never ruled out.
+- `next-playwright` fixture in the regression harness.
+
+### Fixed
+
+- When several runners collect the same file, the deepest project's runner owns it.
+
 ## [0.6.0] — adoption
 
 ### Added

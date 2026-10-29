@@ -1,6 +1,6 @@
 {
   "name": "@smarttest/dependency-graph",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "Hybrid dependency graph with provenance, persistence and queries.",
   "license": "Apache-2.0",
   "type": "module",

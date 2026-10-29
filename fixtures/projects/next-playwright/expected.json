@@ -1,0 +1,43 @@
+{
+  "runners": [
+    "playwright",
+    "node"
+  ],
+  "vcs": "git",
+  "testFiles": 5,
+  "mutations": [
+    {
+      "file": "lib/format.js",
+      "find": "`${user.first} ${user.last}`",
+      "replace": "`${user.last}, ${user.first}`",
+      "expectFailing": [
+        "e2e/users.spec.js",
+        "test/format.test.js"
+      ]
+    },
+    {
+      "file": "app/page.js",
+      "find": "<h1>Home</h1>",
+      "replace": "<h1>Welcome</h1>",
+      "expectFailing": [
+        "e2e/home.spec.js"
+      ]
+    },
+    {
+      "file": "app/api/health/route.js",
+      "find": "ok: true",
+      "replace": "ok: false",
+      "expectFailing": [
+        "e2e/health.spec.js"
+      ]
+    },
+    {
+      "file": "lib/format.js",
+      "find": "replace(/\\s+/g, \"-\")",
+      "replace": "replace(/\\s+/g, \"_\")",
+      "expectFailing": [
+        "e2e/about.spec.js"
+      ]
+    }
+  ]
+}

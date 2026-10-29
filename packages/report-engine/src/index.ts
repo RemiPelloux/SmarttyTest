@@ -93,6 +93,11 @@ export function summarize(
   };
 }
 
+/** Artifact paths are project-relative; the HTML report lives in .smarttest/reports/. */
+function relArtifact(path: string): string {
+  return /^(\/|[A-Za-z]:)/.test(path) ? `file://${path}` : `../../${path}`;
+}
+
 export function overallStatus(report: RunReport): "passed" | "failed" | "error" {
   const s = report.summary;
   if (s.infrastructureErrors) return "error";
@@ -279,7 +284,7 @@ export function toHtml(report: RunReport): string {
       const tests = e.tests
         .map(
           (t) =>
-            `<li class="t ${statusClass[t.status] ?? "skip"}"><span class="sym" aria-hidden="true">${t.status === "passed" ? "✓" : t.status === "flaky" ? "↻" : t.status === "skipped" || t.status === "pending" ? "○" : "✕"}</span><span class="name">${esc(t.testId.slice(t.testId.indexOf("::") + 2))}</span><span class="badge">${esc(t.status)}</span><span class="dur">${esc(formatDuration(t.durationMs))}</span>${t.error ? `<pre>${esc(trimStack(t.error.message))}</pre>` : ""}</li>`,
+            `<li class="t ${statusClass[t.status] ?? "skip"}"><span class="sym" aria-hidden="true">${t.status === "passed" ? "✓" : t.status === "flaky" ? "↻" : t.status === "skipped" || t.status === "pending" ? "○" : "✕"}</span><span class="name">${esc(t.testId.slice(t.testId.indexOf("::") + 2))}</span><span class="badge">${esc(t.status)}</span><span class="dur">${esc(formatDuration(t.durationMs))}</span>${t.error ? `<pre>${esc(trimStack(t.error.message))}</pre>` : ""}${t.artifacts?.length ? `<p class="artifacts">${t.artifacts.map((x) => `<a href="${esc(relArtifact(x.path))}">${esc(x.name)}</a>`).join(" · ")}</p>` : ""}</li>`,
         )
         .join("");
       return `<details class="file ${statusClass[e.status] ?? "skip"}" ${e.status !== "passed" ? "open" : ""}><summary><span class="dot"></span><code>${esc(e.file)}</code><span class="badge">${esc(e.status)}</span><span class="dur">${esc(formatDuration(e.durationMs))}</span></summary><ul>${tests}</ul></details>`;

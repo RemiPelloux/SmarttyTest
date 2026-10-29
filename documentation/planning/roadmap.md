@@ -14,17 +14,17 @@ Planning is in story points. One sprint is about 40 points. Each version has an 
 
 ## Overview
 
-| Version | Theme              | Points | Gate                                                                                            |
-| ------- | ------------------ | ------ | ----------------------------------------------------------------------------------------------- |
-| 0.3.0   | Precise graph      | 83     | Released (13 pts moved to 0.8.0): member-level selection, CommonJS symbols, graph queries       |
-| 0.4.0   | Complete graph     | 84     | Released (8 pts moved to 0.7.0): env, asset, Wasp, Prisma, translation, mock and snapshot edges |
-| 0.5.0   | Runtime evidence   | 71     | Released: traces, hybrid selection, Shadow Mode; reduction target not reached on LeadsIt        |
-| 0.6.0   | Adoption           | 66     | Installed from npm and adopted in five external repositories without config edits               |
-| 0.7.0   | Adaptation and E2E | 84     | Projects that change shape stay correct; Playwright and Cypress selection                       |
-| 0.8.0   | Speed              | 105    | 30% less test time than 0.7 on the benchmark repositories                                       |
-| 0.9.0   | Interfaces         | 76     | Studio and VS Code cover run, explain, impact and coverage                                      |
-| 1.0.0   | Stable             | 52     | Frozen contracts, published benchmarks, security review                                         |
-|         | Total              | 621    | About 16 sprints                                                                                |
+| Version | Theme              | Points | Gate                                                                                               |
+| ------- | ------------------ | ------ | -------------------------------------------------------------------------------------------------- |
+| 0.3.0   | Precise graph      | 83     | Released (13 pts moved to 0.8.0): member-level selection, CommonJS symbols, graph queries          |
+| 0.4.0   | Complete graph     | 84     | Released (8 pts moved to 0.7.0): env, asset, Wasp, Prisma, translation, mock and snapshot edges    |
+| 0.5.0   | Runtime evidence   | 71     | Released: traces, hybrid selection, Shadow Mode; reduction target not reached on LeadsIt           |
+| 0.6.0   | Adoption           | 66     | Installed from npm and adopted in five external repositories without config edits                  |
+| 0.7.0   | Adaptation and E2E | 84     | Released: sync, watch, migrate, Playwright and Cypress, Next.js routes; TypeScript 7 not available |
+| 0.8.0   | Speed              | 105    | 30% less test time than 0.7 on the benchmark repositories                                          |
+| 0.9.0   | Interfaces         | 76     | Studio and VS Code cover run, explain, impact and coverage                                         |
+| 1.0.0   | Stable             | 52     | Frozen contracts, published benchmarks, security review                                            |
+|         | Total              | 621    | About 16 sprints                                                                                   |
 
 ## Graph model at 1.0.0
 
@@ -111,20 +111,20 @@ Make the first ten minutes trivial, in any repository and any CI system. No depe
 
 **Gate:** partly met. Four public repositories (commander.js, path-to-regexp, ufo, defu) and LeadsIt were set up with `init --yes` and no configuration edits, and `benchmark` reports 0 missed failures on all five ([results](../case-studies/external-repositories.md)). Installing from npm is still blocked on the package name.
 
-## 0.7.0: Adaptation and E2E (84 pts)
+## 0.7.0: Adaptation and E2E (84 pts), released
 
-| Story                                                                                                                                        | Pts |
-| -------------------------------------------------------------------------------------------------------------------------------------------- | --- |
-| `smarttest sync [--check]`: detect new projects, runners, aliases or a VCS change and propose a config update; `doctor --fix` for safe fixes | 13  |
-| `migrate` between runners (Jest to Vitest) keeping rules and history                                                                         | 8   |
-| `smarttest watch`: rerun affected tests on save using graph patches                                                                          | 13  |
-| Playwright adapter: discovery, file selection, traces linked in the report                                                                   | 13  |
-| E2E mapping: routes and pages (from 0.4.0 framework edges) to the E2E specs that visit them                                                  | 13  |
-| Next.js `app/` and `pages/` route conventions and middleware (from 0.4.0)                                                                    | 8   |
-| Cypress adapter                                                                                                                              | 8   |
-| TypeScript 7 native API behind `language-typescript`, TypeScript 6 kept as fallback                                                          | 8   |
+| Story                                                                                                                                                     | Pts | Status                                                                                                               |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------- | --- | -------------------------------------------------------------------------------------------------------------------- |
+| `smarttest sync [--check]`: detects new runners, packages or a VCS change and patches the config; `doctor --fix` for safe fixes                           | 13  | done                                                                                                                 |
+| `migrate` between runners (Jest to Vitest) keeping rules and history                                                                                      | 8   | done (Jest to Vitest; other directions not planned)                                                                  |
+| `smarttest watch`: rerun affected tests on save                                                                                                           | 13  | done; each cycle rebuilds the graph from the warm index, incremental graph patches are part of the 0.8.0 graph story |
+| Playwright adapter: discovery, file selection, traces linked in the report                                                                                | 13  | done                                                                                                                 |
+| E2E mapping: URLs visited by specs (`page.goto`, `request.*`, `cy.visit`) linked to the routes that serve them; unreadable visits make the spec uncertain | 13  | done                                                                                                                 |
+| Next.js `app/` and `pages/` route conventions, layouts and middleware                                                                                     | 8   | done                                                                                                                 |
+| Cypress adapter                                                                                                                                           | 8   | done, not validated against a Cypress install (argument building and JUnit parsing are tested)                       |
+| TypeScript 7 native API behind `language-typescript`, TypeScript 6 kept as fallback                                                                       | 8   | not done: TypeScript 7 exposes no parser API usable from Node yet; moved to 1.0.0 as a watch item                    |
 
-**Gate:** a fixture that adds a package, switches runner and adopts Git mid-history needs no manual re-init; Playwright selection is validated with `benchmark`.
+**Gate:** met. A Jest project without Git that switches to Vitest, adopts Git and gains a `node --test` package is brought up to date by `smarttest sync` without re-running init (`integration-tests/adaptation.test.ts`). Playwright selection: the `next-playwright` fixture's four seeded regressions are in the regression harness, and `benchmark` over a history of breaking and fixing commits reports 0 missed failures.
 
 ## 0.8.0: Speed (105 pts)
 

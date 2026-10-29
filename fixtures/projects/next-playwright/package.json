@@ -1,0 +1,12 @@
+{
+  "name": "fixture-next-playwright",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "playwright test",
+    "test:unit": "node --test test/"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.56.1"
+  }
+}
