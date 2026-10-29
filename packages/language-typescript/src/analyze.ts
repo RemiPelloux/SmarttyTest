@@ -2,8 +2,9 @@ import type { SymbolKind } from "@smarttest/shared";
 import { sha256 } from "@smarttest/shared";
 import type { FileAnalysis, ImportRecord, SymbolRecord } from "@smarttest/source-parser";
 import ts from "typescript";
+import { StaticPathEvaluator } from "./static-path.js";
 
-export const ANALYZER_VERSION = "ts-1";
+export const ANALYZER_VERSION = "ts-2";
 
 function scriptKind(path: string): ts.ScriptKind {
   if (path.endsWith(".tsx")) return ts.ScriptKind.TSX;
@@ -103,6 +104,8 @@ export function analyzeSource(path: string, content: string): FileAnalysis {
   const topRefs = new Set<string>();
   const topTokens: string[] = [];
   const dynamicUnresolved: string[] = [];
+  const dynamicHints: { pattern: string; line: number; expr: string }[] = [];
+  const pathEval = new StaticPathEvaluator(sf, path);
   let esm = false;
   let cjs = false;
   const lineOf = (n: ts.Node) => sf.getLineAndCharacterOfPosition(n.getStart(sf)).line;
@@ -437,7 +440,11 @@ export function analyzeSource(path: string, content: string): FileAnalysis {
           }
           if (kind === "require") cjs = true;
         } else if (kind === "dynamic" || kind === "require") {
-          dynamicUnresolved.push(`line ${lineOf(n) + 1}: ${n.getText(sf).slice(0, 80)}`);
+          // Try to evaluate computed paths (constants, new URL(…, import.meta.url), resolve(__dirname…)).
+          const pattern = arg ? pathEval.evaluate(arg) : undefined;
+          const expr = `line ${lineOf(n) + 1}: ${n.getText(sf).slice(0, 80)}`;
+          if (pattern) dynamicHints.push({ pattern, line: lineOf(n), expr });
+          else dynamicUnresolved.push(expr);
         }
       }
     }
@@ -466,6 +473,7 @@ export function analyzeSource(path: string, content: string): FileAnalysis {
     topLevelHash: hash(topTokens.join("|")),
     importsHash: hash(importsKey),
     dynamicUnresolved,
+    ...(dynamicHints.length ? { dynamicHints } : {}),
     parseErrors,
     analyzerVersion: ANALYZER_VERSION,
   };

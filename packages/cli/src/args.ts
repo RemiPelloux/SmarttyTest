@@ -19,6 +19,7 @@ export const OPTIONS = {
   all: { type: "boolean" },
   base: { type: "string" },
   "base-mode": { type: "string" },
+  target: { type: "string" },
   staged: { type: "boolean" },
   uncommitted: { type: "boolean" },
   "since-snapshot": { type: "boolean" },
@@ -48,6 +49,7 @@ export const OPTIONS = {
   depth: { type: "string" },
   // explain
   fresh: { type: "boolean" },
+  commits: { type: "string" },
   // snapshot
   keep: { type: "string" },
   force: { type: "boolean" },

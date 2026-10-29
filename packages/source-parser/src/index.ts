@@ -70,6 +70,12 @@ export interface FileAnalysis {
   importsHash: string;
   /** Descriptions of non-literal dynamic imports/requires — sources of uncertainty. */
   dynamicUnresolved: string[];
+  /** Computed import paths evaluated statically (relative to the file's dir; may contain *). */
+  dynamicHints?: { pattern: string; line: number; expr: string }[];
+  /** Derived at resolution time: project files the hints point to. */
+  dynamicTargets?: string[];
+  /** Derived at resolution time: hints that matched no project file (still uncertainty). */
+  dynamicUnmatched?: string[];
   parseErrors: number;
   analyzerVersion: string;
 }

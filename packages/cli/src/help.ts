@@ -47,6 +47,15 @@ export const COMMANDS: Record<string, { summary: string; usage: string; flags?: 
     summary: "Compare the selection against a full reference run",
     usage: "smarttest validate-selection [--base <ref>] [--mode m] [--json]",
   },
+  benchmark: {
+    summary:
+      "Replay recent commits: full run vs project-gated run vs SmartTest, with missed failures checked",
+    usage: "smarttest benchmark [--commits n] [--mode m] [--json] [-o file.md]",
+    flags: [
+      "--commits n  how many recent commits to replay (default 10)",
+      "-o file.md  also write the Markdown report there",
+    ],
+  },
   graph: {
     summary: "Query or export the dependency graph",
     usage:

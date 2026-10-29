@@ -13,7 +13,7 @@
 
 **Out of scope for 1.0.0:** SVN adapter (Release 2); Mercurial / Perforce (Release 6); Custom VCS plugins (post-1.0).
 
-| Implementation | 37 / 37 points done (v0.1.0) |
+| Implementation | 37 / 37 points done (v0.2.0) |
 
 ## Stories
 

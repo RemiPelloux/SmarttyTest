@@ -1,0 +1,16 @@
+{
+  "runners": [
+    "node"
+  ],
+  "testFiles": 2,
+  "mutations": [
+    {
+      "file": "src/money.js",
+      "find": "Math.round(n * 100) / 100",
+      "replace": "Math.round(n * 100) / 10",
+      "expectFailing": [
+        "test/cart.test.js"
+      ]
+    }
+  ]
+}

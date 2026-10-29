@@ -46,7 +46,7 @@ export interface PlanInputs {
   globalConfigFiles: string[];
   overrides?: Partial<Pick<SmartTestConfig, "mode">> & {
     layout?: "mirror" | "colocated" | "domain" | "custom";
-    adapters?: ("vitest" | "jest")[];
+    adapters?: ("vitest" | "jest" | "node")[];
   };
 }
 
@@ -63,10 +63,11 @@ function suggestedRules(profile: ProjectProfile, sourceFiles: readonly string[])
     if (m) critical.add(`${m[1] ?? ""}${m[2]}/**`);
   }
   for (const path of [...critical].slice(0, 3)) {
-    const name = `${path
-      .replace(/\/\*\*$/, "")
-      .split("/")
-      .pop()}-critical`;
+    const segs = path.replace(/\/\*\*$/, "").split("/");
+    let name = `${segs.at(-1)}-critical`;
+    // Two "auth/" folders in different projects must not produce the same rule name.
+    if (rules.some((r) => r.name === name)) name = `${segs[0]}-${segs.at(-1)}-critical`;
+    for (let n = 2; rules.some((r) => r.name === name); n++) name = `${segs.at(-1)}-critical-${n}`;
     rules.push({
       name,
       match: { path },
@@ -140,9 +141,9 @@ export async function buildPlan(
   const warnings = [...profile.warnings];
   const adapters =
     inputs.overrides?.adapters ??
-    ([...new Set(profile.runners.map((r) => r.adapter))] as ("vitest" | "jest")[]);
+    ([...new Set(profile.runners.map((r) => r.adapter))] as ("vitest" | "jest" | "node")[]);
   const layout =
-    inputs.overrides?.layout ?? (profile.tests.layout === "colocated" ? "colocated" : "mirror");
+    inputs.overrides?.layout ?? (profile.tests.colocatedRatio >= 0.5 ? "colocated" : "mirror");
   const testDir =
     profile.tests.testDirs.find((d) => d === "tests" || d === "test" || d === "__tests__") ??
     "tests";
@@ -208,12 +209,38 @@ export async function buildPlan(
     );
   if (inputs.globalConfigFiles.length)
     warnings.push(
-      `${inputs.globalConfigFiles.length} configuration file(s) affect all suites (${inputs.globalConfigFiles.slice(0, 4).join(", ")})`,
+      `${inputs.globalConfigFiles.length} configuration file(s) widen test selection in their project when changed (${inputs.globalConfigFiles.slice(0, 4).join(", ")})`,
     );
 
-  const exclude = profile.layout.generatedDirs
-    .filter((d) => !["dist", "build", "coverage", ".next", "out"].includes(d))
-    .map((d) => `${d}/**`);
+  const ignoredByCommands = [...new Set(profile.testCommands.flatMap((c) => c.ignores))];
+  if (ignoredByCommands.length) {
+    recs.push({
+      key: "Skipped tests",
+      value: ignoredByCommands.join(", "),
+      reason: "your existing test commands skip these, so SmartTest does too",
+      evidence: profile.testCommands
+        .filter((c) => c.ignores.length)
+        .map((c) => `${c.source}${c.line ? `:${c.line}` : ""}`),
+    });
+  }
+  const hookCommands = profile.testCommands.filter((c) =>
+    /husky|hooks|lefthook|pre-commit-config/.test(c.source),
+  );
+  if (hookCommands.length) {
+    const hookFile = hookCommands[0]?.source ?? "";
+    recs.push({
+      key: "Git hook",
+      value: "smarttest run --staged",
+      reason: `${hookFile} runs ${hookCommands.length} full suite(s) (${[...new Set(hookCommands.map((c) => c.adapter))].join(", ")}); one affected-tests run can replace them`,
+      evidence: hookCommands.map((c) => `${c.source}:${c.line}`),
+    });
+  }
+  const exclude = [
+    ...profile.layout.generatedDirs
+      .filter((d) => !["dist", "build", "coverage", ".next", "out"].includes(d))
+      .map((d) => `${d}/**`),
+    ...ignoredByCommands,
+  ];
   const config: SmartTestConfig = {
     mode: inputs.overrides?.mode ?? "balanced",
     ...(adapters.length ? { adapters } : {}),
@@ -304,7 +331,7 @@ export async function buildPlan(
   const lang = profile.layout.typescript ? "TypeScript" : "JavaScript";
   const pm =
     profile.packageManager.name === "unknown" ? "no lockfile" : profile.packageManager.name;
-  const summary = `${fw} + ${lang}${adapters.length ? ` + ${adapters.map((a) => (a === "vitest" ? "Vitest" : "Jest")).join(" + ")}` : ""} · ${pm}${profile.workspaces.length ? ` workspace (${profile.workspaces.length} packages)` : ""} · ${profile.vcs.provider === "git" ? "Git" : "no VCS"}`;
+  const summary = `${fw} + ${lang}${adapters.length ? ` + ${adapters.map((a) => ({ vitest: "Vitest", jest: "Jest", node: "node:test" })[a]).join(" + ")}` : ""} · ${pm}${profile.workspaces.length ? (profile.workspaces.every((w) => w.kind === "nested") ? ` · ${profile.workspaces.length} independent projects` : ` workspace (${profile.workspaces.length} packages)`) : ""} · ${profile.vcs.provider === "git" ? "Git" : "no VCS"}`;
   return { summary, recommendations: recs, warnings, files, config };
 }
 

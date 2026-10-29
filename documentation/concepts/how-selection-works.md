@@ -20,6 +20,12 @@ The graph holds files, symbols, tests and configuration. Its edges are `IMPORTS`
 
 <p align="center"><img src="../assets/impact-map.svg" alt="Impact map example" width="100%"></p>
 
+### What counts as a dependency
+
+- **Files:** in a Git repository, the project is what `git ls-files` sees. Everything `.gitignore` excludes (build output such as `.wasp/`, `.next/`, `dist/`) and submodules are skipped.
+- **Tests:** each runner (Jest, Vitest, `node --test`) is asked which files it collects, with its own config. A file named `*.test.ts` that no runner collects never runs, and `doctor` reports it.
+- **Computed imports:** ``import(`${SCRIPTS}x.mjs`)``, `new URL("../tpl/", import.meta.url)` and `resolve(__dirname, "fixtures")` are evaluated statically. A partially known path becomes a bounded glob (`templates/*.ts`). Only truly unknowable imports (`import(file)`) remain uncertainty.
+
 ## 4. Rules & safety
 
 [Rules](rules.md) add risk levels, always-run tests and mode overrides. **Mandatory triggers** widen the selection for changes with global impact:
@@ -41,7 +47,7 @@ Rules can **add** triggers but cannot remove the built-in ones.
 | Intended for                                    | local loop               | pull requests                        | releases, critical code |
 | Traversal                                       | full transitive          | full transitive                      | full transitive         |
 | Comment/format-only changes                     | skipped (with a warning) | treated as changes                   | treated as changes      |
-| Tests that depend on unresolved/dynamic imports | warning only             | **selected** ("cannot be ruled out") | full suite              |
+| Tests that depend on unresolved/dynamic imports | warning only             | **selected** ("cannot be ruled out") | **selected**            |
 | Incomplete change set (e.g. hash-only snapshot) | whole-file seeds         | whole-file seeds, status `partial`   | full suite              |
 | Critical-risk rules                             | upgrade to SAFE          | upgrade to SAFE                      | SAFE                    |
 

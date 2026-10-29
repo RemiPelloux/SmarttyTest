@@ -13,7 +13,7 @@
 
 **Out of scope for 1.0.0:** Diff/branch coverage intelligence K06–K09 (Release 2); Historical comparison O07.
 
-| Implementation | 26 / 26 points done (v0.1.0) |
+| Implementation | 26 / 26 points done (v0.2.0) |
 
 ## Stories
 

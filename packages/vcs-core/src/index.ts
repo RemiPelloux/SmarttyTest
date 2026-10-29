@@ -14,7 +14,12 @@ export type {
 
 /** What to compare against. */
 export type ChangeSource =
-  | { kind: "base"; ref: string; direct?: boolean }
+  | {
+      kind: "base";
+      ref: string;
+      direct?: boolean /** compare against this revision instead of the working tree */;
+      target?: string;
+    }
   | { kind: "staged" }
   | { kind: "uncommitted" }
   | { kind: "snapshot"; id?: string };
@@ -36,9 +41,7 @@ export interface ChangeProvider {
 export function describeSource(source: ChangeSource): string {
   switch (source.kind) {
     case "base":
-      return source.direct
-        ? `${source.ref}…working tree (direct)`
-        : `merge-base(${source.ref})…working tree`;
+      return `${source.direct ? source.ref : `merge-base(${source.ref})`}…${source.target ?? "working tree"}`;
     case "staged":
       return "HEAD…index (staged)";
     case "uncommitted":

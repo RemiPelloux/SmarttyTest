@@ -13,7 +13,7 @@
 
 **Out of scope for 1.0.0:** Persistent result cache J09/J10 (Release 2); Playwright/Cypress adapters.
 
-| Implementation | 35 / 35 points done (v0.1.0) |
+| Implementation | 35 / 35 points done (v0.2.0) |
 
 ## Stories
 

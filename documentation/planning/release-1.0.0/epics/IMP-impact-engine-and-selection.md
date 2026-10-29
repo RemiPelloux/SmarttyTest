@@ -13,7 +13,7 @@
 
 **Out of scope for 1.0.0:** Runtime trace integration G03 (Release 2); Continuous Shadow Mode G11 (Release 2).
 
-| Implementation | 39 / 39 points done (v0.1.0) |
+| Implementation | 39 / 39 points done (v0.2.0) |
 
 ## Stories
 

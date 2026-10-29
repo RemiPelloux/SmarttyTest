@@ -13,7 +13,7 @@
 
 **Out of scope for 1.0.0:** GitLab/Jenkins integrations (Release 2); PR comments (Cloud).
 
-| Implementation | 5 / 8 points done (v0.1.0) |
+| Implementation | 5 / 8 points done (v0.2.0) |
 
 ## Stories
 

@@ -1,0 +1,8 @@
+{
+  "name": "fixture-node-test-esm",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test test/"
+  }
+}

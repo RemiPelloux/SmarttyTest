@@ -13,7 +13,7 @@
 
 **Out of scope for 1.0.0:** Adaptive configuration / `sync` (Release 2).
 
-| Implementation | 33 / 33 points done (v0.1.0) |
+| Implementation | 33 / 33 points done (v0.2.0) |
 
 ## Stories
 

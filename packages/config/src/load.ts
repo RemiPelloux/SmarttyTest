@@ -1,5 +1,5 @@
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { isAbsolute, join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { exists, SmartTestError, shortHash } from "@smarttest/shared";
 import ts from "typescript";
@@ -62,7 +62,11 @@ async function importConfigModule(root: string, file: string): Promise<unknown> 
 }
 
 export async function loadConfig(root: string, explicitPath?: string): Promise<LoadedConfig> {
-  const path = explicitPath ? join(root, explicitPath) : await findConfigFile(root);
+  const path = explicitPath
+    ? isAbsolute(explicitPath)
+      ? explicitPath
+      : join(root, explicitPath)
+    : await findConfigFile(root);
   if (!path) return { config: resolveConfig({}), raw: {}, warnings: [] };
   if (!(await exists(path))) {
     throw new SmartTestError(`Config file not found: ${explicitPath}`, {

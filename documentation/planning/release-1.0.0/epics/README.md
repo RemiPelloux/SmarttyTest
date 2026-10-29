@@ -4,7 +4,7 @@
 
 15 epics · 103 stories · 422 committed points (+6 stretch).
 
-**Implementation (v0.1.0):** 389 / 422 committed points done · 10 partial · 2 todo.
+**Implementation (v0.2.0):** 389 / 422 committed points done · 10 partial · 2 todo.
 
 | Epic | Name | Stories | Points | Done pts | Must | Should | Could | Sprints | Acceptance gate |
 |---|---|---|---|---|---|---|---|---|---|

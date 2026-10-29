@@ -8,6 +8,9 @@ import { access, readdir, stat } from "node:fs/promises";
 import { arch, cpus, freemem, platform, totalmem } from "node:os";
 import { dirname, join } from "node:path";
 import { exists, matchGlob, readJson, readText, toPosix, walkFiles } from "@smarttest/shared";
+import { detectTestCommands, type ExistingTestCommand } from "./commands.js";
+
+export { detectTestCommands, type ExistingTestCommand } from "./commands.js";
 
 export interface Evidence {
   value: string;
@@ -100,6 +103,8 @@ export interface ProjectProfile {
   layout: SourceLayout;
   vcs: VcsInfo;
   coverage: Evidence[];
+  /** How the project runs tests today (hooks, scripts, CI). */
+  testCommands: ExistingTestCommand[];
   ci: Evidence[];
   warnings: string[];
 }
@@ -137,6 +142,7 @@ async function detectPackageManager(
   root: string,
   manifest: PackageManifest | undefined,
   warnings: string[],
+  projectDirs: readonly string[] = [],
 ) {
   const evidence: string[] = [];
   const found: ("npm" | "pnpm" | "yarn" | "bun")[] = [];
@@ -153,6 +159,18 @@ async function detectPackageManager(
       evidence.push(`lockfile ${file}`);
     }
   }
+  // No root lockfile: a repo of independent projects, each with its own lockfile.
+  if (!found.length) {
+    for (const dir of projectDirs) {
+      for (const [file, pm] of locks) {
+        if (await exists(join(root, dir, file))) {
+          found.push(pm);
+          evidence.push(`lockfile ${dir}/${file}`);
+          break;
+        }
+      }
+    }
+  }
   const declared = manifest?.packageManager?.split("@")[0] as
     | "npm"
     | "pnpm"
@@ -161,7 +179,8 @@ async function detectPackageManager(
     | undefined;
   if (declared) evidence.unshift(`package.json packageManager: ${manifest?.packageManager}`);
   const unique = [...new Set(found)];
-  if (unique.length > 1)
+  const perProject = evidence.some((e) => e.includes("/"));
+  if (unique.length > 1 && !perProject)
     warnings.push(`Conflicting lockfiles (${unique.join(", ")}) — package manager is ambiguous`);
   const name = declared ?? (unique.length === 1 ? unique[0] : undefined) ?? unique[0] ?? "unknown";
   const value = name;
@@ -406,8 +425,18 @@ async function detectTests(
   const testDirs = new Map<string, number>();
   for (const t of tests) {
     const base = t.replace(/\.(test|spec)(\.[cm]?[jt]sx?)$/, "$2").replace(/__tests__\//, "");
-    const candidates = [".ts", ".tsx", ".js", ".jsx", ".mts", ".mjs", ".cjs", ".cts"].map((e) =>
-      base.replace(/\.[cm]?[jt]sx?$/, e),
+    // Also try without an environment segment: credits.server.test.ts → credits.ts
+    const bases = [
+      base,
+      base.replace(
+        /\.(?:server|client|node|browser|unit|int|integration|e2e)(\.[cm]?[jt]sx?)$/,
+        "$1",
+      ),
+    ];
+    const candidates = bases.flatMap((b) =>
+      [".ts", ".tsx", ".js", ".jsx", ".mts", ".mjs", ".cjs", ".cts"].map((e) =>
+        b.replace(/\.[cm]?[jt]sx?$/, e),
+      ),
     );
     if (candidates.some((c) => fileSet.has(c) && c !== t)) colocated++;
     const top = t.split("/")[0] ?? "";
@@ -606,9 +635,9 @@ export async function detectProject(
 ): Promise<ProjectProfile> {
   const warnings: string[] = [];
   const manifest = await readJson<PackageManifest>(join(root, "package.json"));
-  if (!manifest) warnings.push("No package.json found at the project root");
   const files = await walkFiles(root);
   const workspaces = await detectWorkspaces(root, manifest);
+  if (!manifest && !workspaces.length) warnings.push("No package.json found in this project");
   const manifests = [
     ...(manifest ? [{ dir: "", manifest }] : []),
     ...workspaces.map((w) => ({ dir: w.dir, manifest: w.manifest })),
@@ -628,7 +657,12 @@ export async function detectProject(
     root,
     name: manifest?.name ?? root.split(/[\\/]/).pop() ?? "project",
     runtime,
-    packageManager: await detectPackageManager(root, manifest, warnings),
+    packageManager: await detectPackageManager(
+      root,
+      manifest,
+      warnings,
+      workspaces.map((w) => w.dir),
+    ),
     workspaces,
     frameworks: await detectFrameworks(root, manifests),
     runners,
@@ -637,6 +671,10 @@ export async function detectProject(
     vcs,
     coverage: await detectCoverage(manifests, files),
     ci: await detectCi(root),
+    testCommands: await detectTestCommands(
+      root,
+      workspaces.map((w) => w.dir),
+    ),
     warnings,
   };
 }

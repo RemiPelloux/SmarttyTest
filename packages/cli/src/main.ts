@@ -71,7 +71,12 @@ function sourceOf(flags: Flags): ChangeSource | undefined {
         code: "ST_USAGE",
         category: "usage",
       });
-    return { kind: "base", ref: flags.base, direct: flags["base-mode"] === "direct" };
+    return {
+      kind: "base",
+      ref: flags.base,
+      direct: flags["base-mode"] === "direct",
+      ...(flags.target ? { target: flags.target } : {}),
+    };
   }
   if (flags.staged) return { kind: "staged" };
   if (flags.uncommitted) return { kind: "uncommitted" };
@@ -891,6 +896,51 @@ async function cmdVcs(ctx: Ctx): Promise<number> {
   });
 }
 
+async function cmdBenchmark(ctx: Ctx): Promise<number> {
+  const { t, flags } = ctx;
+  const st = await ctx.open();
+  const { benchmarkHistory, benchmarkMarkdown } = await import("@smarttest/core");
+  const mode = modeOf(flags);
+  const commits = intFlag(flags.commits, "commits") ?? 10;
+  const b = await benchmarkHistory(st, {
+    commits,
+    ...(mode ? { mode } : {}),
+    onProgress: (m) => {
+      if (!flags.json && !flags.quiet) ctx.err(t.dim(m));
+    },
+  });
+  const md = benchmarkMarkdown(b);
+  const reportPath = join(st.storeDir, "reports", "benchmark.md");
+  await writeFileAtomic(reportPath, md);
+  await writeFileAtomic(
+    join(st.storeDir, "reports", "benchmark.json"),
+    `${JSON.stringify(b, null, 2)}\n`,
+  );
+  if (flags.output) await writeFileAtomic(join(ctx.root, flags.output), md);
+  if (flags.json) ctx.json("benchmark", b);
+  else {
+    const s = (ms: number) => formatDuration(ms);
+    const tt = b.totals;
+    ctx.out();
+    ctx.out(`${t.bold("History benchmark")} · ${tt.commits} commits · mode ${t.violet(b.mode)}`);
+    ctx.out(`  ${pad("Full run", 16)}${s(tt.fullMs)}`);
+    ctx.out(
+      `  ${pad("Project-gated", 16)}${s(tt.projectGatedMs)}  ${t.dim("(suites of the projects each commit touched)")}`,
+    );
+    ctx.out(
+      `  ${pad("SmartTest", 16)}${t.bold(s(tt.smarttestMs))}  ${t.dim(`(${tt.selectedTests}/${tt.totalTests} test files, analysis included)`)}`,
+    );
+    ctx.out(
+      `  ${pad("Saved", 16)}${tt.savedVsFullPct}% vs full · ${tt.savedVsGatedPct}% vs project-gated`,
+    );
+    ctx.out(
+      `  ${pad("Missed failures", 16)}${tt.missed ? t.red(String(tt.missed)) : t.green("0")}${tt.preexisting ? t.dim(` · ${tt.preexisting} already failing in the parent commit`) : ""}`,
+    );
+    ctx.out(`  ${t.dim("Report")} ${rel(ctx, reportPath)}`);
+  }
+  return b.totals.missed ? ExitCode.PolicyFailure : ExitCode.Success;
+}
+
 async function cmdGraph(ctx: Ctx): Promise<number> {
   const { t, flags } = ctx;
   const st = await ctx.open();
@@ -1043,6 +1093,7 @@ const HANDLERS: Record<string, (ctx: Ctx) => Promise<number>> = {
   snapshot: cmdSnapshot,
   vcs: cmdVcs,
   graph: cmdGraph,
+  benchmark: cmdBenchmark,
   coverage: cmdCoverage,
   report: cmdReport,
 };

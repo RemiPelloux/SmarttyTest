@@ -57,8 +57,8 @@ import { SymbolIndex, type UpdateStats } from "@smarttest/symbol-index";
 import {
   assignRunner,
   discoverTestFiles,
+  expandNodePatterns,
   isTestFile,
-  NODE_TEST_DEFAULTS,
   type RunnerRoot,
 } from "@smarttest/test-discovery";
 import { type ExecutionEvent, executeGroups, type Group } from "@smarttest/test-executor";
@@ -271,7 +271,8 @@ export class SmartTest {
 
   async changeInput(source?: ChangeSource): Promise<ChangeAnalysisInput> {
     const src = source ?? (await this.defaultSource());
-    if (src.kind === "snapshot") return this.snapshots().getChangeInput(src);
+    if (src.kind === "snapshot")
+      return this.withoutOwnState(await this.snapshots().getChangeInput(src));
     if ((await this.provider()) !== "git" && !(await this.git().detect())) {
       throw new SmartTestError("This project is not a Git repository", {
         code: "ST_NOT_GIT",
@@ -279,7 +280,20 @@ export class SmartTest {
         hint: "Drop --base/--staged/--uncommitted to use native snapshots, or run `git init`.",
       });
     }
-    return this.git().getChangeInput(src);
+    return this.withoutOwnState(await this.git().getChangeInput(src));
+  }
+
+  /** SmartTest's own state (store, reports) is never a change to the project. */
+  private withoutOwnState(input: ChangeAnalysisInput): ChangeAnalysisInput {
+    const own = [this.config.storeDir, this.config.reports.outputDir].map((d) =>
+      d.replace(/^\.\//, "").replace(/\/$/, ""),
+    );
+    const changes = input.changeSet.changes.filter(
+      (c) => !own.some((d) => c.path === d || c.path.startsWith(`${d}/`)),
+    );
+    return changes.length === input.changeSet.changes.length
+      ? input
+      : { ...input, changeSet: { ...input.changeSet, changes } };
   }
 
   // ── Index & graph ───────────────────────────────────────────────────────────────────────
@@ -343,12 +357,7 @@ export class SmartTest {
       if (this.isTest(f)) return true;
       if (root?.adapter !== "node") return false;
       const rel = root.dir ? f.slice(root.dir.length + 1) : f;
-      return matchGlob(
-        rel,
-        root.patterns?.length
-          ? root.patterns.map((p) => (/[*?{]/.test(p) ? p : `${p.replace(/\/$/, "")}/**`))
-          : NODE_TEST_DEFAULTS,
-      );
+      return matchGlob(rel, expandNodePatterns(root.patterns));
     };
     const staticCandidates = discoverTestFiles(analysed, this.config.tests.match);
     const assignment = new Map<string, RunnerRoot>();
@@ -538,6 +547,11 @@ export class SmartTest {
   }
 
   // ── Run ─────────────────────────────────────────────────────────────────────────────────
+
+  /** Adapter for a runner group (used by the history benchmark). */
+  createAdapterFor(group: Group & { configFile?: string; patterns?: string[] }): TestAdapter {
+    return this.createAdapter(group);
+  }
 
   private createAdapter(group: Group, coverageDir?: string): TestAdapter {
     const cwd = join(this.root, group.dir);
@@ -972,9 +986,15 @@ export class SmartTest {
     const { tests } = await this.discoverTests(index);
     const sources = [...index.entries().keys()].filter((f) => !this.isTest(f));
     const tested = new Set(tests.flatMap((t) => [...graph.dependenciesOf(t)]));
+    // Only source files inside projects that run tests, excluding assets and tooling.
+    const roots = await this.runnerRoots();
     const untested = sources.filter(
       (s) =>
-        !tested.has(s) && !/(?:^|\/)(?:index|main)\.[cm]?[jt]sx?$/.test(s) && !/\.config\./.test(s),
+        !tested.has(s) &&
+        roots.some((r) => r.dir === "" || s.startsWith(`${r.dir}/`)) &&
+        !/(?:^|\/)(?:public|static|scripts|assets|migrations|fixtures|mocks|__mocks__)\//.test(s) &&
+        !/(?:^|\/)(?:index|main)\.[cm]?[jt]sx?$/.test(s) &&
+        !/\.(?:config|d|wasp)\.[cm]?[jt]sx?$/.test(s),
     );
     const files = await this.allFiles();
     const globalConfigFiles = files.filter(

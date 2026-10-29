@@ -16,7 +16,7 @@ interface Mutation {
   expectFailing: string[];
 }
 
-const fixtures = ["nest-auth-vitest", "express-cjs-jest", "pnpm-monorepo"];
+const fixtures = ["nest-auth-vitest", "express-cjs-jest", "pnpm-monorepo", "node-test-esm"];
 
 for (const fixture of fixtures) {
   const expected = JSON.parse(readFileSync(join(FIXTURES, fixture, "expected.json"), "utf8")) as {

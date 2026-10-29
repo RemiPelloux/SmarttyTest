@@ -1,27 +1,28 @@
 # CLI reference
 
-> Implemented in **v0.1.0**. Every command below is exercised by the test suite (`integration-tests/cli.test.ts`).
+> Implemented in **v0.2.0**. Every command below is exercised by the test suite (`integration-tests/cli.test.ts`).
 
 ## Commands
 
-| Command                                                         | Purpose                                                                     |
-| --------------------------------------------------------------- | --------------------------------------------------------------------------- |
-| `smarttest`                                                     | Interactive menu in a terminal. Prints help otherwise                       |
-| `smarttest init`                                                | Detect, plan, preview and apply setup. Idempotent and reversible            |
-| `smarttest doctor`                                              | Diagnose runtime, config, rules, VCS, index and runners                     |
-| `smarttest scan`                                                | Show what SmartTest understands about the project (read-only)               |
-| `smarttest impact`                                              | Compute the decision without running tests                                  |
-| `smarttest run`                                                 | Run affected tests (default) or the full suite (`--all`)                    |
-| `smarttest explain <target>`                                    | Why a test was selected or skipped, or which tests protect a file or symbol |
-| `smarttest validate-selection`                                  | Compare the selection against a full reference run                          |
-| `smarttest graph`                                               | Query or export the dependency graph                                        |
-| `smarttest generate`                                            | Generate or sync the test architecture. Never overwrites                    |
-| `smarttest rules list \| validate \| explain <path>`            | Inspect rules                                                               |
-| `smarttest snapshot create \| list \| inspect \| diff \| prune` | Native snapshots                                                            |
-| `smarttest vcs detect \| status \| connect <git\|native>`       | Version-control state                                                       |
-| `smarttest coverage`                                            | Latest ingested coverage, with its scope (full or selected)                 |
-| `smarttest report`                                              | Re-render reports from the last run                                         |
-| `smarttest uninstall`                                           | Remove SmartTest config, scripts and local state. Tests are kept            |
+| Command                                                         | Purpose                                                                                                                 |
+| --------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `smarttest`                                                     | Interactive menu in a terminal. Prints help otherwise                                                                   |
+| `smarttest init`                                                | Detect, plan, preview and apply setup. Idempotent and reversible                                                        |
+| `smarttest doctor`                                              | Diagnose runtime, config, rules, VCS, index and runners                                                                 |
+| `smarttest scan`                                                | Show what SmartTest understands about the project (read-only)                                                           |
+| `smarttest impact`                                              | Compute the decision without running tests                                                                              |
+| `smarttest run`                                                 | Run affected tests (default) or the full suite (`--all`)                                                                |
+| `smarttest explain <target>`                                    | Why a test was selected or skipped, or which tests protect a file or symbol                                             |
+| `smarttest validate-selection`                                  | Compare the selection against a full reference run                                                                      |
+| `smarttest benchmark`                                           | Replay recent commits: full run vs project-gated run vs SmartTest, with missed failures re-checked on the parent commit |
+| `smarttest graph`                                               | Query or export the dependency graph                                                                                    |
+| `smarttest generate`                                            | Generate or sync the test architecture. Never overwrites                                                                |
+| `smarttest rules list \| validate \| explain <path>`            | Inspect rules                                                                                                           |
+| `smarttest snapshot create \| list \| inspect \| diff \| prune` | Native snapshots                                                                                                        |
+| `smarttest vcs detect \| status \| connect <git\|native>`       | Version-control state                                                                                                   |
+| `smarttest coverage`                                            | Latest ingested coverage, with its scope (full or selected)                                                             |
+| `smarttest report`                                              | Re-render reports from the last run                                                                                     |
+| `smarttest uninstall`                                           | Remove SmartTest config, scripts and local state. Tests are kept                                                        |
 
 Planned for later releases: `sync`, `migrate` and `watch` (Release 2), `ai …` and `autopilot` (Release 3), `studio` / `open` (Release 4). These names are reserved and answer with `ST_NOT_AVAILABLE`.
 
@@ -48,6 +49,7 @@ Planned for later releases: `sync`, `migrate` and `watch` (Release 2), `ai …` 
 | _(none)_                               | Git: HEAD → working tree incl. untracked (or `vcs.base` if configured). No Git: latest native snapshot |
 | `--base <ref>`                         | merge-base(`<ref>`, HEAD) → working tree                                                               |
 | `--base-mode direct`                   | `<ref>` → working tree, without the merge-base                                                         |
+| `--base <a> --target <b>`              | revision `a` → revision `b` (untracked files ignored), e.g. one commit or a PR range                   |
 | `--staged`                             | HEAD → index                                                                                           |
 | `--uncommitted`                        | HEAD → working tree, including untracked files                                                         |
 | `--since-snapshot` / `--snapshot <id>` | latest (or given) native snapshot → working tree (hybrid mode works with Git too)                      |
@@ -86,6 +88,10 @@ In GitHub Actions the Markdown summary is appended to `$GITHUB_STEP_SUMMARY` aut
 | `--type unit\|integration\|e2e`               | Category, used in mirror/domain paths                                   |
 | `--dry-run`                                   | List files (and contents with `--verbose`) without writing              |
 | `--sync`                                      | Report missing tests, orphaned tests and renamed sources. Proposes only |
+
+## `benchmark`
+
+`--commits <n>` (default 10), `--mode <m>`, `--json`, `-o <file.md>`. It replays commits in a temporary Git worktree that reuses the project's installed `node_modules`. For each commit it runs the full suites, records the suites of the projects the commit touched ("project-gated", what most hooks do), then runs SmartTest's selection. Every failing test that wasn't selected is re-run on the parent commit to tell a real miss from a pre-existing failure. Exits 5 if anything was missed. Writes `.smarttest/reports/benchmark.{md,json}`.
 
 ## `graph`
 

@@ -107,8 +107,14 @@ describe("decideImpact", () => {
     expect(d.warnings.some((w) => w.includes("FAST mode"))).toBe(true);
   });
 
-  it("SAFE falls back to the full suite when uncertainty exists", () => {
+  it("SAFE selects uncertain tests individually instead of the whole suite", () => {
     const d = decide(changed(["src/a.ts"]), [unit("src/a.ts", ["a"])], "safe");
+    expect(d.fallbackApplied).toBe(false);
+    expect(sel(d)).toEqual(["test/a.test.ts", "test/b.test.ts", "test/plugins.test.ts"]);
+  });
+
+  it("SAFE falls back to the full suite when the change analysis is incomplete", () => {
+    const d = decide(changed(["src/a.ts"], "partial"), [unit("src/a.ts", ["a"])], "safe");
     expect(d.fallbackApplied).toBe(true);
     expect(d.selectedTests).toHaveLength(5);
   });

@@ -19,7 +19,7 @@ import {
   toPosix,
   walkFiles,
 } from "@smarttest/shared";
-import { NODE_TEST_DEFAULTS } from "@smarttest/test-discovery";
+import { expandNodePatterns } from "@smarttest/test-discovery";
 
 export interface NodeTestAdapterOptions {
   projectRoot: string;
@@ -115,15 +115,7 @@ export class NodeTestAdapter implements TestAdapter {
   }
 
   async discover(): Promise<TestCase[]> {
-    const patterns = this.options.patterns?.length
-      ? this.options.patterns.map((p) =>
-          /[*?{]/.test(p)
-            ? p
-            : p.endsWith(".js") || p.endsWith(".mjs") || p.endsWith(".cjs")
-              ? p
-              : `${p.replace(/\/$/, "")}/**/*.{js,cjs,mjs}`,
-        )
-      : NODE_TEST_DEFAULTS;
+    const patterns = expandNodePatterns(this.options.patterns);
     const files = await walkFiles(this.options.cwd, { include: patterns });
     return files.map((f) => {
       const rel = relPosix(this.options.projectRoot, join(this.options.cwd, f)) ?? f;

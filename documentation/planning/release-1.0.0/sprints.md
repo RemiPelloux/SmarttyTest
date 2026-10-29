@@ -4,7 +4,7 @@
 
 Planning is in **story points only**. Capacity per sprint: **40 pts** (hard cap 42). Re-baseline at every sprint review using measured velocity.
 
-**Implementation (v0.1.0):** 389 / 422 committed points done.
+**Implementation (v0.2.0):** 389 / 422 committed points done.
 
 ## Overview
 

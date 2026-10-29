@@ -13,7 +13,7 @@
 
 **Out of scope for 1.0.0:** `smarttest watch` (1.1, Release 2); `smarttest studio` (Release 4).
 
-| Implementation | 18 / 18 points done (v0.1.0) |
+| Implementation | 18 / 18 points done (v0.2.0) |
 
 ## Stories
 

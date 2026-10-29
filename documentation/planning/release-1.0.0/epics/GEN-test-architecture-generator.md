@@ -13,7 +13,7 @@
 
 **Out of scope for 1.0.0:** AI generation mode (Release 3); REFACTOR migration preview H15 (Release 2).
 
-| Implementation | 36 / 36 points done (v0.1.0) |
+| Implementation | 36 / 36 points done (v0.2.0) |
 
 ## Stories
 

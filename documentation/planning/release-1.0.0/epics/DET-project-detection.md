@@ -13,7 +13,7 @@
 
 **Out of scope for 1.0.0:** Perforce/Mercurial detection; Non-JS languages.
 
-| Implementation | 27 / 27 points done (v0.1.0) |
+| Implementation | 27 / 27 points done (v0.2.0) |
 
 ## Stories
 

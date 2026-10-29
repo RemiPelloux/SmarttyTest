@@ -11,7 +11,7 @@
 | Sprints | S0 |
 | Acceptance gate | Core packages build and test independently. |
 
-| Implementation | 30 / 39 points done (v0.1.0) |
+| Implementation | 30 / 39 points done (v0.2.0) |
 
 ## Stories
 
@@ -124,7 +124,7 @@
 |---|---|---|---|---|
 | 🟥 Must | 5 | S0 | A05, §3.3 | [ST-001](FND-core-project-foundation.md#st-001) |
 
-**Status:** 🟡 partial — 4 of 8 fixtures exist (TS + Vitest, CommonJS + Jest, pnpm monorepo, no-VCS). React, Next.js, Yarn ESM and a TS library fixture remain.
+**Status:** 🟡 partial — 5 fixtures exist (TS + Vitest, CommonJS + Jest, pnpm monorepo, node:test, no-VCS), plus the LeadsIt case study as a real-world check. React, Next.js and Yarn ESM fixtures remain (planned in 1.1.0).
 
 **Acceptance criteria**
 

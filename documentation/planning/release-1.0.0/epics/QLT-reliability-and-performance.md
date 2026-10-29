@@ -13,7 +13,7 @@
 
 **Out of scope for 1.0.0:** Stress tests & memory profiling R05–R06 (Release 2).
 
-| Implementation | 10 / 16 points done (v0.1.0) |
+| Implementation | 10 / 16 points done (v0.2.0) |
 
 ## Stories
 

@@ -2,6 +2,34 @@
 
 All notable changes are documented here. Releases are managed with [Changesets](https://github.com/changesets/changesets). The project follows [Semantic Versioning](https://semver.org/).
 
+## [0.2.0] — real-world projects
+
+Driven by the first real migration, [LeadsIt](documentation/case-studies/leadsit.md): parity with the native runners (706/706), 88% less test time than full suites and 63% less than its per-project hook over 12 replayed commits, 0 missed failures.
+
+### Added
+
+- `@smarttest/adapter-node`: Node's built-in runner (`node --test`), with directory arguments following Node's semantics.
+- Nested projects discovered without a workspace manifest (repos of independent projects).
+- Custom runner configs (`vitest.*.config.*`, `--config` in scripts) detected and passed to the runner. Explicit `runners` config.
+- Runner-accurate test discovery: each runner lists the files it collects (cached). `tests.discovery: "static"` opts out.
+- `init` reads existing hooks, scripts and CI workflows: carries over skipped tests (`--testPathIgnorePatterns`, `--exclude`) and suggests replacing full-suite hook steps.
+- Static evaluation of computed `import()`/`require()` paths (constants, `new URL(…, import.meta.url)`, `resolve(__dirname…)`, templates → files or bounded globs).
+- `smarttest benchmark --commits N`: replays history (full vs project-gated vs SmartTest) and re-checks every unselected failure on the parent commit.
+- `--target <ref>` for revision-to-revision comparisons (`--base A --target B`).
+- Time-saved estimates from recorded per-file durations, always labelled as estimates.
+- Wasp, Prisma, Remix, Astro and Hono detection. Per-project lockfiles recognised.
+
+### Changed
+
+- File listing respects `.gitignore` through `git ls-files` (generated output and submodules are skipped).
+- SAFE mode selects tests with uncertain dependencies individually. It falls back to the full suite only when the change analysis itself is incomplete.
+- SmartTest's own state (`.smarttest/`, reports) is never treated as a change. `.env.*.example` files are no longer mandatory triggers.
+- Suggested rule names are unique. Layout follows the majority convention.
+
+### Fixed
+
+- Badges in the README rendered as raw HTML on GitHub.
+
 ## [0.1.0] — alpha
 
 The first working version of the v1.0.0 scope: **389 of 422 planned points** ([progress](documentation/planning/release-1.0.0/epics/README.md)).

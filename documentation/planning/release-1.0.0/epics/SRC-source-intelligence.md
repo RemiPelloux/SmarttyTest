@@ -13,7 +13,7 @@
 
 **Out of scope for 1.0.0:** Full source-map remapping (E09, Release 2).
 
-| Implementation | 47 / 50 points done (v0.1.0) |
+| Implementation | 47 / 50 points done (v0.2.0) |
 
 ## Stories
 

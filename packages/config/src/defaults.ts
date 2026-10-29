@@ -44,7 +44,8 @@ export const BUILTIN_TRIGGERS = [
   "**/setupTests.*",
   "**/global-setup.*",
   "**/.env",
-  "**/.env.*",
+  "**/.env.{local,development,test,production,staging,ci}",
+  "**/.env.*.local",
   "smarttest.config.*",
 ];
 

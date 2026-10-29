@@ -259,18 +259,8 @@ export function decideImpact(input: ImpactInput): ImpactResult {
     if (u.length) uncertainTests.push({ test: t, files: u.map((x) => x.file) });
   }
   details.uncertainty = [...relevantUncertainty].map(([file, rs]) => ({ file, reasons: rs }));
-  if (
-    mode === "safe" &&
-    (partial || relevantUncertainty.size || uncertainTests.length) &&
-    !fallback
-  ) {
-    selectAll({
-      kind: "fallback",
-      message: partial
-        ? "SAFE mode: change analysis is incomplete — running the full suite"
-        : "SAFE mode: unresolved dependencies could hide relationships — running the full suite",
-    });
-  } else if (mode === "balanced") {
+  // Uncertain tests can't be ruled out: BALANCED and SAFE select them (individually, not the whole suite).
+  if (mode !== "fast") {
     for (const { test, files } of uncertainTests) {
       select(test, {
         kind: "uncertainty",
@@ -278,6 +268,19 @@ export function decideImpact(input: ImpactInput): ImpactResult {
       });
     }
     if (uncertainTests.length) partial = true;
+  }
+  // SAFE: an incomplete change analysis (unknown ranges, low-confidence diff) means the full suite.
+  if (
+    mode === "safe" &&
+    partial &&
+    !fallback &&
+    (changeSet.completeness !== "complete" ||
+      [...input.diffs.values()].some((d) => d.confidence === "low"))
+  ) {
+    selectAll({
+      kind: "fallback",
+      message: "SAFE mode: change analysis is incomplete — running the full suite",
+    });
   } else if (mode === "fast" && uncertainTests.length) {
     warnings.push(
       `FAST mode: ${uncertainTests.length} test(s) with unresolved/dynamic dependencies were not selected — use balanced or safe to include them`,

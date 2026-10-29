@@ -1,6 +1,6 @@
 {
   "name": "@smarttest/test-selector",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Turns impact decisions into explainable test selections.",
   "license": "Apache-2.0",
   "type": "module",

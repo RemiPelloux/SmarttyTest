@@ -1,6 +1,6 @@
 # Configuration reference
 
-> Implemented in **v0.1.0**. Validation errors list every offending path and exit with `ST_CONFIG_INVALID` (3).
+> Implemented in **v0.2.0**. Validation errors list every offending path and exit with `ST_CONFIG_INVALID` (3).
 
 SmartTest reads `smarttest.config.{ts,mts,js,mjs,json}` from the project root, or the file given with `--config`. `smarttest init` writes one for you. The file is transpiled on load, so `import { defineConfig } from "smarttest"` works even before the package is resolvable.
 
@@ -34,7 +34,9 @@ export default defineConfig({
 | `include`                | `string[]`                                        | all `ts/tsx/mts/cts/js/jsx/mjs/cjs` | Globs of analysed files, relative to the root                                                                                       |
 | `exclude`                | `string[]`                                        | —                                   | Added to built-in excludes (`node_modules`, `dist`, `build`, `coverage`, `.next`, `*.d.ts`…)                                        |
 | `mode`                   | `"fast" \| "balanced" \| "safe"`                  | `"balanced"`                        | Overridable per run (`--mode`) and per rule                                                                                         |
-| `adapters`               | `("vitest" \| "jest")[]`                          | detected                            | Restricts and orders runners                                                                                                        |
+| `adapters`               | `("vitest" \| "jest" \| "node")[]`                | detected                            | Restricts and orders runners                                                                                                        |
+| `runners`                | `{ adapter, dir?, config?, patterns? }[]`         | detected                            | Explicit runners. Replaces detection (custom config names, `node --test` patterns)                                                  |
+| `tests.discovery`        | `"runner" \| "static"`                            | `"runner"`                          | `runner`: each runner lists the files it collects (cached). `static`: filename patterns                                             |
 | `vcs.provider`           | `"auto" \| "git" \| "native"`                     | `"auto"`                            |                                                                                                                                     |
 | `vcs.base`               | `string`                                          | —                                   | Default comparison ref for `run` / `impact`                                                                                         |
 | `vcs.snapshots`          | `boolean`                                         | `true`                              | With Git, record a native snapshot after each fully passing run (`--since-snapshot`)                                                |

@@ -5,9 +5,9 @@
  */
 import { statSync } from "node:fs";
 import { readFile } from "node:fs/promises";
-import { join } from "node:path";
+import { join, posix } from "node:path";
 import type { SourceRange } from "@smarttest/shared";
-import { exists, readJson, sha256, writeFileAtomic } from "@smarttest/shared";
+import { exists, matchGlob, readJson, sha256, writeFileAtomic } from "@smarttest/shared";
 import type {
   Analyzer,
   FileAnalysis,
@@ -184,6 +184,29 @@ export class SymbolIndex {
     for (const analysis of this.files.values()) {
       if (reuseResolution && !changed.has(analysis.path)) continue;
       const old = oldTargets.get(analysis.path);
+      delete analysis.dynamicTargets;
+      delete analysis.dynamicUnmatched;
+      if (analysis.dynamicHints?.length) {
+        const dir = posix.dirname(analysis.path);
+        const targets = new Set<string>();
+        const unmatched: string[] = [];
+        for (const h of analysis.dynamicHints) {
+          const rel = posix.normalize(posix.join(dir === "." ? "" : dir, h.pattern));
+          if (rel.startsWith("..")) {
+            unmatched.push(h.expr);
+            continue;
+          }
+          const hits = rel.includes("*")
+            ? options.files.filter((f) => matchGlob(f, rel))
+            : wanted.has(rel)
+              ? [rel]
+              : [];
+          if (hits.length) for (const f of hits) targets.add(f);
+          else unmatched.push(h.expr);
+        }
+        if (targets.size) analysis.dynamicTargets = [...targets].sort();
+        if (unmatched.length) analysis.dynamicUnmatched = unmatched;
+      }
       for (const imp of analysis.imports) {
         const oldTarget = old?.get(`${imp.kind}|${imp.specifier}`);
         delete imp.resolved;

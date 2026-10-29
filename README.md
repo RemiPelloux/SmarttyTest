@@ -20,11 +20,11 @@
 </p>
 
 > [!IMPORTANT]
-> **v0.1.0 alpha: the engine works end to end.** It covers Smart Init, Git and native snapshots, semantic TS/JS analysis, impact selection with safety modes, rules, Jest and Vitest, reports, the generator and `validate-selection`. That is **389 of the 422 points** planned for 1.0 ([progress](documentation/planning/release-1.0.0/epics/README.md)). It isn't on npm yet: _SmartTest_ is a working name and the npm name is still being checked ([ADR-0007](documentation/architecture/adr/0007-name-license-distribution.md)). See [Try it](#try-it) to run it today.
+> **v0.2.0 alpha, already running on a real product.** [LeadsIt](documentation/case-studies/leadsit.md) replaced its per-project test hook with SmartTest: 706/706 tests in parity, **88% less test time than full suites and 63% less than its old hook over 12 replayed commits, 0 missed failures**. SmartTest isn't on npm yet (the name is still being checked, [ADR-0007](documentation/architecture/adr/0007-name-license-distribution.md)); see [Try it](#try-it). Progress toward 1.0: 389 of 422 points ([epics](documentation/planning/release-1.0.0/epics/README.md)), then the [1.1 → 1.5 roadmap](documentation/planning/roadmap-1.x.md).
 
 ---
 
-**SmartTest is a test-impact layer that works on top of the runners you already use.** It reads your TypeScript/JavaScript at the level of symbols, works out what a change can affect, and has **Jest** or **Vitest** run only the tests that protect that code. For every test it runs or skips, it records the reason.
+**SmartTest is a test-impact layer that works on top of the runners you already use.** It reads your TypeScript/JavaScript at the level of symbols, works out what a change can affect, and has **Jest**, **Vitest** or **`node --test`** run only the tests that protect that code. For every test it runs or skips, it records the reason.
 
 - **For a 3-file change, run 12 tests instead of 486.** When the analysis is uncertain, SmartTest falls back to a wider run or the full suite.
 - **Zero-config setup.** `smarttest init` detects your stack, explains its plan, shows a preview before writing, and can be rolled back.
@@ -92,6 +92,7 @@ npx smarttest init               # apply it (idempotent · `init --rollback` und
 npx smarttest run --affected     # analyse your changes, run what matters
 npx smarttest explain <test>     # why was it selected, or why not
 npx smarttest generate --sync    # missing / orphaned / renamed tests
+npx smarttest benchmark          # replay recent commits: how much would SmartTest have saved?
 ```
 
 In CI:
@@ -126,19 +127,33 @@ To use it in your own project, build the self-contained package (`pnpm bundle:cl
 
 ## What ships in 1.0 (all working in v0.1.0)
 
-|     | Capability                                                                                                   | Commands                          | v0.1.0 |
-| --- | ------------------------------------------------------------------------------------------------------------ | --------------------------------- | ------ |
-| 🧭  | **Smart Init**: detection, explained plan, dry-run, safe merge, idempotent, rollback                         | `init` · `doctor` · `scan`        | ✅     |
-| 🔀  | **Change intelligence**: Git and native snapshots, plus a hybrid of the two                                  | `vcs` · `snapshot`                | ✅     |
-| 🧠  | **Source intelligence**: TS/JS symbols, imports, classes, exports, semantic diff                             | `graph`                           | ✅     |
-| 🎯  | **Impact selection**: direct + transitive, FAST/BALANCED/SAFE, mandatory triggers, safe fallback             | `impact` · `run --affected`       | ✅     |
-| 💬  | **Explainability & trust**                                                                                   | `explain` · `validate-selection`  | ✅     |
-| 📐  | **Rules engine**: by path, package, class, method, decorator                                                 | `rules list / validate / explain` | ✅     |
-| 🏃  | **Jest & Vitest adapters**: honest statuses, parallelism, timeouts, cancellation, retries with flaky marking | `run`                             | ✅     |
-| 🗂️  | **Test architecture generator**: mirror/colocated/custom layouts, templates, `it.todo` scaffolds, sync       | `generate`                        | ✅     |
-| 📊  | **Reports**: self-contained HTML, JSON (versioned schema), JUnit, Markdown, coverage scope                   | `report` · `coverage`             | ✅     |
+|     | Capability                                                                                                                                            | Commands                                       | v0.1.0 |
+| --- | ----------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------- | ------ |
+| 🧭  | **Smart Init**: detection, explained plan, dry-run, safe merge, idempotent, rollback                                                                  | `init` · `doctor` · `scan`                     | ✅     |
+| 🔀  | **Change intelligence**: Git and native snapshots, plus a hybrid of the two                                                                           | `vcs` · `snapshot`                             | ✅     |
+| 🧠  | **Source intelligence**: TS/JS symbols, imports, classes, exports, semantic diff                                                                      | `graph`                                        | ✅     |
+| 🎯  | **Impact selection**: direct + transitive, FAST/BALANCED/SAFE, mandatory triggers, safe fallback                                                      | `impact` · `run --affected`                    | ✅     |
+| 💬  | **Explainability & trust**: reasons for every decision, full-run comparison, history replay                                                           | `explain` · `validate-selection` · `benchmark` | ✅     |
+| 📐  | **Rules engine**: by path, package, class, method, decorator                                                                                          | `rules list / validate / explain`              | ✅     |
+| 🏃  | **Jest, Vitest & node:test adapters**: custom configs, runner-accurate discovery, honest statuses, timeouts, cancellation, retries with flaky marking | `run`                                          | ✅     |
+| 🗂️  | **Test architecture generator**: mirror/colocated/custom layouts, templates, `it.todo` scaffolds, sync                                                | `generate`                                     | ✅     |
+| 📊  | **Reports**: self-contained HTML, JSON (versioned schema), JUnit, Markdown, coverage scope                                                            | `report` · `coverage`                          | ✅     |
 
 Planned for later releases: adaptive `sync`, SVN, runtime tracing, watch mode and result cache (**Release 2**) · AI test engineering (**3**) · SmartTest Studio GUI (**4**) · Cloud (**5**) · Python/Java/Go (**6**). Details are in the [roadmap](documentation/planning/README.md).
+
+<br>
+
+## Real-world: LeadsIt
+
+Six independent projects with no root `package.json`, three runners (Jest, Vitest with a custom config, `node --test`), Wasp-generated code and a submodule. It was set up with built-in commands only (`npm install`, `smarttest init --yes`, `smarttest run --staged` in the pre-commit hook):
+
+| Last 12 commits, replayed with `smarttest benchmark` | Full suites | Old per-project hook | SmartTest  |
+| ---------------------------------------------------- | ----------- | -------------------- | ---------- |
+| Total test time                                      | 110.3 s     | 37.2 s               | **13.8 s** |
+| Test files run                                       | 1,192       | —                    | 9          |
+| Missed failures                                      | —           | —                    | **0**      |
+
+Everything the migration exposed (nested projects, custom runner configs, `node:test`, `.gitignore`, computed `import()` paths…) was fixed in SmartTest itself, not worked around in LeadsIt. → [Case study](documentation/case-studies/leadsit.md)
 
 <br>
 

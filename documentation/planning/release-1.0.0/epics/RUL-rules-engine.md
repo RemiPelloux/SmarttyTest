@@ -13,7 +13,7 @@
 
 **Out of scope for 1.0.0:** Visual rules editor (Studio, Release 4).
 
-| Implementation | 24 / 24 points done (v0.1.0) |
+| Implementation | 24 / 24 points done (v0.2.0) |
 
 ## Stories
 

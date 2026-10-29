@@ -36,6 +36,20 @@ export interface RunnerRoot {
   patterns?: string[];
 }
 
+/**
+ * Expands `node --test` arguments the way Node does: a glob stays a glob, a directory means
+ * "the default patterns inside it", a file path is that file.
+ */
+export function expandNodePatterns(patterns: readonly string[] | undefined): string[] {
+  if (!patterns?.length) return NODE_TEST_DEFAULTS;
+  return patterns.flatMap((p) => {
+    if (/[*?{[]/.test(p)) return [p];
+    if (/\.[cm]?[jt]s$/.test(p)) return [p];
+    const dir = p.replace(/\/$/, "");
+    return NODE_TEST_DEFAULTS.map((d) => `${dir}/${d}`);
+  });
+}
+
 /** Node's built-in runner default patterns (node --test without arguments). */
 export const NODE_TEST_DEFAULTS = [
   "**/*.test.{js,cjs,mjs}",

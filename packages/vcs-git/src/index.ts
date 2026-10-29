@@ -198,8 +198,14 @@ export class GitAdapter implements VersionControlAdapter, ChangeProvider {
       };
     } else if (source.kind === "base") {
       beforeRev = await this.resolveBase(source.ref, source.direct);
-      changeSet = await this.diff([beforeRev], true, beforeRev);
-      changeSet.targetRevision = "working-tree";
+      if (source.target) {
+        // Revision-to-revision (history replay): untracked files in the working tree don't count.
+        changeSet = await this.diff([beforeRev, source.target], false, beforeRev);
+        changeSet.targetRevision = source.target;
+      } else {
+        changeSet = await this.diff([beforeRev], true, beforeRev);
+        changeSet.targetRevision = "working-tree";
+      }
     } else if (source.kind === "staged") {
       beforeRev = "HEAD";
       changeSet = await this.diff([], false, "HEAD", true);

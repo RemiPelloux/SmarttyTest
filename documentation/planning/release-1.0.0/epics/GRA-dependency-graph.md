@@ -13,7 +13,7 @@
 
 **Out of scope for 1.0.0:** OBSERVED_EXECUTION edges from runtime tracing (Release 2).
 
-| Implementation | 20 / 25 points done (v0.1.0) |
+| Implementation | 20 / 25 points done (v0.2.0) |
 
 ## Stories
 

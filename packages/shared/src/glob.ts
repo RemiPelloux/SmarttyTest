@@ -1,5 +1,7 @@
+import { statSync } from "node:fs";
 import { readdir } from "node:fs/promises";
 import { join } from "node:path";
+import { runProcess } from "./proc.js";
 
 const cache = new Map<string, RegExp>();
 
@@ -90,9 +92,67 @@ export interface WalkOptions {
   ignoredDirs?: ReadonlySet<string>;
 }
 
-/** Walks a directory and returns POSIX project-relative file paths, sorted. */
-export async function walkFiles(root: string, options: WalkOptions = {}): Promise<string[]> {
+/**
+ * Files Git considers part of the project: tracked + untracked, minus everything ignored by any
+ * .gitignore. Submodules (gitlinks) and deleted files are dropped. Undefined outside a Git repo.
+ * Not cached: files are created and deleted between calls (generate, deletes), and listing is fast.
+ */
+export async function gitProjectFiles(root: string): Promise<string[] | undefined> {
+  let files: string[] | undefined;
+  try {
+    const res = await runProcess(
+      "git",
+      [
+        "-c",
+        "core.quotePath=false",
+        "ls-files",
+        "-z",
+        "--cached",
+        "--others",
+        "--exclude-standard",
+      ],
+      { cwd: root },
+    );
+    if (res.code === 0) {
+      files = [...new Set(res.stdout.split("\0").filter(Boolean))].filter((f) => {
+        try {
+          return statSync(join(root, f)).isFile();
+        } catch {
+          return false;
+        }
+      });
+    }
+  } catch {
+    files = undefined;
+  }
+  return files;
+}
+
+/**
+ * Lists project files as POSIX project-relative paths, sorted. In a Git repository this respects
+ * every .gitignore (and skips submodules); elsewhere it walks the directory tree.
+ */
+export async function walkFiles(
+  root: string,
+  options: WalkOptions & { useGit?: boolean } = {},
+): Promise<string[]> {
   const ignored = options.ignoredDirs ?? DEFAULT_IGNORED_DIRS;
+  if (options.useGit !== false) {
+    const fromGit = await gitProjectFiles(root);
+    if (fromGit) {
+      return fromGit
+        .filter(
+          (f) =>
+            !f
+              .split("/")
+              .slice(0, -1)
+              .some((seg) => ignored.has(seg)),
+        )
+        .filter((f) => !options.include || matchGlob(f, options.include))
+        .filter((f) => !options.exclude || !matchGlob(f, options.exclude))
+        .sort();
+    }
+  }
   const out: string[] = [];
   async function visit(dir: string, rel: string): Promise<void> {
     let entries: import("node:fs").Dirent[];

@@ -224,6 +224,18 @@ export class DependencyGraph {
           confidence: imp.kind === "dynamic" || imp.kind === "mock" ? "medium" : "high",
         });
       }
+      for (const d of a.dynamicUnmatched ?? [])
+        unc.push(`dynamic import matched no project file (${d})`);
+      // Statically evaluated dynamic imports: the whole file may load each target.
+      for (const target of a.dynamicTargets ?? []) {
+        fwd.add(target);
+        this.addFileDep(target, {
+          from: key(file, WHOLE),
+          kind: "IMPORTS",
+          provenance: "static",
+          confidence: "medium",
+        });
+      }
       if (unc.length) this.uncertainty.set(file, unc);
 
       const link = (fromUnit: string, refs: readonly string[]) => {

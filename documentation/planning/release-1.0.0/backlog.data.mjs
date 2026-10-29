@@ -2210,12 +2210,12 @@ export const stories = [
  * "partial" and "todo" always carry a note saying exactly what is missing.
  */
 export const implementation = {
-  version: "0.1.0",
+  version: "0.2.0",
   default: "done",
   overrides: {
     "ST-005": {
       status: "partial",
-      note: "4 of 8 fixtures exist (TS + Vitest, CommonJS + Jest, pnpm monorepo, no-VCS). React, Next.js, Yarn ESM and a TS library fixture remain.",
+      note: "5 fixtures exist (TS + Vitest, CommonJS + Jest, pnpm monorepo, node:test, no-VCS), plus the LeadsIt case study as a real-world check. React, Next.js and Yarn ESM fixtures remain (planned in 1.1.0).",
     },
     "ST-006": {
       status: "partial",

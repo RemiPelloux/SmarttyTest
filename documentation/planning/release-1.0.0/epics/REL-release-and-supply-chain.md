@@ -11,7 +11,7 @@
 | Sprints | S6 → S10 |
 | Acceptance gate | A new user can install, use and remove SmartTest following only the published docs. |
 
-| Implementation | 2 / 15 points done (v0.1.0) |
+| Implementation | 2 / 15 points done (v0.2.0) |
 
 ## Stories
 
