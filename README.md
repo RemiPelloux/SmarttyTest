@@ -70,11 +70,11 @@ LeadsIt has six independent projects, no root `package.json`, and three runners 
 
 `smarttest benchmark --commits 200 --sample 40` with SmartTest 0.5.0 (40 commits spread over the last 200):
 
-|                     | Full suites | Previous hook (suites of touched projects) | SmartTest      |
-| ------------------- | ----------- | ------------------------------------------ | -------------- |
-| Test time           | 240.7 s     | 82.9 s                                     | 88.3 s         |
-| Test files run      | 3,052       |                                            | 522 (17%)      |
-| Missed failures     |             |                                            | 0              |
+|                 | Full suites | Previous hook (suites of touched projects) | SmartTest |
+| --------------- | ----------- | ------------------------------------------ | --------- |
+| Test time       | 240.7 s     | 82.9 s                                     | 88.3 s    |
+| Test files run  | 3,052       |                                            | 522 (17%) |
+| Missed failures |             |                                            | 0         |
 
 SmartTest saved 63% of the full-run time. It was 6% slower than the previous hook over these commits: on single-project commits the hook runs one small suite, and SmartTest's analysis time counts in full. On the 12 most recent commits, with `--traces`, it also found 0 missed failures. Details and caveats: [case study](documentation/case-studies/leadsit.md).
 
