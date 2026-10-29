@@ -1,7 +1,7 @@
 {
   "$comment": "Source of truth for the v1.0.0 package map. Edit, then run `pnpm scaffold:package --all` (idempotent: never overwrites existing src/ files).",
   "scope": "@smarttest",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "packages": [
     {
       "name": "shared",
@@ -52,6 +52,18 @@
       "epic": "VCS",
       "deps": ["shared", "vcs-core"],
       "description": "Git adapter: branches, commits, staged, uncommitted, renames."
+    },
+    {
+      "name": "vcs-svn",
+      "epic": "VCS",
+      "deps": ["shared", "vcs-core"],
+      "description": "Subversion adapter: working copy and revision changes."
+    },
+    {
+      "name": "vcs-hg",
+      "epic": "VCS",
+      "deps": ["shared", "vcs-core"],
+      "description": "Mercurial adapter: working directory and revision changes."
     },
     {
       "name": "native-snapshots",
@@ -199,6 +211,8 @@
         "smart-init",
         "vcs-core",
         "vcs-git",
+        "vcs-hg",
+        "vcs-svn",
         "native-snapshots",
         "source-parser",
         "language-typescript",

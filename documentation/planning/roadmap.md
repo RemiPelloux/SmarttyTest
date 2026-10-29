@@ -14,17 +14,17 @@ Planning is in story points. One sprint is about 40 points. Each version has an 
 
 ## Overview
 
-| Version | Theme              | Points | Gate                                                                                               |
-| ------- | ------------------ | ------ | -------------------------------------------------------------------------------------------------- |
-| 0.3.0   | Precise graph      | 83     | Released (13 pts moved to 0.8.0): member-level selection, CommonJS symbols, graph queries          |
-| 0.4.0   | Complete graph     | 84     | Released (8 pts moved to 0.7.0): env, asset, Wasp, Prisma, translation, mock and snapshot edges    |
-| 0.5.0   | Runtime evidence   | 71     | Released: traces, hybrid selection, Shadow Mode; reduction target not reached on LeadsIt           |
-| 0.6.0   | Adoption           | 66     | Installed from npm and adopted in five external repositories without config edits                  |
-| 0.7.0   | Adaptation and E2E | 84     | Released: sync, watch, migrate, Playwright and Cypress, Next.js routes; TypeScript 7 not available |
-| 0.8.0   | Speed              | 105    | 30% less test time than 0.7 on the benchmark repositories                                          |
-| 0.9.0   | Interfaces         | 76     | Studio and VS Code cover run, explain, impact and coverage                                         |
-| 1.0.0   | Stable             | 52     | Frozen contracts, published benchmarks, security review                                            |
-|         | Total              | 621    | About 16 sprints                                                                                   |
+| Version | Theme              | Points | Gate                                                                                                      |
+| ------- | ------------------ | ------ | --------------------------------------------------------------------------------------------------------- |
+| 0.3.0   | Precise graph      | 83     | Released (13 pts moved to 0.8.0): member-level selection, CommonJS symbols, graph queries                 |
+| 0.4.0   | Complete graph     | 84     | Released (8 pts moved to 0.7.0): env, asset, Wasp, Prisma, translation, mock and snapshot edges           |
+| 0.5.0   | Runtime evidence   | 71     | Released: traces, hybrid selection, Shadow Mode; reduction target not reached on LeadsIt                  |
+| 0.6.0   | Adoption           | 66     | Installed from npm and adopted in five external repositories without config edits                         |
+| 0.7.0   | Adaptation and E2E | 84     | Released: sync, watch, migrate, Playwright and Cypress, Next.js routes; TypeScript 7 not available        |
+| 0.8.0   | Speed              | 105    | Released: result cache, parallel groups, shards, flaky history, SVN and Mercurial; 30% target not reached |
+| 0.9.0   | Interfaces         | 76     | Studio and VS Code cover run, explain, impact and coverage                                                |
+| 1.0.0   | Stable             | 52     | Frozen contracts, published benchmarks, security review                                                   |
+|         | Total              | 621    | About 16 sprints                                                                                          |
 
 ## Graph model at 1.0.0
 
@@ -126,20 +126,22 @@ Make the first ten minutes trivial, in any repository and any CI system. No depe
 
 **Gate:** met. A Jest project without Git that switches to Vitest, adopts Git and gains a `node --test` package is brought up to date by `smarttest sync` without re-running init (`integration-tests/adaptation.test.ts`). Playwright selection: the `next-playwright` fixture's four seeded regressions are in the regression harness, and `benchmark` over a history of breaking and fixing commits reports 0 missed failures.
 
-## 0.8.0: Speed (105 pts)
+## 0.8.0: Speed (105 pts), released
 
 Run less (graph), then run what remains faster.
 
-| Story                                                                                                                                                              | Pts |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --- |
-| Validated result cache, content-addressed on test, transitive sources, dependencies, config, runtime and adapter version; cached results always reported as cached | 21  |
-| Fail-fast ordering: run the tests closest to the change in the graph and those that failed recently first                                                          | 8   |
-| Duration-aware scheduling: run independent runner groups in parallel within a CPU and memory budget                                                                | 13  |
-| Sharding: `smarttest shard --total n --index i`, balanced by recorded durations                                                                                    | 8   |
-| Flaky analytics: failure history, rate, quarantine suggestions (never silent skips)                                                                                | 13  |
-| SVN and Mercurial adapters behind the existing VCS contract                                                                                                        | 16  |
+| Story                                                                                                                                                                                                               | Pts | Status                                                                                                                                                     |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Validated result cache, content-addressed on the test, its closure and traced files, runner config, manifests, lockfiles, env and setup files, runtime and runner version; cached results always reported as cached | 21  | done; `benchmark` checks every cached pass against the full run                                                                                            |
+| Fail-fast ordering: recent failures first, then the tests closest to the change; `--bail`                                                                                                                           | 8   | done                                                                                                                                                       |
+| Duration-aware scheduling: independent runner groups in parallel within a CPU budget                                                                                                                                | 13  | done (`parallelGroups`, end-to-end groups alone); memory is not budgeted separately                                                                        |
+| Sharding: `smarttest shard --total n --index i` and `run --shard i/n`, balanced by recorded durations                                                                                                               | 8   | done                                                                                                                                                       |
+| Flaky analytics: failure history, rate, retry-rule suggestions (never silent skips)                                                                                                                                 | 13  | done                                                                                                                                                       |
+| SVN and Mercurial adapters behind the existing VCS contract                                                                                                                                                         | 16  | done                                                                                                                                                       |
+| Persistent graph with incremental patches (from 0.3.0)                                                                                                                                                              | 13  | partial: in-memory patches in `watch` (under 1 ms at 2,000 modules); the graph is not persisted to disk, a rebuild from the cached index takes about 60 ms |
+| Type-checker resolution for values local inference cannot type (from 0.3.0)                                                                                                                                         | 13  | not done; moved after 1.0.0                                                                                                                                |
 
-**Gate:** 30% less test time than 0.7 on the benchmark repositories, with 0 cache-integrity violations.
+**Gate:** not met. On LeadsIt's last 12 commits, SmartTest's time went from 47.2 s (groups one after another, no cache) to 43.4 s (8% less), with 0 cache-integrity violations and 0 missed failures. Parallel groups help on the commits that run several projects; on single-project commits nothing changes. The result cache never hits when replaying history, because every commit changes the inputs of the tests it selects; it pays off on repeated runs of the same state (re-running after a fix elsewhere, CI retries, switching back to a branch), where a second run of an unchanged selection takes milliseconds.
 
 ## 0.9.0: Interfaces (76 pts)
 

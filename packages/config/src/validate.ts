@@ -37,6 +37,8 @@ const TOP_KEYS: Record<string, string[] | null> = {
   rules: null,
   retries: null,
   adaptive: null,
+  cache: null,
+  parallelGroups: null,
   projects: null,
   timeoutMs: null,
   workers: null,
@@ -114,9 +116,9 @@ export function validateConfig(raw: unknown): { errors: ConfigIssue[]; warnings:
     else {
       if (
         c.vcs.provider !== undefined &&
-        !["auto", "git", "native"].includes(c.vcs.provider as string)
+        !["auto", "git", "svn", "hg", "native"].includes(c.vcs.provider as string)
       )
-        err("vcs.provider", "must be auto, git or native");
+        err("vcs.provider", "must be auto, git, svn, hg or native");
       if (c.vcs.base !== undefined && typeof c.vcs.base !== "string")
         err("vcs.base", "must be a string");
       if (c.vcs.snapshots !== undefined && typeof c.vcs.snapshots !== "boolean")

@@ -69,7 +69,7 @@ export interface SmartTestConfig {
   exclude?: string[];
   mode?: SafetyMode;
   adapters?: AdapterId[];
-  vcs?: { provider?: "auto" | "git" | "native"; base?: string; snapshots?: boolean };
+  vcs?: { provider?: "auto" | "git" | "svn" | "hg" | "native"; base?: string; snapshots?: boolean };
   snapshots?: { storeContent?: boolean; keep?: number };
   tests?: {
     layout?: TestLayout;
@@ -91,6 +91,10 @@ export interface SmartTestConfig {
   adaptive?: boolean;
   /** Per-project conventions, keyed by directory ("backend", "apps/web"). */
   projects?: Record<string, ProjectConfig>;
+  /** Reuse passing results whose inputs are all unchanged (default true; reported as cached). */
+  cache?: boolean;
+  /** Runner groups run at the same time: a number, or "auto" (default) from the CPU count. */
+  parallelGroups?: number | "auto";
   timeoutMs?: number;
   workers?: number;
   reports?: { formats?: ReportFormat[]; outputDir?: string };
@@ -102,7 +106,7 @@ export interface ResolvedConfig {
   exclude: string[];
   mode: SafetyMode;
   adapters: AdapterId[];
-  vcs: { provider: "auto" | "git" | "native"; base?: string; snapshots: boolean };
+  vcs: { provider: "auto" | "git" | "svn" | "hg" | "native"; base?: string; snapshots: boolean };
   snapshots: { storeContent: boolean; keep: number };
   tests: {
     layout?: TestLayout;
@@ -119,6 +123,8 @@ export interface ResolvedConfig {
   retries: number;
   adaptive: boolean;
   projects: Record<string, ProjectConfig>;
+  cache: boolean;
+  parallelGroups: number | "auto";
   timeoutMs: number;
   workers?: number;
   reports: { formats: ReportFormat[]; outputDir: string };

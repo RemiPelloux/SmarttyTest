@@ -37,6 +37,14 @@ export interface ExecuteOptions {
   workers?: number;
   coverage?: boolean;
   onEvent?: (event: ExecutionEvent) => void;
+  /**
+   * Runner groups executed at the same time (default 1). Groups whose adapter is in `exclusive`
+   * (end-to-end runners that start servers) always run alone.
+   */
+  concurrency?: number;
+  exclusive?: readonly string[];
+  /** Stop starting new groups after a group with a failure; groups not started are "cancelled". */
+  bail?: boolean;
 }
 
 export interface ExecutionSummary {
@@ -78,8 +86,9 @@ export async function executeGroups(
   const results = new Map<string, FileResult>();
   const infra: string[] = [];
 
-  for (const group of groups) {
-    if (options.signal?.aborted) {
+  let failedGroup = false;
+  const runGroup = async (group: Group): Promise<void> => {
+    if (options.signal?.aborted || (options.bail && failedGroup)) {
       for (const f of group.files)
         results.set(f, {
           file: f,
@@ -88,7 +97,7 @@ export async function executeGroups(
           durationMs: 0,
           tests: [],
         });
-      continue;
+      return;
     }
     options.onEvent?.({ type: "group-start", group });
     const adapter = options.createAdapter(group);
@@ -202,8 +211,25 @@ export async function executeGroups(
         });
       }
     }
+    if (
+      [...results.values()].some(
+        (r) => group.files.includes(r.file) && (r.status === "failed" || r.status === "timed-out"),
+      )
+    )
+      failedGroup = true;
     options.onEvent?.({ type: "group-end", group });
-  }
+  };
+  const exclusive = new Set(options.exclusive ?? []);
+  const shared = groups.filter((g) => !exclusive.has(g.adapter));
+  const alone = groups.filter((g) => exclusive.has(g.adapter));
+  const limit = Math.max(1, options.concurrency ?? 1);
+  const queue = [...shared];
+  await Promise.all(
+    Array.from({ length: Math.min(limit, queue.length) }, async () => {
+      for (let g = queue.shift(); g; g = queue.shift()) await runGroup(g);
+    }),
+  );
+  for (const g of alone) await runGroup(g);
   return {
     files: [...results.values()].sort((a, b) => a.file.localeCompare(b.file)),
     durationMs: performance.now() - started,

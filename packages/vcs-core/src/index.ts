@@ -128,3 +128,4 @@ function clean(c: FileChange): FileChange {
 export function emptyChangeSet(provider: string): ChangeSet {
   return { provider, changes: [], completeness: "complete", warnings: [] };
 }
+export { parseUnifiedRanges } from "./unified.js";

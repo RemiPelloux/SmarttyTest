@@ -98,7 +98,7 @@ export interface SourceLayout {
 }
 
 export interface VcsInfo {
-  provider: "git" | "none";
+  provider: "git" | "svn" | "hg" | "none";
   root?: string;
   nested: string[];
   unsupported: string[];
@@ -634,16 +634,12 @@ async function findUp(start: string, marker: string): Promise<string | undefined
 async function detectVcs(root: string): Promise<VcsInfo> {
   const gitRoot = await findUp(root, ".git");
   const unsupported: string[] = [];
-  for (const [marker, name] of [
-    [".svn", "SVN"],
-    [".hg", "Mercurial"],
-    [".p4config", "Perforce"],
-  ] as const) {
-    if (await findUp(root, marker))
-      unsupported.push(
-        `${name} detected — not supported in 1.0 (native snapshots will be used unless Git is present)`,
-      );
-  }
+  const svn = await findUp(root, ".svn");
+  const hg = await findUp(root, ".hg");
+  if (await findUp(root, ".p4config"))
+    unsupported.push(
+      "Perforce detected — not supported (native snapshots will be used unless Git is present)",
+    );
   const nested: string[] = [];
   if (gitRoot) {
     const dirs = await walkFiles(root, {
@@ -655,9 +651,11 @@ async function detectVcs(root: string): Promise<VcsInfo> {
       if (dir) nested.push(dir);
     }
   }
-  return gitRoot
-    ? { provider: "git", root: toPosix(gitRoot), nested: [...new Set(nested)], unsupported }
-    : { provider: "none", nested, unsupported };
+  if (gitRoot)
+    return { provider: "git", root: toPosix(gitRoot), nested: [...new Set(nested)], unsupported };
+  if (svn) return { provider: "svn", root: toPosix(svn), nested, unsupported };
+  if (hg) return { provider: "hg", root: toPosix(hg), nested, unsupported };
+  return { provider: "none", nested, unsupported };
 }
 
 async function detectCoverage(

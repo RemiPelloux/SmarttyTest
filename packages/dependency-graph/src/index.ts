@@ -335,17 +335,32 @@ export class DependencyGraph {
 
   // ── build ───────────────────────────────────────────────────────────────────────────────
 
+  /** Targets each file contributed edges to (so a patch touches only those). */
+  private contributions = new Map<string, { deps: Set<string>; fileDeps: Set<string> }>();
+
+  private contributed(from: string) {
+    const file = from.slice(0, from.indexOf("#"));
+    let c = this.contributions.get(file);
+    if (!c) {
+      c = { deps: new Set(), fileDeps: new Set() };
+      this.contributions.set(file, c);
+    }
+    return c;
+  }
+
   private addDep(target: string, dep: Dep): void {
-    const list = this.deps.get(target) ?? [];
-    list.push(dep);
-    this.deps.set(target, list);
+    const list = this.deps.get(target);
+    if (list) list.push(dep);
+    else this.deps.set(target, [dep]);
+    this.contributed(dep.from).deps.add(target);
     this.edgeCount++;
   }
 
   private addFileDep(target: string, dep: Dep): void {
-    const list = this.fileDependents.get(target) ?? [];
-    list.push(dep);
-    this.fileDependents.set(target, list);
+    const list = this.fileDependents.get(target);
+    if (list) list.push(dep);
+    else this.fileDependents.set(target, [dep]);
+    this.contributed(dep.from).fileDeps.add(target);
     this.edgeCount++;
   }
 
@@ -424,160 +439,224 @@ export class DependencyGraph {
 
   private build(): void {
     this.collectWaspSpecs();
-    for (const [file, a] of this.files) {
-      const test = this.isTest(file);
-      const dir = file.includes("/") ? file.slice(0, file.lastIndexOf("/") + 1) : "";
-      for (const r of a.assetReads ?? []) {
-        const pattern = posixNormalize(`${dir}${r.pattern}`);
-        if (!pattern.startsWith(".."))
-          this.assetReads.push({ pattern, from: key(file, test ? WHOLE : r.unit) });
+    for (const [file, a] of this.files) this.buildFile(file, a);
+  }
+
+  /**
+   * Incremental update after `changed` files were re-analysed (the `files` map already holds the
+   * new analyses): the edges these files contribute are removed and rebuilt. Only valid when what
+   * other files see of them is unchanged (imports, exports, declarations); the caller checks
+   * that and rebuilds otherwise. Returns false when a patch is not possible here.
+   */
+  patch(changed: readonly string[]): boolean {
+    const set = new Set(changed);
+    if (!set.size) return true;
+    for (const f of set) {
+      const a = this.files.get(f);
+      if (!a) return false;
+      const routeFile = (this.options.routes ?? []).some((r) => r.file === f);
+      const visits = [
+        ...(a.topLevelResources ?? []),
+        ...a.symbols.flatMap((s) => s.resources ?? []),
+      ].some((r) => r.startsWith("route:"));
+      if (routeFile || visits || /(^|\/)main\.wasp\.(ts|js|mts)$/.test(f)) return false;
+    }
+    const fromChanged = (from: string) => set.has(from.slice(0, from.indexOf("#")));
+    let removed = 0;
+    for (const f of set) {
+      const c = this.contributions.get(f);
+      if (!c) continue;
+      for (const target of c.deps) {
+        const list = this.deps.get(target) ?? [];
+        const kept = list.filter((d) => !fromChanged(d.from));
+        removed += list.length - kept.length;
+        if (kept.length) this.deps.set(target, kept);
+        else this.deps.delete(target);
       }
-      if (test) {
-        const actual = new Set(
-          a.imports
-            .filter((i) => i.mock === "actual" || i.mock === "unmock")
-            .map((i) => i.resolved),
-        );
-        const mocked = a.imports
-          .filter(
-            (i) =>
-              i.kind === "mock" && i.mock === "factory" && i.resolved && !actual.has(i.resolved),
-          )
-          .map((i) => i.resolved as string);
-        if (mocked.length) this.factoryMocks.set(file, new Set(mocked));
+      for (const target of c.fileDeps) {
+        const list = this.fileDependents.get(target) ?? [];
+        const kept = list.filter((d) => !fromChanged(d.from));
+        removed += list.length - kept.length;
+        if (kept.length) this.fileDependents.set(target, kept);
+        else this.fileDependents.delete(target);
       }
-      const fwd = new Set<string>();
-      this.forward.set(file, fwd);
-      const unc: string[] = [...a.dynamicUnresolved.map((d) => `dynamic import/require (${d})`)];
+      this.contributions.delete(f);
+      for (const imp of this.files.get(f)?.imports ?? []) {
+        const list = imp.resolved ? this.moduleDependents.get(imp.resolved) : undefined;
+        if (list && imp.resolved)
+          this.moduleDependents.set(
+            imp.resolved,
+            list.filter((k) => !fromChanged(k)),
+          );
+      }
+    }
+    for (const files of this.reexporters.values()) for (const f of set) files.delete(f);
+    this.assetReads = this.assetReads.filter((r) => !fromChanged(r.from));
+    for (const f of set) {
+      this.forward.delete(f);
+      this.factoryMocks.delete(f);
+      this.uncertainty.delete(f);
+      this.localCache.delete(f);
+      this.exportCache.delete(f);
+    }
+    this.forwardClosure.clear();
+    this.reachingUncertainty = undefined;
+    this.edgeCount -= removed;
+    for (const f of set) this.buildFile(f, this.files.get(f) as FileAnalysis);
+    return true;
+  }
+
+  /** Edges contributed by one file (its imports, references, member uses and resources). */
+  private buildFile(file: string, a: FileAnalysis): void {
+    const test = this.isTest(file);
+    const dir = file.includes("/") ? file.slice(0, file.lastIndexOf("/") + 1) : "";
+    for (const r of a.assetReads ?? []) {
+      const pattern = posixNormalize(`${dir}${r.pattern}`);
+      if (!pattern.startsWith(".."))
+        this.assetReads.push({ pattern, from: key(file, test ? WHOLE : r.unit) });
+    }
+    if (test) {
+      const actual = new Set(
+        a.imports.filter((i) => i.mock === "actual" || i.mock === "unmock").map((i) => i.resolved),
+      );
+      const mocked = a.imports
+        .filter(
+          (i) => i.kind === "mock" && i.mock === "factory" && i.resolved && !actual.has(i.resolved),
+        )
+        .map((i) => i.resolved as string);
+      if (mocked.length) this.factoryMocks.set(file, new Set(mocked));
+    }
+    const fwd = new Set<string>();
+    this.forward.set(file, fwd);
+    const unc: string[] = [...a.dynamicUnresolved.map((d) => `dynamic import/require (${d})`)];
+    for (const imp of a.imports) {
+      if (imp.unresolved && !imp.missing)
+        unc.push(`unresolved import "${imp.specifier}" (${imp.unresolved})`);
+      if (!imp.resolved) continue;
+      fwd.add(imp.resolved);
+      if (imp.missing) this.deletedFiles.add(imp.resolved);
+      if (!imp.typeOnly) {
+        const list = this.moduleDependents.get(imp.resolved);
+        if (list) list.push(key(file, WHOLE));
+        else this.moduleDependents.set(imp.resolved, [key(file, WHOLE)]);
+      }
+      if (imp.kind === "reexport" || imp.kind === "reexport-all") {
+        const set = this.reexporters.get(imp.resolved) ?? new Set();
+        set.add(file);
+        this.reexporters.set(imp.resolved, set);
+        continue;
+      }
+      if (imp.bindings.length && imp.kind !== "dynamic" && imp.kind !== "mock") continue; // linked through names
+      this.addFileDep(imp.resolved, {
+        from: key(file, WHOLE),
+        kind: imp.kind === "mock" ? "REFERENCES" : "IMPORTS",
+        provenance: "static",
+        confidence: imp.kind === "dynamic" || imp.kind === "mock" ? "medium" : "high",
+      });
+    }
+    for (const d of a.dynamicUnmatched ?? [])
+      unc.push(`dynamic import matched no project file (${d})`);
+    for (const target of a.dynamicTargets ?? []) {
+      fwd.add(target);
+      this.addFileDep(target, {
+        from: key(file, WHOLE),
+        kind: "IMPORTS",
+        provenance: "static",
+        confidence: "medium",
+      });
+    }
+    if (unc.length) this.uncertainty.set(file, unc);
+
+    // Re-exported locals: `import { x } from "./y"; export { x }` makes this file a re-exporter of y.
+    for (const le of a.localExports) {
       for (const imp of a.imports) {
-        if (imp.unresolved && !imp.missing)
-          unc.push(`unresolved import "${imp.specifier}" (${imp.unresolved})`);
-        if (!imp.resolved) continue;
-        fwd.add(imp.resolved);
-        if (imp.missing) this.deletedFiles.add(imp.resolved);
-        if (!imp.typeOnly)
-          this.moduleDependents.set(imp.resolved, [
-            ...(this.moduleDependents.get(imp.resolved) ?? []),
-            key(file, WHOLE),
-          ]);
-        if (imp.kind === "reexport" || imp.kind === "reexport-all") {
+        if (imp.resolved && imp.bindings.some((b) => b.local === le.local)) {
           const set = this.reexporters.get(imp.resolved) ?? new Set();
           set.add(file);
           this.reexporters.set(imp.resolved, set);
-          continue;
-        }
-        if (imp.bindings.length && imp.kind !== "dynamic" && imp.kind !== "mock") continue; // linked through names
-        this.addFileDep(imp.resolved, {
-          from: key(file, WHOLE),
-          kind: imp.kind === "mock" ? "REFERENCES" : "IMPORTS",
-          provenance: "static",
-          confidence: imp.kind === "dynamic" || imp.kind === "mock" ? "medium" : "high",
-        });
-      }
-      for (const d of a.dynamicUnmatched ?? [])
-        unc.push(`dynamic import matched no project file (${d})`);
-      for (const target of a.dynamicTargets ?? []) {
-        fwd.add(target);
-        this.addFileDep(target, {
-          from: key(file, WHOLE),
-          kind: "IMPORTS",
-          provenance: "static",
-          confidence: "medium",
-        });
-      }
-      if (unc.length) this.uncertainty.set(file, unc);
-
-      // Re-exported locals: `import { x } from "./y"; export { x }` makes this file a re-exporter of y.
-      for (const le of a.localExports) {
-        for (const imp of a.imports) {
-          if (imp.resolved && imp.bindings.some((b) => b.local === le.local)) {
-            const set = this.reexporters.get(imp.resolved) ?? new Set();
-            set.add(file);
-            this.reexporters.set(imp.resolved, set);
-          }
         }
       }
-
-      const kind: GraphEdge["kind"] = test ? "TESTS" : "REFERENCES";
-      for (const s of a.symbols) {
-        const from = test
-          ? key(file, WHOLE)
-          : key(file, s.parent ? `${s.parent}.${s.name}` : s.qualifiedName);
-        this.link(file, from, s.refs, s.uses ?? [], s.escapes ?? [], kind);
-        this.linkResources(from, s.resources);
-        if (s.parent && !test) {
-          if (s.thisEscapes)
-            this.addDep(key(file, s.parent), {
-              from,
-              kind: "REFERENCES",
-              provenance: "static",
-              confidence: "high",
-            });
-          for (const m of s.thisUses ?? []) {
-            const mk = this.memberKey(file, s.parent, m);
-            if (mk && mk !== from)
-              this.addDep(mk, {
-                from,
-                kind: "REFERENCES",
-                provenance: "static",
-                confidence: "high",
-              });
-          }
-          const base = this.topSymbol(file, s.parent)?.extends;
-          for (const m of s.superUses ?? []) {
-            const t = base ? this.localTarget(file, base) : undefined;
-            const mk =
-              t && !("namespace" in t) && t.unit !== WHOLE
-                ? this.memberKey(t.file, t.unit, m)
-                : undefined;
-            this.addDep(mk ?? key(file, s.parent), {
-              from,
-              kind: "REFERENCES",
-              provenance: "static",
-              confidence: mk ? "high" : "medium",
-            });
-          }
-        }
-        if (s.kind === "class" && !s.parent && s.extends && !test) {
-          const t = this.localTarget(file, s.extends.split(/[<(]/)[0] as string);
-          const target =
-            t &&
-            !("namespace" in t) &&
-            t.unit !== WHOLE &&
-            this.topSymbol(t.file, t.unit)?.kind === "class"
-              ? key(t.file, `${t.unit}.${INIT}`)
-              : undefined;
-          if (target)
-            this.addDep(target, {
-              from: key(file, s.qualifiedName),
-              kind: "EXTENDS",
-              provenance: "static",
-              confidence: "high",
-            });
-          else if (t && "namespace" in t)
-            this.addFileDep(t.file, {
-              from: key(file, s.qualifiedName),
-              kind: "EXTENDS",
-              provenance: "static",
-              confidence: "medium",
-            });
-        }
-      }
-      // Analyses without member uses (older analyzer) treat every reference as an escape.
-      const hasMemberInfo =
-        a.topLevelUses !== undefined ||
-        a.topLevelEscapes !== undefined ||
-        !["ts-1", "ts-2"].includes(a.analyzerVersion);
-      this.link(
-        file,
-        key(file, WHOLE),
-        a.topLevelRefs,
-        a.topLevelUses ?? [],
-        a.topLevelEscapes ?? (hasMemberInfo ? [] : a.topLevelRefs),
-        kind,
-      );
-      this.linkResources(key(file, WHOLE), a.topLevelResources);
     }
+
+    const kind: GraphEdge["kind"] = test ? "TESTS" : "REFERENCES";
+    for (const s of a.symbols) {
+      const from = test
+        ? key(file, WHOLE)
+        : key(file, s.parent ? `${s.parent}.${s.name}` : s.qualifiedName);
+      this.link(file, from, s.refs, s.uses ?? [], s.escapes ?? [], kind);
+      this.linkResources(from, s.resources);
+      if (s.parent && !test) {
+        if (s.thisEscapes)
+          this.addDep(key(file, s.parent), {
+            from,
+            kind: "REFERENCES",
+            provenance: "static",
+            confidence: "high",
+          });
+        for (const m of s.thisUses ?? []) {
+          const mk = this.memberKey(file, s.parent, m);
+          if (mk && mk !== from)
+            this.addDep(mk, {
+              from,
+              kind: "REFERENCES",
+              provenance: "static",
+              confidence: "high",
+            });
+        }
+        const base = this.topSymbol(file, s.parent)?.extends;
+        for (const m of s.superUses ?? []) {
+          const t = base ? this.localTarget(file, base) : undefined;
+          const mk =
+            t && !("namespace" in t) && t.unit !== WHOLE
+              ? this.memberKey(t.file, t.unit, m)
+              : undefined;
+          this.addDep(mk ?? key(file, s.parent), {
+            from,
+            kind: "REFERENCES",
+            provenance: "static",
+            confidence: mk ? "high" : "medium",
+          });
+        }
+      }
+      if (s.kind === "class" && !s.parent && s.extends && !test) {
+        const t = this.localTarget(file, s.extends.split(/[<(]/)[0] as string);
+        const target =
+          t &&
+          !("namespace" in t) &&
+          t.unit !== WHOLE &&
+          this.topSymbol(t.file, t.unit)?.kind === "class"
+            ? key(t.file, `${t.unit}.${INIT}`)
+            : undefined;
+        if (target)
+          this.addDep(target, {
+            from: key(file, s.qualifiedName),
+            kind: "EXTENDS",
+            provenance: "static",
+            confidence: "high",
+          });
+        else if (t && "namespace" in t)
+          this.addFileDep(t.file, {
+            from: key(file, s.qualifiedName),
+            kind: "EXTENDS",
+            provenance: "static",
+            confidence: "medium",
+          });
+      }
+    }
+    // Analyses without member uses (older analyzer) treat every reference as an escape.
+    const hasMemberInfo =
+      a.topLevelUses !== undefined ||
+      a.topLevelEscapes !== undefined ||
+      !["ts-1", "ts-2"].includes(a.analyzerVersion);
+    this.link(
+      file,
+      key(file, WHOLE),
+      a.topLevelRefs,
+      a.topLevelUses ?? [],
+      a.topLevelEscapes ?? (hasMemberInfo ? [] : a.topLevelRefs),
+      kind,
+    );
+    this.linkResources(key(file, WHOLE), a.topLevelResources);
   }
 
   get stats(): { files: number; edges: number; memberEdges: number; uncertainFiles: number } {

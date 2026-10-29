@@ -214,12 +214,18 @@ export async function buildPlan(
   }
   recs.push({
     key: "Change tracking",
-    value: profile.vcs.provider === "git" ? "git + native snapshots" : "native snapshots",
+    value:
+      profile.vcs.provider === "none"
+        ? "native snapshots"
+        : `${profile.vcs.provider} + native snapshots`,
     reason:
-      profile.vcs.provider === "git"
-        ? "Git repository detected; snapshots speed up repeated local runs"
-        : "no version control detected — snapshots track changes locally",
-    evidence: profile.vcs.provider === "git" ? [`git root ${profile.vcs.root}`] : ["no .git found"],
+      profile.vcs.provider === "none"
+        ? "no version control detected — snapshots track changes locally"
+        : `${profile.vcs.provider === "git" ? "Git" : profile.vcs.provider === "svn" ? "Subversion" : "Mercurial"} repository detected; snapshots speed up repeated local runs`,
+    evidence:
+      profile.vcs.provider === "none"
+        ? ["no .git, .svn or .hg found"]
+        : [`${profile.vcs.provider} root ${profile.vcs.root}`],
   });
   recs.push({
     key: "Impact mode",

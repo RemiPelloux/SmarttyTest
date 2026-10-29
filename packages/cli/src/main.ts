@@ -116,10 +116,22 @@ async function cmdRun(ctx: Ctx): Promise<number> {
     const retries = intFlag(flags.retries, "retries");
     const timeoutMs = intFlag(flags.timeout, "timeout");
     const workers = intFlag(flags.workers, "workers");
+    const shard =
+      flags.shard !== undefined
+        ? (await import("@smarttest/core")).parseShard(flags.shard)
+        : undefined;
+    if (flags.shard !== undefined && !shard)
+      throw new SmartTestError("--shard must look like 2/4 (index/total)", {
+        code: "ST_USAGE",
+        category: "usage",
+      });
     const outcome = await st.run({
       ...(source ? { source } : {}),
       ...(mode ? { mode } : {}),
       all: !!flags.all,
+      ...(flags["no-cache"] ? { cache: false } : {}),
+      ...(shard ? { shard } : {}),
+      ...(flags.bail ? { bail: true } : {}),
       coverage: !!flags.coverage,
       ...(retries !== undefined ? { retries } : {}),
       ...(timeoutMs !== undefined ? { timeoutMs } : {}),
@@ -221,23 +233,32 @@ function printRun(ctx: Ctx, report: RunReport, written: Record<string, string>):
     const tests = e.tests;
     const counts = (s: string) => tests.filter((x) => x.status === s).length;
     const icon =
-      e.status === "passed"
-        ? t.green("✓")
-        : e.status === "flaky"
-          ? t.yellow("↻")
-          : e.status === "skipped"
-            ? t.dim("○")
-            : t.red("✕");
+      e.status === "cached-pass"
+        ? t.cyan("⧉")
+        : e.status === "passed"
+          ? t.green("✓")
+          : e.status === "flaky"
+            ? t.yellow("↻")
+            : e.status === "skipped"
+              ? t.dim("○")
+              : t.red("✕");
     const detail =
-      e.status === "passed" || e.status === "flaky"
-        ? `${counts("passed") + counts("flaky")} passed${counts("flaky") ? t.yellow(` (${counts("flaky")} flaky)`) : ""}`
-        : e.status === "skipped"
-          ? "skipped by the test itself"
-          : `${counts("failed")} failed${counts("timed-out") ? ` · ${counts("timed-out")} timed out` : ""}${e.status === "infrastructure-error" ? " · infrastructure error" : ""}`;
+      e.status === "cached-pass"
+        ? `${tests.length} passed earlier · cached, not run`
+        : e.status === "passed" || e.status === "flaky"
+          ? `${counts("passed") + counts("flaky")} passed${counts("flaky") ? t.yellow(` (${counts("flaky")} flaky)`) : ""}`
+          : e.status === "skipped"
+            ? "skipped by the test itself"
+            : `${counts("failed")} failed${counts("timed-out") ? ` · ${counts("timed-out")} timed out` : ""}${e.status === "infrastructure-error" ? " · infrastructure error" : ""}`;
     ctx.out(
       `  ${icon} ${pad(e.file, width)}${t.dim(detail)}  ${t.dim(formatDuration(e.durationMs))}`,
     );
-    if (e.status !== "passed" && e.status !== "flaky" && e.status !== "skipped") {
+    if (
+      e.status !== "passed" &&
+      e.status !== "flaky" &&
+      e.status !== "skipped" &&
+      e.status !== "cached-pass"
+    ) {
       for (const f of tests
         .filter((x) => x.status !== "passed" && x.status !== "skipped" && x.status !== "pending")
         .slice(0, 3)) {
@@ -262,6 +283,7 @@ function printRun(ctx: Ctx, report: RunReport, written: Record<string, string>):
     s.passed || !failed ? t.green(`${s.passed} passed`) : `${s.passed} passed`,
     failed ? t.red(`${failed} failed`) : "0 failed",
     ...(s.flaky ? [t.yellow(`${s.flaky} flaky`)] : []),
+    ...(s.cached ? [t.cyan(`${s.cached} cached (not run)`)] : []),
     ...(s.infrastructureErrors ? [t.red(`${s.infrastructureErrors} infrastructure error(s)`)] : []),
     `${s.skippedBySelection} skipped (not run)`,
     formatDuration(s.durationMs),
@@ -546,6 +568,61 @@ async function cmdScan(ctx: Ctx): Promise<number> {
       ctx.out(`    ${d.file} ${t.dim(d.detail)}`);
   }
   for (const w of p.warnings) ctx.out(`  ${t.yellow("▲")} ${w}`);
+  return ExitCode.Success;
+}
+
+async function cmdShard(ctx: Ctx): Promise<number> {
+  const { t, flags } = ctx;
+  const total = intFlag(flags.total, "total");
+  const index = intFlag(flags.index, "index");
+  if (!total || !index || index > total)
+    throw new SmartTestError("smarttest shard needs --total n and --index i (1…n)", {
+      code: "ST_USAGE",
+      category: "usage",
+    });
+  const st = await ctx.open();
+  const source = sourceOf(flags);
+  const files = await st.shardPlan({
+    total,
+    index,
+    ...(source ? { source } : {}),
+    ...(flags.all ? { all: true } : {}),
+  });
+  if (flags.json) ctx.json("shard", { total, index, files });
+  else {
+    ctx.out(t.dim(`shard ${index}/${total} · ${files.length} test file(s)`));
+    for (const f of files) ctx.out(f);
+  }
+  return ExitCode.Success;
+}
+
+async function cmdFlaky(ctx: Ctx): Promise<number> {
+  const { t, flags } = ctx;
+  const st = await ctx.open();
+  const minRate = flags["min-rate"] !== undefined ? Number(flags["min-rate"]) : 0.05;
+  const entries = await st.flakyTests(minRate);
+  if (flags.json) ctx.json("flaky", { minRate, tests: entries });
+  else if (!entries.length)
+    ctx.out(
+      `${t.green("✓")} No test above a ${Math.round(minRate * 100)}% flake rate in the recorded runs.`,
+    );
+  else {
+    ctx.out(
+      `${t.bold("Flaky tests")} · flake rate ≥ ${Math.round(minRate * 100)}% · from .smarttest/state/history.json`,
+    );
+    for (const e of entries)
+      ctx.out(
+        `  ${t.yellow("↻")} ${pad(`${Math.round(e.flakeRate * 100)}%`, 6)}${e.testId}  ${t.dim(`${e.runs} runs · recent ${e.recent}`)}`,
+      );
+    ctx.out();
+    ctx.out(t.dim("Suggested rule (retries, never a silent skip):"));
+    const files = [...new Set(entries.map((e) => e.file))].slice(0, 5);
+    ctx.out(
+      t.dim(
+        `  { name: "flaky-retry", match: { path: "{${files.join(",")}}" }, execution: { retries: 2 } }`,
+      ),
+    );
+  }
   return ExitCode.Success;
 }
 
@@ -1310,6 +1387,7 @@ async function cmdBenchmark(ctx: Ctx): Promise<number> {
     ...(sample ? { sample } : {}),
     ...(previous ? { previous } : {}),
     ...(flags.traces ? { traces: true } : {}),
+    ...(flags["no-cache"] ? { cache: false } : {}),
     onCommit: async (results) => {
       await writeFileAtomic(
         jsonPath,
@@ -1347,9 +1425,13 @@ async function cmdBenchmark(ctx: Ctx): Promise<number> {
     ctx.out(
       `  ${pad("Missed failures", 16)}${tt.missed ? t.red(String(tt.missed)) : t.green("0")}${tt.preexisting ? t.dim(` · ${tt.preexisting} already failing in the parent commit`) : ""}`,
     );
+    if (tt.cachedTests)
+      ctx.out(
+        `  ${pad("Cached results", 16)}${tt.cachedTests} · integrity violations ${tt.cacheViolations ? t.red(String(tt.cacheViolations)) : t.green("0")}`,
+      );
     ctx.out(`  ${t.dim("Report")} ${rel(ctx, reportPath)}`);
   }
-  return b.totals.missed ? ExitCode.PolicyFailure : ExitCode.Success;
+  return b.totals.missed || b.totals.cacheViolations ? ExitCode.PolicyFailure : ExitCode.Success;
 }
 
 async function cmdGraph(ctx: Ctx): Promise<number> {
@@ -1543,6 +1625,8 @@ const HANDLERS: Record<string, (ctx: Ctx) => Promise<number>> = {
   sync: cmdSync,
   migrate: cmdMigrate,
   watch: cmdWatch,
+  shard: cmdShard,
+  flaky: cmdFlaky,
   ci: cmdCi,
   shadow: cmdShadow,
   coverage: cmdCoverage,

@@ -29,6 +29,12 @@
       "path": "../vcs-git"
     },
     {
+      "path": "../vcs-hg"
+    },
+    {
+      "path": "../vcs-svn"
+    },
+    {
       "path": "../native-snapshots"
     },
     {

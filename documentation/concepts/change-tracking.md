@@ -1,4 +1,4 @@
-# Change tracking: Git, native snapshots, hybrid
+# Change tracking: Git, Subversion, Mercurial, native snapshots
 
 ## Git (default when a repo is detected)
 
@@ -9,6 +9,10 @@
 | `--uncommitted` | HEAD → working tree + untracked (honours `.gitignore`)                             |
 
 Renames carry `previousPath`. Deletions mark dependent tests as affected. Worktrees and nested repositories are supported, and each repository boundary is reported, never mixed. A shallow clone that doesn't contain the base gives a clear error (exit 4) with a `git fetch` hint.
+
+## Subversion and Mercurial
+
+Detected automatically when there is no Git repository (`vcs.provider: "auto"`), or chosen with `vcs.provider: "svn"` / `"hg"`. Neither has a staging area, so `run`, `--staged` and `--uncommitted` all compare the working copy with its base (`BASE` in Subversion, the working directory's parent in Mercurial), unversioned files included. `--base <rev>` takes a revision: in Subversion it is compared directly (`svn diff -r <rev>`); in Mercurial with the common ancestor of `<rev>` and the working directory (`--base-mode direct` compares with `<rev>` itself). Changed line ranges and the content before the change come from `svn diff` / `svn cat` and `hg diff` / `hg cat`. `benchmark`, `ci` and `hook` are Git-only.
 
 ## Native snapshots (no VCS required)
 

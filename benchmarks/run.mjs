@@ -138,6 +138,23 @@ for (const size of sizes) {
   r.selection = last.timings["graph build"] + last.timings["impact analysis"];
   r.selected = last.decision.selectedTests.length;
   r.total = last.testFiles.length;
+  // Watch mode: index and graph stay in memory; a body change patches the graph.
+  {
+    const warm = await SmartTest.open({ root: dir });
+    warm.keepWarm = true;
+    await warm.analyze();
+    const patches = [];
+    for (let i = 1; i <= 3; i++) {
+      await writeFile(
+        file,
+        (await readFile(file, "utf8")).replace(/ \+ 0;| \+ \d+ \* 0;/, ` + ${i} * 0;`),
+      );
+      const a = await warm.analyze();
+      if (warm.lastGraphBuild === "patched") patches.push(a.timings["graph build"]);
+    }
+    r.graphPatch = patches.length ? median(patches) : undefined;
+    r.graphBuild = last.timings["graph build"];
+  }
   // Report generation for a run of this size.
   const executions = last.testFiles.map((f) => ({
     file: f,
@@ -188,6 +205,7 @@ const TARGETS = [
   ["Simple diff analysis, warm index (end-to-end `analyze`)", "warmDiff", 500],
   ["Warm graph selection (graph build + impact)", "selection", 200],
   ["Standard report generation (HTML)", "report", 2000],
+  ["Graph update after a body change (watch: patched)", "graphPatch", 10],
 ];
 const cols = sizes.map((s) => `${s} (${SIZES[s]})`);
 const lines = [

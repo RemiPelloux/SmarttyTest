@@ -32,6 +32,12 @@ export const OPTIONS = {
   format: { type: "string", multiple: true },
   open: { type: "boolean" },
   "fail-on-missed": { type: "boolean" },
+  "no-cache": { type: "boolean" },
+  shard: { type: "string" },
+  bail: { type: "boolean" },
+  total: { type: "string" },
+  index: { type: "string" },
+  "min-rate": { type: "string" },
   // init
   auto: { type: "boolean" },
   advanced: { type: "boolean" },

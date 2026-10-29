@@ -8,6 +8,7 @@ Concepts
 - [How selection works](concepts/how-selection-works.md)
 - [Safety model](concepts/safety-model.md)
 - [Runtime evidence](concepts/runtime-evidence.md)
+- [Running less, faster](concepts/speed.md)
 - [Change tracking](concepts/change-tracking.md)
 - [Rules](concepts/rules.md)
 

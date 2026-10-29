@@ -14,7 +14,7 @@ SmartTest is not on npm yet. Build the package from this repository and install 
 git clone https://github.com/RemiPelloux/SmarttyTest && cd SmarttyTest
 corepack enable && pnpm install && pnpm build && pnpm release:pack
 # in your project:
-npm install -D /path/to/SmarttyTest/packages/cli/.publish/smarttest-0.7.0.tgz
+npm install -D /path/to/SmarttyTest/packages/cli/.publish/smarttest-0.8.0.tgz
 ```
 
 If your repository has no root `package.json` (several independent projects), add a minimal one for repository tooling, as LeadsIt does.

@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { availableParallelism } from "node:os";
 import { join, relative } from "node:path";
 import { CypressAdapter } from "@smarttest/adapter-cypress";
 import { JestAdapter } from "@smarttest/adapter-jest";
@@ -92,7 +93,25 @@ import {
 import { planExecution, rootKey } from "@smarttest/test-selector";
 import type { ChangeAnalysisInput, ChangeSource } from "@smarttest/vcs-core";
 import { GitAdapter } from "@smarttest/vcs-git";
+import { HgAdapter } from "@smarttest/vcs-hg";
+import { SvnAdapter } from "@smarttest/vcs-svn";
 import { ParsePool, parallelParsingAvailable } from "./parse-pool.js";
+import {
+  cacheGet,
+  cachePut,
+  type FlakyEntry,
+  failFastOrder,
+  flakyReport,
+  type HistoryStore,
+  loadHistory,
+  loadResultCache,
+  recentlyFailingFiles,
+  recordRun,
+  resultKey,
+  saveHistory,
+  saveResultCache,
+  shardFiles,
+} from "./speed.js";
 import { detectDrift, patchConfig, type SyncResult } from "./sync.js";
 import {
   cleanDir,
@@ -140,6 +159,14 @@ export interface Analysis {
 
 export interface RunOptions extends AnalyzeOptions {
   all?: boolean;
+  /** Reuse validated passing results (default: config `cache`, off with `all`). */
+  cache?: boolean;
+  /** Run only shard `index` of `total` (balanced by recorded durations). */
+  shard?: { index: number; total: number };
+  /** Stop starting runner groups after one fails. */
+  bail?: boolean;
+  /** Reuse an analysis computed by the caller (benchmark) instead of analysing again. */
+  analysis?: Analysis;
   coverage?: boolean;
   retries?: number;
   timeoutMs?: number;
@@ -351,11 +378,19 @@ export class SmartTest {
     return new GitAdapter(this.root);
   }
 
-  async provider(): Promise<"git" | "native"> {
+  async provider(): Promise<"git" | "svn" | "hg" | "native"> {
     const p = this.config.vcs.provider;
     if (p !== "auto") return p;
-    return (await this.git().detect()) ? "git" : "native";
+    this.providerCache ??= (await this.git().detect())
+      ? "git"
+      : (await new SvnAdapter(this.root).detect())
+        ? "svn"
+        : (await new HgAdapter(this.root).detect())
+          ? "hg"
+          : "native";
+    return this.providerCache;
   }
+  private providerCache: "git" | "svn" | "hg" | "native" | undefined;
 
   async defaultSource(): Promise<ChangeSource> {
     const provider = await this.provider();
@@ -368,7 +403,12 @@ export class SmartTest {
     const src = source ?? (await this.defaultSource());
     if (src.kind === "snapshot")
       return this.withoutOwnState(await this.snapshots().getChangeInput(src));
-    if ((await this.provider()) !== "git" && !(await this.git().detect())) {
+    const provider = await this.provider();
+    if (provider === "svn")
+      return this.withoutOwnState(await new SvnAdapter(this.root).getChangeInput(src));
+    if (provider === "hg")
+      return this.withoutOwnState(await new HgAdapter(this.root).getChangeInput(src));
+    if (provider !== "git" && !(await this.git().detect())) {
       throw new SmartTestError("This project is not a Git repository", {
         code: "ST_NOT_GIT",
         category: "usage",
@@ -393,8 +433,21 @@ export class SmartTest {
 
   // ── Index & graph ───────────────────────────────────────────────────────────────────────
 
+  /**
+   * Long-running mode (watch): the index and graph stay in memory between cycles and the graph is
+   * patched for changed files instead of rebuilt.
+   */
+  keepWarm = false;
+  private indexCache: SymbolIndex | undefined;
+  private graphCache: { graph: DependencyGraph; index: SymbolIndex; e2e: string } | undefined;
+  private lastIndexChange: { changed: string[]; structural: boolean } | undefined;
+  /** How the last graph was obtained ("patched" or "built"), for diagnostics. */
+  lastGraphBuild: "patched" | "built" | undefined;
+
   async loadIndex(): Promise<{ index: SymbolIndex; stats: UpdateStats }> {
-    const index = await SymbolIndex.load(this.storeDir);
+    const index =
+      this.keepWarm && this.indexCache ? this.indexCache : await SymbolIndex.load(this.storeDir);
+    const before = this.keepWarm ? new Map(index.entries()) : undefined;
     // Cold start (no index, or one from another analyzer version) of a large project: parser
     // threads start before files are read, so their start-up overlaps with reading.
     const sample = index.entries().values().next().value as FileAnalysis | undefined;
@@ -440,10 +493,59 @@ export class SmartTest {
       })
       .finally(() => pool?.close());
     await index.save();
+    if (before) {
+      // Changes other files can see (imports, exports, declarations) need a full graph rebuild.
+      const surface = (x: FileAnalysis) =>
+        JSON.stringify([
+          x.importsHash,
+          x.localExports,
+          x.symbols.map((y) => [
+            y.qualifiedName,
+            y.kind,
+            y.exportNames,
+            y.parent ?? "",
+            y.extends ?? "",
+          ]),
+          x.catalogKeys ? Object.keys(x.catalogKeys) : [],
+        ]);
+      const changed: string[] = [];
+      let structural = before.size !== index.size;
+      for (const [p, a] of index.entries()) {
+        const old = before.get(p);
+        if (old === a) continue;
+        changed.push(p);
+        if (!old || surface(old) !== surface(a)) structural = true;
+      }
+      this.lastIndexChange = { changed, structural };
+      this.indexCache = index;
+    }
     return { index, stats };
   }
 
   buildGraph(index: SymbolIndex, e2eTests?: ReadonlySet<string>): DependencyGraph {
+    const e2e = [...(e2eTests ?? [])].sort().join("|");
+    const cached = this.graphCache;
+    if (
+      this.keepWarm &&
+      cached &&
+      cached.index === index &&
+      cached.e2e === e2e &&
+      this.lastIndexChange &&
+      !this.lastIndexChange.structural &&
+      cached.graph.patch(this.lastIndexChange.changed)
+    ) {
+      this.lastGraphBuild = "patched";
+      this.lastIndexChange = { changed: [], structural: false };
+      return cached.graph;
+    }
+    const graph = this.buildGraphFresh(index, e2eTests);
+    if (this.keepWarm) this.graphCache = { graph, index, e2e };
+    this.lastGraphBuild = "built";
+    if (this.lastIndexChange) this.lastIndexChange = { changed: [], structural: false };
+    return graph;
+  }
+
+  private buildGraphFresh(index: SymbolIndex, e2eTests?: ReadonlySet<string>): DependencyGraph {
     const files = [...index.entries().keys()];
     // Next.js projects: directories with a next.config, or the root when Next.js was detected.
     const nextRoots = new Set(
@@ -962,16 +1064,18 @@ export class SmartTest {
       recorded.fullRunMs !== undefined &&
       typicalAnalysis !== undefined &&
       recorded.fullRunMs < typicalAnalysis;
-    const analysis = await this.analyze({
-      ...options,
-      ...(adaptive
-        ? {
-            everything: {
-              reason: `Adaptive: the full suite took ${Math.round(recorded.fullRunMs ?? 0)} ms last time, less than a typical analysis (${Math.round(typicalAnalysis ?? 0)} ms), so everything runs`,
-            },
-          }
-        : {}),
-    });
+    const analysis =
+      options.analysis ??
+      (await this.analyze({
+        ...options,
+        ...(adaptive
+          ? {
+              everything: {
+                reason: `Adaptive: the full suite took ${Math.round(recorded.fullRunMs ?? 0)} ms last time, less than a typical analysis (${Math.round(typicalAnalysis ?? 0)} ms), so everything runs`,
+              },
+            }
+          : {}),
+      }));
     const timings = analysis.timings;
     const analysisMs = Object.values(timings).reduce((a, b) => a + b, 0);
     if (options.all) {
@@ -994,15 +1098,95 @@ export class SmartTest {
         hint: "Install vitest or jest in the project, or set `adapters` in smarttest.config.",
       });
     }
+    const durationsPath = join(this.storeDir, "state", "durations.json");
+    const durations = (await readJson<Record<string, number>>(durationsPath)) ?? {};
+    const warnings: string[] = [];
+    // Sharding: this run takes its share of the selection, balanced by recorded durations.
+    if (options.shard) {
+      const all = analysis.decision.selectedTests.map((t) => t.filePath);
+      const mine = new Set(
+        shardFiles(all, durations, options.shard.total)[options.shard.index - 1] ?? [],
+      );
+      analysis.decision.selectedTests = analysis.decision.selectedTests.filter((t) =>
+        mine.has(t.filePath),
+      );
+      warnings.push(
+        `Shard ${options.shard.index}/${options.shard.total}: ${mine.size} of ${all.length} selected test files run here; the others run in the other shards`,
+      );
+    }
+    // Validated result cache: a passing result is reused only while every input is unchanged.
+    const history = await loadHistory(this.storeDir);
+    const useCache = (options.cache ?? this.config.cache) && !options.all && !options.coverage;
+    const resultCache = useCache ? await loadResultCache(this.storeDir) : undefined;
+    const keys = useCache
+      ? await this.resultKeys(
+          analysis,
+          analysis.decision.selectedTests.map((t) => t.filePath),
+          history,
+        )
+      : new Map<string, string>();
+    const cachedExecutions: FileExecution[] = [];
+    let cacheSavedMs = 0;
+    if (resultCache)
+      for (const [file, key] of keys) {
+        const hit = cacheGet(resultCache, file, key);
+        if (!hit) continue;
+        cacheSavedMs += hit.durationMs;
+        cachedExecutions.push({
+          file,
+          adapter: analysis.assignment.get(file)?.adapter ?? "cache",
+          status: "cached-pass",
+          durationMs: 0,
+          tests: hit.tests.map((t) => ({
+            testId: t.testId,
+            status: "cached-pass",
+            durationMs: 0,
+            attempts: 0,
+          })),
+        });
+      }
+    const cachedFiles = new Set(cachedExecutions.map((e) => e.file));
+    // Fail-fast order: recent failures, then the tests closest to the change.
+    const depthOf = new Map(
+      analysis.decision.selectedTests.map((t) => [
+        t.filePath,
+        Math.min(...t.reasons.map((r) => r.path?.length ?? 99), 99),
+      ]),
+    );
+    const order = failFastOrder(
+      analysis.decision.selectedTests.map((t) => t.filePath).filter((f) => !cachedFiles.has(f)),
+      recentlyFailingFiles(history),
+      (f) => depthOf.get(f) ?? 99,
+    );
+    const rank = new Map(order.map((f, i) => [f, i]));
     const plan = planExecution(
-      analysis.decision.selectedTests.map((t) => t.filePath),
+      order,
       analysis.runnerRoots,
       this.config.adapters,
       analysis.assignment,
     );
+    for (const g of plan.groups) g.files.sort((a, b) => (rank.get(a) ?? 0) - (rank.get(b) ?? 0));
+    plan.groups.sort(
+      (a, b) => (rank.get(a.files[0] ?? "") ?? 0) - (rank.get(b.files[0] ?? "") ?? 0),
+    );
+    // Duration-aware scheduling: independent runner groups in parallel within the CPU budget.
+    const cpus = availableParallelism();
+    const concurrency =
+      this.config.parallelGroups === "auto"
+        ? Math.max(1, Math.min(plan.groups.length, Math.floor(cpus / 4), 4))
+        : Math.max(1, this.config.parallelGroups);
+    const explicitWorkers = options.workers ?? this.config.workers;
+    const workers =
+      explicitWorkers ??
+      (concurrency > 1 && plan.groups.length > 1
+        ? Math.max(1, Math.floor((cpus - 1) / Math.min(concurrency, plan.groups.length)))
+        : undefined);
     const coverageDirs: string[] = [];
     const summary = await timed(timings, "test execution", () =>
       executeGroups(plan.groups, {
+        concurrency,
+        exclusive: ["playwright", "cypress"],
+        ...(options.bail ? { bail: true } : {}),
         createAdapter: (g) => {
           const dir = options.coverage ? this.coverageDirFor(g) : undefined;
           if (dir) coverageDirs.push(join(dir, "coverage-final.json"));
@@ -1011,14 +1195,15 @@ export class SmartTest {
         timeoutMs: options.timeoutMs ?? this.config.timeoutMs,
         retries: options.retries ?? this.config.retries,
         ...(options.signal ? { signal: options.signal } : {}),
-        ...((options.workers ?? this.config.workers)
-          ? { workers: (options.workers ?? this.config.workers) as number }
-          : {}),
+        ...(workers ? { workers } : {}),
         coverage: !!options.coverage,
         ...(options.onEvent ? { onEvent: options.onEvent } : {}),
       }),
     );
-    const warnings: string[] = [];
+    if (cachedExecutions.length)
+      warnings.push(
+        `${cachedExecutions.length} test file(s) reused a cached passing result (every input unchanged; not run, about ${Math.round(cacheSavedMs)} ms saved) — \`--no-cache\` runs them`,
+      );
     // Files the runner didn't collect (e.g. excluded by its own config) were not run — say so honestly.
     for (const f of summary.files) {
       if (
@@ -1042,10 +1227,37 @@ export class SmartTest {
           "Coverage was requested but no coverage report was produced — is a coverage provider installed?",
         );
     }
-    const executions: FileExecution[] = summary.files.map((f) => ({ ...f }));
+    const executions: FileExecution[] = [
+      ...summary.files.map((f) => ({ ...f })),
+      ...cachedExecutions,
+    ].sort((a, b) => a.file.localeCompare(b.file));
+    // Record fresh passing results in the cache and every fresh result in the history.
+    if (resultCache) {
+      for (const f of summary.files) {
+        const key = keys.get(f.file);
+        const clean =
+          f.status === "passed" &&
+          f.tests.every(
+            (t) =>
+              t.attempts <= 1 &&
+              (t.status === "passed" || t.status === "skipped" || t.status === "pending"),
+          );
+        if (key && clean)
+          cachePut(resultCache, f.file, {
+            key,
+            at: new Date().toISOString(),
+            durationMs: Math.round(f.durationMs),
+            tests: f.tests,
+          });
+      }
+      await saveResultCache(this.storeDir, resultCache);
+    }
+    recordRun(
+      history,
+      summary.files.flatMap((f) => f.tests),
+    );
+    await saveHistory(this.storeDir, history);
     // Duration history: estimate what skipping saved, then record fresh measurements.
-    const durationsPath = join(this.storeDir, "state", "durations.json");
-    const durations = (await readJson<Record<string, number>>(durationsPath)) ?? {};
     const skipped = analysis.decision.skippedTests.map((t) => t.filePath);
     const known = skipped.filter((f) => durations[f] !== undefined);
     const estimate = known.length
@@ -1055,12 +1267,16 @@ export class SmartTest {
           totalSkipped: skipped.length,
         }
       : undefined;
-    for (const e of executions)
+    for (const e of summary.files)
       if (e.status !== "cancelled" && e.status !== "infrastructure-error")
         durations[e.file] = Math.round(e.durationMs);
     await writeJson(durationsPath, durations);
     // Timings for the adaptive policy: typical analysis time, and the last full-suite wall time.
-    const fullRun = analysis.decision.skippedTests.length === 0 && analysis.testFiles.length > 0;
+    const fullRun =
+      analysis.decision.skippedTests.length === 0 &&
+      analysis.testFiles.length > 0 &&
+      !cachedExecutions.length &&
+      !options.shard;
     await writeJson(statsPath, {
       analysisMs: adaptive
         ? (recorded.analysisMs ?? [])
@@ -1523,6 +1739,114 @@ export class SmartTest {
     return { plan, done: await applyUninstall(this.root, plan) };
   }
 
+  /**
+   * Result-cache keys for the tests that can be cached: every input that can change a test's
+   * result is hashed (its static closure and the files its last fresh trace loaded, runner config,
+   * manifests, lockfiles, tsconfig, env files, setup files, manual mocks, snapshots, Node and runner
+   * versions). Tests with uncertain dependencies, file reads, flaky history or an end-to-end runner
+   * are never cached.
+   */
+  private async resultKeys(
+    analysis: Analysis,
+    tests: readonly string[],
+    history: HistoryStore,
+  ): Promise<Map<string, string>> {
+    const out = new Map<string, string>();
+    if (!tests.length) return out;
+    const profile = await this.profile();
+    const files = await this.allFiles();
+    const hashes = new Map<string, string>();
+    const h = async (f: string): Promise<string> => {
+      let v = hashes.get(f);
+      if (v === undefined) {
+        v = analysis.index.get(f)?.hash ?? (await hashFile(this.root, f)) ?? "missing";
+        hashes.set(f, v);
+      }
+      return v;
+    };
+    const { readJson: rj } = await import("@smarttest/shared");
+    const view = await this.traceView(undefined, analysis.index).catch(() => undefined);
+    const flaky = new Set(
+      Object.entries(history.tests)
+        .filter(([, x]) => x.flaky > 0 || /F.*P|P.*F/.test(x.recent.slice(-10)))
+        .map(([id]) => id.slice(0, id.indexOf("::") > -1 ? id.indexOf("::") : undefined)),
+    );
+    const shared = new Map<string, Record<string, string>>();
+    for (const t of tests) {
+      const root = analysis.assignment.get(t);
+      if (!root || root.adapter === "playwright" || root.adapter === "cypress") continue;
+      if (flaky.has(t)) continue;
+      if (analysis.graph.uncertaintyReachableFrom(t).length) continue;
+      const closure = [t, ...analysis.graph.dependenciesOf(t)];
+      if (closure.some((f) => analysis.index.get(f)?.assetReads?.length)) continue;
+      const rk = `${root.adapter}:${root.dir}`;
+      let base = shared.get(rk);
+      if (!base) {
+        const dir = root.dir ? `${root.dir}/` : "";
+        const inScope = (f: string) => !root.dir || f.startsWith(dir) || !f.includes("/");
+        const global = files.filter(
+          (f) =>
+            inScope(f) &&
+            (/(^|\/)(package\.json|package-lock\.json|pnpm-lock\.yaml|yarn\.lock|bun\.lockb?|tsconfig[^/]*\.json|\.env[^/]*|babel\.config\.[^/]+|\.babelrc[^/]*|\.swcrc)$/.test(
+              f,
+            ) ||
+              /(^|\/)__mocks__\//.test(f) ||
+              profile.tests.setupFiles.includes(f)),
+        );
+        const runnerPkg = root.adapter === "node" ? undefined : root.adapter;
+        let runnerVersion = "";
+        for (let d = join(this.root, root.dir); runnerPkg; d = join(d, "..")) {
+          const pkg = await rj<{ version?: string }>(
+            join(d, "node_modules", runnerPkg, "package.json"),
+          );
+          if (pkg?.version) {
+            runnerVersion = pkg.version;
+            break;
+          }
+          if (d === this.root || d === join(d, "..")) break;
+        }
+        base = {
+          node: process.versions.node.split(".")[0] as string,
+          runner: `${root.adapter}@${runnerVersion}`,
+          smarttest: TOOL.version,
+          config: root.configFile ? await h(root.configFile) : "",
+        };
+        for (const f of global.sort()) base[`g:${f}`] = await h(f);
+        shared.set(rk, base);
+      }
+      const parts: Record<string, string> = { ...base };
+      for (const f of closure) parts[`f:${f}`] = await h(f);
+      const trace = view?.trace(t);
+      if (trace) for (const f of Object.keys(trace.fileHashes)) parts[`f:${f}`] = await h(f);
+      const snap = `${t.includes("/") ? t.slice(0, t.lastIndexOf("/") + 1) : ""}__snapshots__/${t.slice(t.lastIndexOf("/") + 1)}.snap`;
+      if (files.includes(snap)) parts[`s:${snap}`] = await h(snap);
+      out.set(t, resultKey(parts));
+    }
+    return out;
+  }
+
+  /** Files of one shard of the selection (or of every test with `all`). */
+  async shardPlan(options: {
+    total: number;
+    index: number;
+    source?: ChangeSource;
+    all?: boolean;
+  }): Promise<string[]> {
+    const analysis = await this.analyze(options.source ? { source: options.source } : {});
+    const files = options.all
+      ? analysis.testFiles
+      : analysis.decision.selectedTests.map((t) => t.filePath);
+    const durations =
+      (await readJson<Record<string, number>>(join(this.storeDir, "state", "durations.json"))) ??
+      {};
+    return shardFiles(files, durations, options.total)[options.index - 1] ?? [];
+  }
+
+  /** Flaky tests from the recorded run history. */
+  async flakyTests(minRate = 0.05): Promise<FlakyEntry[]> {
+    return flakyReport(await loadHistory(this.storeDir), minRate);
+  }
+
   /** `smarttest watch`: reruns affected tests after each batch of saves until closed. */
   async watch(options: {
     onRun: (outcome: RunOutcome, files: string[]) => void;
@@ -1531,6 +1855,7 @@ export class SmartTest {
     mode?: SafetyMode;
   }): Promise<Watcher> {
     const git = (await this.provider()) === "git";
+    this.keepWarm = true;
     return watchProject(this.root, {
       exclude: this.config.exclude,
       git,
@@ -1722,7 +2047,17 @@ export class SmartTest {
         hint: "SmartTest stores state in .smarttest/",
       });
     const provider = await this.provider();
-    if (provider === "git") {
+    if (provider === "svn" || provider === "hg") {
+      const state = await (provider === "svn"
+        ? new SvnAdapter(this.root)
+        : new HgAdapter(this.root)
+      ).getWorkingState();
+      out.push({
+        severity: "ok",
+        check: "vcs",
+        message: `${provider === "svn" ? "Subversion" : "Mercurial"} · ${state.head?.ref ?? "no revision"}${state.dirty ? " · uncommitted changes" : ""}`,
+      });
+    } else if (provider === "git") {
       const state = await this.git().getWorkingState();
       out.push({
         severity: state.warnings.length ? "warn" : "ok",

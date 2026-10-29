@@ -1,6 +1,6 @@
 {
   "name": "@smarttest/core",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "description": "Application core: orchestrates engines behind a stable API used by the CLI and (later) Studio.",
   "license": "Apache-2.0",
   "type": "module",
@@ -30,6 +30,8 @@
     "@smarttest/smart-init": "workspace:*",
     "@smarttest/vcs-core": "workspace:*",
     "@smarttest/vcs-git": "workspace:*",
+    "@smarttest/vcs-hg": "workspace:*",
+    "@smarttest/vcs-svn": "workspace:*",
     "@smarttest/native-snapshots": "workspace:*",
     "@smarttest/source-parser": "workspace:*",
     "@smarttest/language-typescript": "workspace:*",

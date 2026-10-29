@@ -54,6 +54,7 @@ const NAV = [
       ["How selection works", "docs/concepts/how-selection-works.html"],
       ["Safety model", "docs/concepts/safety-model.html"],
       ["Runtime evidence", "docs/concepts/runtime-evidence.html"],
+      ["Running less, faster", "docs/concepts/speed.html"],
       ["Change tracking", "docs/concepts/change-tracking.html"],
       ["Rules", "docs/concepts/rules.html"],
     ],

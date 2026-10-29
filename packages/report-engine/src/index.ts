@@ -44,6 +44,8 @@ export interface RunSummary {
   cancelled: number;
   infrastructureErrors: number;
   skippedByTests: number;
+  /** Results reused from the validated cache (not run in this run). */
+  cached: number;
   durationMs: number;
 }
 
@@ -89,6 +91,7 @@ export function summarize(
     cancelled: count("cancelled"),
     infrastructureErrors: count("infrastructure-error"),
     skippedByTests: count("skipped") + count("pending"),
+    cached: count("cached-pass"),
     durationMs,
   };
 }
@@ -127,6 +130,8 @@ export function validateReportIntegrity(report: RunReport): string[] {
   if (s.passed !== tests.filter((t) => t.status === "passed").length)
     issues.push("summary.passed does not match executions");
   if (s.passed > tests.length) issues.push("more passes than executed tests");
+  if ((s.cached ?? 0) !== tests.filter((t) => t.status === "cached-pass").length)
+    issues.push("summary.cached does not match executions");
   if (s.skippedBySelection !== report.decision.skippedTests.length)
     issues.push("summary.skippedBySelection does not match the decision");
   if (report.decision.fallbackApplied && report.decision.analysisStatus !== "fallback")
@@ -156,7 +161,7 @@ export function toJUnit(report: RunReport, includeSkipped = false): string {
   const lines = ['<?xml version="1.0" encoding="UTF-8"?>'];
   const s = report.summary;
   lines.push(
-    `<testsuites name="smarttest" tests="${s.passed + s.failed + s.flaky + s.timedOut + (includeSkipped ? s.skippedBySelection : 0)}" failures="${s.failed + s.timedOut}" errors="${s.infrastructureErrors}" time="${(s.durationMs / 1000).toFixed(3)}">`,
+    `<testsuites name="smarttest" tests="${s.passed + s.failed + s.flaky + s.timedOut + s.cached + (includeSkipped ? s.skippedBySelection : 0)}" failures="${s.failed + s.timedOut}" errors="${s.infrastructureErrors}" time="${(s.durationMs / 1000).toFixed(3)}">`,
   );
   for (const e of report.executions) {
     const failures = e.tests.filter(
@@ -170,7 +175,7 @@ export function toJUnit(report: RunReport, includeSkipped = false): string {
       `  <testsuite name="${xmlEsc(e.file)}" tests="${e.tests.length}" failures="${failures}" errors="${errors}" skipped="${skippedCount}" time="${(e.durationMs / 1000).toFixed(3)}">`,
     );
     for (const t of e.tests) {
-      const name = t.testId.slice(t.testId.indexOf("::") + 2);
+      const name = `${t.testId.slice(t.testId.indexOf("::") + 2)}${t.status === "cached-pass" ? " (cached, not run)" : ""}`;
       lines.push(
         `    <testcase classname="${xmlEsc(e.file)}" name="${xmlEsc(name)}" time="${(t.durationMs / 1000).toFixed(3)}">`,
       );
@@ -211,7 +216,7 @@ export function toMarkdown(report: RunReport, htmlLink?: string): string {
   const icon = status === "passed" ? "✅" : status === "failed" ? "❌" : "⚠️";
   const out: string[] = [];
   out.push(
-    `### ${icon} SmartTest — ${s.passed} passed · ${s.failed} failed${s.flaky ? ` · ${s.flaky} flaky` : ""} · ${s.skippedBySelection} skipped (not run) · ${formatDuration(s.durationMs)}`,
+    `### ${icon} SmartTest — ${s.passed} passed · ${s.failed} failed${s.flaky ? ` · ${s.flaky} flaky` : ""}${s.cached ? ` · ${s.cached} cached (not run)` : ""} · ${s.skippedBySelection} skipped (not run) · ${formatDuration(s.durationMs)}`,
   );
   out.push("");
   out.push(
@@ -278,6 +283,7 @@ export function toHtml(report: RunReport): string {
     cancelled: "warn",
     skipped: "skip",
     pending: "skip",
+    "cached-pass": "cached",
   };
   const execRows = report.executions
     .map((e) => {
@@ -357,7 +363,7 @@ table{border-collapse:collapse;width:100%}td{padding:6px 8px;border-bottom:1px s
 <header><div class="logo" aria-hidden="true">✓</div><div><h1>SmartTest report</h1><div class="meta">${esc(report.project)} · ${esc(report.command)} · ${esc(report.startedAt)}</div></div><span class="status ${status}" style="margin-left:auto">${esc(statusLabel)}</span></header>
 <section aria-label="Summary" class="grid">
 <div class="card"><b>${s.selected}<span> / ${s.totalTests}</span></b><span>test files selected</span></div>
-<div class="card pass"><b>${s.passed}</b><span>passed</span></div>
+<div class="card pass"><b>${s.passed}</b><span>passed</span></div>${s.cached ? `<div class="card"><b>${s.cached}</b><span>cached results — not run</span></div>` : ""}
 <div class="card fail"><b>${s.failed + s.timedOut}</b><span>failed / timed out</span></div>
 <div class="card warn"><b>${s.flaky}</b><span>flaky (passed on retry)</span></div>
 <div class="card skip"><b>${s.skippedBySelection}</b><span>skipped by selection — not run</span></div>

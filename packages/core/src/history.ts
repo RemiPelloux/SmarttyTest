@@ -30,6 +30,10 @@ export interface CommitBenchmark {
   preexisting: string[];
   /** Tests ruled out by fresh traces (only with `traces`). */
   observedSkips?: number;
+  /** Selected test files answered from the result cache. */
+  cachedTests?: number;
+  /** Cached passes that failed in the full run of the same commit (must be 0). */
+  cacheViolations?: string[];
 }
 
 export interface HistoryBenchmark {
@@ -47,6 +51,8 @@ export interface HistoryBenchmark {
     totalTests: number;
     missed: number;
     preexisting: number;
+    cachedTests: number;
+    cacheViolations: number;
   };
 }
 
@@ -56,6 +62,8 @@ export interface BenchmarkOptions {
   since?: string;
   /** Replay at most this many commits, evenly spaced. */
   sample?: number;
+  /** Use the validated result cache in SmartTest's runs (default true). */
+  cache?: boolean;
   /** Results of an earlier (possibly interrupted) run; commits already measured are not re-run. */
   previous?: readonly CommitBenchmark[];
   /** Called after each commit with the results so far (for resuming). */
@@ -206,18 +214,20 @@ export async function benchmarkHistory(
         }),
       );
       const selected = analysis.decision.selectedTests.map((t) => t.filePath);
-      const selectedPlan = planExecution(
-        selected,
-        analysis.runnerRoots,
-        engine.config.adapters,
-        analysis.assignment,
-      );
-      const [, selectedMs] = await wall(() =>
-        executeGroups(selectedPlan.groups, {
-          createAdapter: create,
-          timeoutMs: engine.config.timeoutMs,
+      // SmartTest's own run: validated cache, fail-fast order, parallel runner groups.
+      const [outcome, selectedMs] = await wall(() =>
+        engine.run({
+          analysis,
+          source: { kind: "base", ref: `${c.sha}^`, direct: true, target: c.sha },
+          formats: [],
+          ...(options.cache === false ? { cache: false } : {}),
         }),
       );
+      const fullStatus = new Map(full.files.map((f) => [f.file, f.status]));
+      const cached = outcome.report.executions
+        .filter((e) => e.status === "cached-pass")
+        .map((e) => e.file);
+      const cacheViolations = cached.filter((f) => fullStatus.get(f) !== "passed");
       // Project-gated baseline: every suite whose runner root contains a changed file.
       const changed = analysis.input.changeSet.changes.flatMap((ch) =>
         [ch.path, ch.previousPath].filter((p): p is string => !!p),
@@ -271,6 +281,8 @@ export async function benchmarkHistory(
         ...(analysis.decision.details.observedSkips
           ? { observedSkips: analysis.decision.details.observedSkips.length }
           : {}),
+        ...(cached.length ? { cachedTests: cached.length } : {}),
+        ...(cacheViolations.length ? { cacheViolations } : {}),
       });
       await options.onCommit?.(results);
       const last = results.at(-1) as CommitBenchmark;
@@ -297,6 +309,8 @@ export async function benchmarkHistory(
         totalTests: sum("totalTests"),
         missed: results.reduce((a, r) => a + r.missed.length, 0),
         preexisting: results.reduce((a, r) => a + r.preexisting.length, 0),
+        cachedTests: results.reduce((a, r) => a + (r.cachedTests ?? 0), 0),
+        cacheViolations: results.reduce((a, r) => a + (r.cacheViolations?.length ?? 0), 0),
       },
     };
   } finally {
@@ -319,7 +333,7 @@ export function benchmarkMarkdown(b: HistoryBenchmark): string {
     `| Saved by SmartTest | ${t.savedVsFullPct}% | ${t.savedVsGatedPct}% | — |`,
     `| Tests run | ${t.totalTests} | — | ${t.selectedTests} |`,
     "",
-    `**Missed failures: ${t.missed}** · failures already present in the parent commit: ${t.preexisting}`,
+    `**Missed failures: ${t.missed}** · failures already present in the parent commit: ${t.preexisting} · cached results: ${t.cachedTests ?? 0} (integrity violations: ${t.cacheViolations ?? 0})`,
     "",
     "| Commit | Changed | Selected | Full | Gated | SmartTest | Missed |",
     "|---|---|---|---|---|---|---|",

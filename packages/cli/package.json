@@ -1,6 +1,6 @@
 {
   "name": "smarttest",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "description": "The smarttest command-line interface.",
   "license": "Apache-2.0",
   "type": "module",

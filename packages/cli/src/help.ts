@@ -38,6 +38,9 @@ export const COMMANDS: Record<string, { summary: string; usage: string; flags?: 
       "--since-snapshot  compare with the latest native snapshot",
       "--coverage  collect coverage (scope: selected or full)",
       "--retries n  retry failures; a pass after retry is reported as flaky",
+      "--no-cache  run tests even when a validated cached pass exists",
+      "--shard i/n  run shard i of n (balanced by recorded durations)",
+      "--bail  stop starting runner groups after one fails",
     ],
   },
   explain: {
@@ -61,6 +64,15 @@ export const COMMANDS: Record<string, { summary: string; usage: string; flags?: 
       "--traces  trace the tests at each parent commit so selection uses observed execution",
       "-o file.md  also write the Markdown report there",
     ],
+  },
+  shard: {
+    summary: "Print the test files of one CI shard, balanced by recorded durations",
+    usage: "smarttest shard --total n --index i [--base <ref>] [--all] [--json]",
+    flags: ["the same split is used by `smarttest run --shard i/n`"],
+  },
+  flaky: {
+    summary: "Tests that pass and fail without code changes, from the recorded runs",
+    usage: "smarttest flaky [--min-rate 0.05] [--json]",
   },
   watch: {
     summary: "Rerun the tests affected by each save",

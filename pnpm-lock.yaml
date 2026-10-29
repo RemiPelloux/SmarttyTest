@@ -423,6 +423,12 @@ importers:
       '@smarttest/vcs-git':
         specifier: workspace:*
         version: link:../vcs-git
+      '@smarttest/vcs-hg':
+        specifier: workspace:*
+        version: link:../vcs-hg
+      '@smarttest/vcs-svn':
+        specifier: workspace:*
+        version: link:../vcs-svn
 
   packages/coverage-engine:
     dependencies:
@@ -658,6 +664,24 @@ importers:
         version: link:../shared
 
   packages/vcs-git:
+    dependencies:
+      '@smarttest/shared':
+        specifier: workspace:*
+        version: link:../shared
+      '@smarttest/vcs-core':
+        specifier: workspace:*
+        version: link:../vcs-core
+
+  packages/vcs-hg:
+    dependencies:
+      '@smarttest/shared':
+        specifier: workspace:*
+        version: link:../shared
+      '@smarttest/vcs-core':
+        specifier: workspace:*
+        version: link:../vcs-core
+
+  packages/vcs-svn:
     dependencies:
       '@smarttest/shared':
         specifier: workspace:*

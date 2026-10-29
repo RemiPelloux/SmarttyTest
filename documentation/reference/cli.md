@@ -18,6 +18,8 @@
 | `smarttest sync [--check]`                                      | Update the configuration after the project changed (runners, packages, Git); `--check` fails when it is out of date     |
 | `smarttest watch`                                               | Rerun the tests affected by each save                                                                                   |
 | `smarttest migrate --to vitest`                                 | Move Jest projects to Vitest, keeping SmartTest rules and history                                                       |
+| `smarttest shard --total n --index i`                           | Print one CI shard of the selection, balanced by recorded durations                                                     |
+| `smarttest flaky`                                               | Tests that flip between pass and fail in the recorded runs                                                              |
 | `smarttest trace`                                               | Record which code each test file runs (V8 coverage, one run per test file)                                              |
 | `smarttest shadow`                                              | Run the full suite next to the selection and record drift; `--report` summarises all runs                               |
 | `smarttest graph`                                               | Query or export the dependency graph                                                                                    |
@@ -71,6 +73,9 @@ Reserved for later versions ([roadmap](../planning/roadmap.md)): `studio` / `ope
 | `--workers <n>`  | Passed to the runner as `--maxWorkers`                                        |
 | `--format <f>`   | Repeatable: `html`, `json`, `junit`, `markdown` (default from config)         |
 | `--open`         | Open the HTML report                                                          |
+| `--no-cache`     | Run tests even when a validated cached pass exists                            |
+| `--shard <i/n>`  | Run shard i of n, balanced by recorded durations                              |
+| `--bail`         | Stop starting runner groups after one has a failure                           |
 
 Ctrl-C cancels the runner cleanly and reports `cancelled`.
 
@@ -130,6 +135,10 @@ Watches the project and, after each batch of saves, runs the tests those saves c
 ## `migrate`
 
 `smarttest migrate --to vitest` moves Jest projects to Vitest: `jest.*` calls become `vi.*` (`jest.requireActual` becomes `await vi.importActual`), a `vitest.config` with Jest-style globals and Jest's default test patterns is created, `jest` in package scripts becomes `vitest run`, the package.json `jest` block is removed, and SmartTest's `adapters` switch to `vitest`. Rules, durations and traces carry over (they are keyed by file). Constructs without an automatic equivalent (`done` callbacks, Jest types) are listed. `--dir <project>` limits it to one project; it does not install Vitest, it prints the command. `smarttest init --rollback` undoes it.
+
+## `shard` and `flaky`
+
+`smarttest shard --total n --index i [--base <ref>] [--all]` prints the test files of one shard (the split `run --shard i/n` uses). `smarttest flaky [--min-rate 0.05]` lists tests whose recorded results flip between pass and fail or passed only on retry, with a suggested retry rule. See [Running less, faster](../concepts/speed.md).
 
 ## `trace`
 

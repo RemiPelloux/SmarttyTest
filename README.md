@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <img alt="Status: alpha 0.7.0" src="https://img.shields.io/badge/status-alpha%200.7.0-FBBF24?style=flat-square&amp;labelColor=0E1530">
+  <img alt="Status: alpha 0.8.0" src="https://img.shields.io/badge/status-alpha%200.8.0-FBBF24?style=flat-square&amp;labelColor=0E1530">
   <a href="LICENSE"><img alt="License: Apache-2.0" src="https://img.shields.io/badge/license-Apache--2.0-8B5CF6?style=flat-square&amp;labelColor=0E1530"></a>
   <img alt="Node 22.12 or newer" src="https://img.shields.io/badge/node-22.12%2B-34D399?style=flat-square&amp;labelColor=0E1530">
   <img alt="Runners: Jest, Vitest, node:test, Playwright, Cypress" src="https://img.shields.io/badge/runners-Jest%20%7C%20Vitest%20%7C%20node%3Atest%20%7C%20Playwright%20%7C%20Cypress-22D3EE?style=flat-square&amp;labelColor=0E1530">
@@ -15,7 +15,7 @@ SmartTest runs only the tests a change can affect. It builds a dependency graph 
 
 Documentation site: [remipelloux.github.io/SmarttyTest](https://remipelloux.github.io/SmarttyTest/). It has a live example of the selection on the first screen.
 
-Status: 0.7.0 alpha. It runs in the pre-commit hook of [LeadsIt](documentation/case-studies/leadsit.md). It is not on npm yet (the package name is still being decided, [ADR-0007](documentation/architecture/adr/0007-name-license-distribution.md)). Next steps are in the [roadmap to 1.0.0](documentation/planning/roadmap.md).
+Status: 0.8.0 alpha. It runs in the pre-commit hook of [LeadsIt](documentation/case-studies/leadsit.md). It is not on npm yet (the package name is still being decided, [ADR-0007](documentation/architecture/adr/0007-name-license-distribution.md)). Next steps are in the [roadmap to 1.0.0](documentation/planning/roadmap.md).
 
 ## Usage
 
@@ -36,7 +36,7 @@ npx smarttest trace               # record which code each test runs; later sele
 npx smarttest benchmark           # replay recent commits: full run vs SmartTest, with misses checked
 ```
 
-Until the package is published, build it from this repository (see [Development](#development)) and install the tarball: `pnpm release:pack`, then `npm install -D <path>/smarttest-0.7.0.tgz`.
+Until the package is published, build it from this repository (see [Development](#development)) and install the tarball: `pnpm release:pack`, then `npm install -D <path>/smarttest-0.8.0.tgz`.
 
 ## How it works
 
@@ -83,7 +83,7 @@ Four public repositories (commander.js, path-to-regexp, ufo, defu) set up with `
 
 SmartTest saved 63% of the full-run time. It was 6% slower than the previous hook over these commits: on single-project commits the hook runs one small suite, and SmartTest's analysis time counts in full. On the 12 most recent commits, with `--traces`, it also found 0 missed failures. Details and caveats: [case study](documentation/case-studies/leadsit.md).
 
-## Features in 0.7.0
+## Features in 0.8.0
 
 | Area      | What it does                                                                                                                                                              | Commands                                                        |
 | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------- |
@@ -96,6 +96,7 @@ SmartTest saved 63% of the full-run time. It was 6% slower than the previous hoo
 | Evidence  | Reasons per test, runtime traces, unprotected changes, comparison with a full run, Shadow Mode, history replay                                                            | `explain`, `trace`, `validate-selection`, `shadow`, `benchmark` |
 | Generator | Missing test files as `it.todo` scaffolds; never overwrites                                                                                                               | `generate`                                                      |
 | Reports   | HTML, JSON, JUnit, Markdown; coverage labelled full or selected                                                                                                           | `report`, `coverage`                                            |
+| Speed     | Validated result cache (reported as cached), fail-fast order, parallel runner groups, duration-balanced shards, flaky-test history                                        | `run --shard`, `run --bail`, `shard`, `flaky`                   |
 
 What SmartTest does not do: it never reports a skipped test as passed, never treats an unresolvable import as unrelated, never presents partial coverage as project coverage, and never overwrites a file without an explicit `--yes`. A report that breaks one of these rules fails its own integrity check (exit 70).
 
@@ -105,13 +106,14 @@ Measured with `node benchmarks/run.mjs` on generated layered TypeScript reposito
 
 |                                 | 50 modules | 500 modules | 2,000 modules   | Target       |
 | ------------------------------- | ---------- | ----------- | --------------- | ------------ |
-| CLI startup                     | 70 ms      | 67 ms       | 80 ms           | under 300 ms |
-| Selection on a warm graph       | 2 ms       | 19 ms       | 67 ms           | under 200 ms |
-| Full analysis of a change, warm | 112 ms     | 371 ms      | 705 ms (missed) | under 500 ms |
-| Cold index (parse every file)   | 175 ms     | 745 ms      | 1.10 s          | under 1 s    |
-| HTML report                     | under 1 ms | 2 ms        | 7 ms            | under 2 s    |
+| CLI startup                     | 143 ms     | 111 ms      | 116 ms          | under 300 ms |
+| Selection on a warm graph       | 2 ms       | 14 ms       | 114 ms          | under 200 ms |
+| Full analysis of a change, warm | 70 ms      | 244 ms      | 884 ms (missed) | under 500 ms |
+| Graph patch after a body change | under 1 ms | under 1 ms  | under 1 ms      | under 10 ms  |
+| Cold index (parse every file)   | 127 ms     | 510 ms      | 920 ms          | under 1 s    |
+| HTML report                     | under 1 ms | 2 ms        | 16 ms           | under 2 s    |
 
-The 2,000-module repository has 4,000 files (one test per module), and a change in its middle layer reaches 975 tests. Measured in one process after the smaller sizes; run on its own, the warm analysis at 2,000 modules settles around 400 ms after the first run.
+The 2,000-module repository has 4,000 files (one test per module), and a change in its middle layer reaches 975 tests. These figures were measured while other processes kept the machine busy (load average about 18), so they are noisier than usual; on an idle machine `--version` takes about 60 ms and the warm analysis at 2,000 modules about 400 ms after the first run.
 
 ## Documentation
 

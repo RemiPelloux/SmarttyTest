@@ -32,6 +32,55 @@ function fakeAdapter(script: Record<string, ("passed" | "failed")[]>): TestAdapt
 }
 
 describe("executeGroups", () => {
+  it("runs groups in parallel within the budget, end-to-end groups alone, and bails", async () => {
+    let running = 0;
+    let peak = 0;
+    const slow = (status: "passed" | "failed"): TestAdapter => ({
+      ...fakeAdapter({}),
+      execute: async (selection) => {
+        running++;
+        peak = Math.max(peak, running);
+        await new Promise((r) => setTimeout(r, 30));
+        running--;
+        return {
+          adapter: "fake",
+          executions: selection.files.map((f) => ({
+            testId: `${f}::t`,
+            status,
+            durationMs: 1,
+            attempts: 1,
+          })),
+          startedAt: "",
+          finishedAt: "",
+        };
+      },
+    });
+    const groups = [
+      { adapter: "vitest", dir: "a", files: ["a/1.test.ts"] },
+      { adapter: "jest", dir: "b", files: ["b/1.test.js"] },
+      { adapter: "node", dir: "c", files: ["c/1.test.js"] },
+      { adapter: "playwright", dir: "e", files: ["e/1.spec.ts"] },
+    ];
+    const res = await executeGroups(groups, {
+      createAdapter: () => slow("passed"),
+      concurrency: 3,
+      exclusive: ["playwright"],
+    });
+    expect(peak).toBe(3);
+    expect(res.files.map((f) => f.status)).toEqual(["passed", "passed", "passed", "passed"]);
+    const bailed = await executeGroups(groups, {
+      createAdapter: (g) => slow(g.dir === "a" ? "failed" : "passed"),
+      concurrency: 1,
+      bail: true,
+    });
+    expect(bailed.files.map((f) => [f.file, f.status])).toEqual([
+      ["a/1.test.ts", "failed"],
+      ["b/1.test.js", "cancelled"],
+      ["c/1.test.js", "cancelled"],
+      ["e/1.spec.ts", "cancelled"],
+    ]);
+  });
+
   it("marks pass-after-retry as flaky, never plain passed", async () => {
     const adapter = fakeAdapter({
       "a.test.ts": ["failed", "passed"],

@@ -4,6 +4,22 @@ All notable changes are documented here. Releases are managed with [Changesets](
 
 ## [Unreleased]
 
+## [0.8.0] — speed
+
+### Added
+
+- Validated result cache (`cache`, default on): a passing test file is reused while its closure, traced files, runner config, manifests, lockfiles, env and setup files, snapshots, Node and runner versions are unchanged. Reported as `cached-pass` everywhere, never as passed; `--no-cache` disables it, `--all` and `--coverage` never use it. `benchmark` counts cache-integrity violations.
+- Fail-fast order (recent failures, then graph distance) and `run --bail`.
+- Parallel runner groups (`parallelGroups`, default `auto`), with Playwright and Cypress groups run alone.
+- `run --shard i/n` and `smarttest shard --total n --index i`, balanced by recorded durations.
+- Test history (`.smarttest/state/history.json`) and `smarttest flaky`.
+- Subversion and Mercurial adapters (`vcs.provider: "svn" | "hg"`, detected automatically).
+- `watch` keeps the index and graph in memory and patches the graph for body-only changes.
+
+### Changed
+
+- Graph construction appends to dependency lists instead of copying them (quadratic on modules with many importers).
+
 ## [0.7.0] — adaptation and end-to-end
 
 ### Added
