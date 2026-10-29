@@ -15,7 +15,7 @@ SmartTest runs only the tests a change can affect. It builds a dependency graph 
 
 Documentation site: [remipelloux.github.io/SmarttyTest](https://remipelloux.github.io/SmarttyTest/). It has a live example of the selection on the first screen.
 
-Status: 0.8.0 alpha. It runs in the pre-commit hook of [LeadsIt](documentation/case-studies/leadsit.md). It is not on npm yet (the package name is still being decided, [ADR-0007](documentation/architecture/adr/0007-name-license-distribution.md)). Next is 0.9.0: SmartTest Studio (a local web app) and a VS Code extension ([roadmap to 1.0.0](documentation/planning/roadmap.md), [what each version delivered](documentation/planning/delivery.md)).
+Status: 0.8.0 alpha. It runs in the pre-commit hook of [LeadsIt](documentation/case-studies/leadsit.md). It is not on npm yet (the package name is still being decided, [ADR-0007](documentation/architecture/adr/0007-name-license-distribution.md)). Next is 0.9.0: first a sprint on commit hooks (tests on exactly the staged content, pre-push mode, checks for the affected projects only), then SmartTest Studio (a local web app) and a VS Code extension ([roadmap to 1.0.0](documentation/planning/roadmap.md), [what each version delivered](documentation/planning/delivery.md)).
 
 ## Usage
 

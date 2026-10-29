@@ -6,6 +6,7 @@ All notable changes are documented here. Releases are managed with [Changesets](
 
 ### Documentation
 
+- Roadmap: 0.9.0 starts with sprint S24 on commit hooks (staged-content runs, `hook install --pre-push`, hook profile, project checks for affected projects, time budget, hook status); a "when is it usable" table.
 - Studio design brief (`documentation/design/studio.md`): users, data, jobs, one question per screen, the dealt app style and the design quality bar that is now part of the 0.9.0 gate.
 - Delivery log for 0.3.0 to 0.8.0 (sprints S11 to S23: done, partial, moved, gate results); roadmap rebased on 0.8.0 with SmartTest Studio and VS Code in 0.9.0 and the carried items in 1.0.0; risks reviewed; ADR-0008 (observed execution) and ADR-0009 (result cache); architecture, LeadsIt case study and agent instructions updated.
 
