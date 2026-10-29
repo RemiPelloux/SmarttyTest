@@ -27,7 +27,16 @@ import {
   writeReports,
 } from "@smarttest/report-engine";
 import { RulesEngine } from "@smarttest/rules-engine";
-import { diffFile, type FileSemanticDiff } from "@smarttest/semantic-diff";
+import {
+  diffCatalog,
+  diffFile,
+  diffResource,
+  type FileSemanticDiff,
+  isEnvFile,
+  isJsonCatalog,
+  isPrismaSchema,
+  type ResourceChange,
+} from "@smarttest/semantic-diff";
 import type { TestAdapter } from "@smarttest/shared";
 import {
   ExitCode,
@@ -53,6 +62,7 @@ import {
   type SetupPlan,
 } from "@smarttest/smart-init";
 import type { Analyzer, FileAnalysis } from "@smarttest/source-parser";
+import { LOCALE_PATH } from "@smarttest/source-parser";
 import { SymbolIndex, type UpdateStats } from "@smarttest/symbol-index";
 import {
   assignRunner,
@@ -448,8 +458,9 @@ export class SmartTest {
       warnings: discoveryWarnings,
     } = await this.discoverTests(index);
     const graphDiff: { file: string; added: string[]; removed: string[] }[] = [];
+    const resources = new Map<string, ResourceChange>();
     const diffs = await timed(timings, "semantic diff", () =>
-      this.semanticDiffs(input, index, graphDiff),
+      this.semanticDiffs(input, index, graphDiff, resources),
     );
     const decision = await timed(timings, "impact analysis", () =>
       decideImpact({
@@ -463,6 +474,10 @@ export class SmartTest {
         triggers: [...BUILTIN_TRIGGERS, ...this.config.triggers],
         rules: new RulesEngine(this.config.rules),
         packageOf: this.packageOf,
+        resources,
+        generated: this.config.generated
+          .filter((g) => g.policy === "rebuild-required" && g.from?.length)
+          .map((g) => ({ path: g.path, from: g.from ?? [] })),
       }),
     );
     if (graphDiff.length) decision.details.graphDiff = graphDiff;
@@ -505,10 +520,29 @@ export class SmartTest {
     input: ChangeAnalysisInput,
     index: SymbolIndex,
     graphDiff: { file: string; added: string[]; removed: string[] }[] = [],
+    resources = new Map<string, ResourceChange>(),
   ): Promise<Map<string, FileSemanticDiff>> {
     const diffs = new Map<string, FileSemanticDiff>();
     const { readFile } = await import("node:fs/promises");
     for (const change of input.changeSet.changes) {
+      // Resource files (env, Prisma schema, JSON catalogs): key-level diff.
+      if (
+        isEnvFile(change.path) ||
+        isPrismaSchema(change.path) ||
+        isJsonCatalog(change.path, LOCALE_PATH)
+      ) {
+        const beforeText =
+          change.type === "added"
+            ? undefined
+            : await input.readBefore(change.previousPath ?? change.path);
+        const afterText =
+          change.type === "deleted"
+            ? undefined
+            : await readFile(join(this.root, change.path), "utf8").catch(() => undefined);
+        const rc = diffResource(change.path, beforeText, afterText, LOCALE_PATH);
+        if (rc) resources.set(change.path, rc);
+        continue;
+      }
       if (change.type === "deleted") continue;
       const after = index.get(change.path);
       if (!after) continue;
@@ -537,6 +571,11 @@ export class SmartTest {
         beforeText !== undefined
           ? analyzer.analyze(change.previousPath ?? change.path, beforeText)
           : undefined;
+      if (after.catalogKeys || before?.catalogKeys)
+        resources.set(
+          change.path,
+          diffCatalog(change.path, before?.catalogKeys, after.catalogKeys),
+        );
       if (before) {
         before.path = change.path;
         // Graph diff: internal dependencies this change adds or removes.

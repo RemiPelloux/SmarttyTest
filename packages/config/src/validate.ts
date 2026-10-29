@@ -149,6 +149,11 @@ export function validateConfig(raw: unknown): { errors: ConfigIssue[]; warnings:
       c.generated.forEach((g, i) => {
         if (!isObj(g) || typeof g.path !== "string" || !POLICIES.includes(g.policy as string))
           err(`generated[${i}]`, `must be { path: string, policy: ${POLICIES.join(" | ")} }`);
+        else if (
+          g.from !== undefined &&
+          (!Array.isArray(g.from) || g.from.some((f) => typeof f !== "string"))
+        )
+          err(`generated[${i}].from`, "must be an array of globs");
       });
   }
   if (c.rules !== undefined) {

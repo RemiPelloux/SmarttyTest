@@ -12,6 +12,7 @@ import ts from "typescript";
 export class StaticPathEvaluator {
   private consts = new Map<string, ts.Expression>();
   private evaluating = new Set<string>();
+  private anchored = false;
 
   constructor(
     private readonly sf: ts.SourceFile,
@@ -24,6 +25,16 @@ export class StaticPathEvaluator {
         if (ts.isIdentifier(d.name) && d.initializer) this.consts.set(d.name.text, d.initializer);
       }
     }
+  }
+
+  /**
+   * Like evaluate(), but only for paths built from the file's location (`__dirname`,
+   * `import.meta.url`…). Plain strings given to `fs` are relative to the working directory.
+   */
+  evaluateAnchored(node: ts.Expression): string | undefined {
+    this.anchored = false;
+    const r = this.evaluate(node);
+    return this.anchored ? r : undefined;
   }
 
   /** A path (relative to the file's directory, may contain `*`), or undefined when nothing is known. */
@@ -55,8 +66,10 @@ export class StaticPathEvaluator {
       return (this.eval(node.left) ?? "*") + (this.eval(node.right) ?? "*");
     }
     if (ts.isIdentifier(node)) {
-      if (node.text === "__dirname") return "./";
-      if (node.text === "__filename") return `./${posix.basename(this.fileName)}`;
+      if (node.text === "__dirname" || node.text === "__filename") {
+        this.anchored = true;
+        return node.text === "__dirname" ? "./" : `./${posix.basename(this.fileName)}`;
+      }
       const init = this.consts.get(node.text);
       if (!init || this.evaluating.has(node.text)) return undefined;
       this.evaluating.add(node.text);
@@ -68,9 +81,14 @@ export class StaticPathEvaluator {
     }
     if (ts.isPropertyAccessExpression(node)) {
       const text = node.getText(this.sf);
-      if (text === "import.meta.dirname") return "./";
-      if (text === "import.meta.url" || text === "import.meta.filename")
-        return `./${posix.basename(this.fileName)}`;
+      if (
+        text === "import.meta.dirname" ||
+        text === "import.meta.url" ||
+        text === "import.meta.filename"
+      ) {
+        this.anchored = true;
+        return text === "import.meta.dirname" ? "./" : `./${posix.basename(this.fileName)}`;
+      }
       if (["href", "pathname"].includes(node.name.text)) return this.eval(node.expression);
       return undefined;
     }

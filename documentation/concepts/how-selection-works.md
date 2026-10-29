@@ -28,6 +28,22 @@ The graph holds files, symbols, tests and configuration. Its edges are `IMPORTS`
 
 Methods and accessors are units of their own. `this.tokens.verify()` is linked to `TokenManager.verify` when the class of `this.tokens` is known locally (`new X()`, `x: X`, constructor parameter properties). A change to `verify` then reaches only callers of `verify`, not every user of `TokenManager`. Values that leave a function (returned, passed, stored) or whose class cannot be inferred are linked to the whole class. Constructor, field and heritage changes affect the whole class. Inherited members resolve to the base class; `super.m()` to the base member.
 
+### Resources and conventions
+
+Some changes are not code. SmartTest links them to the code that reads them:
+
+| Change                                                                      | Selected                                                                                                                                            |
+| --------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A key in `.env*`                                                            | Code reading `process.env.KEY` or `import.meta.env.KEY` (or the whole environment). A key no code reads keeps the mandatory trigger                 |
+| A model or enum in `*.prisma`                                               | Code using `prisma.model`, `db.model`, `context.entities.Model` or the model type. Datasource/generator changes widen to the schema's directory     |
+| A key in a translation catalog                                              | Code calling `t("key")` (parent objects, plural variants and `t(\`prefix.${x}\`)`match;`t(variable)` reads any key) and tests importing the catalog |
+| A file read through `fs` with a path built from `__dirname` / `import.meta` | The function that reads it                                                                                                                          |
+| `__snapshots__/x.test.ts.snap`                                              | `x.test.ts`                                                                                                                                         |
+| `__mocks__/m.ts`                                                            | Users of `m`                                                                                                                                        |
+| A generator input listed in `generated[].from`                              | Tests of the generated outputs, with a regenerate warning                                                                                           |
+
+A test that replaces module M with a factory mock (`vi.mock("./m", () => …)`, `jest.mock` with a factory that does not load the original) never runs M. Implementation changes in M, or in modules only reached through M, do not select it. A change to what M exports still does.
+
 ## 4. Rules & safety
 
 [Rules](rules.md) add risk levels, always-run tests and mode overrides. Mandatory triggers widen the selection for changes with global impact:

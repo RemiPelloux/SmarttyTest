@@ -21,4 +21,4 @@ export * from "./primitives.js";
 export * from "./proc.js";
 export * from "./text.js";
 
-export const VERSION = "0.3.0";
+export const VERSION = "0.4.0";

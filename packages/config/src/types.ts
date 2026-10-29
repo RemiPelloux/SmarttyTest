@@ -41,8 +41,11 @@ export interface Rule {
 }
 
 export interface GeneratedPolicy {
+  /** Glob of the generated files. */
   path: string;
   policy: "exclude" | "test-source" | "rebuild-required";
+  /** Generator inputs (globs). With `rebuild-required`, a change to an input stands for a change to the outputs. */
+  from?: string[];
 }
 
 export interface SmartTestConfig {

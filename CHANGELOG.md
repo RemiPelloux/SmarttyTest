@@ -2,6 +2,19 @@
 
 All notable changes are documented here. Releases are managed with [Changesets](https://github.com/changesets/changesets). The project follows [Semantic Versioning](https://semver.org/).
 
+## [0.4.0] — complete graph
+
+### Added
+
+- Environment edges: reads of `process.env.X` / `import.meta.env.X` are linked per key. A change to one key in a `.env*` file selects the code that reads it; a key nobody reads keeps the mandatory trigger.
+- Prisma schema edges: changed models and enums select code using `prisma.<model>`, `db.<model>`, Wasp `context.entities.<Model>` or model types from `@prisma/client` / `wasp/entities`. Datasource and generator changes widen to the schema's directory (schema changes were previously ignored).
+- Translation edges: `t("key")` and `i18nKey` are linked to catalog keys in TypeScript or JSON catalogs.
+- Asset edges for files read through `fs` with paths built from `__dirname` / `import.meta`.
+- Wasp operations imported from `wasp/client/operations` / `wasp/server/operations` resolve to their implementation in `main.wasp.ts`.
+- Mock awareness: tests that replace a module with a factory mock skip its implementation changes.
+- Snapshot files select their test; `__mocks__/x` selects the users of `x`; `import.meta.glob` is an import.
+- `generated[].from` for `rebuild-required` generator inputs.
+
 ## [0.3.0] — precise graph
 
 ### Added

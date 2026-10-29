@@ -1,11 +1,13 @@
 import type { SymbolKind } from "@smarttest/shared";
 import { sha256 } from "@smarttest/shared";
 import type { FileAnalysis, ImportRecord, SymbolRecord } from "@smarttest/source-parser";
+import { LOCALE_PATH, unitOf } from "@smarttest/source-parser";
 import ts from "typescript";
 import { collectMemberUses, type MemberUses, moduleScope, thisScope } from "./member-uses.js";
+import { catalogKeys, collectResources, MODEL_MODULES } from "./resources.js";
 import { StaticPathEvaluator } from "./static-path.js";
 
-export const ANALYZER_VERSION = "ts-3";
+export const ANALYZER_VERSION = "ts-4";
 
 function scriptKind(path: string): ts.ScriptKind {
   if (path.endsWith(".tsx")) return ts.ScriptKind.TSX;
@@ -73,6 +75,28 @@ function collectRefs(node: ts.Node, out: Set<string>): void {
   visit(node);
 }
 
+/**
+ * "factory": the module is replaced by a factory that never loads it; "actual": the real module is
+ * loaded (requireActual, importActual, or a factory taking `importOriginal`); "auto": automock or
+ * spy options (the real module is evaluated); "unmock".
+ */
+function mockKind(
+  name: string,
+  second: ts.Expression | undefined,
+): "factory" | "auto" | "actual" | "unmock" {
+  if (name === "requireActual" || name === "importActual") return "actual";
+  if (name === "unmock") return "unmock";
+  if (!second) return "auto";
+  if (ts.isArrowFunction(second) || ts.isFunctionExpression(second)) {
+    if (second.parameters.length) return "actual";
+    const text = second.body.getText();
+    return /\b(requireActual|importActual|importOriginal|require\s*\()/.test(text)
+      ? "actual"
+      : "factory";
+  }
+  return "auto";
+}
+
 function range(node: ts.Node, sf: ts.SourceFile) {
   const start = sf.getLineAndCharacterOfPosition(node.getStart(sf));
   const end = sf.getLineAndCharacterOfPosition(node.getEnd());
@@ -126,10 +150,12 @@ export function analyzeSource(path: string, content: string): FileAnalysis {
   const topTokens: string[] = [];
   const dynamicUnresolved: string[] = [];
   const dynamicHints: { pattern: string; line: number; expr: string }[] = [];
+  const assetLines: { pattern: string; line: number }[] = [];
   const pathEval = new StaticPathEvaluator(sf, path);
   const modScope = moduleScope(sf);
   const topUses = new Set<string>();
   const topEscapes = new Set<string>();
+  const topResources = new Set<string>();
   let esm = false;
   let cjs = false;
   const lineOf = (n: ts.Node) => sf.getLineAndCharacterOfPosition(n.getStart(sf)).line;
@@ -175,6 +201,8 @@ export function analyzeSource(path: string, content: string): FileAnalysis {
     if (mu.escapes.length) rec.escapes = mu.escapes.filter((e) => e !== name || !!opts.parent);
     if (mu.thisUses.length) rec.thisUses = mu.thisUses;
     if (mu.superUses.length) rec.superUses = mu.superUses;
+    const res = collectResources(node);
+    if (res.length) rec.resources = res;
     symbols.push(rec);
     return rec;
   };
@@ -517,6 +545,7 @@ export function analyzeSource(path: string, content: string): FileAnalysis {
     const tu = collectMemberUses(stmt, modScope);
     for (const u of tu.uses) topUses.add(u);
     for (const e of tu.escapes) topEscapes.add(e);
+    for (const r of collectResources(stmt)) topResources.add(r);
     topTokens.push(tokenHash(stmt.getText(sf), jsx));
     const text = stmt.getText(sf);
     if (/\b(?:module\.exports|exports\.[A-Za-z_$])/.test(text)) cjs = true;
@@ -542,19 +571,59 @@ export function analyzeSource(path: string, content: string): FileAnalysis {
         )
           kind = "mock";
       }
+      // Vite's import.meta.glob("./dir/*.ts" | [...]) imports every matching file.
+      if (
+        ts.isPropertyAccessExpression(callee) &&
+        callee.name.text === "glob" &&
+        ts.isMetaProperty(callee.expression) &&
+        arg
+      ) {
+        const patterns = ts.isArrayLiteralExpression(arg) ? [...arg.elements] : [arg];
+        for (const p of patterns) {
+          const expr = `line ${lineOf(n) + 1}: ${n.getText(sf).slice(0, 80)}`;
+          if (ts.isStringLiteralLike(p) && !p.text.startsWith("!") && !p.text.startsWith("/"))
+            dynamicHints.push({ pattern: p.text.replace(/^\.\//, ""), line: lineOf(n), expr });
+          else if (!(ts.isStringLiteralLike(p) && p.text.startsWith("!")))
+            dynamicUnresolved.push(expr);
+        }
+      }
+      // fs reads with a path built from the file's location become asset edges
+      const calleeName = ts.isIdentifier(callee)
+        ? callee.text
+        : ts.isPropertyAccessExpression(callee)
+          ? callee.name.text
+          : "";
+      if (
+        !kind &&
+        arg &&
+        [
+          "readFile",
+          "readFileSync",
+          "createReadStream",
+          "readJson",
+          "readJSON",
+          "readJsonSync",
+        ].includes(calleeName)
+      ) {
+        const pattern = pathEval.evaluateAnchored(arg);
+        if (pattern) assetLines.push({ pattern, line: lineOf(n) });
+      }
       if (kind) {
         if (literal !== undefined) {
           const key = `${kind}:${literal}:${lineOf(n)}`;
           const already = [...seen].some((k) => k.endsWith(`:${literal}:${lineOf(n)}`));
           if (!already) {
             seen.add(key);
+            const mockName =
+              kind === "mock" && ts.isPropertyAccessExpression(callee) ? callee.name.text : "";
             imports.push({
               specifier: literal,
               kind,
               bindings: [],
               typeOnly: false,
               line: lineOf(n),
-            });
+              ...(kind === "mock" ? { mock: mockKind(mockName, n.arguments[1]) } : {}),
+            } as ImportRecord);
           }
           if (kind === "require") cjs = true;
         } else if (kind === "dynamic" || kind === "require") {
@@ -572,6 +641,36 @@ export function analyzeSource(path: string, content: string): FileAnalysis {
 
   const parseErrors =
     (sf as unknown as { parseDiagnostics?: unknown[] }).parseDiagnostics?.length ?? 0;
+
+  // Model types imported from the Prisma client / Wasp entities are model resources.
+  const modelLocals = new Map<string, string>();
+  for (const imp of imports)
+    if (MODEL_MODULES.has(imp.specifier))
+      for (const b of imp.bindings)
+        if (/^[A-Z]/.test(b.imported)) modelLocals.set(b.local, b.imported);
+  if (modelLocals.size) {
+    const addModels = (refs: readonly string[], into: Set<string>) => {
+      for (const r of refs) {
+        const m = modelLocals.get(r);
+        if (m) into.add(`model:${m}`);
+      }
+    };
+    for (const s of symbols) {
+      const res = new Set(s.resources ?? []);
+      addModels(s.refs, res);
+      if (res.size) s.resources = [...res].sort();
+    }
+    addModels([...topRefs], topResources);
+  }
+  // Asset reads are attributed to the innermost declaration around them.
+  const assetReads = assetLines.map((h) => {
+    let best: SymbolRecord | undefined;
+    for (const s of symbols)
+      if (s.range.start.line <= h.line && h.line <= s.range.end.line && (!best || s.parent))
+        best = s;
+    return { pattern: h.pattern, line: h.line, unit: best ? unitOf(best) : "*" };
+  });
+  const catalog = LOCALE_PATH.test(path) ? catalogKeys(sf, hash) : undefined;
   const importsKey = imports
     .map(
       (i) =>
@@ -590,10 +689,13 @@ export function analyzeSource(path: string, content: string): FileAnalysis {
     topLevelRefs: [...topRefs].sort(),
     ...(topUses.size ? { topLevelUses: [...topUses].sort() } : {}),
     ...(topEscapes.size ? { topLevelEscapes: [...topEscapes].sort() } : {}),
+    ...(topResources.size ? { topLevelResources: [...topResources].sort() } : {}),
     topLevelHash: hash(topTokens.join("|")),
     importsHash: hash(importsKey),
     dynamicUnresolved,
     ...(dynamicHints.length ? { dynamicHints } : {}),
+    ...(assetReads.length ? { assetReads } : {}),
+    ...(catalog ? { catalogKeys: catalog } : {}),
     parseErrors,
     analyzerVersion: ANALYZER_VERSION,
   };

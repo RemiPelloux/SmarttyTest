@@ -7,7 +7,7 @@
 
 import type { DependencyGraph, Seed } from "@smarttest/dependency-graph";
 import { type RulesEngine, strictestMode } from "@smarttest/rules-engine";
-import type { FileSemanticDiff } from "@smarttest/semantic-diff";
+import type { FileSemanticDiff, ResourceChange } from "@smarttest/semantic-diff";
 import type {
   ChangeSet,
   ImpactDecision,
@@ -31,6 +31,10 @@ export interface ImpactInput {
   triggers: readonly string[];
   rules: RulesEngine;
   packageOf?: (path: string) => string | undefined;
+  /** Key-level changes of resource files (env, Prisma schema, translation catalogs). */
+  resources?: ReadonlyMap<string, ResourceChange>;
+  /** Generated outputs (`path` glob) and the generator inputs they are built from. */
+  generated?: readonly { path: string; from: readonly string[] }[];
 }
 
 export interface TriggerHit {
@@ -94,32 +98,109 @@ export function decideImpact(input: ImpactInput): ImpactResult {
     return finish();
   }
 
-  // 2. Mandatory triggers (cannot be disabled by rules).
+  /** Selects every test under a directory or depending on a file under it. */
+  const selectScope = (scope: string, reason: SelectionReason) => {
+    if (scope === "") return selectAll(reason);
+    reasons.push(reason);
+    for (const t of allTests) {
+      if (inDir(t, scope) || [...graph.dependenciesOf(t)].some((d) => inDir(d, scope)))
+        select(t, reason);
+    }
+  };
+  const resourceSeeded = new Set<string>();
+  /** Seeds readers of changed resource keys; returns the keys nobody reads. */
+  const seedResources = (rc: ResourceChange): string[] => {
+    const { seed, unmatched } = graph.resourceSeeds(rc.kind, rc.keys);
+    if (seed) details.seeds.push(seed);
+    resourceSeeded.add(rc.file);
+    return unmatched;
+  };
+
+  // 2. Mandatory triggers (cannot be disabled by rules). An environment file whose changed keys
+  // are all read by analysed code selects those readers instead.
   for (const change of changeSet.changes) {
     for (const path of [change.path, change.previousPath].filter((p): p is string => !!p)) {
       const pattern = input.triggers.find((t) => matchGlob(path, t));
       if (!pattern) continue;
+      const rc = input.resources?.get(path);
+      if (rc?.kind === "env" && change.type === "modified") {
+        const { unmatched } = graph.resourceSeeds("env", rc.keys);
+        if (!unmatched.length) {
+          seedResources(rc);
+          details.ignored.push(
+            `${path} (keys ${rc.keys.join(", ") || "none"}; readers selected instead of trigger)`,
+          );
+          continue;
+        }
+      }
       const scope = dirOf(path);
       details.triggers.push({ file: path, pattern, scope });
       const reason: SelectionReason = {
         kind: "mandatory-trigger",
         message: `${path} changed (mandatory trigger ${pattern})${scope ? ` — scope ${scope}/` : ""}`,
       };
-      if (scope === "") selectAll(reason);
-      else {
-        reasons.push(reason);
-        for (const t of allTests) {
-          if (inDir(t, scope) || [...graph.dependenciesOf(t)].some((d) => inDir(d, scope)))
-            select(t, reason);
-        }
-      }
+      selectScope(scope, reason);
     }
   }
 
   // 3. Seeds from changed files.
   for (const change of changeSet.changes) {
     const path = change.path;
-    if (details.triggers.some((t) => t.file === path)) continue;
+    if (details.triggers.some((t) => t.file === path) || resourceSeeded.has(path)) continue;
+    // Generated outputs: a generator input change stands for its outputs (rebuild required).
+    const gens = (input.generated ?? []).filter((g) => g.from.some((f) => matchGlob(path, f)));
+    if (gens.length) {
+      for (const g of gens) {
+        const outputs = [...input.files.keys()].filter((f) => matchGlob(f, g.path));
+        warnings.push(
+          `${path} changed: regenerate ${g.path} before running tests (rebuild-required)`,
+        );
+        if (outputs.length) for (const o of outputs) details.seeds.push({ file: o, units: ["*"] });
+        else
+          selectScope(dirOf(path), {
+            kind: "fallback",
+            message: `${path} generates ${g.path}, which is not analysed — scope ${dirOf(path) || "."}/`,
+          });
+      }
+      continue;
+    }
+    const rc = input.resources?.get(path);
+    if (rc && rc.kind !== "i18n") {
+      const unmatched = seedResources(rc);
+      if (unmatched.length)
+        details.ignored.push(`${path}: ${unmatched.join(", ")} (not read by analysed code)`);
+      if (rc.global)
+        selectScope(dirOf(path), {
+          kind: "fallback",
+          message: `${path}: datasource/generator settings changed — scope ${dirOf(path) || "."}/`,
+        });
+      continue;
+    }
+    if (rc) seedResources(rc); // translations: key readers, plus the catalog's own importers below
+    // Snapshot files belong to their test; manual mocks to the module they replace.
+    const snap = /^(.*\/)?__snapshots__\/(.+)\.snap$/.exec(path);
+    if (snap) {
+      const test = `${snap[1] ?? ""}${snap[2]}`;
+      if (allTests.includes(test))
+        select(test, { kind: "test-file-changed", message: `Snapshot ${path} changed` });
+      else details.ignored.push(`${path} (snapshot of an unknown test)`);
+      continue;
+    }
+    const mock = /^(.*?)(?:^|\/)__mocks__\/(.+)$/.exec(path);
+    if (mock) {
+      const dir = mock[1] ?? "";
+      const stem = (mock[2] as string).replace(/\.[cm]?[jt]sx?$/, "");
+      const real = [...input.files.keys()].find(
+        (f) => f.replace(/\.[cm]?[jt]sx?$/, "") === (dir ? `${dir}/${stem}` : stem) && !isTest(f),
+      );
+      if (real) details.seeds.push({ file: real, units: ["*"] });
+      else
+        selectScope(dir, {
+          kind: "fallback",
+          message: `Manual mock ${path} changed (mocks a dependency) — scope ${dir || "."}/`,
+        });
+      continue;
+    }
     if (isTest(path)) {
       if (change.type !== "deleted")
         select(path, { kind: "test-file-changed", message: `Test file ${change.type}` });
@@ -143,8 +224,15 @@ export function decideImpact(input: ImpactInput): ImpactResult {
           continue;
         }
       }
-      if (diff.units.length) details.seeds.push({ file: path, units: diff.units });
-      else if (!diff.trivialOnly) details.seeds.push({ file: path, units: ["*"] });
+      const signature = diff.changes.some((c) =>
+        ["signature", "exported-api", "interface", "unclassifiable"].includes(c.kind),
+      );
+      const flags = {
+        ...(signature ? { signature } : {}),
+        ...(rc ? { referencesOnly: true } : {}),
+      };
+      if (diff.units.length) details.seeds.push({ file: path, units: diff.units, ...flags });
+      else if (!diff.trivialOnly) details.seeds.push({ file: path, units: ["*"], ...flags });
       else
         details.seeds.push({
           file: path,
@@ -163,11 +251,17 @@ export function decideImpact(input: ImpactInput): ImpactResult {
       details.seeds.push({ file: path, units: ["*"] });
       continue;
     }
-    // A non-source file referenced by analysed code (json, css…) is still tracked through the graph.
-    const traversal = graph.dependentsOf([{ file: path, units: ["*"] }]);
+    // A non-source file referenced by analysed code (json, css…) is still tracked through the graph,
+    // and so are files read through fs with a path built from the reader's location.
+    const readers = graph.assetReaders(path);
+    details.seeds.push(...readers);
+    const traversal = graph.dependentsOf([
+      { file: path, units: ["*"], ...(rc ? { referencesOnly: true } : {}) },
+    ]);
     if (traversal.affectedFiles.size > 1 || traversal.tests.size)
-      details.seeds.push({ file: path, units: ["*"] });
-    else details.ignored.push(`${path} (not part of the analysed sources)`);
+      details.seeds.push({ file: path, units: ["*"], ...(rc ? { referencesOnly: true } : {}) });
+    else if (!readers.length && !rc)
+      details.ignored.push(`${path} (not part of the analysed sources)`);
   }
 
   // 4. Traverse the graph.

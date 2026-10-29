@@ -1,0 +1,65 @@
+{
+  "runners": [
+    "vitest"
+  ],
+  "vcs": "git",
+  "testFiles": 15,
+  "mutations": [
+    {
+      "file": ".env.test",
+      "find": "FEATURE=1",
+      "replace": "FEATURE=0",
+      "expectFailing": [
+        "tests/feature.test.ts"
+      ]
+    },
+    {
+      "file": "templates/welcome.txt",
+      "find": "Welcome",
+      "replace": "Hi",
+      "expectFailing": [
+        "tests/welcome.test.ts"
+      ]
+    },
+    {
+      "file": "src/locales/en/common.ts",
+      "find": "\"Hello\"",
+      "replace": "\"Hi\"",
+      "expectFailing": [
+        "tests/greet.test.ts"
+      ]
+    },
+    {
+      "file": "src/ops/getTotal.ts",
+      "find": "sum + i.price",
+      "replace": "sum - i.price",
+      "expectFailing": [
+        "tests/cart.test.ts"
+      ]
+    },
+    {
+      "file": "tests/__snapshots__/format.test.ts.snap",
+      "find": "HI!",
+      "replace": "HEY!",
+      "expectFailing": [
+        "tests/format.test.ts"
+      ]
+    },
+    {
+      "file": "src/__mocks__/mailer.ts",
+      "find": "mock sent",
+      "replace": "mock mailed",
+      "expectFailing": [
+        "tests/notify.test.ts"
+      ]
+    },
+    {
+      "file": "src/stats.ts",
+      "find": "/ xs.length",
+      "replace": "* xs.length",
+      "expectFailing": [
+        "tests/stats.test.ts"
+      ]
+    }
+  ]
+}

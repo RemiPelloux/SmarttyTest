@@ -34,6 +34,8 @@ export interface ImportRecord {
   unresolved?: string;
   /** The resolved target used to exist but was deleted. */
   missing?: boolean;
+  /** For `vi.mock` / `jest.mock` family calls. */
+  mock?: "factory" | "auto" | "actual" | "unmock";
 }
 
 export interface SymbolRecord {
@@ -61,6 +63,8 @@ export interface SymbolRecord {
   superUses?: string[];
   /** Classes: token hash of the class with method/constructor bodies removed. */
   shellHash?: string;
+  /** Non-code resources read: "env:NAME", "env:*", "model:Name", "i18n:key". */
+  resources?: string[];
   visibility?: "public" | "protected" | "private";
   extends?: string;
   implements?: string[];
@@ -78,12 +82,17 @@ export interface FileAnalysis {
   /** Member-level uses and escapes of module-level code. */
   topLevelUses?: string[];
   topLevelEscapes?: string[];
+  topLevelResources?: string[];
   topLevelHash: string;
   importsHash: string;
   /** Descriptions of non-literal dynamic imports/requires — sources of uncertainty. */
   dynamicUnresolved: string[];
   /** Computed import paths evaluated statically (relative to the file's dir; may contain *). */
   dynamicHints?: { pattern: string; line: number; expr: string }[];
+  /** Files read through fs with a path built from the file's location (relative to its directory). */
+  assetReads?: { pattern: string; line: number; unit: string }[];
+  /** Translation catalogs: flattened key path → value hash. */
+  catalogKeys?: Record<string, string>;
   /** Derived at resolution time: project files the hints point to. */
   dynamicTargets?: string[];
   /** Derived at resolution time: hints that matched no project file (still uncertainty). */
@@ -141,3 +150,6 @@ export function rangesOverlap(a: SourceRange, b: SourceRange): boolean {
 }
 
 export const SOURCE_FILE = /\.(?:[cm]?[jt]sx?)$/;
+
+/** Files treated as translation catalogs when they only hold data. */
+export const LOCALE_PATH = /(^|\/)(locales?|i18n|lang|langs|translations|messages)\//;

@@ -254,3 +254,5 @@ function hasCommentDelta(
     stripComments(bt) === stripComments(at) && bt.replace(/\s+/g, "") !== at.replace(/\s+/g, "")
   );
 }
+
+export * from "./resources.js";

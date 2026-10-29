@@ -6,6 +6,7 @@
  *   file#C.m        a class member (method, accessor, property)
  *   file#C.@init    construction of C (constructor, field initializers, heritage)
  *   file#*          the whole file (module-level code, side-effect imports, tests)
+ *   @resource#k:v   a non-code resource: "env:NAME", "model:Name", "i18n:key" (`*` = any key)
  *
  * An edge points from a dependent key to what it depends on. Member-level edges come from the
  * analyzer's member uses; anything less precise (escapes, unknown members, non-class targets)
@@ -13,17 +14,39 @@
  * of C) are affected by any change to any member of C.
  */
 import type { Confidence, GraphEdge, GraphNode, Provenance } from "@smarttest/shared";
+import { matchGlob } from "@smarttest/shared";
 import type { FileAnalysis, SymbolRecord } from "@smarttest/source-parser";
 import { topLevelSymbols } from "@smarttest/source-parser";
 
 export const WHOLE = "*";
 const ANY = "@any";
 const INIT = "@init";
+export const RESOURCE = "@resource";
+/** Framework modules whose exports are the project's own operations (Wasp). */
+const WASP_OPERATION_MODULES = new Set(["wasp/client/operations", "wasp/server/operations"]);
+
+/**
+ * Whether a translation key read in code (`t("nav.about")`, `t("auth:login")`, `t(`nav.${x}`)`)
+ * is affected by a changed catalog key ("auth.login.title"). Readers of a parent object or a
+ * plural/context variant (`item` for `item_one`) match too.
+ */
+export function i18nKeyMatches(reader: string, changed: string): boolean {
+  const r = reader.replace(":", ".");
+  const candidates = [changed];
+  const dot = changed.indexOf(".");
+  if (dot > 0) candidates.push(changed.slice(dot + 1)); // without namespace
+  if (r.endsWith("*")) return candidates.some((c) => c.startsWith(r.slice(0, -1)));
+  return candidates.some((c) => c === r || c.startsWith(`${r}.`) || c.startsWith(`${r}_`));
+}
 
 export interface Seed {
   file: string;
   /** Units: "*" (whole file), "X" (top-level symbol / whole class), "C.m" (member). */
   units: string[];
+  /** The change alters what the file exports (names, signatures), not only behaviour. */
+  signature?: boolean;
+  /** Follow only symbol references out of this file (data catalogs read through resource keys). */
+  referencesOnly?: boolean;
 }
 
 export interface TestHit {
@@ -76,6 +99,11 @@ export class DependencyGraph {
   readonly deletedFiles = new Set<string>();
   private edgeCount = 0;
   private memberEdgeCount = 0;
+  private resourceKeys = new Set<string>();
+  private assetReads: { pattern: string; from: string }[] = [];
+  /** Files a test replaces with a factory mock (`vi.mock("./m", () => …)`): never loaded there. */
+  private factoryMocks = new Map<string, Set<string>>();
+  private waspOps = new Map<string, Map<string, { file: string; unit: string }>>();
 
   constructor(
     private readonly files: ReadonlyMap<string, FileAnalysis>,
@@ -163,6 +191,14 @@ export class DependencyGraph {
       const a = this.files.get(file);
       if (a) {
         for (const imp of a.imports) {
+          if (!imp.resolved && WASP_OPERATION_MODULES.has(imp.specifier)) {
+            const ops = this.waspOperationsFor(file);
+            for (const b of imp.bindings) {
+              const op = ops?.get(b.imported);
+              if (op) cache.set(b.local, op);
+            }
+            continue;
+          }
           if (!imp.resolved || imp.kind === "reexport" || imp.kind === "reexport-all") continue;
           for (const b of imp.bindings) {
             if (b.imported === "*") cache.set(b.local, { file: imp.resolved, namespace: true });
@@ -197,6 +233,37 @@ export class DependencyGraph {
     if (!t || "namespace" in t || t.unit === WHOLE) return undefined;
     if (this.topSymbol(t.file, t.unit)?.kind !== "class") return undefined;
     return this.memberKey(t.file, t.unit, member, seen);
+  }
+
+  /** Operations declared by the Wasp spec (`main.wasp.ts`) of the app containing a file. */
+  private waspOperationsFor(file: string): Map<string, { file: string; unit: string }> | undefined {
+    let best: string | undefined;
+    for (const dir of this.waspOps.keys())
+      if (
+        (dir === "" || file.startsWith(`${dir}/`)) &&
+        (best === undefined || dir.length > best.length)
+      )
+        best = dir;
+    return best === undefined ? undefined : this.waspOps.get(best);
+  }
+
+  private collectWaspSpecs(): void {
+    for (const [file, a] of this.files) {
+      if (!/(^|\/)main\.wasp\.(ts|js|mts)$/.test(file)) continue;
+      const dir = file.includes("/") ? file.slice(0, file.lastIndexOf("/")) : "";
+      const ops = new Map<string, { file: string; unit: string }>();
+      for (const imp of a.imports) {
+        if (!imp.resolved) continue;
+        for (const b of imp.bindings) {
+          if (b.imported === "*") continue;
+          ops.set(
+            b.local,
+            this.resolveExport(imp.resolved, b.imported) ?? { file: imp.resolved, unit: WHOLE },
+          );
+        }
+      }
+      this.waspOps.set(dir, ops);
+    }
   }
 
   // ── build ───────────────────────────────────────────────────────────────────────────────
@@ -276,9 +343,42 @@ export class DependencyGraph {
     }
   }
 
+  private linkResources(from: string, resources: readonly string[] | undefined): void {
+    for (const r of resources ?? []) {
+      this.resourceKeys.add(r);
+      this.addDep(key(RESOURCE, r), {
+        from,
+        kind: "REFERENCES",
+        provenance: "static",
+        confidence: "high",
+      });
+    }
+  }
+
   private build(): void {
+    this.collectWaspSpecs();
     for (const [file, a] of this.files) {
       const test = this.isTest(file);
+      const dir = file.includes("/") ? file.slice(0, file.lastIndexOf("/") + 1) : "";
+      for (const r of a.assetReads ?? []) {
+        const pattern = posixNormalize(`${dir}${r.pattern}`);
+        if (!pattern.startsWith(".."))
+          this.assetReads.push({ pattern, from: key(file, test ? WHOLE : r.unit) });
+      }
+      if (test) {
+        const actual = new Set(
+          a.imports
+            .filter((i) => i.mock === "actual" || i.mock === "unmock")
+            .map((i) => i.resolved),
+        );
+        const mocked = a.imports
+          .filter(
+            (i) =>
+              i.kind === "mock" && i.mock === "factory" && i.resolved && !actual.has(i.resolved),
+          )
+          .map((i) => i.resolved as string);
+        if (mocked.length) this.factoryMocks.set(file, new Set(mocked));
+      }
       const fwd = new Set<string>();
       this.forward.set(file, fwd);
       const unc: string[] = [...a.dynamicUnresolved.map((d) => `dynamic import/require (${d})`)];
@@ -337,6 +437,7 @@ export class DependencyGraph {
           ? key(file, WHOLE)
           : key(file, s.parent ? `${s.parent}.${s.name}` : s.qualifiedName);
         this.link(file, from, s.refs, s.uses ?? [], s.escapes ?? [], kind);
+        this.linkResources(from, s.resources);
         if (s.parent && !test) {
           for (const m of s.thisUses ?? []) {
             const mk = this.memberKey(file, s.parent, m);
@@ -401,6 +502,7 @@ export class DependencyGraph {
         a.topLevelEscapes ?? (hasMemberInfo ? [] : a.topLevelRefs),
         kind,
       );
+      this.linkResources(key(file, WHOLE), a.topLevelResources);
     }
   }
 
@@ -411,6 +513,50 @@ export class DependencyGraph {
       memberEdges: this.memberEdgeCount,
       uncertainFiles: this.uncertainty.size,
     };
+  }
+
+  /**
+   * Seeds for changed resource keys. Keys nobody reads specifically are returned as `unmatched`
+   * (readers of "any key", such as code passing `process.env` around, are still seeded).
+   */
+  resourceSeeds(
+    kind: string,
+    keys: readonly string[],
+  ): { seed: Seed | undefined; unmatched: string[] } {
+    const units = new Set<string>();
+    const unmatched: string[] = [];
+    const wildcard = `${kind}:*`;
+    for (const k of keys) {
+      let hit = false;
+      for (const r of this.resourceKeys) {
+        if (r === wildcard || !r.startsWith(`${kind}:`)) continue;
+        const reader = r.slice(kind.length + 1);
+        if (kind === "i18n" ? i18nKeyMatches(reader, k) : reader === k) {
+          units.add(r);
+          hit = true;
+        }
+      }
+      if (!hit) unmatched.push(k);
+    }
+    if (keys.length && this.resourceKeys.has(wildcard)) units.add(wildcard);
+    return {
+      seed: units.size ? { file: RESOURCE, units: [...units].sort() } : undefined,
+      unmatched,
+    };
+  }
+
+  /** Units that read a non-source file through `fs` (fixtures, templates, SQL…). */
+  assetReaders(path: string): Seed[] {
+    const byFile = new Map<string, Set<string>>();
+    for (const r of this.assetReads) {
+      if (r.pattern === path || (r.pattern.includes("*") && matchGlob(path, r.pattern))) {
+        const [file, unit] = splitKey(r.from);
+        const set = byFile.get(file) ?? new Set();
+        set.add(unit);
+        byFile.set(file, set);
+      }
+    }
+    return [...byFile].map(([file, units]) => ({ file, units: [...units] }));
   }
 
   hasFile(file: string): boolean {
@@ -466,8 +612,40 @@ export class DependencyGraph {
 
   // ── traversal ───────────────────────────────────────────────────────────────────────────
 
-  /** Reverse traversal from changed units to everything that depends on them (cycle-safe BFS). */
+  /**
+   * Reverse traversal from changed units to everything that depends on them (cycle-safe BFS).
+   * A test that replaces a module with a factory mock never runs that module's code, so paths
+   * through it do not count for that test (unless the seed changes the module's signature).
+   */
   dependentsOf(seeds: readonly Seed[]): TraversalResult {
+    const result = this.traverse(seeds, new Set());
+    if (!this.factoryMocks.size) return result;
+    const rerun = new Map<string, TraversalResult>();
+    for (const [test, hit] of [...result.tests]) {
+      const mocked = this.factoryMocks.get(test);
+      if (!mocked || !hit.files.some((f) => mocked.has(f))) continue;
+      const blocked = new Set(
+        [...mocked].filter((m) => !seeds.some((s) => s.file === m && s.signature)),
+      );
+      if (!hit.files.some((f) => blocked.has(f))) continue;
+      const cacheKey = [...blocked].sort().join("|");
+      let r = rerun.get(cacheKey);
+      if (!r) {
+        r = this.traverse(seeds, blocked);
+        rerun.set(cacheKey, r);
+      }
+      const alt = r.tests.get(test);
+      if (alt) result.tests.set(test, alt);
+      else result.tests.delete(test);
+    }
+    return result;
+  }
+
+  private traverse(
+    seeds: readonly Seed[],
+    blocked: ReadonlySet<string>,
+  ): TraversalResult & { tests: Map<string, TestHit & { files: string[] }> } {
+    const referencesOnly = new Set(seeds.filter((s) => s.referencesOnly).map((s) => s.file));
     const parent = new Map<string, { from: string | undefined; confidence: Confidence }>();
     const queue: string[] = [];
     let head = 0;
@@ -480,11 +658,12 @@ export class DependencyGraph {
     for (const s of seeds)
       for (const u of s.units.length ? s.units : [WHOLE]) push(key(s.file, u), undefined);
 
-    const tests = new Map<string, TestHit>();
+    const tests = new Map<string, TestHit & { files: string[] }>();
     const affectedFiles = new Set<string>();
     const affectedUnits = new Set<string>();
     const label = (k: string) => {
       const [file, unit] = splitKey(k);
+      if (file === RESOURCE) return unit;
       return unit === WHOLE || unit === ANY
         ? file
         : `${file}#${unit.replace(`.${INIT}`, ".constructor")}`;
@@ -514,21 +693,31 @@ export class DependencyGraph {
       if (this.isTest(file)) {
         if (!tests.has(file)) {
           const path = pathOfKey(k);
+          const files: string[] = [];
+          for (let c = parent.get(k)?.from; c !== undefined; c = parent.get(c)?.from)
+            files.push(splitKey(c)[0]);
           tests.set(file, {
             test: file,
             path,
             depth: path.length - 1,
             confidence: parent.get(k)?.confidence ?? "high",
+            files,
           });
         }
         continue;
       }
+      if (blocked.has(file)) continue;
       affectedUnits.add(k);
       const a = this.files.get(file);
+      if (file === RESOURCE) {
+        pushDeps(k, k);
+        continue;
+      }
       if (unit === WHOLE) {
         for (const s of a ? topLevelSymbols(a) : []) push(key(file, s.qualifiedName), k);
         pushDeps(k, k);
-        for (const importer of this.moduleDependents.get(file) ?? []) push(importer, k);
+        if (!referencesOnly.has(file))
+          for (const importer of this.moduleDependents.get(file) ?? []) push(importer, k);
       } else if (unit === ANY) {
         // only file-level dependents and re-exporters below
       } else if (unit.includes(".")) {
@@ -543,7 +732,13 @@ export class DependencyGraph {
         }
         pushDeps(k, k);
       }
-      for (const d of this.fileDependents.get(file) ?? []) push(d.from, k, d.confidence);
+      for (const d of this.fileDependents.get(file) ?? [])
+        if (
+          !referencesOnly.has(file) ||
+          d.confidence === "high" ||
+          this.isTest(splitKey(d.from)[0])
+        )
+          push(d.from, k, d.confidence);
       for (const g of this.reexporters.get(file) ?? []) push(key(g, ANY), k);
     }
     return {
@@ -674,4 +869,14 @@ export class DependencyGraph {
     lines.push("}");
     return lines.join("\n");
   }
+}
+
+function posixNormalize(p: string): string {
+  const out: string[] = [];
+  for (const part of p.split("/")) {
+    if (part === "" || part === ".") continue;
+    if (part === ".." && out.length && out[out.length - 1] !== "..") out.pop();
+    else out.push(part);
+  }
+  return out.join("/");
 }

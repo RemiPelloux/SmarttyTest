@@ -14,17 +14,17 @@ Planning is in story points. One sprint is about 40 points. Each version has an 
 
 ## Overview
 
-| Version | Theme              | Points | Gate                                                                              |
-| ------- | ------------------ | ------ | --------------------------------------------------------------------------------- |
-| 0.3.0   | Precise graph      | 96     | Method-level selection on the fixtures and LeadsIt, 0 missed failures             |
-| 0.4.0   | Complete graph     | 92     | Config, env, assets, framework and schema changes select only their readers       |
-| 0.5.0   | Runtime evidence   | 71     | Observed edges reduce selection by 20% or more, with Shadow Mode at 0 misses      |
-| 0.6.0   | Adoption           | 66     | Installed from npm and adopted in five external repositories without config edits |
-| 0.7.0   | Adaptation and E2E | 76     | Projects that change shape stay correct; Playwright and Cypress selection         |
-| 0.8.0   | Speed              | 79     | 30% less test time than 0.7 on the benchmark repositories                         |
-| 0.9.0   | Interfaces         | 76     | Studio and VS Code cover run, explain, impact and coverage                        |
-| 1.0.0   | Stable             | 52     | Frozen contracts, published benchmarks, security review                           |
-|         | Total              | 608    | About 15 sprints                                                                  |
+| Version | Theme              | Points | Gate                                                                                            |
+| ------- | ------------------ | ------ | ----------------------------------------------------------------------------------------------- |
+| 0.3.0   | Precise graph      | 83     | Released (13 pts moved to 0.8.0): member-level selection, CommonJS symbols, graph queries       |
+| 0.4.0   | Complete graph     | 84     | Released (8 pts moved to 0.7.0): env, asset, Wasp, Prisma, translation, mock and snapshot edges |
+| 0.5.0   | Runtime evidence   | 71     | Observed edges reduce selection by 20% or more, with Shadow Mode at 0 misses                    |
+| 0.6.0   | Adoption           | 66     | Installed from npm and adopted in five external repositories without config edits               |
+| 0.7.0   | Adaptation and E2E | 84     | Projects that change shape stay correct; Playwright and Cypress selection                       |
+| 0.8.0   | Speed              | 105    | 30% less test time than 0.7 on the benchmark repositories                                       |
+| 0.9.0   | Interfaces         | 76     | Studio and VS Code cover run, explain, impact and coverage                                      |
+| 1.0.0   | Stable             | 52     | Frozen contracts, published benchmarks, security review                                         |
+|         | Total              | 621    | About 16 sprints                                                                                |
 
 ## Graph model at 1.0.0
 
@@ -41,7 +41,7 @@ Every new edge type follows the same rules as today: if SmartTest cannot evaluat
 
 ---
 
-## 0.3.0: Precise graph (96 pts), released
+## 0.3.0: Precise graph (96 pts planned, 83 delivered), released
 
 Selection moves from "the class changed" to "this method changed, these callers use it".
 
@@ -61,22 +61,23 @@ Type-checker resolution for values local inference cannot type (return values of
 
 **Gate:** method-level fixture passes (a change to `TokenManager.verify` no longer selects `AuthController`, which only reaches `issue`); regression harness at 0 missed failures. LeadsIt measurement after 0.5.0.
 
-## 0.4.0: Complete graph (92 pts)
+## 0.4.0: Complete graph (92 pts planned, 84 delivered), released
 
-Changes that are not TypeScript code currently fall back to whole files, whole projects or "not analysed". Each of these gets real edges.
+Changes that are not TypeScript code used to fall back to whole files, whole projects or "not analysed". Each of these now has real edges.
 
-| Story                                                                                                                                                                                    | Pts |
-| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --- |
-| Environment edges: `process.env.X`, `import.meta.env.X` and config loaders create edges per key; editing one key in `.env.*` selects only its readers                                    | 13  |
-| Asset edges: JSON, YAML, CSS, SQL and text imports; `fs.readFile` / `readFileSync` with statically evaluable paths (same evaluator as computed imports)                                  | 8   |
-| Framework conventions: Next.js `app/` and `pages/` routes and middleware, Wasp `main.wasp(.ts)` operations, actions and pages, NestJS module/provider injection, Express router mounting | 21  |
-| Database schema: Prisma models and fields linked to `prisma.<model>.*` usage, so a schema change selects only code using the changed models                                              | 13  |
-| Translations: `t("key")` and similar calls linked to locale files per key                                                                                                                | 8   |
-| Test infrastructure: setup files, global mocks, fixtures and snapshot files linked to the tests that use them                                                                            | 8   |
-| Mock awareness: a test that mocks module M depends on M's exported signature only, not its implementation; implementation-only changes in M skip it                                      | 13  |
-| Generated code: `rebuild-required` policy maps generator inputs to outputs (completes ST-043)                                                                                            | 8   |
+| Story                                                                                                                                                                                                                                                                                      | Pts | Status                                 |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --- | -------------------------------------- |
+| Environment edges: `process.env.X`, `process.env["X"]`, destructuring and `import.meta.env.X` create edges per key; editing one key in `.env*` selects only its readers. A key no code reads keeps the mandatory trigger                                                                   | 13  | done                                   |
+| Asset edges: JSON, YAML, CSS, SQL and text imports (already tracked as files); `readFile` / `readFileSync` / `createReadStream` with paths built from `__dirname` or `import.meta`                                                                                                         | 8   | done                                   |
+| Framework conventions: Wasp operations imported from `wasp/client/operations` and `wasp/server/operations` resolve to the implementation declared in `main.wasp.ts`. NestJS constructor injection is covered by parameter-property inference (0.3.0) and Express routers are plain imports | 13  | done                                   |
+| Next.js `app/` and `pages/` route conventions and middleware                                                                                                                                                                                                                               | 8   | moved to 0.7.0, with E2E route mapping |
+| Database schema: Prisma models and enums linked to `prisma.<model>`, `db.<model>`, Wasp `context.entities.<Model>` and type imports from `@prisma/client` / `wasp/entities`; datasource and generator changes widen to the schema's directory                                              | 13  | done                                   |
+| Translations: `t("key")`, `t(\`prefix.${x}\`)`, `i18nKey`linked to catalog keys (TypeScript or JSON catalogs under`locales/`, `i18n/`, `lang/`, `translations/`, `messages/`); `t(variable)` reads any key                                                                                 | 8   | done                                   |
+| Test infrastructure: snapshot files select their test, `__mocks__/x` selects the users of `x`, fixtures read through `fs` are asset edges, `import.meta.glob` is an import. Setup files stay mandatory triggers                                                                            | 8   | done                                   |
+| Mock awareness: a test that replaces module M with a factory (`vi.mock` / `jest.mock` with a factory that does not load the original) does not run M; implementation changes in M, or in modules only reached through M, skip it. Signature changes still select it                        | 13  | done                                   |
+| Generated code: `generated[].from` lists generator inputs; with `rebuild-required`, an input change stands for a change to the outputs and warns to regenerate                                                                                                                             | 8   | done                                   |
 
-**Gate:** each edge type has a fixture where a targeted change selects only the affected tests, and the regression harness stays at 0 missed failures with these edges enabled.
+**Gate:** met. The `edges-vitest` fixture has one targeted change per edge type that selects only the affected tests (`integration-tests/edges.test.ts`), and its seven seeded mutations are in the regression harness with 0 missed failures in BALANCED and SAFE.
 
 ## 0.5.0: Runtime evidence (71 pts)
 
@@ -110,7 +111,7 @@ Make the first ten minutes trivial, in any repository and any CI system. No depe
 
 **Gate:** five external repositories initialised with `init --yes` and no config edits; `benchmark` reports 0 missed failures on all five.
 
-## 0.7.0: Adaptation and E2E (76 pts)
+## 0.7.0: Adaptation and E2E (84 pts)
 
 | Story                                                                                                                                        | Pts |
 | -------------------------------------------------------------------------------------------------------------------------------------------- | --- |
@@ -119,6 +120,7 @@ Make the first ten minutes trivial, in any repository and any CI system. No depe
 | `smarttest watch`: rerun affected tests on save using graph patches                                                                          | 13  |
 | Playwright adapter: discovery, file selection, traces linked in the report                                                                   | 13  |
 | E2E mapping: routes and pages (from 0.4.0 framework edges) to the E2E specs that visit them                                                  | 13  |
+| Next.js `app/` and `pages/` route conventions and middleware (from 0.4.0)                                                                    | 8   |
 | Cypress adapter                                                                                                                              | 8   |
 | TypeScript 7 native API behind `language-typescript`, TypeScript 6 kept as fallback                                                          | 8   |
 
