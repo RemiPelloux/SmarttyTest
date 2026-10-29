@@ -16,20 +16,24 @@ npx smarttest run --base origin/main --non-interactive --format junit --format h
 
 # main branch or nightly: everything, same pipeline and reports
 npx smarttest run --all --non-interactive --format junit --format html
+
+# nightly: refresh traces, then compare the selection with a full run and keep the record
+npx smarttest trace --stale --non-interactive
+npx smarttest shadow --non-interactive
 ```
 
 Reports are written to `.smarttest/reports/` (`junit.xml`, `report.html`, `report.json`, `summary.md`). Publish them with your CI's artifact mechanism.
 
 ## Exit codes
 
-| Code | Meaning                                                           | Usual CI handling      |
-| ---- | ----------------------------------------------------------------- | ---------------------- |
-| 0    | all selected tests passed                                         | pass                   |
-| 1    | a test failed or timed out                                        | fail                   |
-| 2    | invalid command or flag                                           | fail, fix the pipeline |
-| 3    | configuration problem                                             | fail                   |
-| 4    | infrastructure problem (runner missing, Git base not found)       | fail or retry          |
-| 5    | policy failure (`validate-selection` or `benchmark` found a miss) | fail                   |
+| Code | Meaning                                                                     | Usual CI handling      |
+| ---- | --------------------------------------------------------------------------- | ---------------------- |
+| 0    | all selected tests passed                                                   | pass                   |
+| 1    | a test failed or timed out                                                  | fail                   |
+| 2    | invalid command or flag                                                     | fail, fix the pipeline |
+| 3    | configuration problem                                                       | fail                   |
+| 4    | infrastructure problem (runner missing, Git base not found)                 | fail or retry          |
+| 5    | policy failure (`validate-selection`, `shadow` or `benchmark` found a miss) | fail                   |
 
 ## Example: GitLab CI
 
@@ -54,5 +58,9 @@ npm ci
 git fetch --depth=200 origin main
 npx smarttest run --base origin/main --non-interactive --format junit --format html
 ```
+
+## Traces and Shadow Mode in CI
+
+Traces live in `.smarttest/state/traces.json`. To use them on pull requests, cache that file (or the whole `.smarttest/state/` directory) between pipeline runs, keyed on the lockfile. A trace whose loaded files changed is ignored automatically, so a stale cache is harmless. `smarttest shadow` appends to `.smarttest/shadow/history.jsonl`; keep that file as an artifact or in a cache to follow drift with `smarttest shadow --report`.
 
 To check SmartTest against the full suite on your own history before relying on it in CI, run `npx smarttest benchmark --commits 20` locally.

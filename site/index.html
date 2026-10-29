@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SmartTest · run only the tests a change reaches</title>
+<meta name="description" content="SmartTest walks a dependency graph of your TypeScript or JavaScript repository and runs only the tests a change can affect, through Jest, Vitest or node --test.">
+<meta property="og:title" content="SmartTest · run only the tests a change reaches">
+<meta property="og:description" content="Semantic test impact analysis for TypeScript and JavaScript. Every selected or skipped test comes with the reason.">
+<link rel="icon" href="assets/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="assets/site.css">
+<script>document.documentElement.classList.add("js")</script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="top">
+  <a class="wordmark" href="./"><img src="assets/logo.svg" alt="" width="24" height="24"> SmartTest</a>
+  <nav aria-label="Site">
+    <a href="docs/index.html" class="keep">Docs</a>
+    <a href="docs/reference/cli.html">CLI reference</a>
+    <a href="docs/case-studies/leadsit.html">Case study</a>
+    <a href="https://github.com/RemiPelloux/SmarttyTest" rel="noopener" class="keep">GitHub</a>
+  </nav>
+  <a class="button" href="docs/guides/getting-started.html">Install SmartTest</a>
+</header>
+
+<main id="main">
+<section class="hero" aria-labelledby="title">
+  <div class="hero-head">
+    <h1 id="title"><span class="line"><span>Only the tests</span></span><span class="line"><span>a change reaches</span></span></h1>
+    <div class="chips after-headline" role="group" aria-label="Edits to try on the example project">
+      <button class="chip c1" type="button" data-edit="verify" aria-pressed="true"><span class="chip-label">Edit method</span><code class="chip-name">TokenManager.verify</code><span class="switch" aria-hidden="true"></span></button>
+      <button class="chip c2" type="button" data-edit="issue" aria-pressed="false"><span class="chip-label">Edit method</span><code class="chip-name">TokenManager.issue</code><span class="switch" aria-hidden="true"></span></button>
+      <button class="chip c3" type="button" data-edit="isEmail" aria-pressed="false"><span class="chip-label">Edit function</span><code class="chip-name">isEmail</code><span class="switch" aria-hidden="true"></span></button>
+      <button class="chip c4" type="button" data-edit="total" aria-pressed="false"><span class="chip-label">Edit method</span><code class="chip-name">CatalogService.total</code><span class="switch" aria-hidden="true"></span></button>
+    </div>
+    <p class="lead after-headline">SmartTest follows each change through a dependency graph of your TypeScript or JavaScript repository, down to the method, and runs only the tests it reaches with Jest, Vitest or <code>node --test</code>.</p>
+    <div class="hero-actions after-headline">
+      <a class="button" href="docs/guides/getting-started.html">Install SmartTest</a>
+      <a class="text-link" href="docs/concepts/how-selection-works.html">How it decides</a>
+    </div>
+  </div>
+
+  <div class="stage">
+    <div data-ui class="term" aria-live="polite" id="impact"><samp>
+      <div><span class="t-cyan">◇</span> git · HEAD…working tree · <span data-changed>1 changed file</span> · mode balanced · analysis complete</div>
+      <div data-files><span class="t-dim">  modified </span>src/modules/auth/TokenManager.ts<span class="t-dim">  implementation</span></div>
+      <div style="height:10px"></div>
+      <div><span class="pill sel">SELECTED</span> <span data-count>3</span></div>
+      <div data-selected>
+        <button class="row" type="button" aria-expanded="false"><span class="t-pass">■</span><span>test/routes/ProtectedRoutes.test.ts</span><span class="why">Transitively depends on TokenManager.verify (4 hops)</span></button>
+        <button class="row" type="button" aria-expanded="false"><span class="t-pass">■</span><span>tests/unit/modules/auth/AuthService.test.ts</span><span class="why">Transitively depends on TokenManager.verify (2 hops)</span></button>
+        <button class="row" type="button" aria-expanded="false"><span class="t-pass">■</span><span>tests/unit/modules/auth/TokenManager.test.ts</span><span class="why">Directly depends on TokenManager.verify</span></button>
+      </div>
+      <div class="path" data-path hidden></div>
+      <div style="height:10px"></div>
+      <div><span class="pill skp">SKIPPED</span> <span data-skipcount>4</span> <span class="t-dim">· not run</span></div>
+      <div data-skipped>
+        <div class="row skipped"><span>□</span><span>tests/unit/modules/auth/AuthController.test.ts</span></div>
+        <div class="row skipped"><span>□</span><span>tests/unit/modules/catalog/CatalogService.test.ts</span></div>
+        <div class="row skipped"><span>□</span><span>tests/unit/modules/users/UserService.test.ts</span></div>
+        <div class="row skipped"><span>□</span><span>tests/unit/shared/validators/EmailValidator.test.ts</span></div>
+      </div>
+    </samp></div>
+    <div class="stage-note">
+      <h2 class="count"><span data-ratio>3 of 7</span> test files run</h2>
+      <p>Switch the edits above the panel on and off. The panel shows what SmartTest selects in the example project from this repository, computed by SmartTest itself.</p>
+      <p>Select a test to see the path from the change to it.</p>
+    </div>
+  </div>
+</section>
+
+<section class="modes" id="modes" aria-labelledby="modes-title" style="--field: var(--cyan)">
+  <h2 id="modes-title" class="reveal"><span data-mode-word>Balanced</span> mode</h2>
+  <p class="mode-text reveal" style="--i:1" data-mode-text>The default for pull requests and hooks. Every change counts, and a test behind an import SmartTest cannot resolve is selected on its own instead of being ruled out.</p>
+  <p class="mode-detail reveal" style="--i:2" data-mode-detail>Rules can only make the mode stricter. A file marked critical upgrades the whole decision to SAFE.</p>
+  <p class="segmented-label" id="mode-label">Safety mode</p>
+  <div data-ui class="segmented" role="radiogroup" aria-labelledby="mode-label">
+    <button type="button" role="radio" aria-checked="false" data-mode="fast">Fast</button>
+    <button type="button" role="radio" aria-checked="true" data-mode="balanced">Balanced</button>
+    <button type="button" role="radio" aria-checked="false" data-mode="safe">Safe</button>
+  </div>
+</section>
+
+<section class="section flow" id="how" aria-labelledby="how-title">
+  <h2 id="how-title" class="reveal">What happens on a commit</h2>
+  <ol>
+    <li>
+      <p class="reveal"><strong>First, the change.</strong> SmartTest reads what changed from Git: the staged files in a pre-commit hook, the working tree, a branch against its merge-base, or any commit range. Without Git it compares local snapshots of the project.</p>
+      <div data-ui class="term evidence reveal" style="--i:1"><samp><span class="t-cyan">◇</span> git · HEAD…index (staged) · 1 changed file(s) · mode balanced<br><span class="t-dim">  modified </span>src/modules/auth/TokenManager.ts<span class="t-dim">  implementation</span></samp></div>
+    </li>
+    <li>
+      <p class="reveal"><strong>Then, the declarations.</strong> Each changed line is mapped to the method, function or class around it and classified as comment, formatting, implementation, signature or exported API. An edit inside <code>verify</code> is a change to <code>TokenManager.verify</code>, not to every user of the file.</p>
+      <div data-ui class="term evidence reveal" style="--i:1"><samp><span class="t-dim">changed unit </span>src/modules/auth/TokenManager.ts#TokenManager.verify<br><span class="t-dim">not changed  </span>TokenManager.issue <span class="t-dim">· the class shell · the file's module code</span></samp></div>
+    </li>
+    <li>
+      <p class="reveal"><strong>Then, the graph.</strong> From the changed method SmartTest walks backwards to every test that can reach it, through imports, re-exports, barrels, inheritance, CommonJS, path aliases and workspace packages. Environment keys, Prisma models, translation keys and files read with <code>fs</code> are nodes too, so a change to one key reaches only the code that reads it.</p>
+      <div data-ui class="term evidence reveal" style="--i:1"><samp>TokenManager.verify <span class="t-dim">→</span> AuthService.validateToken <span class="t-dim">→</span> authenticate <span class="t-dim">→</span> protectedRoute <span class="t-dim">→</span> <span class="t-pass">test/routes/ProtectedRoutes.test.ts</span><br>i18n:greeting <span class="t-dim">→</span> src/greet.ts#greet <span class="t-dim">→</span> <span class="t-pass">tests/greet.test.ts</span></samp></div>
+    </li>
+    <li>
+      <p class="reveal"><strong>Then, what it cannot see.</strong> An import it cannot resolve is never treated as unrelated: the tests behind it run. When <code>smarttest trace</code> has recorded which functions each test ran, a test that can reach the change on paper but never ran the changed code is skipped, with the date of the trace as its reason.</p>
+      <div data-ui class="term evidence reveal" style="--i:1"><samp><span class="pill skp">SKIPPED (not run)</span> tests/price.test.ts<br><span class="t-dim">  •</span> Reachable statically, but its trace (2026-10-29) never ran the changed code</samp></div>
+    </li>
+    <li>
+      <p class="reveal"><strong>Last, your runner.</strong> The selected tests run through the project's own Jest, Vitest or <code>node --test</code> configuration. The report lists every skipped test as not run, never as passed.</p>
+      <figure class="reveal" style="--i:1">
+        <img src="assets/img/report-edg-0.webp" alt="SmartTest HTML report: 1 of 15 test files selected, the translation test failed on the changed key, 14 test files skipped by selection and not run." width="1100" height="880" loading="lazy">
+        <figcaption>The HTML report after a translation key changed in the <code>edges-vitest</code> fixture: one test selected, its failure caught, fourteen not run.</figcaption>
+      </figure>
+    </li>
+  </ol>
+</section>
+
+<section class="section" id="works-with" aria-labelledby="works-title">
+  <div class="board">
+    <div class="tile head reveal"><h2 id="works-title">Works with what you have</h2><p>No plugin in your test runner and no change to your tests. SmartTest asks each runner which files it collects and runs them with your config.</p></div>
+    <div class="tile reveal" style="--i:1">Jest<small>with your jest.config</small></div>
+    <div class="tile reveal" style="--i:2">Vitest<small>custom config names too</small></div>
+    <div class="tile reveal" style="--i:3">node --test<small>directories and globs</small></div>
+    <div class="tile reveal" style="--i:1">Git<small>or local snapshots</small></div>
+    <div class="tile reveal" style="--i:2">TypeScript<small>path aliases, project references</small></div>
+    <div class="tile reveal" style="--i:3">CommonJS<small>module.exports per symbol</small></div>
+    <div class="tile reveal" style="--i:4">pnpm, npm, Yarn<small>workspaces, or none at all</small></div>
+    <div class="tile reveal" style="--i:1">Prisma<small>models and enums</small></div>
+    <div class="tile reveal" style="--i:2">Wasp<small>operations in main.wasp.ts</small></div>
+    <div class="tile reveal" style="--i:3">react-i18next<small>keys per namespace</small></div>
+  </div>
+</section>
+
+<section class="section" id="results" aria-labelledby="results-title">
+  <div class="ledger">
+    <div class="ledger-head">
+      <h2 id="results-title" class="reveal"><span class="soft">Measured on</span><span>a real repository</span></h2>
+      <p class="reveal" style="--i:1">LeadsIt has six projects, no root manifest and three runners. It replaced its pre-commit test steps with <code>smarttest run --staged</code>. These are its numbers with SmartTest {{VERSION}}.</p>
+      <figure class="reveal" style="--i:2">
+        <img src="assets/img/report-leadsit-0.webp" alt="SmartTest HTML report for LeadsIt: 100 of 100 test files selected after a lockfile change, 706 tests passed, 0 failed, 7.7 seconds." width="1100" height="880" loading="lazy" data-drift>
+        <figcaption>A lockfile change runs everything by design: 706 passed in 7.7 s.</figcaption>
+      </figure>
+    </div>
+    <dl class="figures">
+      <div class="figure reveal"><dt class="whole">706</dt><dt class="dec"></dt><dd class="cap"><b>tests</b>, the same results through SmartTest as through the three runners</dd></div>
+      <div class="figure reveal" style="--i:1"><dt class="whole">0</dt><dt class="dec"></dt><dd class="cap"><b>missed failures</b> in 52 replayed commits, every miss re-checked on the parent commit</dd></div>
+      <div class="figure reveal" style="--i:2"><dt class="whole">17</dt><dt class="dec"></dt><dd class="cap"><b>percent of test files</b> run over 40 commits sampled from the last 200</dd></div>
+      <div class="figure reveal" style="--i:3"><dt class="whole">63</dt><dt class="dec"></dt><dd class="cap"><b>percent of full-run time</b> saved on the same commits, analysis included</dd></div>
+      <div class="figure reveal" style="--i:4"><dt class="whole">23</dt><dt class="dec"></dt><dd class="cap"><b>seconds</b> to trace all 100 test files across Jest, Vitest and node --test</dd></div>
+      <div class="figure reveal" style="--i:5"><dt class="whole">7</dt><dt class="dec">.7</dt><dd class="cap"><b>seconds</b> for the full suite through SmartTest</dd></div>
+    </dl>
+  </div>
+</section>
+
+<section class="section docs-index" id="docs" aria-labelledby="docs-title">
+  <div class="intro">
+    <h2 id="docs-title" class="reveal">Documentation</h2>
+    <p class="reveal" style="--i:1">Start with getting started, then read how selection works. Every page is also in the repository under <code>documentation/</code>.</p>
+  </div>
+  <div class="doc-list reveal" style="--i:2"><!-- DOCS_LIST --></div>
+  <div class="docs-shots reveal" style="--i:3">
+    <img src="assets/img/report-edg-1.webp" alt="SmartTest HTML report in the light theme: one failing test selected and fourteen not run." width="1100" height="880" loading="lazy">
+    <img src="assets/img/report-leadsit-1.webp" alt="SmartTest HTML report in the light theme for LeadsIt: 706 tests passed." width="1100" height="880" loading="lazy">
+  </div>
+</section>
+
+<section class="setup" id="start" aria-labelledby="start-title">
+  <div class="setup-close">
+    <h2 id="start-title" class="reveal">Try it on your repository</h2>
+    <p class="reveal" style="--i:1">SmartTest is not on npm yet. These commands build it from the repository, install it in your project and preview the setup. Nothing is written until you run <code>init --yes</code>.</p>
+  </div>
+  <div data-ui class="dialog reveal" style="--i:2">
+    <h3>Set up SmartTest</h3>
+    <p class="sub">Node.js 22.12 or newer · Jest, Vitest or node --test</p>
+    <label id="pm-label">Package manager</label>
+    <div class="seg" role="radiogroup" aria-labelledby="pm-label">
+      <button type="button" role="radio" aria-checked="true" data-pm="npm">npm</button>
+      <button type="button" role="radio" aria-checked="false" data-pm="pnpm">pnpm</button>
+      <button type="button" role="radio" aria-checked="false" data-pm="yarn">Yarn</button>
+    </div>
+    <label for="project">Your project</label>
+    <input id="project" value="~/code/my-app" spellcheck="false">
+    <pre data-cmd>git clone https://github.com/RemiPelloux/SmarttyTest ~/SmarttyTest
+cd ~/SmarttyTest && corepack enable && pnpm install && pnpm release:pack
+cd ~/code/my-app
+npm install -D ~/SmarttyTest/packages/cli/.publish/smarttest-{{VERSION}}.tgz
+npx smarttest init --dry-run</pre>
+    <button class="button" type="button" data-copy>Copy commands</button>
+  </div>
+</section>
+</main>
+
+<footer class="foot">
+  <div class="f-statement"><p>SmartTest runs only the tests a change reaches, and says why for every test it skips.</p><small>Alpha. Licence to be confirmed before the first npm release.</small></div>
+  <div class="f-nav"><ul>
+    <li><a href="docs/guides/getting-started.html">Getting started</a></li>
+    <li><a href="docs/reference/cli.html">CLI reference</a></li>
+    <li><a href="docs/reference/configuration.html">Configuration</a></li>
+    <li><a href="docs/planning/roadmap.html">Roadmap</a></li>
+    <li><a href="docs/changelog.html">Changelog</a></li>
+  </ul></div>
+  <div class="f-version"><b>{{VERSION}}</b><span>current version · Node.js 22.12+</span></div>
+  <div class="f-repo"><span>Source and issues</span><a href="https://github.com/RemiPelloux/SmarttyTest" rel="noopener">RemiPelloux/<wbr>SmarttyTest</a></div>
+  <div class="f-mark" aria-hidden="true">SmartTest</div>
+  <a class="f-go" href="docs/index.html">Read the docs<svg width="56" height="56" viewBox="0 0 56 56" fill="none" aria-hidden="true"><path d="M8 28h38M32 14l14 14-14 14" stroke="currentColor" stroke-width="4"/></svg></a>
+</footer>
+
+<script type="application/json" id="demo-data"><!-- DEMO_DATA --></script>
+<script src="assets/site.js" defer></script>
+</body>
+</html>

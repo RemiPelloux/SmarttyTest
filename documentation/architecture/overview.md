@@ -1,6 +1,6 @@
 # Architecture overview
 
-> SmartTest is an intelligent layer **on top of** existing test runners. It works out what changed, what depends on it and which tests protect it, then lets Jest or Vitest do the running.
+> SmartTest is an intelligent layer **on top of** existing test runners. It works out what changed, what depends on it and which tests protect it, then lets Jest, Vitest or `node --test` do the running.
 
 This document describes the **v1.0.0** architecture. The full long-term architecture (AI, Studio, Cloud) is in [PRD §4](../product/PRD.md#4-system-architecture). Decisions are recorded in [ADRs](adr/README.md).
 
@@ -47,6 +47,7 @@ flowchart TB
     EXEC["test-executor"]
     VIT["adapter-vitest"]
     JEST["adapter-jest"]
+    NODE["adapter-node"]
     COV["coverage-engine"]
     GEN["test-generator"]
   end
@@ -95,11 +96,12 @@ sequenceDiagram
   Code-->>Core: SemanticChange[] (with confidence)
   Core->>G: apply updates, reverse-traverse from changed symbols
   G-->>Core: candidate tests + paths + uncertainty
+  Core->>Core: compare with fresh traces (observed execution)
   Core->>R: evaluate rules for affected symbols
   R-->>Core: risk, mandatory tests, effective mode
   Core->>I: decide(candidates, rules, mode, uncertainty)
   I-->>Core: ImpactDecision (selected / skipped / reasons / fallback)
-  Core->>X: execute(selection) via Jest/Vitest
+  Core->>X: execute(selection) via Jest / Vitest / node --test
   X-->>Core: TestRunResult (normalized statuses)
   Core->>Rep: write JSON / HTML / JUnit / Markdown
   Core-->>CLI: summary + exit code
@@ -122,13 +124,13 @@ sequenceDiagram
 | `@smarttest/language-typescript` / `-javascript` | Language adapters                                                  | SRC  |
 | `@smarttest/symbol-index`                        | Persistent incremental symbol index                                | SRC  |
 | `@smarttest/semantic-diff`                       | Change classification with confidence                              | SRC  |
-| `@smarttest/dependency-graph`                    | Graph model, storage, traversal, queries                           | GRA  |
+| `@smarttest/dependency-graph`                    | Member-level graph, resource nodes, mock-aware traversal, queries  | GRA  |
 | `@smarttest/rules-engine`                        | Rule evaluation, precedence, explanations                          | RUL  |
 | `@smarttest/impact-engine`                       | Modes, mandatory triggers, fallbacks, decisions                    | IMP  |
 | `@smarttest/test-selector`                       | Decision → runnable selection                                      | IMP  |
 | `@smarttest/test-discovery`                      | Normalized discovery                                               | EXE  |
 | `@smarttest/test-executor`                       | Scheduling, timeouts, cancellation, retries                        | EXE  |
-| `@smarttest/adapter-vitest` / `adapter-jest`     | Runner adapters                                                    | EXE  |
+| `@smarttest/adapter-vitest` / `-jest` / `-node`  | Runner adapters (Vitest, Jest, `node --test`)                      | EXE  |
 | `@smarttest/coverage-engine`                     | Coverage ingestion with scope                                      | REP  |
 | `@smarttest/test-generator`                      | Layouts, templates, scaffolds, sync                                | GEN  |
 | `@smarttest/report-engine`                       | JSON / HTML / JUnit / Markdown + integrity                         | REP  |
@@ -141,11 +143,15 @@ sequenceDiagram
 .smarttest/                    (git-ignored, path configurable via storeDir)
 ├── state/
 │   ├── index.json             per-file analyses (content-hash cached), file stats, resolution context
+│   ├── discovery.json         files each runner collects (cached per config and file list)
+│   ├── durations.json         last measured duration per test file
+│   ├── traces.json            observed execution per test file (smarttest trace)
 │   ├── snapshots/             snapshot manifests (hashes; content optional)
 │   ├── blobs/                 deduplicated gzip content (when snapshots.storeContent)
 │   └── init-journal.json      what init changed → rollback
 ├── runs/                      latest.json, <runId>.json, last-decision.json, coverage.json, flaky.json
 ├── reports/                   report.html · report.json · junit.xml · summary.md · setup.md
+├── shadow/                    history.jsonl (smarttest shadow)
 ├── coverage/                  raw coverage per runner root
 └── logs/                      smarttest.log (JSON, redacted, rotated at 1 MB)
 ```

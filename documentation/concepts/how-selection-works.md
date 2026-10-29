@@ -32,15 +32,17 @@ Methods and accessors are units of their own. `this.tokens.verify()` is linked t
 
 Some changes are not code. SmartTest links them to the code that reads them:
 
-| Change                                                                      | Selected                                                                                                                                            |
-| --------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-| A key in `.env*`                                                            | Code reading `process.env.KEY` or `import.meta.env.KEY` (or the whole environment). A key no code reads keeps the mandatory trigger                 |
-| A model or enum in `*.prisma`                                               | Code using `prisma.model`, `db.model`, `context.entities.Model` or the model type. Datasource/generator changes widen to the schema's directory     |
-| A key in a translation catalog                                              | Code calling `t("key")` (parent objects, plural variants and `t(\`prefix.${x}\`)`match;`t(variable)` reads any key) and tests importing the catalog |
-| A file read through `fs` with a path built from `__dirname` / `import.meta` | The function that reads it                                                                                                                          |
-| `__snapshots__/x.test.ts.snap`                                              | `x.test.ts`                                                                                                                                         |
-| `__mocks__/m.ts`                                                            | Users of `m`                                                                                                                                        |
-| A generator input listed in `generated[].from`                              | Tests of the generated outputs, with a regenerate warning                                                                                           |
+| Change                                                                      | Selected                                                                                                                                                                                                  |
+| --------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A key in `.env*`                                                            | Code reading `process.env.KEY` or `import.meta.env.KEY` (or the whole environment). A key no code reads keeps the mandatory trigger                                                                       |
+| A model or enum in `*.prisma`                                               | Code using `prisma.model`, `db.model`, `context.entities.Model` or the model type. Datasource/generator changes widen to the schema's directory                                                           |
+| A key in a translation catalog                                              | Code calling `t("key")` in that namespace. Parent objects, plural variants and template keys such as ``t(`menu.${id}`)`` match; `t(variable)` reads any key of its namespace. Tests importing the catalog |
+| A file read through `fs` with a path built from `__dirname` / `import.meta` | The function that reads it                                                                                                                                                                                |
+| `__snapshots__/x.test.ts.snap`                                              | `x.test.ts`                                                                                                                                                                                               |
+| `__mocks__/m.ts`                                                            | Users of `m`                                                                                                                                                                                              |
+| A generator input listed in `generated[].from`                              | Tests of the generated outputs, with a regenerate warning                                                                                                                                                 |
+
+Translation keys are qualified by the namespace bound with `useTranslation("ns")` (per binding, so `const { t: tl } = useTranslation("landing")` reads `landing` keys). A translation function received as a parameter, as in `getNav(t)`, reads in its callers' namespaces: the caller records that it passes `t` on.
 
 A test that replaces module M with a factory mock (`vi.mock("./m", () => …)`, `jest.mock` with a factory that does not load the original) never runs M. Implementation changes in M, or in modules only reached through M, do not select it. A change to what M exports still does.
 
@@ -48,17 +50,21 @@ A test that replaces module M with a factory mock (`vi.mock("./m", () => …)`, 
 
 [Rules](rules.md) add risk levels, always-run tests and mode overrides. Mandatory triggers widen the selection for changes with global impact:
 
-| Trigger                                                  | Default effect                               |
-| -------------------------------------------------------- | -------------------------------------------- |
-| `tsconfig*.json`, Babel/SWC config                       | full suite                                   |
-| Jest/Vitest config, global setup files                   | full suite for that runner/project           |
-| `package.json` dependencies, lockfiles                   | full suite (affected workspace in monorepos) |
-| `.env*` templates, shared env config                     | full suite                                   |
-| Unresolved import or dynamic pattern touching the change | widened per mode, see below                  |
+| Trigger                                                  | Default effect                                                                   |
+| -------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| `tsconfig*.json`, Babel/SWC config                       | full suite                                                                       |
+| Jest/Vitest config, global setup files                   | full suite for that runner/project                                               |
+| `package.json` dependencies, lockfiles                   | full suite (affected workspace in monorepos)                                     |
+| `.env`, `.env.test`, `.env.local`…                       | full suite, unless every changed key is read by analysed code (then its readers) |
+| Unresolved import or dynamic pattern touching the change | widened per mode, see below                                                      |
 
 Rules can add triggers but cannot remove the built-in ones.
 
-## 5. Modes
+## 5. Observed execution
+
+When `smarttest trace` has recorded which functions each test ran, a fresh trace can rule out a test that static analysis reaches but that never ran the changed code, and can add a test static analysis missed. SAFE mode only adds. → [Runtime evidence](runtime-evidence.md)
+
+## 6. Modes
 
 |                                                 | FAST                     | BALANCED (default)                 | SAFE                    |
 | ----------------------------------------------- | ------------------------ | ---------------------------------- | ----------------------- |
@@ -68,37 +74,52 @@ Rules can add triggers but cannot remove the built-in ones.
 | Tests that depend on unresolved/dynamic imports | warning only             | selected ("cannot be ruled out")   | selected                |
 | Incomplete change set (e.g. hash-only snapshot) | whole-file seeds         | whole-file seeds, status `partial` | full suite              |
 | Critical-risk rules                             | upgrade to SAFE          | upgrade to SAFE                    | SAFE                    |
+| Fresh runtime traces                            | rule out and add         | rule out and add                   | add only                |
 
 Rules can only make the effective mode stricter. The decision always records the requested and the effective mode.
 
-## 6. Decision & fallback
+## 7. Decision & fallback
 
-The result is an `ImpactDecision` containing selected tests with reasons, skipped tests with reasons, `analysisStatus` (`complete | partial | fallback`), `fallbackApplied` and any warnings. When the analysis is incomplete in a way that matters, SmartTest widens the selection or runs everything, and tells you why.
+The result is an `ImpactDecision` containing selected tests with reasons, skipped tests with reasons, `analysisStatus` (`complete | partial | fallback`), `fallbackApplied` and any warnings. Its details also list the dependencies the change adds or removes, tests ruled out by traces, and changed units no test reaches ("unprotected"). When the analysis is incomplete in a way that matters, SmartTest widens the selection or runs everything, and tells you why.
 
-## 7. Run & report
+## 8. Run & report
 
 Selected tests run through the project's runner (Jest, Vitest or `node --test`). Results are normalized, and skipped tests are reported as not run, never as passed. → [Safety model](safety-model.md)
 
 ## Asking "why?"
 
-```text
-$ smarttest explain test/routes/protected.test.ts
+Output from the `nest-auth-vitest` fixture after a change to `TokenManager.verify`:
 
-SELECTED  test/routes/protected.test.ts
-Reasons
-  • Modified symbol: AuthService.validateToken (implementation, high confidence)
-  • Transitive dependency: validateToken → AuthenticationMiddleware → protected.test.ts
-  • Matched rule: authentication-critical (risk: critical → mode SAFE)
-Analysis: complete · mode: balanced
+```text
+$ smarttest impact
+◇ git · HEAD…working tree · 1 changed file(s) · mode balanced · analysis complete
+  modified src/modules/auth/TokenManager.ts  implementation
+
+  [SELECTED]  3
+  ■ test/routes/ProtectedRoutes.test.ts  Transitively depends on src/modules/auth/TokenManager.ts#TokenManager.verify (4 hops)
+  ■ tests/unit/modules/auth/AuthService.test.ts  Transitively depends on src/modules/auth/TokenManager.ts#TokenManager.verify (2 hops)
+  ■ tests/unit/modules/auth/TokenManager.test.ts  Directly depends on src/modules/auth/TokenManager.ts#TokenManager.verify
+  [SKIPPED]   4 · not run
 ```
 
 ```text
-$ smarttest explain src/catalog/CatalogService.test.ts
-
-SKIPPED (not run)  src/catalog/CatalogService.test.ts
+$ smarttest explain test/routes/ProtectedRoutes.test.ts
+[SELECTED]  test/routes/ProtectedRoutes.test.ts
 Reasons
-  • No static dependency path from changed symbols
-  • No mandatory trigger matched · no rule requires it
+  • Transitively depends on src/modules/auth/TokenManager.ts#TokenManager.verify (4 hops)
+  src/modules/auth/TokenManager.ts#TokenManager.verify → src/modules/auth/AuthService.ts#AuthService.validateToken → src/modules/auth/AuthenticationMiddleware.ts#authenticate → src/routes/protected.ts#protectedRoute → test/routes/ProtectedRoutes.test.ts
+Analysis: complete · mode: balanced · git · HEAD…working tree
+```
+
+```text
+$ smarttest explain tests/unit/modules/auth/AuthController.test.ts
+[SKIPPED (not run)]  tests/unit/modules/auth/AuthController.test.ts
+Reasons
+  • No static dependency path from changed code
+  • No mandatory trigger matched
+  • No rule requires it
 Confidence
-  Limited to the analysed dependency model (0 unresolved imports in the affected area)
+  Limited to the analysed dependency model (0 file(s) with unresolved imports in its dependencies)
 ```
+
+`AuthController` uses `TokenManager.issue`, not `verify`, so it is skipped.

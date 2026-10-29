@@ -2,7 +2,7 @@
   "name": "smarttest-monorepo",
   "private": true,
   "version": "0.0.0",
-  "description": "SmartTest \u2014 Understand the change. Test what matters.",
+  "description": "SmartTest — Understand the change. Test what matters.",
   "type": "module",
   "packageManager": "pnpm@12.16.1",
   "engines": {
@@ -27,7 +27,11 @@
     "release:publish": "pnpm verify && pnpm bundle:cli && npm publish packages/cli/.publish --access public",
     "changeset": "changeset",
     "hooks:install": "git config core.hooksPath scripts/hooks && echo \"git hooks: scripts/hooks (pre-push runs pnpm verify)\"",
-    "release:pack": "pnpm bundle:cli && cd packages/cli/.publish && npm pack"
+    "release:pack": "pnpm bundle:cli && cd packages/cli/.publish && npm pack",
+    "site:build": "node scripts/site/build.mjs",
+    "site:serve": "node scripts/site/build.mjs --serve",
+    "site:demo": "node scripts/site/demo-data.mjs",
+    "site:publish": "node scripts/site/build.mjs && node scripts/site/publish.mjs"
   },
   "devDependencies": {
     "@biomejs/biome": "2.6.4",

@@ -113,18 +113,18 @@ Ctrl-C cancels the runner cleanly and reports `cancelled`.
 
 ## JSON output
 
-Every `--json` document has `schemaVersion` and `command`. Schemas ship with the package in [`packages/cli/schemas/`](../../packages/cli/schemas): `run`, `impact`, `scan`, `explain` and `error`. Breaking a schema requires a major version.
+Every `--json` document has `schemaVersion` and `command`. Schemas ship with the package in [`packages/cli/schemas/`](../../packages/cli/schemas): `run`, `impact`, `scan`, `explain` and `error`. `trace`, `shadow`, `benchmark` and `graph` also accept `--json`; their documents are not versioned by a schema yet. Breaking a schema requires a major version.
 
 ## Exit codes
 
 These are versioned and part of the public contract (locked by a test in `@smarttest/shared`).
 
-| Code | Category                | Examples                                                                     |
-| ---- | ----------------------- | ---------------------------------------------------------------------------- |
-| 0    | Success                 | All selected tests passed                                                    |
-| 1    | Test failure            | A test failed, timed out or was cancelled                                    |
-| 2    | Invalid usage           | Unknown command or flag, bad argument                                        |
-| 3    | Configuration failure   | Invalid config, rule conflict, confirmation required in non-interactive mode |
-| 4    | Infrastructure failure  | Runner crashed or missing, Git base missing in a shallow clone               |
-| 5    | Safety / policy failure | `validate-selection` found a missed failure, rollback conflict               |
-| 70   | Internal error          | A SmartTest bug (e.g. a report integrity violation)                          |
+| Code | Category                | Examples                                                                                |
+| ---- | ----------------------- | --------------------------------------------------------------------------------------- |
+| 0    | Success                 | All selected tests passed                                                               |
+| 1    | Test failure            | A test failed, timed out or was cancelled                                               |
+| 2    | Invalid usage           | Unknown command or flag, bad argument                                                   |
+| 3    | Configuration failure   | Invalid config, rule conflict, confirmation required in non-interactive mode            |
+| 4    | Infrastructure failure  | Runner crashed or missing, Git base missing in a shallow clone                          |
+| 5    | Safety / policy failure | `validate-selection`, `shadow` or `benchmark` found a missed failure, rollback conflict |
+| 70   | Internal error          | A SmartTest bug (e.g. a report integrity violation)                                     |

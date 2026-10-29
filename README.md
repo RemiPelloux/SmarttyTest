@@ -13,6 +13,8 @@
 
 SmartTest runs only the tests a change can affect. It builds a dependency graph of a TypeScript or JavaScript repository (files, symbols, imports, tests), finds what a change reaches, and runs those tests through the project's own runner: Jest, Vitest or `node --test`. Every selected or skipped test comes with the reason.
 
+Documentation site: [remipelloux.github.io/SmarttyTest](https://remipelloux.github.io/SmarttyTest/). It has a live example of the selection on the first screen.
+
 Status: 0.5.0 alpha. It runs in the pre-commit hook of [LeadsIt](documentation/case-studies/leadsit.md). It is not on npm yet (the package name is still being decided, [ADR-0007](documentation/architecture/adr/0007-name-license-distribution.md)). Next steps are in the [roadmap to 1.0.0](documentation/planning/roadmap.md).
 
 ## Usage
@@ -66,15 +68,15 @@ Confidence
 
 LeadsIt has six independent projects, no root `package.json`, and three runners (Jest, Vitest with a custom config, `node --test`). It was migrated with `init --yes` and `run --staged` in its pre-commit hook. Running every test through SmartTest gives the same 706 results as the three runners.
 
-Replay of 12 commits with `smarttest benchmark` (SmartTest 0.2.0):
+`smarttest benchmark --commits 200 --sample 40` with SmartTest 0.5.0 (40 commits spread over the last 200):
 
-|                 | Full suites | Previous hook (suites of touched projects) | SmartTest |
-| --------------- | ----------- | ------------------------------------------ | --------- |
-| Test time       | 110.3 s     | 37.2 s                                     | 13.8 s    |
-| Test files run  | 1,192       |                                            | 9         |
-| Missed failures |             |                                            | 0         |
+|                     | Full suites | Previous hook (suites of touched projects) | SmartTest      |
+| ------------------- | ----------- | ------------------------------------------ | -------------- |
+| Test time           | 240.7 s     | 82.9 s                                     | 88.3 s         |
+| Test files run      | 3,052       |                                            | 522 (17%)      |
+| Missed failures     |             |                                            | 0              |
 
-With 0.5.0, 40 commits sampled from the last 200 replay with 0 missed failures, running 17% of the test files. Details, the 0.5.0 numbers and caveats: [case study](documentation/case-studies/leadsit.md).
+SmartTest saved 63% of the full-run time. It was 6% slower than the previous hook over these commits: on single-project commits the hook runs one small suite, and SmartTest's analysis time counts in full. On the 12 most recent commits, with `--traces`, it also found 0 missed failures. Details and caveats: [case study](documentation/case-studies/leadsit.md).
 
 ## Features in 0.5.0
 
@@ -105,11 +107,13 @@ Measured with `node benchmarks/run.mjs` on generated layered TypeScript reposito
 
 ## Documentation
 
+The same pages are published at [remipelloux.github.io/SmarttyTest](https://remipelloux.github.io/SmarttyTest/) (built by `pnpm site:build`, published to the `gh-pages` branch by `pnpm site:publish`).
+
 - [Getting started](documentation/guides/getting-started.md), [CI](documentation/guides/ci.md)
-- [How selection works](documentation/concepts/how-selection-works.md), [safety model](documentation/concepts/safety-model.md), [change tracking](documentation/concepts/change-tracking.md), [rules](documentation/concepts/rules.md)
+- [How selection works](documentation/concepts/how-selection-works.md), [runtime evidence](documentation/concepts/runtime-evidence.md), [safety model](documentation/concepts/safety-model.md), [change tracking](documentation/concepts/change-tracking.md), [rules](documentation/concepts/rules.md)
 - [CLI reference](documentation/reference/cli.md), [configuration](documentation/reference/configuration.md)
 - [Architecture](documentation/architecture/overview.md), [decision records](documentation/architecture/adr/README.md)
-- [Roadmap to 1.0.0](documentation/planning/roadmap.md), [specification](documentation/product/PRD.md)
+- [Roadmap to 1.0.0](documentation/planning/roadmap.md), [changelog](CHANGELOG.md), [case study: LeadsIt](documentation/case-studies/leadsit.md), [specification](documentation/product/PRD.md)
 
 ## Development
 
@@ -120,6 +124,7 @@ pnpm hooks:install     # pre-push runs `pnpm verify`; this repository has no hos
 pnpm verify            # lint, package boundaries, typecheck, tests, planning consistency
 pnpm build             # compile all packages
 pnpm release:pack      # self-contained `smarttest` tarball in packages/cli/.publish
+pnpm site:serve        # documentation site on http://localhost:4173
 node benchmarks/run.mjs
 ```
 

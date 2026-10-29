@@ -2,6 +2,15 @@
 
 All notable changes are documented here. Releases are managed with [Changesets](https://github.com/changesets/changesets). The project follows [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+- Documentation site at https://remipelloux.github.io/SmarttyTest/, built from `documentation/` by `pnpm site:build` and published to the `gh-pages` branch by `pnpm site:publish`. The landing page shows the real selection for edits to the `nest-auth-vitest` fixture.
+
+### Fixed
+- Traces no longer add tests for a changed translation catalog: loading a catalog says nothing about which keys a test read.
+- `run` output keeps a space between a long test path and its result column.
+
 ## [0.5.0] — runtime evidence
 
 ### Added
@@ -41,16 +50,10 @@ All notable changes are documented here. Releases are managed with [Changesets](
 - Per-test confidence (lowest edge confidence along the path) in reasons and `explain`.
 
 ### Changed
-
-- Importers of a module are affected when its module-level code changes, even if they use none of its exports.
-
-## [Unreleased]
-
-### Changed
-
 - No hosted CI: GitHub Actions workflows and Dependabot removed. `pnpm verify` runs locally and in a pre-push hook (`pnpm hooks:install`). Releases are published locally (`pnpm release:publish`), without npm provenance.
 - Planning: the delivered backlog is now the foundation record (`documentation/planning/foundation/`); a single roadmap covers 0.2.0 to 1.0.0 (608 points), centred on the dependency graph.
 - Documentation rewritten for plain, factual wording; package READMEs are generated from the manifest; a provider-neutral CI guide replaces the GitHub Actions guide.
+- Importers of a module are affected when its module-level code changes, even if they use none of its exports.
 
 ## [0.2.0] — real-world projects
 

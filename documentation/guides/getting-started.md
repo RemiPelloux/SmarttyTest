@@ -14,7 +14,7 @@ SmartTest is not on npm yet. Build the package from this repository and install 
 git clone https://github.com/RemiPelloux/SmarttyTest && cd SmarttyTest
 corepack enable && pnpm install && pnpm build && pnpm release:pack
 # in your project:
-npm install -D /path/to/SmarttyTest/packages/cli/.publish/smarttest-0.2.0.tgz
+npm install -D /path/to/SmarttyTest/packages/cli/.publish/smarttest-0.5.0.tgz
 ```
 
 If your repository has no root `package.json` (several independent projects), add a minimal one for repository tooling, as LeadsIt does.
@@ -63,8 +63,20 @@ npx smarttest explain <test>          # why it ran or not
 npx smarttest explain <file>          # which tests cover a file
 npx smarttest validate-selection      # run selection and full suite, compare
 npx smarttest benchmark --commits 20  # replay history: full run vs SmartTest, misses re-checked
+npx smarttest shadow                  # full suite next to the selection, recorded over time
+npx smarttest graph why <from> <to>   # shortest dependency path between two places
 npx smarttest doctor                  # runners, discovery, index, configuration
 ```
+
+## Record what each test runs (optional)
+
+```bash
+npx smarttest trace           # runs each test file once with V8 coverage (about one full run)
+npx smarttest trace --status  # how many traces are still fresh
+npx smarttest trace --stale   # refresh only the stale ones
+```
+
+With fresh traces, a test that can reach a change on paper but never ran the changed code is skipped in FAST and BALANCED mode. See [runtime evidence](../concepts/runtime-evidence.md).
 
 ## Use it in a Git hook
 
@@ -81,4 +93,4 @@ npx smarttest report --open           # HTML report of the last run
 npx smarttest generate --dry-run      # missing test files as it.todo scaffolds
 ```
 
-Next: [how selection works](../concepts/how-selection-works.md), [CLI reference](../reference/cli.md), [configuration](../reference/configuration.md), [running in CI](ci.md).
+Next: [how selection works](../concepts/how-selection-works.md), [runtime evidence](../concepts/runtime-evidence.md), [CLI reference](../reference/cli.md), [configuration](../reference/configuration.md), [running in CI](ci.md).

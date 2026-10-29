@@ -39,6 +39,9 @@ Areas that need extra care:
 | `pnpm planning:build`         | Regenerate the foundation backlog pages from `backlog.data.mjs`                                |
 | `pnpm assets:build`           | Regenerate the SVG illustrations                                                               |
 | `pnpm release:pack`           | Build the self-contained `smarttest` tarball                                                   |
+| `pnpm site:serve`             | Build the documentation site into `site/dist` and serve it on port 4173                        |
+| `pnpm site:demo`              | Recompute the landing page's live example with SmartTest (after analyzer changes)              |
+| `pnpm site:publish`           | Build the site and force-push `site/dist` to the `gh-pages` branch                             |
 | `node benchmarks/run.mjs`     | Performance benchmarks                                                                         |
 
 Larger changes: open an issue first; architectural changes need an ADR (`documentation/architecture/adr/template.md`).

@@ -26,3 +26,7 @@ Thumbs.db
 .vscode/*
 !.vscode/extensions.json
 !.vscode/settings.json
+
+# documentation site build and design-inspection output
+site/dist/
+.taste-skill/

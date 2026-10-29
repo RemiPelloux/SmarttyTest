@@ -12,6 +12,7 @@
       "!**/coverage",
       "!**/.smarttest",
       "!fixtures/projects",
+      "!site",
       "!documentation/assets",
       "!documentation/planning/foundation/epics",
       "!documentation/planning/foundation/sprints.md",

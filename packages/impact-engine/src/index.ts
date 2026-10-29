@@ -295,7 +295,10 @@ export function decideImpact(input: ImpactInput): ImpactResult {
   }
 
   // 4b. Observed evidence. Code seeds only: traces do not see env, catalogs or assets.
-  const codeSeeds = details.seeds.filter((s) => s.file !== RESOURCE && input.files.has(s.file));
+  // Translation catalogs are read by key, so loading one says nothing about which keys ran.
+  const codeSeeds = details.seeds.filter(
+    (s) => s.file !== RESOURCE && input.files.has(s.file) && !s.referencesOnly,
+  );
   const nonCodeSeeds = details.seeds.filter((s) => !codeSeeds.includes(s));
   const nonCodeTests = nonCodeSeeds.length ? graph.dependentsOf(nonCodeSeeds).tests : new Map();
   const traces = input.traces;
