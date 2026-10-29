@@ -24,7 +24,7 @@
   },
   "dependencies": {
     "@smarttest/shared": "workspace:*",
-    "typescript": "^6.0.3"
+    "typescript": "^7.0.2"
   },
   "smarttest": {
     "epic": "FND",
