@@ -11,8 +11,9 @@
  */
 
 export const release = {
-  version: "1.0.0",
-  codename: "Impact",
+  version: "0.2.0",
+  name: "Foundation backlog (shipped in 0.1.0 and 0.2.0)",
+  codename: "Foundation",
   goal: "A reliable, useful npm package that initialises itself, understands what changed, runs only the tests that matter (with conservative fallbacks), explains every decision and organises the test architecture — with no account, no cloud and no AI required.",
   velocity: { planned: 40, maxCommit: 42 },
   team: [
@@ -111,26 +112,22 @@ export const milestones = [
     sprint: "S0",
     version: "—",
     name: "Foundation ready",
-    exit: [
-      "`pnpm verify` green in CI on 3 OSes",
-      "ADR-0001…0007 accepted",
-      "Fixture catalogue committed",
-    ],
+    exit: ["`pnpm verify` green", "ADR-0001…0007 written", "Fixture catalogue committed"],
   },
   {
     id: "M1",
     sprint: "S3",
-    version: "0.1.0-alpha",
+    version: "—",
     name: "Change intelligence",
     exit: [
       "`scan`, `vcs status`, `snapshot diff` work on all fixtures",
-      "Persisted graph for every TS/JS fixture",
+      "Persisted index for every TS/JS fixture",
     ],
   },
   {
     id: "M2",
     sprint: "S6",
-    version: "0.3.0-alpha",
+    version: "—",
     name: "First affected run",
     exit: [
       "`run --affected` + `explain` end-to-end on Jest and Vitest fixtures",
@@ -140,31 +137,30 @@ export const milestones = [
   {
     id: "M3",
     sprint: "S8",
-    version: "0.6.0-beta",
-    name: "Init & generate (public beta)",
+    version: "—",
+    name: "Init & generate",
     exit: [
-      "`init` succeeds on 8/8 fixtures, idempotent, reversible",
+      "`init` idempotent and reversible on all fixtures",
       "`generate` never overwrites user files",
-      "Design-partner beta opened",
     ],
   },
   {
     id: "M4",
     sprint: "S9",
-    version: "1.0.0-rc.1",
-    name: "Release candidate · feature freeze",
-    exit: [
-      "All Must stories done",
-      "Report integrity suite green",
-      "`validate-selection` available",
-    ],
+    version: "0.1.0",
+    name: "First release",
+    exit: ["Reports, `validate-selection`, benchmarks", "Report integrity suite green"],
   },
   {
     id: "M5",
     sprint: "S10",
-    version: "1.0.0",
-    name: "General availability",
-    exit: ["Release exit criteria met (see README)", "Published to npm with provenance + SBOM"],
+    version: "0.2.0",
+    name: "Real-world validation (LeadsIt)",
+    exit: [
+      "LeadsIt pre-commit hook runs SmartTest",
+      "706/706 parity with native runners",
+      "History benchmark: 0 missed failures",
+    ],
   },
 ];
 
@@ -2206,20 +2202,24 @@ export const stories = [
 ];
 
 /**
- * Implementation status (updated as work lands). Stories not listed in `overrides` are "done".
- * "partial" and "todo" always carry a note saying exactly what is missing.
+ * Implementation status. Stories not listed in `overrides` are "done".
+ * "partial", "todo", "changed" and "dropped" always carry a note. Open work continues in ../roadmap.md.
  */
 export const implementation = {
   version: "0.2.0",
   default: "done",
   overrides: {
+    "ST-093": {
+      status: "dropped",
+      note: "GitHub Actions is not used. Replaced by a CI-agnostic guide (documentation/guides/ci.md); `smarttest ci` is planned in roadmap 0.6.0.",
+    },
     "ST-005": {
       status: "partial",
       note: "5 fixtures exist (TS + Vitest, CommonJS + Jest, pnpm monorepo, node:test, no-VCS), plus the LeadsIt case study as a real-world check. React, Next.js and Yarn ESM fixtures remain (planned in 1.1.0).",
     },
     "ST-006": {
-      status: "partial",
-      note: "Workflow committed (3 OSes × Node 22/24); not yet executed on GitHub.",
+      status: "changed",
+      note: "No hosted CI by decision: `pnpm verify` runs locally and in the `scripts/hooks/pre-push` gate (`pnpm hooks:install`).",
     },
     "ST-011": {
       status: "partial",
@@ -2239,11 +2239,11 @@ export const implementation = {
     },
     "ST-099": {
       status: "partial",
-      note: "Self-contained bundle, Changesets and provenance workflow are ready; first publish waits for the name decision.",
+      note: "Self-contained bundle and `pnpm release:publish` (local) are ready. npm provenance dropped: it requires hosted CI. First publish waits for the name decision.",
     },
     "ST-100": {
-      status: "partial",
-      note: "SBOM, dependency-audit and secret-scanning workflows are ready; not yet executed.",
+      status: "changed",
+      note: "Hosted audit and secret-scanning workflows dropped with GitHub Actions. Planned locally in roadmap 0.6.0 (`pnpm audit` + SBOM in `release:pack`).",
     },
     "ST-101": {
       status: "partial",

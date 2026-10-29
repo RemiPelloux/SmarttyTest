@@ -11,7 +11,7 @@
 | Sprints | S8 → S9 |
 | Acceptance gate | Generation is repeatable and does not overwrite user content by default. |
 
-**Out of scope for 1.0.0:** AI generation mode (Release 3); REFACTOR migration preview H15 (Release 2).
+**Deferred to [the roadmap](../../roadmap.md):** AI generation mode (Release 3); REFACTOR migration preview H15 (Release 2).
 
 | Implementation | 36 / 36 points done (v0.2.0) |
 
@@ -19,13 +19,13 @@
 
 | ID | Story | Pri | Pts | Sprint | Status | Depends on |
 |---|---|---|---|---|---|---|
-| [ST-078](#st-078) | Mirror and colocated layouts | Must | 5 | S8 | ✅ done | [ST-037](SRC-source-intelligence.md#st-037), [ST-022](DET-project-detection.md#st-022) |
-| [ST-079](#st-079) | Domain and custom layouts with naming tokens | Should | 5 | S9 | ✅ done | [ST-078](GEN-test-architecture-generator.md#st-078) |
-| [ST-080](#st-080) | Class and module templates | Must | 5 | S8 | ✅ done | [ST-065](RUL-rules-engine.md#st-065) |
-| [ST-081](#st-081) | Unit and integration scaffolding without fake coverage | Must | 8 | S8 | ✅ done | [ST-078](GEN-test-architecture-generator.md#st-078), [ST-080](GEN-test-architecture-generator.md#st-080), [ST-082](GEN-test-architecture-generator.md#st-082) |
-| [ST-082](#st-082) | Existing test detection and collision prevention | Must | 5 | S8 | ✅ done | [ST-052](EXE-test-execution.md#st-052), [ST-078](GEN-test-architecture-generator.md#st-078) |
-| [ST-083](#st-083) | Generator dry-run and atomic writes | Must | 3 | S9 | ✅ done | [ST-081](GEN-test-architecture-generator.md#st-081) |
-| [ST-084](#st-084) | Architecture sync: missing, orphaned and renamed | Should | 5 | S9 | ✅ done | [ST-082](GEN-test-architecture-generator.md#st-082), [ST-029](VCS-version-control-and-native-snapshots.md#st-029) |
+| [ST-078](#st-078) | Mirror and colocated layouts | Must | 5 | S8 | done | [ST-037](SRC-source-intelligence.md#st-037), [ST-022](DET-project-detection.md#st-022) |
+| [ST-079](#st-079) | Domain and custom layouts with naming tokens | Should | 5 | S9 | done | [ST-078](GEN-test-architecture-generator.md#st-078) |
+| [ST-080](#st-080) | Class and module templates | Must | 5 | S8 | done | [ST-065](RUL-rules-engine.md#st-065) |
+| [ST-081](#st-081) | Unit and integration scaffolding without fake coverage | Must | 8 | S8 | done | [ST-078](GEN-test-architecture-generator.md#st-078), [ST-080](GEN-test-architecture-generator.md#st-080), [ST-082](GEN-test-architecture-generator.md#st-082) |
+| [ST-082](#st-082) | Existing test detection and collision prevention | Must | 5 | S8 | done | [ST-052](EXE-test-execution.md#st-052), [ST-078](GEN-test-architecture-generator.md#st-078) |
+| [ST-083](#st-083) | Generator dry-run and atomic writes | Must | 3 | S9 | done | [ST-081](GEN-test-architecture-generator.md#st-081) |
+| [ST-084](#st-084) | Architecture sync: missing, orphaned and renamed | Should | 5 | S9 | done | [ST-082](GEN-test-architecture-generator.md#st-082), [ST-029](VCS-version-control-and-native-snapshots.md#st-029) |
 
 ---
 
@@ -37,9 +37,9 @@
 
 | Priority | Points | Sprint | Spec | Depends on |
 |---|---|---|---|---|
-| 🟥 Must | 5 | S8 | H01, H02, §13.4 | [ST-037](SRC-source-intelligence.md#st-037), [ST-022](DET-project-detection.md#st-022) |
+| Must | 5 | S8 | H01, H02, §13.4 | [ST-037](SRC-source-intelligence.md#st-037), [ST-022](DET-project-detection.md#st-022) |
 
-**Status:** ✅ done
+**Status:** done
 
 **Acceptance criteria**
 
@@ -57,9 +57,9 @@
 
 | Priority | Points | Sprint | Spec | Depends on |
 |---|---|---|---|---|
-| 🟧 Should | 5 | S9 | H03, H04, H05, §13.5 | [ST-078](GEN-test-architecture-generator.md#st-078) |
+| Should | 5 | S9 | H03, H04, H05, §13.5 | [ST-078](GEN-test-architecture-generator.md#st-078) |
 
-**Status:** ✅ done
+**Status:** done
 
 **Acceptance criteria**
 
@@ -77,9 +77,9 @@
 
 | Priority | Points | Sprint | Spec | Depends on |
 |---|---|---|---|---|
-| 🟥 Must | 5 | S8 | H06, H07 | [ST-065](RUL-rules-engine.md#st-065) |
+| Must | 5 | S8 | H06, H07 | [ST-065](RUL-rules-engine.md#st-065) |
 
-**Status:** ✅ done
+**Status:** done
 
 **Acceptance criteria**
 
@@ -97,9 +97,9 @@
 
 | Priority | Points | Sprint | Spec | Depends on |
 |---|---|---|---|---|
-| 🟥 Must | 8 | S8 | H08, H09, §13.8 | [ST-078](GEN-test-architecture-generator.md#st-078), [ST-080](GEN-test-architecture-generator.md#st-080), [ST-082](GEN-test-architecture-generator.md#st-082) |
+| Must | 8 | S8 | H08, H09, §13.8 | [ST-078](GEN-test-architecture-generator.md#st-078), [ST-080](GEN-test-architecture-generator.md#st-080), [ST-082](GEN-test-architecture-generator.md#st-082) |
 
-**Status:** ✅ done
+**Status:** done
 
 **Acceptance criteria**
 
@@ -117,9 +117,9 @@
 
 | Priority | Points | Sprint | Spec | Depends on |
 |---|---|---|---|---|
-| 🟥 Must | 5 | S8 | H10, H11, §13.8 | [ST-052](EXE-test-execution.md#st-052), [ST-078](GEN-test-architecture-generator.md#st-078) |
+| Must | 5 | S8 | H10, H11, §13.8 | [ST-052](EXE-test-execution.md#st-052), [ST-078](GEN-test-architecture-generator.md#st-078) |
 
-**Status:** ✅ done
+**Status:** done
 
 **Acceptance criteria**
 
@@ -137,9 +137,9 @@
 
 | Priority | Points | Sprint | Spec | Depends on |
 |---|---|---|---|---|
-| 🟥 Must | 3 | S9 | H12, §13.8 | [ST-081](GEN-test-architecture-generator.md#st-081) |
+| Must | 3 | S9 | H12, §13.8 | [ST-081](GEN-test-architecture-generator.md#st-081) |
 
-**Status:** ✅ done
+**Status:** done
 
 **Acceptance criteria**
 
@@ -157,9 +157,9 @@
 
 | Priority | Points | Sprint | Spec | Depends on |
 |---|---|---|---|---|
-| 🟧 Should | 5 | S9 | H13, H14, §13.9 | [ST-082](GEN-test-architecture-generator.md#st-082), [ST-029](VCS-version-control-and-native-snapshots.md#st-029) |
+| Should | 5 | S9 | H13, H14, §13.9 | [ST-082](GEN-test-architecture-generator.md#st-082), [ST-029](VCS-version-control-and-native-snapshots.md#st-029) |
 
-**Status:** ✅ done
+**Status:** done
 
 **Acceptance criteria**
 

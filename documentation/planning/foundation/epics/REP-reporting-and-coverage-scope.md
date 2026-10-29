@@ -11,7 +11,7 @@
 | Sprints | S9 → S10 |
 | Acceptance gate | Reports are accurate, portable and clear about skipped, cached and executed tests. |
 
-**Out of scope for 1.0.0:** Diff/branch coverage intelligence K06–K09 (Release 2); Historical comparison O07.
+**Deferred to [the roadmap](../../roadmap.md):** Diff/branch coverage intelligence K06–K09 (Release 2); Historical comparison O07.
 
 | Implementation | 26 / 26 points done (v0.2.0) |
 
@@ -19,13 +19,13 @@
 
 | ID | Story | Pri | Pts | Sprint | Status | Depends on |
 |---|---|---|---|---|---|---|
-| [ST-085](#st-085) | JSON report with a versioned schema | Must | 3 | S9 | ✅ done | [ST-063](IMP-impact-engine-and-selection.md#st-063) |
-| [ST-086](#st-086) | Self-contained HTML report | Must | 8 | S9 | ✅ done | [ST-085](REP-reporting-and-coverage-scope.md#st-085) |
-| [ST-087](#st-087) | JUnit XML export | Must | 2 | S9 | ✅ done | [ST-051](EXE-test-execution.md#st-051) |
-| [ST-088](#st-088) | Coverage ingestion with explicit scope | Should | 5 | S9 | ✅ done | [ST-049](EXE-test-execution.md#st-049), [ST-050](EXE-test-execution.md#st-050) |
-| [ST-089](#st-089) | Impact explanations in reports | Must | 3 | S9 | ✅ done | [ST-062](IMP-impact-engine-and-selection.md#st-062), [ST-085](REP-reporting-and-coverage-scope.md#st-085) |
-| [ST-090](#st-090) | Report integrity validation | Must | 3 | S10 | ✅ done | [ST-086](REP-reporting-and-coverage-scope.md#st-086), [ST-087](REP-reporting-and-coverage-scope.md#st-087) |
-| [ST-091](#st-091) | Markdown / PR summary export | Should | 2 | S9 | ✅ done | [ST-085](REP-reporting-and-coverage-scope.md#st-085) |
+| [ST-085](#st-085) | JSON report with a versioned schema | Must | 3 | S9 | done | [ST-063](IMP-impact-engine-and-selection.md#st-063) |
+| [ST-086](#st-086) | Self-contained HTML report | Must | 8 | S9 | done | [ST-085](REP-reporting-and-coverage-scope.md#st-085) |
+| [ST-087](#st-087) | JUnit XML export | Must | 2 | S9 | done | [ST-051](EXE-test-execution.md#st-051) |
+| [ST-088](#st-088) | Coverage ingestion with explicit scope | Should | 5 | S9 | done | [ST-049](EXE-test-execution.md#st-049), [ST-050](EXE-test-execution.md#st-050) |
+| [ST-089](#st-089) | Impact explanations in reports | Must | 3 | S9 | done | [ST-062](IMP-impact-engine-and-selection.md#st-062), [ST-085](REP-reporting-and-coverage-scope.md#st-085) |
+| [ST-090](#st-090) | Report integrity validation | Must | 3 | S10 | done | [ST-086](REP-reporting-and-coverage-scope.md#st-086), [ST-087](REP-reporting-and-coverage-scope.md#st-087) |
+| [ST-091](#st-091) | Markdown / PR summary export | Should | 2 | S9 | done | [ST-085](REP-reporting-and-coverage-scope.md#st-085) |
 
 ---
 
@@ -37,9 +37,9 @@
 
 | Priority | Points | Sprint | Spec | Depends on |
 |---|---|---|---|---|
-| 🟥 Must | 3 | S9 | O01, §25.2 | [ST-063](IMP-impact-engine-and-selection.md#st-063) |
+| Must | 3 | S9 | O01, §25.2 | [ST-063](IMP-impact-engine-and-selection.md#st-063) |
 
-**Status:** ✅ done
+**Status:** done
 
 **Acceptance criteria**
 
@@ -57,9 +57,9 @@
 
 | Priority | Points | Sprint | Spec | Depends on |
 |---|---|---|---|---|
-| 🟥 Must | 8 | S9 | O02, §25.3 | [ST-085](REP-reporting-and-coverage-scope.md#st-085) |
+| Must | 8 | S9 | O02, §25.3 | [ST-085](REP-reporting-and-coverage-scope.md#st-085) |
 
-**Status:** ✅ done
+**Status:** done
 
 **Acceptance criteria**
 
@@ -78,9 +78,9 @@
 
 | Priority | Points | Sprint | Spec | Depends on |
 |---|---|---|---|---|
-| 🟥 Must | 2 | S9 | O03 | [ST-051](EXE-test-execution.md#st-051) |
+| Must | 2 | S9 | O03 | [ST-051](EXE-test-execution.md#st-051) |
 
-**Status:** ✅ done
+**Status:** done
 
 **Acceptance criteria**
 
@@ -98,9 +98,9 @@
 
 | Priority | Points | Sprint | Spec | Depends on |
 |---|---|---|---|---|
-| 🟧 Should | 5 | S9 | K01, K10, §16.2 | [ST-049](EXE-test-execution.md#st-049), [ST-050](EXE-test-execution.md#st-050) |
+| Should | 5 | S9 | K01, K10, §16.2 | [ST-049](EXE-test-execution.md#st-049), [ST-050](EXE-test-execution.md#st-050) |
 
-**Status:** ✅ done
+**Status:** done
 
 **Acceptance criteria**
 
@@ -118,9 +118,9 @@
 
 | Priority | Points | Sprint | Spec | Depends on |
 |---|---|---|---|---|
-| 🟥 Must | 3 | S9 | O05, §11.6 | [ST-062](IMP-impact-engine-and-selection.md#st-062), [ST-085](REP-reporting-and-coverage-scope.md#st-085) |
+| Must | 3 | S9 | O05, §11.6 | [ST-062](IMP-impact-engine-and-selection.md#st-062), [ST-085](REP-reporting-and-coverage-scope.md#st-085) |
 
-**Status:** ✅ done
+**Status:** done
 
 **Acceptance criteria**
 
@@ -138,9 +138,9 @@
 
 | Priority | Points | Sprint | Spec | Depends on |
 |---|---|---|---|---|
-| 🟥 Must | 3 | S10 | O09, §25.4, §32.2 | [ST-086](REP-reporting-and-coverage-scope.md#st-086), [ST-087](REP-reporting-and-coverage-scope.md#st-087) |
+| Must | 3 | S10 | O09, §25.4, §32.2 | [ST-086](REP-reporting-and-coverage-scope.md#st-086), [ST-087](REP-reporting-and-coverage-scope.md#st-087) |
 
-**Status:** ✅ done
+**Status:** done
 
 **Acceptance criteria**
 
@@ -158,9 +158,9 @@
 
 | Priority | Points | Sprint | Spec | Depends on |
 |---|---|---|---|---|
-| 🟧 Should | 2 | S9 | O10 | [ST-085](REP-reporting-and-coverage-scope.md#st-085) |
+| Should | 2 | S9 | O10 | [ST-085](REP-reporting-and-coverage-scope.md#st-085) |
 
-**Status:** ✅ done
+**Status:** done
 
 **Acceptance criteria**
 

@@ -41,7 +41,7 @@ This is PRD §36, adapted to the repository.
 
 **Review**
 - [ ] At least one approving review, or two for changes to `impact-engine`, `rules-engine` or the report integrity suite.
-- [ ] CI is green on the 3-OS matrix.
+- [ ] `pnpm verify` passes locally (the pre-push hook runs it); before a release, on Linux, macOS and Windows.
 
 ## Definition of Done (sprint level)
 

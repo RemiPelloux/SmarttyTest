@@ -17,11 +17,11 @@
 
 | ID | Story | Pri | Pts | Sprint | Status | Depends on |
 |---|---|---|---|---|---|---|
-| [ST-099](#st-099) | npm publishing with provenance and changesets | Must | 3 | S10 | 🟡 partial | [ST-006](FND-core-project-foundation.md#st-006), [ST-011](FND-core-project-foundation.md#st-011) |
-| [ST-100](#st-100) | SBOM, dependency audit and secret scanning | Must | 2 | S10 | 🟡 partial | [ST-006](FND-core-project-foundation.md#st-006) |
-| [ST-101](#st-101) | Documentation verified against the product | Must | 5 | S10 | 🟡 partial | [ST-063](IMP-impact-engine-and-selection.md#st-063), [ST-071](INI-smart-init.md#st-071), [ST-081](GEN-test-architecture-generator.md#st-081) |
-| [ST-102](#st-102) | Example projects | Should | 3 | S6 | 🟡 partial | [ST-005](FND-core-project-foundation.md#st-005) |
-| [ST-103](#st-103) | Clean removal path | Must | 2 | S10 | ✅ done | [ST-076](INI-smart-init.md#st-076) |
+| [ST-099](#st-099) | npm publishing with provenance and changesets | Must | 3 | S10 | partial | [ST-006](FND-core-project-foundation.md#st-006), [ST-011](FND-core-project-foundation.md#st-011) |
+| [ST-100](#st-100) | SBOM, dependency audit and secret scanning | Must | 2 | S10 | changed | [ST-006](FND-core-project-foundation.md#st-006) |
+| [ST-101](#st-101) | Documentation verified against the product | Must | 5 | S10 | partial | [ST-063](IMP-impact-engine-and-selection.md#st-063), [ST-071](INI-smart-init.md#st-071), [ST-081](GEN-test-architecture-generator.md#st-081) |
+| [ST-102](#st-102) | Example projects | Should | 3 | S6 | partial | [ST-005](FND-core-project-foundation.md#st-005) |
+| [ST-103](#st-103) | Clean removal path | Must | 2 | S10 | done | [ST-076](INI-smart-init.md#st-076) |
 
 ---
 
@@ -33,9 +33,9 @@
 
 | Priority | Points | Sprint | Spec | Depends on |
 |---|---|---|---|---|
-| 🟥 Must | 3 | S10 | §30.6 | [ST-006](FND-core-project-foundation.md#st-006), [ST-011](FND-core-project-foundation.md#st-011) |
+| Must | 3 | S10 | §30.6 | [ST-006](FND-core-project-foundation.md#st-006), [ST-011](FND-core-project-foundation.md#st-011) |
 
-**Status:** 🟡 partial — Self-contained bundle, Changesets and provenance workflow are ready; first publish waits for the name decision.
+**Status:** partial — Self-contained bundle and `pnpm release:publish` (local) are ready. npm provenance dropped: it requires hosted CI. First publish waits for the name decision.
 
 **Acceptance criteria**
 
@@ -53,9 +53,9 @@
 
 | Priority | Points | Sprint | Spec | Depends on |
 |---|---|---|---|---|
-| 🟥 Must | 2 | S10 | §30.6 | [ST-006](FND-core-project-foundation.md#st-006) |
+| Must | 2 | S10 | §30.6 | [ST-006](FND-core-project-foundation.md#st-006) |
 
-**Status:** 🟡 partial — SBOM, dependency-audit and secret-scanning workflows are ready; not yet executed.
+**Status:** changed — Hosted audit and secret-scanning workflows dropped with GitHub Actions. Planned locally in roadmap 0.6.0 (`pnpm audit` + SBOM in `release:pack`).
 
 **Acceptance criteria**
 
@@ -73,9 +73,9 @@
 
 | Priority | Points | Sprint | Spec | Depends on |
 |---|---|---|---|---|
-| 🟥 Must | 5 | S10 | §26, §38.2 | [ST-063](IMP-impact-engine-and-selection.md#st-063), [ST-071](INI-smart-init.md#st-071), [ST-081](GEN-test-architecture-generator.md#st-081) |
+| Must | 5 | S10 | §26, §38.2 | [ST-063](IMP-impact-engine-and-selection.md#st-063), [ST-071](INI-smart-init.md#st-071), [ST-081](GEN-test-architecture-generator.md#st-081) |
 
-**Status:** 🟡 partial — Docs match the implementation and the command surface is covered by CLI tests; executing doc snippets in CI is not implemented.
+**Status:** partial — Docs match the implementation and the command surface is covered by CLI tests; executing doc snippets in CI is not implemented.
 
 **Acceptance criteria**
 
@@ -93,9 +93,9 @@
 
 | Priority | Points | Sprint | Spec | Depends on |
 |---|---|---|---|---|
-| 🟧 Should | 3 | S6 | §4.2 | [ST-005](FND-core-project-foundation.md#st-005) |
+| Should | 3 | S6 | §4.2 | [ST-005](FND-core-project-foundation.md#st-005) |
 
-**Status:** 🟡 partial — The fixture projects double as runnable examples (examples/README.md); dedicated example repos are not split out.
+**Status:** partial — The fixture projects double as runnable examples (examples/README.md); dedicated example repos are not split out.
 
 **Acceptance criteria**
 
@@ -113,9 +113,9 @@
 
 | Priority | Points | Sprint | Spec | Depends on |
 |---|---|---|---|---|
-| 🟥 Must | 2 | S10 | §38.2, §1.4 Non-destructive | [ST-076](INI-smart-init.md#st-076) |
+| Must | 2 | S10 | §38.2, §1.4 Non-destructive | [ST-076](INI-smart-init.md#st-076) |
 
-**Status:** ✅ done
+**Status:** done
 
 **Acceptance criteria**
 

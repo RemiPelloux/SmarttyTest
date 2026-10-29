@@ -1099,13 +1099,13 @@ const HANDLERS: Record<string, (ctx: Ctx) => Promise<number>> = {
 };
 
 const LATER: Record<string, string> = {
-  sync: "Adaptive configuration (`sync`) arrives in Release 2.",
-  migrate: "Adaptive configuration (`migrate`) arrives in Release 2.",
-  watch: "Watch mode arrives in Release 2.",
-  ai: "SmartTest AI arrives in Release 3 — the deterministic core never requires it.",
-  autopilot: "Autopilot arrives in Release 3.",
-  studio: "SmartTest Studio arrives in Release 4. Meanwhile: `smarttest report --open`.",
-  open: "SmartTest Studio arrives in Release 4. Meanwhile: `smarttest report --open`.",
+  sync: "`sync` is planned for 0.7.0.",
+  migrate: "`migrate` is planned for 0.7.0.",
+  watch: "Watch mode is planned for 0.7.0.",
+  ai: "AI features are planned after 1.0.0. SmartTest never requires them.",
+  autopilot: "Autopilot is planned after 1.0.0.",
+  studio: "Studio is planned for 0.9.0. For now: `smarttest report --open`.",
+  open: "Studio is planned for 0.9.0. For now: `smarttest report --open`.",
 };
 
 export async function main(

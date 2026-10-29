@@ -7,7 +7,8 @@
  *
  * Non-destructive by design (same rule the product follows):
  *   - package.json / tsconfig.json are regenerated (they are derived from the manifest)
- *   - README.md and src/** are only created when missing — never overwritten
+ *   - README.md is regenerated (derived from the manifest)
+ *   - src/** is only created when missing — never overwritten
  *   - the root tsconfig.json project references are regenerated
  */
 import { execFileSync } from "node:child_process";
@@ -111,7 +112,7 @@ for (const pkg of targets) {
  * ${publishName(pkg)} — ${pkg.description}
  *
  * Epic: ${pkg.epic} · Target release: 1.0.0
- * See documentation/planning/release-1.0.0/epics/ for the user stories that fill this package.
+ * See documentation/planning/foundation/epics/ for the user stories that fill this package.
  */
 export const packageInfo = {
   name: ${JSON.stringify(publishName(pkg))},
@@ -133,20 +134,16 @@ console.log(\`\${packageInfo.name} — pre-release scaffold. See https://github.
     );
   }
 
-  await writeIfMissing(
+  // README is derived from the manifest, like package.json.
+  await writeFile(
     join(dir, "README.md"),
     `# ${publishName(pkg)}
 
-> ${pkg.description}
+${pkg.description}
 
-| | |
-|---|---|
-| Epic | \`${pkg.epic}\` — see [planning](../../documentation/planning/release-1.0.0/epics/README.md) |
-| Target release | 1.0.0 |
-| Status | Scaffold |
-| Workspace deps | ${deps.length ? deps.map((d) => `\`${publishName(byName.get(d))}\``).join(", ") : "—"} |
+${deps.length ? `Depends on ${deps.map((d) => `\`${publishName(byName.get(d))}\``).join(", ")}.` : "No workspace dependencies."}
 
-Architecture context: [documentation/architecture/overview.md](../../documentation/architecture/overview.md)
+Part of [SmartTest](../../README.md). See the [architecture overview](../../documentation/architecture/overview.md).
 `,
   );
 

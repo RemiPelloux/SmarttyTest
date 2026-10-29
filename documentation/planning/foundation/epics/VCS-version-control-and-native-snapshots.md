@@ -11,7 +11,7 @@
 | Sprints | S1 → S2 → S3 → S10 |
 | Acceptance gate | All 1.0 adapters produce consistent normalized changes within their declared capabilities. |
 
-**Out of scope for 1.0.0:** SVN adapter (Release 2); Mercurial / Perforce (Release 6); Custom VCS plugins (post-1.0).
+**Deferred to [the roadmap](../../roadmap.md):** SVN adapter (Release 2); Mercurial / Perforce (Release 6); Custom VCS plugins (post-1.0).
 
 | Implementation | 37 / 37 points done (v0.2.0) |
 
@@ -19,15 +19,15 @@
 
 | ID | Story | Pri | Pts | Sprint | Status | Depends on |
 |---|---|---|---|---|---|---|
-| [ST-026](#st-026) | VCS adapter contract and normalized ChangeSet | Must | 3 | S1 | ✅ done | [ST-009](FND-core-project-foundation.md#st-009) |
-| [ST-027](#st-027) | Git branch and commit comparison | Must | 5 | S1 | ✅ done | [ST-026](VCS-version-control-and-native-snapshots.md#st-026), [ST-024](DET-project-detection.md#st-024) |
-| [ST-028](#st-028) | Git staged, uncommitted and untracked changes | Must | 3 | S2 | ✅ done | [ST-027](VCS-version-control-and-native-snapshots.md#st-027) |
-| [ST-029](#st-029) | Git renames, deletions, worktrees and nested repos | Must | 5 | S2 | ✅ done | [ST-027](VCS-version-control-and-native-snapshots.md#st-027) |
-| [ST-030](#st-030) | Native snapshot baseline and content fingerprints | Must | 8 | S2 | ✅ done | [ST-026](VCS-version-control-and-native-snapshots.md#st-026), [ST-013](FND-core-project-foundation.md#st-013) |
-| [ST-031](#st-031) | Snapshot comparison with completeness reporting | Must | 5 | S3 | ✅ done | [ST-030](VCS-version-control-and-native-snapshots.md#st-030) |
-| [ST-032](#st-032) | Hybrid mode: Git + native snapshots | Should | 3 | S3 | ✅ done | [ST-031](VCS-version-control-and-native-snapshots.md#st-031), [ST-028](VCS-version-control-and-native-snapshots.md#st-028) |
-| [ST-033](#st-033) | `snapshot` and `vcs` commands | Must | 3 | S3 | ✅ done | [ST-031](VCS-version-control-and-native-snapshots.md#st-031), [ST-014](CLI-cli-developer-experience.md#st-014) |
-| [ST-034](#st-034) | Snapshot retention and prune | Should | 2 | S10 | ✅ done | [ST-033](VCS-version-control-and-native-snapshots.md#st-033) |
+| [ST-026](#st-026) | VCS adapter contract and normalized ChangeSet | Must | 3 | S1 | done | [ST-009](FND-core-project-foundation.md#st-009) |
+| [ST-027](#st-027) | Git branch and commit comparison | Must | 5 | S1 | done | [ST-026](VCS-version-control-and-native-snapshots.md#st-026), [ST-024](DET-project-detection.md#st-024) |
+| [ST-028](#st-028) | Git staged, uncommitted and untracked changes | Must | 3 | S2 | done | [ST-027](VCS-version-control-and-native-snapshots.md#st-027) |
+| [ST-029](#st-029) | Git renames, deletions, worktrees and nested repos | Must | 5 | S2 | done | [ST-027](VCS-version-control-and-native-snapshots.md#st-027) |
+| [ST-030](#st-030) | Native snapshot baseline and content fingerprints | Must | 8 | S2 | done | [ST-026](VCS-version-control-and-native-snapshots.md#st-026), [ST-013](FND-core-project-foundation.md#st-013) |
+| [ST-031](#st-031) | Snapshot comparison with completeness reporting | Must | 5 | S3 | done | [ST-030](VCS-version-control-and-native-snapshots.md#st-030) |
+| [ST-032](#st-032) | Hybrid mode: Git + native snapshots | Should | 3 | S3 | done | [ST-031](VCS-version-control-and-native-snapshots.md#st-031), [ST-028](VCS-version-control-and-native-snapshots.md#st-028) |
+| [ST-033](#st-033) | `snapshot` and `vcs` commands | Must | 3 | S3 | done | [ST-031](VCS-version-control-and-native-snapshots.md#st-031), [ST-014](CLI-cli-developer-experience.md#st-014) |
+| [ST-034](#st-034) | Snapshot retention and prune | Should | 2 | S10 | done | [ST-033](VCS-version-control-and-native-snapshots.md#st-033) |
 
 ---
 
@@ -39,9 +39,9 @@
 
 | Priority | Points | Sprint | Spec | Depends on |
 |---|---|---|---|---|
-| 🟥 Must | 3 | S1 | D01, §7.3, §7.4 | [ST-009](FND-core-project-foundation.md#st-009) |
+| Must | 3 | S1 | D01, §7.3, §7.4 | [ST-009](FND-core-project-foundation.md#st-009) |
 
-**Status:** ✅ done
+**Status:** done
 
 **Acceptance criteria**
 
@@ -59,9 +59,9 @@
 
 | Priority | Points | Sprint | Spec | Depends on |
 |---|---|---|---|---|
-| 🟥 Must | 5 | S1 | D02, D03, §7.5 | [ST-026](VCS-version-control-and-native-snapshots.md#st-026), [ST-024](DET-project-detection.md#st-024) |
+| Must | 5 | S1 | D02, D03, §7.5 | [ST-026](VCS-version-control-and-native-snapshots.md#st-026), [ST-024](DET-project-detection.md#st-024) |
 
-**Status:** ✅ done
+**Status:** done
 
 **Acceptance criteria**
 
@@ -79,9 +79,9 @@
 
 | Priority | Points | Sprint | Spec | Depends on |
 |---|---|---|---|---|
-| 🟥 Must | 3 | S2 | D04, §7.5 | [ST-027](VCS-version-control-and-native-snapshots.md#st-027) |
+| Must | 3 | S2 | D04, §7.5 | [ST-027](VCS-version-control-and-native-snapshots.md#st-027) |
 
-**Status:** ✅ done
+**Status:** done
 
 **Acceptance criteria**
 
@@ -99,9 +99,9 @@
 
 | Priority | Points | Sprint | Spec | Depends on |
 |---|---|---|---|---|
-| 🟥 Must | 5 | S2 | D05, §7.5 | [ST-027](VCS-version-control-and-native-snapshots.md#st-027) |
+| Must | 5 | S2 | D05, §7.5 | [ST-027](VCS-version-control-and-native-snapshots.md#st-027) |
 
-**Status:** ✅ done
+**Status:** done
 
 **Acceptance criteria**
 
@@ -119,9 +119,9 @@
 
 | Priority | Points | Sprint | Spec | Depends on |
 |---|---|---|---|---|
-| 🟥 Must | 8 | S2 | D06, D07, §8 | [ST-026](VCS-version-control-and-native-snapshots.md#st-026), [ST-013](FND-core-project-foundation.md#st-013) |
+| Must | 8 | S2 | D06, D07, §8 | [ST-026](VCS-version-control-and-native-snapshots.md#st-026), [ST-013](FND-core-project-foundation.md#st-013) |
 
-**Status:** ✅ done
+**Status:** done
 
 **Acceptance criteria**
 
@@ -140,9 +140,9 @@
 
 | Priority | Points | Sprint | Spec | Depends on |
 |---|---|---|---|---|
-| 🟥 Must | 5 | S3 | D08, §8.7 | [ST-030](VCS-version-control-and-native-snapshots.md#st-030) |
+| Must | 5 | S3 | D08, §8.7 | [ST-030](VCS-version-control-and-native-snapshots.md#st-030) |
 
-**Status:** ✅ done
+**Status:** done
 
 **Acceptance criteria**
 
@@ -160,9 +160,9 @@
 
 | Priority | Points | Sprint | Spec | Depends on |
 |---|---|---|---|---|
-| 🟧 Should | 3 | S3 | D09, §8.5 | [ST-031](VCS-version-control-and-native-snapshots.md#st-031), [ST-028](VCS-version-control-and-native-snapshots.md#st-028) |
+| Should | 3 | S3 | D09, §8.5 | [ST-031](VCS-version-control-and-native-snapshots.md#st-031), [ST-028](VCS-version-control-and-native-snapshots.md#st-028) |
 
-**Status:** ✅ done
+**Status:** done
 
 **Acceptance criteria**
 
@@ -180,9 +180,9 @@
 
 | Priority | Points | Sprint | Spec | Depends on |
 |---|---|---|---|---|
-| 🟥 Must | 3 | S3 | §8.6 | [ST-031](VCS-version-control-and-native-snapshots.md#st-031), [ST-014](CLI-cli-developer-experience.md#st-014) |
+| Must | 3 | S3 | §8.6 | [ST-031](VCS-version-control-and-native-snapshots.md#st-031), [ST-014](CLI-cli-developer-experience.md#st-014) |
 
-**Status:** ✅ done
+**Status:** done
 
 **Acceptance criteria**
 
@@ -200,9 +200,9 @@
 
 | Priority | Points | Sprint | Spec | Depends on |
 |---|---|---|---|---|
-| 🟧 Should | 2 | S10 | D14, §8.4 | [ST-033](VCS-version-control-and-native-snapshots.md#st-033) |
+| Should | 2 | S10 | D14, §8.4 | [ST-033](VCS-version-control-and-native-snapshots.md#st-033) |
 
-**Status:** ✅ done
+**Status:** done
 
 **Acceptance criteria**
 

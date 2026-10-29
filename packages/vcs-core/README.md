@@ -1,12 +1,7 @@
 # @smarttest/vcs-core
 
-> Version-control adapter contract and normalized ChangeSet utilities.
+Version-control adapter contract and normalized ChangeSet utilities.
 
-|                |                                                                                    |
-| -------------- | ---------------------------------------------------------------------------------- |
-| Epic           | `VCS` — see [planning](../../documentation/planning/release-1.0.0/epics/README.md) |
-| Target release | 1.0.0                                                                              |
-| Status         | Scaffold                                                                           |
-| Workspace deps | `@smarttest/shared`, `@smarttest/plugin-sdk`                                       |
+Depends on `@smarttest/shared`, `@smarttest/plugin-sdk`.
 
-Architecture context: [documentation/architecture/overview.md](../../documentation/architecture/overview.md)
+Part of [SmartTest](../../README.md). See the [architecture overview](../../documentation/architecture/overview.md).

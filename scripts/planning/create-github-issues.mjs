@@ -15,7 +15,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "../..");
 const { release, sprints, epics, stories } = await import(
-  pathToFileURL(join(repoRoot, "documentation/planning/release-1.0.0/backlog.data.mjs")).href
+  pathToFileURL(join(repoRoot, "documentation/planning/foundation/backlog.data.mjs")).href
 );
 
 const apply = process.argv.includes("--apply");
@@ -104,7 +104,7 @@ for (const s of selected) {
     "",
     s.deps.length ? `**Depends on:** ${s.deps.join(", ")}` : "",
     "",
-    "_Generated from `documentation/planning/release-1.0.0/backlog.data.mjs`._",
+    "_Generated from `documentation/planning/foundation/backlog.data.mjs`._",
   ].join("\n");
   const labelsFor = [
     s.title.startsWith("Spike") ? "spike" : "story",

@@ -1,7 +1,5 @@
 # CLI reference
 
-> Implemented in **v0.2.0**. Every command below is exercised by the test suite (`integration-tests/cli.test.ts`).
-
 ## Commands
 
 | Command                                                         | Purpose                                                                                                                 |
@@ -24,7 +22,7 @@
 | `smarttest report`                                              | Re-render reports from the last run                                                                                     |
 | `smarttest uninstall`                                           | Remove SmartTest config, scripts and local state. Tests are kept                                                        |
 
-Planned for later releases: `sync`, `migrate` and `watch` (Release 2), `ai …` and `autopilot` (Release 3), `studio` / `open` (Release 4). These names are reserved and answer with `ST_NOT_AVAILABLE`.
+Reserved for later versions ([roadmap](../planning/roadmap.md)): `sync`, `migrate` and `watch` (0.7.0), `studio` / `open` (0.9.0), `ai …` and `autopilot` (after 1.0.0). They exit with `ST_NOT_AVAILABLE`.
 
 ## Global flags
 
@@ -67,7 +65,7 @@ Planned for later releases: `sync`, `migrate` and `watch` (Release 2), `ai …` 
 | `--format <f>`   | Repeatable: `html`, `json`, `junit`, `markdown` (default from config)         |
 | `--open`         | Open the HTML report                                                          |
 
-In GitHub Actions the Markdown summary is appended to `$GITHUB_STEP_SUMMARY` automatically. Ctrl-C cancels the runner cleanly and reports `cancelled`.
+Ctrl-C cancels the runner cleanly and reports `cancelled`.
 
 ## `init`
 

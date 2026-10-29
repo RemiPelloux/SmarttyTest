@@ -11,7 +11,7 @@
 | Sprints | S6 → S10 → STRETCH |
 | Acceptance gate | Performance and selection-safety claims are reproducible under documented conditions. |
 
-**Out of scope for 1.0.0:** Stress tests & memory profiling R05–R06 (Release 2).
+**Deferred to [the roadmap](../../roadmap.md):** Stress tests & memory profiling R05–R06 (Release 2).
 
 | Implementation | 10 / 16 points done (v0.2.0) |
 
@@ -19,10 +19,10 @@
 
 | ID | Story | Pri | Pts | Sprint | Status | Depends on |
 |---|---|---|---|---|---|---|
-| [ST-095](#st-095) | Regression-detection benchmark harness | Must | 5 | S6 | ✅ done | [ST-005](FND-core-project-foundation.md#st-005), [ST-063](IMP-impact-engine-and-selection.md#st-063) |
-| [ST-096](#st-096) | Performance benchmarks under documented conditions | Must | 5 | S10 | ✅ done | [ST-047](GRA-dependency-graph.md#st-047), [ST-063](IMP-impact-engine-and-selection.md#st-063) |
-| [ST-097](#st-097) | Cross-platform validation | Must | 3 | S10 | 🟡 partial | [ST-006](FND-core-project-foundation.md#st-006) |
-| [ST-098](#st-098) | Performance regression CI | Could | 3 | STRETCH | ⬜ todo | [ST-096](QLT-reliability-and-performance.md#st-096) |
+| [ST-095](#st-095) | Regression-detection benchmark harness | Must | 5 | S6 | done | [ST-005](FND-core-project-foundation.md#st-005), [ST-063](IMP-impact-engine-and-selection.md#st-063) |
+| [ST-096](#st-096) | Performance benchmarks under documented conditions | Must | 5 | S10 | done | [ST-047](GRA-dependency-graph.md#st-047), [ST-063](IMP-impact-engine-and-selection.md#st-063) |
+| [ST-097](#st-097) | Cross-platform validation | Must | 3 | S10 | partial | [ST-006](FND-core-project-foundation.md#st-006) |
+| [ST-098](#st-098) | Performance regression CI | Could | 3 | STRETCH | todo | [ST-096](QLT-reliability-and-performance.md#st-096) |
 
 ---
 
@@ -34,9 +34,9 @@
 
 | Priority | Points | Sprint | Spec | Depends on |
 |---|---|---|---|---|
-| 🟥 Must | 5 | S6 | R09, §11.7, G acceptance gate | [ST-005](FND-core-project-foundation.md#st-005), [ST-063](IMP-impact-engine-and-selection.md#st-063) |
+| Must | 5 | S6 | R09, §11.7, G acceptance gate | [ST-005](FND-core-project-foundation.md#st-005), [ST-063](IMP-impact-engine-and-selection.md#st-063) |
 
-**Status:** ✅ done
+**Status:** done
 
 **Acceptance criteria**
 
@@ -54,9 +54,9 @@
 
 | Priority | Points | Sprint | Spec | Depends on |
 |---|---|---|---|---|
-| 🟥 Must | 5 | S10 | R01, R02, §31.3 | [ST-047](GRA-dependency-graph.md#st-047), [ST-063](IMP-impact-engine-and-selection.md#st-063) |
+| Must | 5 | S10 | R01, R02, §31.3 | [ST-047](GRA-dependency-graph.md#st-047), [ST-063](IMP-impact-engine-and-selection.md#st-063) |
 
-**Status:** ✅ done
+**Status:** done
 
 **Acceptance criteria**
 
@@ -74,9 +74,9 @@
 
 | Priority | Points | Sprint | Spec | Depends on |
 |---|---|---|---|---|
-| 🟥 Must | 3 | S10 | R08 | [ST-006](FND-core-project-foundation.md#st-006) |
+| Must | 3 | S10 | R08 | [ST-006](FND-core-project-foundation.md#st-006) |
 
-**Status:** 🟡 partial — Paths are POSIX-normalised and CI targets 3 OSes; not yet validated on Windows/macOS runners.
+**Status:** partial — Paths are POSIX-normalised and CI targets 3 OSes; not yet validated on Windows/macOS runners.
 
 **Acceptance criteria**
 
@@ -94,9 +94,9 @@
 
 | Priority | Points | Sprint | Spec | Depends on |
 |---|---|---|---|---|
-| 🟦 Could | 3 | STRETCH | R11 | [ST-096](QLT-reliability-and-performance.md#st-096) |
+| Could | 3 | STRETCH | R11 | [ST-096](QLT-reliability-and-performance.md#st-096) |
 
-**Status:** ⬜ todo — Stretch story — benchmarks exist (benchmarks/run.mjs); the nightly regression job does not.
+**Status:** todo — Stretch story — benchmarks exist (benchmarks/run.mjs); the nightly regression job does not.
 
 **Acceptance criteria**
 

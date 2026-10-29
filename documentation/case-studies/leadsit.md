@@ -2,15 +2,15 @@
 
 LeadsIt was the first real repository migrated to SmartTest (commit [`d310fbac`](https://github.com/RemiPelloux/LeadsIt/commit/d310fbac)). It's a good test because it isn't a tidy fixture:
 
-- **No root `package.json`.** Six independent projects (`backend/`, `FrontLeadsIt/app/`, `mcp/`, `docs/growth/outbound/`, …), each with its own lockfile.
-- **Three runners.** Jest (backend, CommonJS JS), Vitest with a custom config (`vitest.server.config.ts`, TypeScript, Wasp) and Node's built-in `node --test` (twice, once with a directory argument).
-- **Tests loaded through computed paths.** For example ``import(`${SCRIPTS}finalize-prerender.mjs`)``.
-- **Generated output and a submodule.** Wasp's `.wasp/` (with its own `package.json` files) and an `apify` submodule.
-- **A pre-commit hook** that ran whole suites per touched project and skipped Redis-dependent tests with `--testPathIgnorePatterns`.
+- No root `package.json`. Six independent projects (`backend/`, `FrontLeadsIt/app/`, `mcp/`, `docs/growth/outbound/`, …), each with its own lockfile.
+- Three runners. Jest (backend, CommonJS JS), Vitest with a custom config (`vitest.server.config.ts`, TypeScript, Wasp) and Node's built-in `node --test` (twice, once with a directory argument).
+- Tests loaded through computed paths. For example ``import(`${SCRIPTS}finalize-prerender.mjs`)``.
+- Generated output and a submodule. Wasp's `.wasp/` (with its own `package.json` files) and an `apify` submodule.
+- A pre-commit hook that ran whole suites per touched project and skipped Redis-dependent tests with `--testPathIgnorePatterns`.
 
 ## Rule of the exercise
 
-**Only built-in commands.** `npm install`, `npx smarttest init --yes`, `smarttest run --staged` in the hook, `smarttest benchmark`. Whenever SmartTest needed a custom flag or a hand-written config to work, that counted as a SmartTest bug, and it was fixed in SmartTest.
+Only built-in commands. `npm install`, `npx smarttest init --yes`, `smarttest run --staged` in the hook, `smarttest benchmark`. Whenever SmartTest needed a custom flag or a hand-written config to work, that counted as a SmartTest bug, and it was fixed in SmartTest.
 
 ## What it forced into the product (0.2.0)
 
@@ -31,19 +31,19 @@ LeadsIt was the first real repository migrated to SmartTest (commit [`d310fbac`]
 
 ## Result: parity
 
-`npm run test:all` through SmartTest: **706 passed, 0 failed**. That's identical to the native runners: Jest 177 + Vitest 489 + MCP 30 + outbound 10, with the Redis suites skipped as before.
+`npm run test:all` through SmartTest: 706 passed, 0 failed. That's identical to the native runners: Jest 177 + Vitest 489 + MCP 30 + outbound 10, with the Redis suites skipped as before.
 
 ## Result: history benchmark
 
 `npx smarttest benchmark --commits 12` replays the last 12 commits in a temporary worktree. For each one it compares a full run, a project-gated run (the suites of every touched project, which is what the old hook did) and SmartTest. Every failure that wasn't selected is re-checked on the parent commit.
 
-|                    | Full run | Project-gated | SmartTest  |
-| ------------------ | -------- | ------------- | ---------- |
-| Total time         | 110.3 s  | 37.2 s        | **13.8 s** |
-| Saved by SmartTest | 88%      | 63%           | —          |
-| Tests run          | 1192     | —             | 9          |
+|                    | Full run | Project-gated | SmartTest |
+| ------------------ | -------- | ------------- | --------- |
+| Total time         | 110.3 s  | 37.2 s        | 13.8 s    |
+| Saved by SmartTest | 88%      | 63%           | —         |
+| Tests run          | 1192     | —             | 9         |
 
-**Missed failures: 0** · failures already present in the parent commit: 0
+Missed failures: 0 · failures already present in the parent commit: 0
 
 | Commit                                                        | Changed | Selected | Full   | Gated  | SmartTest | Missed |
 | ------------------------------------------------------------- | ------- | -------- | ------ | ------ | --------- | ------ |
@@ -64,7 +64,7 @@ Times are wall-clock on this machine. SmartTest time includes its analysis overh
 
 ## Caveats
 
-- **LeadsIt's suites are already fast** (about 5–8 s for everything), so the absolute saving per commit is seconds, not minutes. The percentage is what carries over to larger suites.
-- **The first run in a fresh checkout pays a cold start** (about 3.5 s: parsing ~1,600 files and asking each runner for its file list). Both are cached afterwards. Faster cold start is planned for 1.1.
-- **Commits outside tested projects run nothing.** That's correct, but it also means "gated" can be 0 ms on those commits, and the old hook didn't run anything for them either.
-- **Root `package.json`, lockfile and `tsconfig` changes run the full suite or the project's suite.** That's deliberate: they're mandatory triggers.
+- LeadsIt's suites are already fast (about 5–8 s for everything), so the absolute saving per commit is seconds, not minutes. The percentage is what carries over to larger suites.
+- The first run in a fresh checkout pays a cold start (about 3.5 s: parsing ~1,600 files and asking each runner for its file list). Both are cached afterwards. A faster cold start is planned for 0.6.0.
+- Commits outside tested projects run nothing. That's correct, but it also means "gated" can be 0 ms on those commits, and the old hook didn't run anything for them either.
+- Root `package.json`, lockfile and `tsconfig` changes run the full suite or the project's suite. That's deliberate: they're mandatory triggers.

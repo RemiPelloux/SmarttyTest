@@ -2,6 +2,14 @@
 
 All notable changes are documented here. Releases are managed with [Changesets](https://github.com/changesets/changesets). The project follows [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Changed
+
+- No hosted CI: GitHub Actions workflows and Dependabot removed. `pnpm verify` runs locally and in a pre-push hook (`pnpm hooks:install`). Releases are published locally (`pnpm release:publish`), without npm provenance.
+- Planning: the delivered backlog is now the foundation record (`documentation/planning/foundation/`); a single roadmap covers 0.2.0 to 1.0.0 (608 points), centred on the dependency graph.
+- Documentation rewritten for plain, factual wording; package READMEs are generated from the manifest; a provider-neutral CI guide replaces the GitHub Actions guide.
+
 ## [0.2.0] — real-world projects
 
 Driven by the first real migration, [LeadsIt](documentation/case-studies/leadsit.md): parity with the native runners (706/706), 88% less test time than full suites and 63% less than its per-project hook over 12 replayed commits, 0 missed failures.
@@ -32,7 +40,7 @@ Driven by the first real migration, [LeadsIt](documentation/case-studies/leadsit
 
 ## [0.1.0] — alpha
 
-The first working version of the v1.0.0 scope: **389 of 422 planned points** ([progress](documentation/planning/release-1.0.0/epics/README.md)).
+The first working version of the v1.0.0 scope: **389 of 422 planned points** ([progress](documentation/planning/foundation/epics/README.md)).
 
 ### Added
 

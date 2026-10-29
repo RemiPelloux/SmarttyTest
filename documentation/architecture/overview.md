@@ -10,7 +10,7 @@ This document describes the **v1.0.0** architecture. The full long-term architec
 flowchart TB
   subgraph Surface["Surfaces"]
     CLI["smarttest CLI<br/><small>packages/cli</small>"]
-    Studio["Studio (Release 4)"]:::later
+    Studio["Studio (0.9.0)"]:::later
   end
 
   CORE["Application core<br/><small>packages/core</small>"]

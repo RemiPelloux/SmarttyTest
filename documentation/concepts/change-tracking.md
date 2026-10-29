@@ -1,7 +1,5 @@
 # Change tracking: Git, native snapshots, hybrid
 
-> Implemented in **v0.1.0**. The behaviour on this page is covered by unit and integration tests.
-
 ## Git (default when a repo is detected)
 
 | Flag            | Compares                                                                           |
@@ -23,14 +21,14 @@ smarttest run --affected             # uses the latest snapshot automatically
 
 - Fingerprints use mtime and size as a pre-check, then a content hash to confirm.
 - Content isn't stored by default. In that case changed ranges are _unknown_, and the ChangeSet is marked `partial`, which widens selection.
-- A snapshot becomes a **verified baseline** only once execution evidence is attached to it.
+- A snapshot becomes a verified baseline only once execution evidence is attached to it.
 
 ## Hybrid mode
 
-With Git present and `vcs.snapshots: true` (the default), SmartTest records a native snapshot after every **fully passing** run. `smarttest run --since-snapshot` then compares against the last green run, which is fast and incremental between commits, while `--base main` still compares against Git. Snapshot IDs are never treated as commits.
+With Git present and `vcs.snapshots: true` (the default), SmartTest records a native snapshot after every fully passing run. `smarttest run --since-snapshot` then compares against the last green run, which is fast and incremental between commits, while `--base main` still compares against Git. Snapshot IDs are never treated as commits.
 
 The baseline only moves forward on green runs. A failing test therefore stays selected until it passes.
 
 ## Not in 1.0
 
-SVN (Release 2) and Mercurial/Perforce (Release 6) will implement the same `VersionControlAdapter` contract. Their markers are detected and reported as unsupported in 1.0.
+SVN and Mercurial (roadmap 0.8.0) and other systems through plugins will implement the same `VersionControlAdapter` contract. Their markers are detected and reported as unsupported in 1.0.

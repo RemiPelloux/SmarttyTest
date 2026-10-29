@@ -12,7 +12,7 @@ Developers must be able to trust that skipped tests were skipped for verifiable 
 - Source analysis, impact selection, rules, execution and reporting are **deterministic and work offline with no account**.
 - No package at or below `core` may depend on `ai-*`, `studio-*` or `cloud-*` packages, or make network calls. This is enforced by the boundary checks in ST-002.
 - **No telemetry** in 1.0. Local timings stay local (ST-055).
-- AI features (Release 3) plug in as optional packages that consume the core's indexes and propose changes. They never decide on selection.
+- AI features (after 1.0.0) plug in as optional packages that consume the core's indexes and propose changes. They never decide on selection.
 
 ## Consequences
 

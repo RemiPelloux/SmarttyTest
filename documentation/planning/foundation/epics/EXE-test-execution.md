@@ -11,7 +11,7 @@
 | Sprints | S4 → S5 → S8 → S10 |
 | Acceptance gate | Native runner results and SmartTest results remain consistent. |
 
-**Out of scope for 1.0.0:** Persistent result cache J09/J10 (Release 2); Playwright/Cypress adapters.
+**Deferred to [the roadmap](../../roadmap.md):** Persistent result cache J09/J10 (Release 2); Playwright/Cypress adapters.
 
 | Implementation | 35 / 35 points done (v0.2.0) |
 
@@ -19,13 +19,13 @@
 
 | ID | Story | Pri | Pts | Sprint | Status | Depends on |
 |---|---|---|---|---|---|---|
-| [ST-049](#st-049) | Vitest adapter | Must | 8 | S4 | ✅ done | [ST-009](FND-core-project-foundation.md#st-009), [ST-022](DET-project-detection.md#st-022) |
-| [ST-050](#st-050) | Jest adapter | Must | 8 | S4 | ✅ done | [ST-009](FND-core-project-foundation.md#st-009), [ST-022](DET-project-detection.md#st-022) |
-| [ST-051](#st-051) | Normalized test model and honest result statuses | Must | 5 | S4 | ✅ done | [ST-049](EXE-test-execution.md#st-049), [ST-050](EXE-test-execution.md#st-050) |
-| [ST-052](#st-052) | Test-to-source mapping (TESTS edges) | Must | 3 | S5 | ✅ done | [ST-044](GRA-dependency-graph.md#st-044), [ST-038](SRC-source-intelligence.md#st-038), [ST-049](EXE-test-execution.md#st-049), [ST-050](EXE-test-execution.md#st-050) |
-| [ST-053](#st-053) | Scheduling, timeouts and cancellation | Must | 5 | S5 | ✅ done | [ST-051](EXE-test-execution.md#st-051) |
-| [ST-054](#st-054) | Retry policies and flaky marking | Should | 3 | S8 | ✅ done | [ST-053](EXE-test-execution.md#st-053) |
-| [ST-055](#st-055) | Execution and analysis telemetry (local only) | Should | 3 | S10 | ✅ done | [ST-053](EXE-test-execution.md#st-053) |
+| [ST-049](#st-049) | Vitest adapter | Must | 8 | S4 | done | [ST-009](FND-core-project-foundation.md#st-009), [ST-022](DET-project-detection.md#st-022) |
+| [ST-050](#st-050) | Jest adapter | Must | 8 | S4 | done | [ST-009](FND-core-project-foundation.md#st-009), [ST-022](DET-project-detection.md#st-022) |
+| [ST-051](#st-051) | Normalized test model and honest result statuses | Must | 5 | S4 | done | [ST-049](EXE-test-execution.md#st-049), [ST-050](EXE-test-execution.md#st-050) |
+| [ST-052](#st-052) | Test-to-source mapping (TESTS edges) | Must | 3 | S5 | done | [ST-044](GRA-dependency-graph.md#st-044), [ST-038](SRC-source-intelligence.md#st-038), [ST-049](EXE-test-execution.md#st-049), [ST-050](EXE-test-execution.md#st-050) |
+| [ST-053](#st-053) | Scheduling, timeouts and cancellation | Must | 5 | S5 | done | [ST-051](EXE-test-execution.md#st-051) |
+| [ST-054](#st-054) | Retry policies and flaky marking | Should | 3 | S8 | done | [ST-053](EXE-test-execution.md#st-053) |
+| [ST-055](#st-055) | Execution and analysis telemetry (local only) | Should | 3 | S10 | done | [ST-053](EXE-test-execution.md#st-053) |
 
 ---
 
@@ -37,9 +37,9 @@
 
 | Priority | Points | Sprint | Spec | Depends on |
 |---|---|---|---|---|
-| 🟥 Must | 8 | S4 | J01, §15.1 | [ST-009](FND-core-project-foundation.md#st-009), [ST-022](DET-project-detection.md#st-022) |
+| Must | 8 | S4 | J01, §15.1 | [ST-009](FND-core-project-foundation.md#st-009), [ST-022](DET-project-detection.md#st-022) |
 
-**Status:** ✅ done
+**Status:** done
 
 **Acceptance criteria**
 
@@ -57,9 +57,9 @@
 
 | Priority | Points | Sprint | Spec | Depends on |
 |---|---|---|---|---|
-| 🟥 Must | 8 | S4 | J02, §15.1 | [ST-009](FND-core-project-foundation.md#st-009), [ST-022](DET-project-detection.md#st-022) |
+| Must | 8 | S4 | J02, §15.1 | [ST-009](FND-core-project-foundation.md#st-009), [ST-022](DET-project-detection.md#st-022) |
 
-**Status:** ✅ done
+**Status:** done
 
 **Acceptance criteria**
 
@@ -77,9 +77,9 @@
 
 | Priority | Points | Sprint | Spec | Depends on |
 |---|---|---|---|---|
-| 🟥 Must | 5 | S4 | J03, J04, §15.5 | [ST-049](EXE-test-execution.md#st-049), [ST-050](EXE-test-execution.md#st-050) |
+| Must | 5 | S4 | J03, J04, §15.5 | [ST-049](EXE-test-execution.md#st-049), [ST-050](EXE-test-execution.md#st-050) |
 
-**Status:** ✅ done
+**Status:** done
 
 **Acceptance criteria**
 
@@ -97,9 +97,9 @@
 
 | Priority | Points | Sprint | Spec | Depends on |
 |---|---|---|---|---|
-| 🟥 Must | 3 | S5 | K02, §10.3 | [ST-044](GRA-dependency-graph.md#st-044), [ST-038](SRC-source-intelligence.md#st-038), [ST-049](EXE-test-execution.md#st-049), [ST-050](EXE-test-execution.md#st-050) |
+| Must | 3 | S5 | K02, §10.3 | [ST-044](GRA-dependency-graph.md#st-044), [ST-038](SRC-source-intelligence.md#st-038), [ST-049](EXE-test-execution.md#st-049), [ST-050](EXE-test-execution.md#st-050) |
 
-**Status:** ✅ done
+**Status:** done
 
 **Acceptance criteria**
 
@@ -117,9 +117,9 @@
 
 | Priority | Points | Sprint | Spec | Depends on |
 |---|---|---|---|---|
-| 🟥 Must | 5 | S5 | J05, J06, J07, §15.3 | [ST-051](EXE-test-execution.md#st-051) |
+| Must | 5 | S5 | J05, J06, J07, §15.3 | [ST-051](EXE-test-execution.md#st-051) |
 
-**Status:** ✅ done
+**Status:** done
 
 **Acceptance criteria**
 
@@ -137,9 +137,9 @@
 
 | Priority | Points | Sprint | Spec | Depends on |
 |---|---|---|---|---|
-| 🟧 Should | 3 | S8 | J08, J11, §15.6 | [ST-053](EXE-test-execution.md#st-053) |
+| Should | 3 | S8 | J08, J11, §15.6 | [ST-053](EXE-test-execution.md#st-053) |
 
-**Status:** ✅ done
+**Status:** done
 
 **Acceptance criteria**
 
@@ -157,9 +157,9 @@
 
 | Priority | Points | Sprint | Spec | Depends on |
 |---|---|---|---|---|
-| 🟧 Should | 3 | S10 | J12, §31.4 | [ST-053](EXE-test-execution.md#st-053) |
+| Should | 3 | S10 | J12, §31.4 | [ST-053](EXE-test-execution.md#st-053) |
 
-**Status:** ✅ done
+**Status:** done
 
 **Acceptance criteria**
 

@@ -11,7 +11,7 @@
 | Sprints | S1 → S2 → S3 → S8 |
 | Acceptance gate | Every 1.0 command supports --help, --json where relevant, non-TTY mode and stable exit codes. |
 
-**Out of scope for 1.0.0:** `smarttest watch` (1.1, Release 2); `smarttest studio` (Release 4).
+**Deferred to [the roadmap](../../roadmap.md):** `smarttest watch` (1.1, Release 2); `smarttest studio` (Release 4).
 
 | Implementation | 18 / 18 points done (v0.2.0) |
 
@@ -19,11 +19,11 @@
 
 | ID | Story | Pri | Pts | Sprint | Status | Depends on |
 |---|---|---|---|---|---|---|
-| [ST-014](#st-014) | Command framework, global flags and help | Must | 5 | S1 | ✅ done | [ST-003](FND-core-project-foundation.md#st-003), [ST-008](FND-core-project-foundation.md#st-008) |
-| [ST-015](#st-015) | Output modes for humans and machines | Must | 3 | S1 | ✅ done | [ST-014](CLI-cli-developer-experience.md#st-014) |
-| [ST-016](#st-016) | Interactive root menu | Should | 5 | S8 | ✅ done | [ST-063](IMP-impact-engine-and-selection.md#st-063), [ST-071](INI-smart-init.md#st-071) |
-| [ST-017](#st-017) | Progress and diagnostics renderer | Must | 3 | S2 | ✅ done | [ST-015](CLI-cli-developer-experience.md#st-015) |
-| [ST-018](#st-018) | `smarttest scan` command | Must | 2 | S3 | ✅ done | [ST-019](DET-project-detection.md#st-019), [ST-037](SRC-source-intelligence.md#st-037) |
+| [ST-014](#st-014) | Command framework, global flags and help | Must | 5 | S1 | done | [ST-003](FND-core-project-foundation.md#st-003), [ST-008](FND-core-project-foundation.md#st-008) |
+| [ST-015](#st-015) | Output modes for humans and machines | Must | 3 | S1 | done | [ST-014](CLI-cli-developer-experience.md#st-014) |
+| [ST-016](#st-016) | Interactive root menu | Should | 5 | S8 | done | [ST-063](IMP-impact-engine-and-selection.md#st-063), [ST-071](INI-smart-init.md#st-071) |
+| [ST-017](#st-017) | Progress and diagnostics renderer | Must | 3 | S2 | done | [ST-015](CLI-cli-developer-experience.md#st-015) |
+| [ST-018](#st-018) | `smarttest scan` command | Must | 2 | S3 | done | [ST-019](DET-project-detection.md#st-019), [ST-037](SRC-source-intelligence.md#st-037) |
 
 ---
 
@@ -35,9 +35,9 @@
 
 | Priority | Points | Sprint | Spec | Depends on |
 |---|---|---|---|---|
-| 🟥 Must | 5 | S1 | §26.2, §26.4 | [ST-003](FND-core-project-foundation.md#st-003), [ST-008](FND-core-project-foundation.md#st-008) |
+| Must | 5 | S1 | §26.2, §26.4 | [ST-003](FND-core-project-foundation.md#st-003), [ST-008](FND-core-project-foundation.md#st-008) |
 
-**Status:** ✅ done
+**Status:** done
 
 **Acceptance criteria**
 
@@ -56,9 +56,9 @@
 
 | Priority | Points | Sprint | Spec | Depends on |
 |---|---|---|---|---|
-| 🟥 Must | 3 | S1 | §26.5 | [ST-014](CLI-cli-developer-experience.md#st-014) |
+| Must | 3 | S1 | §26.5 | [ST-014](CLI-cli-developer-experience.md#st-014) |
 
-**Status:** ✅ done
+**Status:** done
 
 **Acceptance criteria**
 
@@ -76,9 +76,9 @@
 
 | Priority | Points | Sprint | Spec | Depends on |
 |---|---|---|---|---|
-| 🟧 Should | 5 | S8 | §26.3 | [ST-063](IMP-impact-engine-and-selection.md#st-063), [ST-071](INI-smart-init.md#st-071) |
+| Should | 5 | S8 | §26.3 | [ST-063](IMP-impact-engine-and-selection.md#st-063), [ST-071](INI-smart-init.md#st-071) |
 
-**Status:** ✅ done
+**Status:** done
 
 **Acceptance criteria**
 
@@ -96,9 +96,9 @@
 
 | Priority | Points | Sprint | Spec | Depends on |
 |---|---|---|---|---|
-| 🟥 Must | 3 | S2 | §26.5 | [ST-015](CLI-cli-developer-experience.md#st-015) |
+| Must | 3 | S2 | §26.5 | [ST-015](CLI-cli-developer-experience.md#st-015) |
 
-**Status:** ✅ done
+**Status:** done
 
 **Acceptance criteria**
 
@@ -116,9 +116,9 @@
 
 | Priority | Points | Sprint | Spec | Depends on |
 |---|---|---|---|---|
-| 🟥 Must | 2 | S3 | §26.2 | [ST-019](DET-project-detection.md#st-019), [ST-037](SRC-source-intelligence.md#st-037) |
+| Must | 2 | S3 | §26.2 | [ST-019](DET-project-detection.md#st-019), [ST-037](SRC-source-intelligence.md#st-037) |
 
-**Status:** ✅ done
+**Status:** done
 
 **Acceptance criteria**
 

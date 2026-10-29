@@ -11,7 +11,7 @@
 | Sprints | S5 → S6 → S9 |
 | Acceptance gate | No known reproducible failing test is missed in the defined validation fixtures. |
 
-**Out of scope for 1.0.0:** Runtime trace integration G03 (Release 2); Continuous Shadow Mode G11 (Release 2).
+**Deferred to [the roadmap](../../roadmap.md):** Runtime trace integration G03 (Release 2); Continuous Shadow Mode G11 (Release 2).
 
 | Implementation | 39 / 39 points done (v0.2.0) |
 
@@ -19,15 +19,15 @@
 
 | ID | Story | Pri | Pts | Sprint | Status | Depends on |
 |---|---|---|---|---|---|---|
-| [ST-056](#st-056) | Direct test selection | Must | 5 | S5 | ✅ done | [ST-041](SRC-source-intelligence.md#st-041), [ST-046](GRA-dependency-graph.md#st-046), [ST-052](EXE-test-execution.md#st-052) |
-| [ST-057](#st-057) | Transitive test selection | Must | 3 | S5 | ✅ done | [ST-056](IMP-impact-engine-and-selection.md#st-056) |
-| [ST-058](#st-058) | Mandatory selection triggers | Must | 5 | S6 | ✅ done | [ST-056](IMP-impact-engine-and-selection.md#st-056), [ST-065](RUL-rules-engine.md#st-065) |
-| [ST-059](#st-059) | Safe fallback on partial analysis | Must | 3 | S5 | ✅ done | [ST-056](IMP-impact-engine-and-selection.md#st-056) |
-| [ST-060](#st-060) | FAST, BALANCED and SAFE modes | Must | 5 | S6 | ✅ done | [ST-057](IMP-impact-engine-and-selection.md#st-057), [ST-058](IMP-impact-engine-and-selection.md#st-058), [ST-059](IMP-impact-engine-and-selection.md#st-059) |
-| [ST-061](#st-061) | Risk classification | Should | 3 | S6 | ✅ done | [ST-041](SRC-source-intelligence.md#st-041), [ST-065](RUL-rules-engine.md#st-065) |
-| [ST-062](#st-062) | Selection explanations: `smarttest explain` | Must | 5 | S6 | ✅ done | [ST-056](IMP-impact-engine-and-selection.md#st-056) |
-| [ST-063](#st-063) | `smarttest run --affected` and `smarttest impact` | Must | 5 | S6 | ✅ done | [ST-057](IMP-impact-engine-and-selection.md#st-057), [ST-059](IMP-impact-engine-and-selection.md#st-059), [ST-053](EXE-test-execution.md#st-053), [ST-014](CLI-cli-developer-experience.md#st-014) |
-| [ST-064](#st-064) | `smarttest validate-selection` | Must | 5 | S9 | ✅ done | [ST-063](IMP-impact-engine-and-selection.md#st-063), [ST-095](QLT-reliability-and-performance.md#st-095) |
+| [ST-056](#st-056) | Direct test selection | Must | 5 | S5 | done | [ST-041](SRC-source-intelligence.md#st-041), [ST-046](GRA-dependency-graph.md#st-046), [ST-052](EXE-test-execution.md#st-052) |
+| [ST-057](#st-057) | Transitive test selection | Must | 3 | S5 | done | [ST-056](IMP-impact-engine-and-selection.md#st-056) |
+| [ST-058](#st-058) | Mandatory selection triggers | Must | 5 | S6 | done | [ST-056](IMP-impact-engine-and-selection.md#st-056), [ST-065](RUL-rules-engine.md#st-065) |
+| [ST-059](#st-059) | Safe fallback on partial analysis | Must | 3 | S5 | done | [ST-056](IMP-impact-engine-and-selection.md#st-056) |
+| [ST-060](#st-060) | FAST, BALANCED and SAFE modes | Must | 5 | S6 | done | [ST-057](IMP-impact-engine-and-selection.md#st-057), [ST-058](IMP-impact-engine-and-selection.md#st-058), [ST-059](IMP-impact-engine-and-selection.md#st-059) |
+| [ST-061](#st-061) | Risk classification | Should | 3 | S6 | done | [ST-041](SRC-source-intelligence.md#st-041), [ST-065](RUL-rules-engine.md#st-065) |
+| [ST-062](#st-062) | Selection explanations: `smarttest explain` | Must | 5 | S6 | done | [ST-056](IMP-impact-engine-and-selection.md#st-056) |
+| [ST-063](#st-063) | `smarttest run --affected` and `smarttest impact` | Must | 5 | S6 | done | [ST-057](IMP-impact-engine-and-selection.md#st-057), [ST-059](IMP-impact-engine-and-selection.md#st-059), [ST-053](EXE-test-execution.md#st-053), [ST-014](CLI-cli-developer-experience.md#st-014) |
+| [ST-064](#st-064) | `smarttest validate-selection` | Must | 5 | S9 | done | [ST-063](IMP-impact-engine-and-selection.md#st-063), [ST-095](QLT-reliability-and-performance.md#st-095) |
 
 ---
 
@@ -39,9 +39,9 @@
 
 | Priority | Points | Sprint | Spec | Depends on |
 |---|---|---|---|---|
-| 🟥 Must | 5 | S5 | G01, §11.2 | [ST-041](SRC-source-intelligence.md#st-041), [ST-046](GRA-dependency-graph.md#st-046), [ST-052](EXE-test-execution.md#st-052) |
+| Must | 5 | S5 | G01, §11.2 | [ST-041](SRC-source-intelligence.md#st-041), [ST-046](GRA-dependency-graph.md#st-046), [ST-052](EXE-test-execution.md#st-052) |
 
-**Status:** ✅ done
+**Status:** done
 
 **Acceptance criteria**
 
@@ -59,9 +59,9 @@
 
 | Priority | Points | Sprint | Spec | Depends on |
 |---|---|---|---|---|
-| 🟥 Must | 3 | S5 | G02 | [ST-056](IMP-impact-engine-and-selection.md#st-056) |
+| Must | 3 | S5 | G02 | [ST-056](IMP-impact-engine-and-selection.md#st-056) |
 
-**Status:** ✅ done
+**Status:** done
 
 **Acceptance criteria**
 
@@ -79,9 +79,9 @@
 
 | Priority | Points | Sprint | Spec | Depends on |
 |---|---|---|---|---|
-| 🟥 Must | 5 | S6 | G05, §11.4 | [ST-056](IMP-impact-engine-and-selection.md#st-056), [ST-065](RUL-rules-engine.md#st-065) |
+| Must | 5 | S6 | G05, §11.4 | [ST-056](IMP-impact-engine-and-selection.md#st-056), [ST-065](RUL-rules-engine.md#st-065) |
 
-**Status:** ✅ done
+**Status:** done
 
 **Acceptance criteria**
 
@@ -99,9 +99,9 @@
 
 | Priority | Points | Sprint | Spec | Depends on |
 |---|---|---|---|---|
-| 🟥 Must | 3 | S5 | G09, §1.5, §32.2 | [ST-056](IMP-impact-engine-and-selection.md#st-056) |
+| Must | 3 | S5 | G09, §1.5, §32.2 | [ST-056](IMP-impact-engine-and-selection.md#st-056) |
 
-**Status:** ✅ done
+**Status:** done
 
 **Acceptance criteria**
 
@@ -119,9 +119,9 @@
 
 | Priority | Points | Sprint | Spec | Depends on |
 |---|---|---|---|---|
-| 🟥 Must | 5 | S6 | G06, G07, G08, §11.3 | [ST-057](IMP-impact-engine-and-selection.md#st-057), [ST-058](IMP-impact-engine-and-selection.md#st-058), [ST-059](IMP-impact-engine-and-selection.md#st-059) |
+| Must | 5 | S6 | G06, G07, G08, §11.3 | [ST-057](IMP-impact-engine-and-selection.md#st-057), [ST-058](IMP-impact-engine-and-selection.md#st-058), [ST-059](IMP-impact-engine-and-selection.md#st-059) |
 
-**Status:** ✅ done
+**Status:** done
 
 **Acceptance criteria**
 
@@ -139,9 +139,9 @@
 
 | Priority | Points | Sprint | Spec | Depends on |
 |---|---|---|---|---|
-| 🟧 Should | 3 | S6 | G04 | [ST-041](SRC-source-intelligence.md#st-041), [ST-065](RUL-rules-engine.md#st-065) |
+| Should | 3 | S6 | G04 | [ST-041](SRC-source-intelligence.md#st-041), [ST-065](RUL-rules-engine.md#st-065) |
 
-**Status:** ✅ done
+**Status:** done
 
 **Acceptance criteria**
 
@@ -159,9 +159,9 @@
 
 | Priority | Points | Sprint | Spec | Depends on |
 |---|---|---|---|---|
-| 🟥 Must | 5 | S6 | G10, §11.6 | [ST-056](IMP-impact-engine-and-selection.md#st-056) |
+| Must | 5 | S6 | G10, §11.6 | [ST-056](IMP-impact-engine-and-selection.md#st-056) |
 
-**Status:** ✅ done
+**Status:** done
 
 **Acceptance criteria**
 
@@ -179,9 +179,9 @@
 
 | Priority | Points | Sprint | Spec | Depends on |
 |---|---|---|---|---|
-| 🟥 Must | 5 | S6 | §11, §26.2, §40 | [ST-057](IMP-impact-engine-and-selection.md#st-057), [ST-059](IMP-impact-engine-and-selection.md#st-059), [ST-053](EXE-test-execution.md#st-053), [ST-014](CLI-cli-developer-experience.md#st-014) |
+| Must | 5 | S6 | §11, §26.2, §40 | [ST-057](IMP-impact-engine-and-selection.md#st-057), [ST-059](IMP-impact-engine-and-selection.md#st-059), [ST-053](EXE-test-execution.md#st-053), [ST-014](CLI-cli-developer-experience.md#st-014) |
 
-**Status:** ✅ done
+**Status:** done
 
 **Acceptance criteria**
 
@@ -200,9 +200,9 @@
 
 | Priority | Points | Sprint | Spec | Depends on |
 |---|---|---|---|---|
-| 🟥 Must | 5 | S9 | G12, §11.7, §32.4 | [ST-063](IMP-impact-engine-and-selection.md#st-063), [ST-095](QLT-reliability-and-performance.md#st-095) |
+| Must | 5 | S9 | G12, §11.7, §32.4 | [ST-063](IMP-impact-engine-and-selection.md#st-063), [ST-095](QLT-reliability-and-performance.md#st-095) |
 
-**Status:** ✅ done
+**Status:** done
 
 **Acceptance criteria**
 

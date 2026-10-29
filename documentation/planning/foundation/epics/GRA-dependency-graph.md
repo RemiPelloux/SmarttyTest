@@ -11,7 +11,7 @@
 | Sprints | S3 → S4 → S5 |
 | Acceptance gate | Dependency queries are reproducible and benchmarked. |
 
-**Out of scope for 1.0.0:** OBSERVED_EXECUTION edges from runtime tracing (Release 2).
+**Deferred to [the roadmap](../../roadmap.md):** OBSERVED_EXECUTION edges from runtime tracing (Release 2).
 
 | Implementation | 20 / 25 points done (v0.2.0) |
 
@@ -19,11 +19,11 @@
 
 | ID | Story | Pri | Pts | Sprint | Status | Depends on |
 |---|---|---|---|---|---|---|
-| [ST-044](#st-044) | Graph model with provenance and confidence | Must | 5 | S3 | ✅ done | [ST-009](FND-core-project-foundation.md#st-009) |
-| [ST-045](#st-045) | Persistent graph storage | Must | 5 | S3 | ✅ done | [ST-044](GRA-dependency-graph.md#st-044), [ST-013](FND-core-project-foundation.md#st-013) |
-| [ST-046](#st-046) | Reverse and transitive traversal with cycle safety | Must | 5 | S4 | ✅ done | [ST-045](GRA-dependency-graph.md#st-045) |
-| [ST-047](#st-047) | Incremental graph updates | Must | 5 | S5 | 🟡 partial | [ST-046](GRA-dependency-graph.md#st-046), [ST-042](SRC-source-intelligence.md#st-042) |
-| [ST-048](#st-048) | Graph snapshots, query API and `smarttest graph` | Should | 5 | S5 | ✅ done | [ST-046](GRA-dependency-graph.md#st-046) |
+| [ST-044](#st-044) | Graph model with provenance and confidence | Must | 5 | S3 | done | [ST-009](FND-core-project-foundation.md#st-009) |
+| [ST-045](#st-045) | Persistent graph storage | Must | 5 | S3 | done | [ST-044](GRA-dependency-graph.md#st-044), [ST-013](FND-core-project-foundation.md#st-013) |
+| [ST-046](#st-046) | Reverse and transitive traversal with cycle safety | Must | 5 | S4 | done | [ST-045](GRA-dependency-graph.md#st-045) |
+| [ST-047](#st-047) | Incremental graph updates | Must | 5 | S5 | partial | [ST-046](GRA-dependency-graph.md#st-046), [ST-042](SRC-source-intelligence.md#st-042) |
+| [ST-048](#st-048) | Graph snapshots, query API and `smarttest graph` | Should | 5 | S5 | done | [ST-046](GRA-dependency-graph.md#st-046) |
 
 ---
 
@@ -35,9 +35,9 @@
 
 | Priority | Points | Sprint | Spec | Depends on |
 |---|---|---|---|---|
-| 🟥 Must | 5 | S3 | F01, F02, F08, §10.2, §10.3 | [ST-009](FND-core-project-foundation.md#st-009) |
+| Must | 5 | S3 | F01, F02, F08, §10.2, §10.3 | [ST-009](FND-core-project-foundation.md#st-009) |
 
-**Status:** ✅ done
+**Status:** done
 
 **Acceptance criteria**
 
@@ -55,9 +55,9 @@
 
 | Priority | Points | Sprint | Spec | Depends on |
 |---|---|---|---|---|
-| 🟥 Must | 5 | S3 | F03, §8.3 | [ST-044](GRA-dependency-graph.md#st-044), [ST-013](FND-core-project-foundation.md#st-013) |
+| Must | 5 | S3 | F03, §8.3 | [ST-044](GRA-dependency-graph.md#st-044), [ST-013](FND-core-project-foundation.md#st-013) |
 
-**Status:** ✅ done
+**Status:** done
 
 **Acceptance criteria**
 
@@ -75,9 +75,9 @@
 
 | Priority | Points | Sprint | Spec | Depends on |
 |---|---|---|---|---|
-| 🟥 Must | 5 | S4 | F04, F05, F06, §10.7 | [ST-045](GRA-dependency-graph.md#st-045) |
+| Must | 5 | S4 | F04, F05, F06, §10.7 | [ST-045](GRA-dependency-graph.md#st-045) |
 
-**Status:** ✅ done
+**Status:** done
 
 **Acceptance criteria**
 
@@ -95,9 +95,9 @@
 
 | Priority | Points | Sprint | Spec | Depends on |
 |---|---|---|---|---|
-| 🟥 Must | 5 | S5 | F07 | [ST-046](GRA-dependency-graph.md#st-046), [ST-042](SRC-source-intelligence.md#st-042) |
+| Must | 5 | S5 | F07 | [ST-046](GRA-dependency-graph.md#st-046), [ST-042](SRC-source-intelligence.md#st-042) |
 
-**Status:** 🟡 partial — Analyses are cached incrementally; the graph is rebuilt in memory from the cache (tens of ms at 2,000 modules) instead of being patched in place.
+**Status:** partial — Analyses are cached incrementally; the graph is rebuilt in memory from the cache (tens of ms at 2,000 modules) instead of being patched in place.
 
 **Acceptance criteria**
 
@@ -115,9 +115,9 @@
 
 | Priority | Points | Sprint | Spec | Depends on |
 |---|---|---|---|---|
-| 🟧 Should | 5 | S5 | F09, F10, §26.2 | [ST-046](GRA-dependency-graph.md#st-046) |
+| Should | 5 | S5 | F09, F10, §26.2 | [ST-046](GRA-dependency-graph.md#st-046) |
 
-**Status:** ✅ done
+**Status:** done
 
 **Acceptance criteria**
 

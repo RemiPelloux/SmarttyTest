@@ -1,12 +1,7 @@
 # @smarttest/smart-init
 
-> Recommendation engine, setup plan, safe writes, rollback.
+Recommendation engine, setup plan, safe writes, rollback.
 
-|                |                                                                                    |
-| -------------- | ---------------------------------------------------------------------------------- |
-| Epic           | `INI` — see [planning](../../documentation/planning/release-1.0.0/epics/README.md) |
-| Target release | 1.0.0                                                                              |
-| Status         | Scaffold                                                                           |
-| Workspace deps | `@smarttest/shared`, `@smarttest/config`, `@smarttest/project-detector`            |
+Depends on `@smarttest/shared`, `@smarttest/config`, `@smarttest/project-detector`, `@smarttest/test-discovery`.
 
-Architecture context: [documentation/architecture/overview.md](../../documentation/architecture/overview.md)
+Part of [SmartTest](../../README.md). See the [architecture overview](../../documentation/architecture/overview.md).

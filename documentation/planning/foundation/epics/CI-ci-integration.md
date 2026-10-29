@@ -11,17 +11,17 @@
 | Sprints | S10 → STRETCH |
 | Acceptance gate | CI integration remains deterministic and secure. |
 
-**Out of scope for 1.0.0:** GitLab/Jenkins integrations (Release 2); PR comments (Cloud).
+**Deferred to [the roadmap](../../roadmap.md):** GitLab/Jenkins integrations (Release 2); PR comments (Cloud).
 
-| Implementation | 5 / 8 points done (v0.2.0) |
+| Implementation | 2 / 8 points done (v0.2.0) |
 
 ## Stories
 
 | ID | Story | Pri | Pts | Sprint | Status | Depends on |
 |---|---|---|---|---|---|---|
-| [ST-092](#st-092) | Versioned machine-readable output contracts | Must | 2 | S10 | ✅ done | [ST-085](REP-reporting-and-coverage-scope.md#st-085) |
-| [ST-093](#st-093) | GitHub Actions template | Must | 3 | S10 | ✅ done | [ST-063](IMP-impact-engine-and-selection.md#st-063), [ST-091](REP-reporting-and-coverage-scope.md#st-091) |
-| [ST-094](#st-094) | Basic CI quality gates | Could | 3 | STRETCH | ⬜ todo | [ST-068](RUL-rules-engine.md#st-068) |
+| [ST-092](#st-092) | Versioned machine-readable output contracts | Must | 2 | S10 | done | [ST-085](REP-reporting-and-coverage-scope.md#st-085) |
+| [ST-093](#st-093) | GitHub Actions template | Must | 3 | S10 | dropped | [ST-063](IMP-impact-engine-and-selection.md#st-063), [ST-091](REP-reporting-and-coverage-scope.md#st-091) |
+| [ST-094](#st-094) | Basic CI quality gates | Could | 3 | STRETCH | todo | [ST-068](RUL-rules-engine.md#st-068) |
 
 ---
 
@@ -33,9 +33,9 @@
 
 | Priority | Points | Sprint | Spec | Depends on |
 |---|---|---|---|---|
-| 🟥 Must | 2 | S10 | P09 | [ST-085](REP-reporting-and-coverage-scope.md#st-085) |
+| Must | 2 | S10 | P09 | [ST-085](REP-reporting-and-coverage-scope.md#st-085) |
 
-**Status:** ✅ done
+**Status:** done
 
 **Acceptance criteria**
 
@@ -53,15 +53,15 @@
 
 | Priority | Points | Sprint | Spec | Depends on |
 |---|---|---|---|---|
-| 🟥 Must | 3 | S10 | P01, P07 | [ST-063](IMP-impact-engine-and-selection.md#st-063), [ST-091](REP-reporting-and-coverage-scope.md#st-091) |
+| Must | 3 | S10 | P01, P07 | [ST-063](IMP-impact-engine-and-selection.md#st-063), [ST-091](REP-reporting-and-coverage-scope.md#st-091) |
 
-**Status:** ✅ done
+**Status:** dropped — GitHub Actions is not used. Replaced by a CI-agnostic guide (documentation/guides/ci.md); `smarttest ci` is planned in roadmap 0.6.0.
 
 **Acceptance criteria**
 
-- [x] Template fetches enough history for merge-base, runs `run --affected --mode balanced` on PRs and `--all` on main
-- [x] Uses least-privilege permissions and is safe for fork PRs (no secrets required)
-- [x] Uploads HTML/JSON/JUnit artifacts and writes the job summary
+- [ ] Template fetches enough history for merge-base, runs `run --affected --mode balanced` on PRs and `--all` on main
+- [ ] Uses least-privilege permissions and is safe for fork PRs (no secrets required)
+- [ ] Uploads HTML/JSON/JUnit artifacts and writes the job summary
 
 ---
 
@@ -73,9 +73,9 @@
 
 | Priority | Points | Sprint | Spec | Depends on |
 |---|---|---|---|---|
-| 🟦 Could | 3 | STRETCH | P03, §16.4 | [ST-068](RUL-rules-engine.md#st-068) |
+| Could | 3 | STRETCH | P03, §16.4 | [ST-068](RUL-rules-engine.md#st-068) |
 
-**Status:** ⬜ todo — Stretch story.
+**Status:** todo — Stretch story.
 
 **Acceptance criteria**
 

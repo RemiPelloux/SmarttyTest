@@ -14,7 +14,7 @@
 
 > This is the master specification, kept as the source of truth. It covers the intelligent testing engine, automated setup, Git/SVN/native version tracking, AI-powered test engineering, a Cypress-like GUI, multi-language architecture and the commercial SaaS model.
 > It is written for developers, AI coding agents, architects and QA engineers.
-> **Scope for v1.0.0** is defined in [`../planning/release-1.0.0/README.md`](../planning/release-1.0.0/README.md). Section numbers (§) are what the backlog and ADRs cite.
+> **Scope for v1.0.0** is defined in [`../planning/foundation/README.md`](../planning/foundation/README.md). Section numbers (§) are what the backlog and ADRs cite.
 
 ---
 
@@ -3449,7 +3449,7 @@ Shadow Mode should be a key feature during early adoption and on customer pilot 
 
 # 34. Engineering Backlog
 
-> For v1.0.0 these spec items are decomposed into user stories in [`../planning/release-1.0.0/epics/`](../planning/release-1.0.0/epics/README.md).
+> For v1.0.0 these spec items are decomposed into user stories in [`../planning/foundation/epics/`](../planning/foundation/epics/README.md).
 
 ## Epic A — Core Project Foundation
 

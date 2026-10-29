@@ -11,7 +11,7 @@
 | Sprints | S2 → S3 → S4 → S5 |
 | Acceptance gate | Known source fixtures produce the expected symbols and relationships. |
 
-**Out of scope for 1.0.0:** Full source-map remapping (E09, Release 2).
+**Deferred to [the roadmap](../../roadmap.md):** Full source-map remapping (E09, Release 2).
 
 | Implementation | 47 / 50 points done (v0.2.0) |
 
@@ -19,15 +19,15 @@
 
 | ID | Story | Pri | Pts | Sprint | Status | Depends on |
 |---|---|---|---|---|---|---|
-| [ST-035](#st-035) | TypeScript program loader | Must | 5 | S2 | ✅ done | [ST-012](FND-core-project-foundation.md#st-012), [ST-023](DET-project-detection.md#st-023) |
-| [ST-036](#st-036) | JavaScript parsing for ESM, CJS and JSX | Must | 5 | S2 | ✅ done | [ST-012](FND-core-project-foundation.md#st-012) |
-| [ST-037](#st-037) | Symbol index | Must | 8 | S3 | ✅ done | [ST-035](SRC-source-intelligence.md#st-035), [ST-036](SRC-source-intelligence.md#st-036) |
-| [ST-038](#st-038) | Import resolution | Must | 8 | S3 | ✅ done | [ST-035](SRC-source-intelligence.md#st-035), [ST-036](SRC-source-intelligence.md#st-036), [ST-020](DET-project-detection.md#st-020) |
-| [ST-039](#st-039) | Class, method and decorator analysis | Must | 5 | S4 | ✅ done | [ST-037](SRC-source-intelligence.md#st-037) |
-| [ST-040](#st-040) | Export and public API analysis | Must | 3 | S5 | ✅ done | [ST-038](SRC-source-intelligence.md#st-038) |
-| [ST-041](#st-041) | Semantic diff with uncertainty | Must | 8 | S4 | ✅ done | [ST-037](SRC-source-intelligence.md#st-037), [ST-027](VCS-version-control-and-native-snapshots.md#st-027), [ST-031](VCS-version-control-and-native-snapshots.md#st-031) |
-| [ST-042](#st-042) | Incremental parsing and persistent index | Must | 5 | S5 | ✅ done | [ST-037](SRC-source-intelligence.md#st-037), [ST-045](GRA-dependency-graph.md#st-045) |
-| [ST-043](#st-043) | Generated-code policies | Should | 3 | S5 | 🟡 partial | [ST-023](DET-project-detection.md#st-023) |
+| [ST-035](#st-035) | TypeScript program loader | Must | 5 | S2 | done | [ST-012](FND-core-project-foundation.md#st-012), [ST-023](DET-project-detection.md#st-023) |
+| [ST-036](#st-036) | JavaScript parsing for ESM, CJS and JSX | Must | 5 | S2 | done | [ST-012](FND-core-project-foundation.md#st-012) |
+| [ST-037](#st-037) | Symbol index | Must | 8 | S3 | done | [ST-035](SRC-source-intelligence.md#st-035), [ST-036](SRC-source-intelligence.md#st-036) |
+| [ST-038](#st-038) | Import resolution | Must | 8 | S3 | done | [ST-035](SRC-source-intelligence.md#st-035), [ST-036](SRC-source-intelligence.md#st-036), [ST-020](DET-project-detection.md#st-020) |
+| [ST-039](#st-039) | Class, method and decorator analysis | Must | 5 | S4 | done | [ST-037](SRC-source-intelligence.md#st-037) |
+| [ST-040](#st-040) | Export and public API analysis | Must | 3 | S5 | done | [ST-038](SRC-source-intelligence.md#st-038) |
+| [ST-041](#st-041) | Semantic diff with uncertainty | Must | 8 | S4 | done | [ST-037](SRC-source-intelligence.md#st-037), [ST-027](VCS-version-control-and-native-snapshots.md#st-027), [ST-031](VCS-version-control-and-native-snapshots.md#st-031) |
+| [ST-042](#st-042) | Incremental parsing and persistent index | Must | 5 | S5 | done | [ST-037](SRC-source-intelligence.md#st-037), [ST-045](GRA-dependency-graph.md#st-045) |
+| [ST-043](#st-043) | Generated-code policies | Should | 3 | S5 | partial | [ST-023](DET-project-detection.md#st-023) |
 
 ---
 
@@ -39,9 +39,9 @@
 
 | Priority | Points | Sprint | Spec | Depends on |
 |---|---|---|---|---|
-| 🟥 Must | 5 | S2 | E01 | [ST-012](FND-core-project-foundation.md#st-012), [ST-023](DET-project-detection.md#st-023) |
+| Must | 5 | S2 | E01 | [ST-012](FND-core-project-foundation.md#st-012), [ST-023](DET-project-detection.md#st-023) |
 
-**Status:** ✅ done
+**Status:** done
 
 **Acceptance criteria**
 
@@ -59,9 +59,9 @@
 
 | Priority | Points | Sprint | Spec | Depends on |
 |---|---|---|---|---|
-| 🟥 Must | 5 | S2 | E02, §3.3 | [ST-012](FND-core-project-foundation.md#st-012) |
+| Must | 5 | S2 | E02, §3.3 | [ST-012](FND-core-project-foundation.md#st-012) |
 
-**Status:** ✅ done
+**Status:** done
 
 **Acceptance criteria**
 
@@ -79,9 +79,9 @@
 
 | Priority | Points | Sprint | Spec | Depends on |
 |---|---|---|---|---|
-| 🟥 Must | 8 | S3 | E03, §9.2, §9.3 | [ST-035](SRC-source-intelligence.md#st-035), [ST-036](SRC-source-intelligence.md#st-036) |
+| Must | 8 | S3 | E03, §9.2, §9.3 | [ST-035](SRC-source-intelligence.md#st-035), [ST-036](SRC-source-intelligence.md#st-036) |
 
-**Status:** ✅ done
+**Status:** done
 
 **Acceptance criteria**
 
@@ -99,9 +99,9 @@
 
 | Priority | Points | Sprint | Spec | Depends on |
 |---|---|---|---|---|
-| 🟥 Must | 8 | S3 | E04 | [ST-035](SRC-source-intelligence.md#st-035), [ST-036](SRC-source-intelligence.md#st-036), [ST-020](DET-project-detection.md#st-020) |
+| Must | 8 | S3 | E04 | [ST-035](SRC-source-intelligence.md#st-035), [ST-036](SRC-source-intelligence.md#st-036), [ST-020](DET-project-detection.md#st-020) |
 
-**Status:** ✅ done
+**Status:** done
 
 **Acceptance criteria**
 
@@ -119,9 +119,9 @@
 
 | Priority | Points | Sprint | Spec | Depends on |
 |---|---|---|---|---|
-| 🟥 Must | 5 | S4 | E05, §9.2 | [ST-037](SRC-source-intelligence.md#st-037) |
+| Must | 5 | S4 | E05, §9.2 | [ST-037](SRC-source-intelligence.md#st-037) |
 
-**Status:** ✅ done
+**Status:** done
 
 **Acceptance criteria**
 
@@ -139,9 +139,9 @@
 
 | Priority | Points | Sprint | Spec | Depends on |
 |---|---|---|---|---|
-| 🟥 Must | 3 | S5 | E06 | [ST-038](SRC-source-intelligence.md#st-038) |
+| Must | 3 | S5 | E06 | [ST-038](SRC-source-intelligence.md#st-038) |
 
-**Status:** ✅ done
+**Status:** done
 
 **Acceptance criteria**
 
@@ -159,9 +159,9 @@
 
 | Priority | Points | Sprint | Spec | Depends on |
 |---|---|---|---|---|
-| 🟥 Must | 8 | S4 | E07, §9.4 | [ST-037](SRC-source-intelligence.md#st-037), [ST-027](VCS-version-control-and-native-snapshots.md#st-027), [ST-031](VCS-version-control-and-native-snapshots.md#st-031) |
+| Must | 8 | S4 | E07, §9.4 | [ST-037](SRC-source-intelligence.md#st-037), [ST-027](VCS-version-control-and-native-snapshots.md#st-027), [ST-031](VCS-version-control-and-native-snapshots.md#st-031) |
 
-**Status:** ✅ done
+**Status:** done
 
 **Acceptance criteria**
 
@@ -179,9 +179,9 @@
 
 | Priority | Points | Sprint | Spec | Depends on |
 |---|---|---|---|---|
-| 🟥 Must | 5 | S5 | E08, §9.5 | [ST-037](SRC-source-intelligence.md#st-037), [ST-045](GRA-dependency-graph.md#st-045) |
+| Must | 5 | S5 | E08, §9.5 | [ST-037](SRC-source-intelligence.md#st-037), [ST-045](GRA-dependency-graph.md#st-045) |
 
-**Status:** ✅ done
+**Status:** done
 
 **Acceptance criteria**
 
@@ -199,9 +199,9 @@
 
 | Priority | Points | Sprint | Spec | Depends on |
 |---|---|---|---|---|
-| 🟧 Should | 3 | S5 | E10, §9.6 | [ST-023](DET-project-detection.md#st-023) |
+| Should | 3 | S5 | E10, §9.6 | [ST-023](DET-project-detection.md#st-023) |
 
-**Status:** 🟡 partial — `exclude` works and referenced generated files are tracked through the graph; a generator-input → output mapping for `rebuild-required` is not implemented.
+**Status:** partial — `exclude` works and referenced generated files are tracked through the graph; a generator-input → output mapping for `rebuild-required` is not implemented.
 
 **Acceptance criteria**
 

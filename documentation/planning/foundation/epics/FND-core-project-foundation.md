@@ -17,19 +17,19 @@
 
 | ID | Story | Pri | Pts | Sprint | Status | Depends on |
 |---|---|---|---|---|---|---|
-| [ST-001](#st-001) | Initialize the TypeScript monorepo | Must | 3 | S0 | ✅ done | — |
-| [ST-002](#st-002) | Define and enforce package boundaries | Must | 3 | S0 | ✅ done | [ST-001](FND-core-project-foundation.md#st-001) |
-| [ST-003](#st-003) | Configuration contract, loader and schema validation | Must | 5 | S0 | ✅ done | [ST-001](FND-core-project-foundation.md#st-001) |
-| [ST-004](#st-004) | Linting, formatting and strict typing gates | Must | 2 | S0 | ✅ done | [ST-001](FND-core-project-foundation.md#st-001) |
-| [ST-005](#st-005) | Fixture project catalogue | Must | 5 | S0 | 🟡 partial | [ST-001](FND-core-project-foundation.md#st-001) |
-| [ST-006](#st-006) | Continuous integration pipeline | Must | 3 | S0 | 🟡 partial | [ST-001](FND-core-project-foundation.md#st-001), [ST-004](FND-core-project-foundation.md#st-004) |
-| [ST-007](#st-007) | Structured logging with secret redaction | Must | 3 | S0 | ✅ done | [ST-001](FND-core-project-foundation.md#st-001) |
-| [ST-008](#st-008) | Stable error model and exit codes | Must | 2 | S0 | ✅ done | [ST-001](FND-core-project-foundation.md#st-001) |
-| [ST-009](#st-009) | Plugin SDK foundation and capability model | Must | 5 | S0 | ✅ done | [ST-002](FND-core-project-foundation.md#st-002) |
-| [ST-010](#st-010) | Architecture documentation and ADRs | Must | 2 | S0 | ✅ done | — |
-| [ST-011](#st-011) | Verify product name and npm package availability | Must | 1 | S0 | 🟡 partial | — |
-| [ST-012](#st-012) | Spike: TypeScript analysis engine | Must | 3 | S0 | ✅ done | — |
-| [ST-013](#st-013) | Spike: local intelligence store | Must | 2 | S0 | ✅ done | — |
+| [ST-001](#st-001) | Initialize the TypeScript monorepo | Must | 3 | S0 | done | — |
+| [ST-002](#st-002) | Define and enforce package boundaries | Must | 3 | S0 | done | [ST-001](FND-core-project-foundation.md#st-001) |
+| [ST-003](#st-003) | Configuration contract, loader and schema validation | Must | 5 | S0 | done | [ST-001](FND-core-project-foundation.md#st-001) |
+| [ST-004](#st-004) | Linting, formatting and strict typing gates | Must | 2 | S0 | done | [ST-001](FND-core-project-foundation.md#st-001) |
+| [ST-005](#st-005) | Fixture project catalogue | Must | 5 | S0 | partial | [ST-001](FND-core-project-foundation.md#st-001) |
+| [ST-006](#st-006) | Continuous integration pipeline | Must | 3 | S0 | changed | [ST-001](FND-core-project-foundation.md#st-001), [ST-004](FND-core-project-foundation.md#st-004) |
+| [ST-007](#st-007) | Structured logging with secret redaction | Must | 3 | S0 | done | [ST-001](FND-core-project-foundation.md#st-001) |
+| [ST-008](#st-008) | Stable error model and exit codes | Must | 2 | S0 | done | [ST-001](FND-core-project-foundation.md#st-001) |
+| [ST-009](#st-009) | Plugin SDK foundation and capability model | Must | 5 | S0 | done | [ST-002](FND-core-project-foundation.md#st-002) |
+| [ST-010](#st-010) | Architecture documentation and ADRs | Must | 2 | S0 | done | — |
+| [ST-011](#st-011) | Verify product name and npm package availability | Must | 1 | S0 | partial | — |
+| [ST-012](#st-012) | Spike: TypeScript analysis engine | Must | 3 | S0 | done | — |
+| [ST-013](#st-013) | Spike: local intelligence store | Must | 2 | S0 | done | — |
 
 ---
 
@@ -41,9 +41,9 @@
 
 | Priority | Points | Sprint | Spec | Depends on |
 |---|---|---|---|---|
-| 🟥 Must | 3 | S0 | A01, §4.3 | — |
+| Must | 3 | S0 | A01, §4.3 | — |
 
-**Status:** ✅ done
+**Status:** done
 
 **Acceptance criteria**
 
@@ -61,9 +61,9 @@
 
 | Priority | Points | Sprint | Spec | Depends on |
 |---|---|---|---|---|
-| 🟥 Must | 3 | S0 | A02, §4.2 | [ST-001](FND-core-project-foundation.md#st-001) |
+| Must | 3 | S0 | A02, §4.2 | [ST-001](FND-core-project-foundation.md#st-001) |
 
-**Status:** ✅ done
+**Status:** done
 
 **Acceptance criteria**
 
@@ -81,9 +81,9 @@
 
 | Priority | Points | Sprint | Spec | Depends on |
 |---|---|---|---|---|
-| 🟥 Must | 5 | S0 | A03, §14.5 | [ST-001](FND-core-project-foundation.md#st-001) |
+| Must | 5 | S0 | A03, §14.5 | [ST-001](FND-core-project-foundation.md#st-001) |
 
-**Status:** ✅ done
+**Status:** done
 
 **Acceptance criteria**
 
@@ -102,9 +102,9 @@
 
 | Priority | Points | Sprint | Spec | Depends on |
 |---|---|---|---|---|
-| 🟥 Must | 2 | S0 | A04 | [ST-001](FND-core-project-foundation.md#st-001) |
+| Must | 2 | S0 | A04 | [ST-001](FND-core-project-foundation.md#st-001) |
 
-**Status:** ✅ done
+**Status:** done
 
 **Acceptance criteria**
 
@@ -122,9 +122,9 @@
 
 | Priority | Points | Sprint | Spec | Depends on |
 |---|---|---|---|---|
-| 🟥 Must | 5 | S0 | A05, §3.3 | [ST-001](FND-core-project-foundation.md#st-001) |
+| Must | 5 | S0 | A05, §3.3 | [ST-001](FND-core-project-foundation.md#st-001) |
 
-**Status:** 🟡 partial — 5 fixtures exist (TS + Vitest, CommonJS + Jest, pnpm monorepo, node:test, no-VCS), plus the LeadsIt case study as a real-world check. React, Next.js and Yarn ESM fixtures remain (planned in 1.1.0).
+**Status:** partial — 5 fixtures exist (TS + Vitest, CommonJS + Jest, pnpm monorepo, node:test, no-VCS), plus the LeadsIt case study as a real-world check. React, Next.js and Yarn ESM fixtures remain (planned in 1.1.0).
 
 **Acceptance criteria**
 
@@ -142,9 +142,9 @@
 
 | Priority | Points | Sprint | Spec | Depends on |
 |---|---|---|---|---|
-| 🟥 Must | 3 | S0 | A06, §30.6 | [ST-001](FND-core-project-foundation.md#st-001), [ST-004](FND-core-project-foundation.md#st-004) |
+| Must | 3 | S0 | A06, §30.6 | [ST-001](FND-core-project-foundation.md#st-001), [ST-004](FND-core-project-foundation.md#st-004) |
 
-**Status:** 🟡 partial — Workflow committed (3 OSes × Node 22/24); not yet executed on GitHub.
+**Status:** changed — No hosted CI by decision: `pnpm verify` runs locally and in the `scripts/hooks/pre-push` gate (`pnpm hooks:install`).
 
 **Acceptance criteria**
 
@@ -162,9 +162,9 @@
 
 | Priority | Points | Sprint | Spec | Depends on |
 |---|---|---|---|---|
-| 🟥 Must | 3 | S0 | A07, §30.2 | [ST-001](FND-core-project-foundation.md#st-001) |
+| Must | 3 | S0 | A07, §30.2 | [ST-001](FND-core-project-foundation.md#st-001) |
 
-**Status:** ✅ done
+**Status:** done
 
 **Acceptance criteria**
 
@@ -182,9 +182,9 @@
 
 | Priority | Points | Sprint | Spec | Depends on |
 |---|---|---|---|---|
-| 🟥 Must | 2 | S0 | A08, §26.6 | [ST-001](FND-core-project-foundation.md#st-001) |
+| Must | 2 | S0 | A08, §26.6 | [ST-001](FND-core-project-foundation.md#st-001) |
 
-**Status:** ✅ done
+**Status:** done
 
 **Acceptance criteria**
 
@@ -202,9 +202,9 @@
 
 | Priority | Points | Sprint | Spec | Depends on |
 |---|---|---|---|---|
-| 🟥 Must | 5 | S0 | A09, §27 | [ST-002](FND-core-project-foundation.md#st-002) |
+| Must | 5 | S0 | A09, §27 | [ST-002](FND-core-project-foundation.md#st-002) |
 
-**Status:** ✅ done
+**Status:** done
 
 **Acceptance criteria**
 
@@ -222,9 +222,9 @@
 
 | Priority | Points | Sprint | Spec | Depends on |
 |---|---|---|---|---|
-| 🟥 Must | 2 | S0 | A10 | — |
+| Must | 2 | S0 | A10 | — |
 
-**Status:** ✅ done
+**Status:** done
 
 **Acceptance criteria**
 
@@ -242,9 +242,9 @@
 
 | Priority | Points | Sprint | Spec | Depends on |
 |---|---|---|---|---|
-| 🟥 Must | 1 | S0 | §40 note | — |
+| Must | 1 | S0 | §40 note | — |
 
-**Status:** 🟡 partial — Findings recorded in ADR-0007; the final name/scope decision is pending (product owner).
+**Status:** partial — Findings recorded in ADR-0007; the final name/scope decision is pending (product owner).
 
 **Acceptance criteria**
 
@@ -262,9 +262,9 @@
 
 | Priority | Points | Sprint | Spec | Depends on |
 |---|---|---|---|---|
-| 🟥 Must | 3 | S0 | §4.3, §9 | — |
+| Must | 3 | S0 | §4.3, §9 | — |
 
-**Status:** ✅ done
+**Status:** done
 
 **Acceptance criteria**
 
@@ -282,9 +282,9 @@
 
 | Priority | Points | Sprint | Spec | Depends on |
 |---|---|---|---|---|
-| 🟥 Must | 2 | S0 | §4.3, §8.3 | — |
+| Must | 2 | S0 | §4.3, §8.3 | — |
 
-**Status:** ✅ done
+**Status:** done
 
 **Acceptance criteria**
 

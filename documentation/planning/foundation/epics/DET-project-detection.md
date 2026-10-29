@@ -11,7 +11,7 @@
 | Sprints | S1 → S2 |
 | Acceptance gate | Detection output matches expectations for every fixture in the catalogue. |
 
-**Out of scope for 1.0.0:** Perforce/Mercurial detection; Non-JS languages.
+**Deferred to [the roadmap](../../roadmap.md):** Perforce/Mercurial detection; Non-JS languages.
 
 | Implementation | 27 / 27 points done (v0.2.0) |
 
@@ -19,13 +19,13 @@
 
 | ID | Story | Pri | Pts | Sprint | Status | Depends on |
 |---|---|---|---|---|---|---|
-| [ST-019](#st-019) | Runtime environment scan | Must | 3 | S1 | ✅ done | [ST-001](FND-core-project-foundation.md#st-001) |
-| [ST-020](#st-020) | Package manager and workspace detection | Must | 5 | S1 | ✅ done | [ST-005](FND-core-project-foundation.md#st-005) |
-| [ST-021](#st-021) | Framework detection with evidence | Must | 5 | S1 | ✅ done | [ST-020](DET-project-detection.md#st-020) |
-| [ST-022](#st-022) | Test runner and test convention detection | Must | 5 | S1 | ✅ done | [ST-020](DET-project-detection.md#st-020) |
-| [ST-023](#st-023) | Source layout and import alias analysis | Must | 5 | S2 | ✅ done | [ST-020](DET-project-detection.md#st-020) |
-| [ST-024](#st-024) | Version control detection | Must | 2 | S1 | ✅ done | [ST-001](FND-core-project-foundation.md#st-001) |
-| [ST-025](#st-025) | Coverage provider and CI detection | Should | 2 | S2 | ✅ done | [ST-022](DET-project-detection.md#st-022) |
+| [ST-019](#st-019) | Runtime environment scan | Must | 3 | S1 | done | [ST-001](FND-core-project-foundation.md#st-001) |
+| [ST-020](#st-020) | Package manager and workspace detection | Must | 5 | S1 | done | [ST-005](FND-core-project-foundation.md#st-005) |
+| [ST-021](#st-021) | Framework detection with evidence | Must | 5 | S1 | done | [ST-020](DET-project-detection.md#st-020) |
+| [ST-022](#st-022) | Test runner and test convention detection | Must | 5 | S1 | done | [ST-020](DET-project-detection.md#st-020) |
+| [ST-023](#st-023) | Source layout and import alias analysis | Must | 5 | S2 | done | [ST-020](DET-project-detection.md#st-020) |
+| [ST-024](#st-024) | Version control detection | Must | 2 | S1 | done | [ST-001](FND-core-project-foundation.md#st-001) |
+| [ST-025](#st-025) | Coverage provider and CI detection | Should | 2 | S2 | done | [ST-022](DET-project-detection.md#st-022) |
 
 ---
 
@@ -37,9 +37,9 @@
 
 | Priority | Points | Sprint | Spec | Depends on |
 |---|---|---|---|---|
-| 🟥 Must | 3 | S1 | B01, §5.3 | [ST-001](FND-core-project-foundation.md#st-001) |
+| Must | 3 | S1 | B01, §5.3 | [ST-001](FND-core-project-foundation.md#st-001) |
 
-**Status:** ✅ done
+**Status:** done
 
 **Acceptance criteria**
 
@@ -57,9 +57,9 @@
 
 | Priority | Points | Sprint | Spec | Depends on |
 |---|---|---|---|---|
-| 🟥 Must | 5 | S1 | B02, §3.3 | [ST-005](FND-core-project-foundation.md#st-005) |
+| Must | 5 | S1 | B02, §3.3 | [ST-005](FND-core-project-foundation.md#st-005) |
 
-**Status:** ✅ done
+**Status:** done
 
 **Acceptance criteria**
 
@@ -77,9 +77,9 @@
 
 | Priority | Points | Sprint | Spec | Depends on |
 |---|---|---|---|---|
-| 🟥 Must | 5 | S1 | B03, §3.3 | [ST-020](DET-project-detection.md#st-020) |
+| Must | 5 | S1 | B03, §3.3 | [ST-020](DET-project-detection.md#st-020) |
 
-**Status:** ✅ done
+**Status:** done
 
 **Acceptance criteria**
 
@@ -97,9 +97,9 @@
 
 | Priority | Points | Sprint | Spec | Depends on |
 |---|---|---|---|---|
-| 🟥 Must | 5 | S1 | B04, B06, §5.3 | [ST-020](DET-project-detection.md#st-020) |
+| Must | 5 | S1 | B04, B06, §5.3 | [ST-020](DET-project-detection.md#st-020) |
 
-**Status:** ✅ done
+**Status:** done
 
 **Acceptance criteria**
 
@@ -117,9 +117,9 @@
 
 | Priority | Points | Sprint | Spec | Depends on |
 |---|---|---|---|---|
-| 🟥 Must | 5 | S2 | B05, §5.3 | [ST-020](DET-project-detection.md#st-020) |
+| Must | 5 | S2 | B05, §5.3 | [ST-020](DET-project-detection.md#st-020) |
 
-**Status:** ✅ done
+**Status:** done
 
 **Acceptance criteria**
 
@@ -137,9 +137,9 @@
 
 | Priority | Points | Sprint | Spec | Depends on |
 |---|---|---|---|---|
-| 🟥 Must | 2 | S1 | B07, §7.8 | [ST-001](FND-core-project-foundation.md#st-001) |
+| Must | 2 | S1 | B07, §7.8 | [ST-001](FND-core-project-foundation.md#st-001) |
 
-**Status:** ✅ done
+**Status:** done
 
 **Acceptance criteria**
 
@@ -157,9 +157,9 @@
 
 | Priority | Points | Sprint | Spec | Depends on |
 |---|---|---|---|---|
-| 🟧 Should | 2 | S2 | B08, §5.3 | [ST-022](DET-project-detection.md#st-022) |
+| Should | 2 | S2 | B08, §5.3 | [ST-022](DET-project-detection.md#st-022) |
 
-**Status:** ✅ done
+**Status:** done
 
 **Acceptance criteria**
 

@@ -24,8 +24,10 @@
     "verify": "pnpm lint && pnpm check:boundaries && pnpm typecheck && pnpm test && pnpm planning:build --check",
     "check:boundaries": "node scripts/check-boundaries.mjs",
     "bundle:cli": "node scripts/release/bundle-cli.mjs",
-    "release:publish": "pnpm bundle:cli && npm publish packages/cli/.publish --provenance --access public",
-    "changeset": "changeset"
+    "release:publish": "pnpm verify && pnpm bundle:cli && npm publish packages/cli/.publish --access public",
+    "changeset": "changeset",
+    "hooks:install": "git config core.hooksPath scripts/hooks && echo \"git hooks: scripts/hooks (pre-push runs pnpm verify)\"",
+    "release:pack": "pnpm bundle:cli && cd packages/cli/.publish && npm pack"
   },
   "devDependencies": {
     "@biomejs/biome": "2.6.4",

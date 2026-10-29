@@ -1,92 +1,84 @@
 # Getting started
 
-> Implemented in **v0.1.0**. The behaviour on this page is covered by unit and integration tests.
-
 ## Requirements
 
-- Node.js **22.12+** or **24** (LTS)
-- A JavaScript or TypeScript project using **Jest** or **Vitest**
-- npm, pnpm or Yarn. Git is optional.
+- Node.js 22.12 or newer
+- A JavaScript or TypeScript project that uses Jest, Vitest or `node --test` (several runners and several projects in one repository are fine)
+- Git is optional; without it SmartTest uses local snapshots
 
-## 1. Install
+## Install
 
-Once published:
-
-```bash
-npm install -D smarttest        # or: pnpm add -D smarttest · yarn add -D smarttest
-```
-
-Until the first npm release, build the self-contained package from source:
+SmartTest is not on npm yet. Build the package from this repository and install the tarball:
 
 ```bash
 git clone https://github.com/RemiPelloux/SmarttyTest && cd SmarttyTest
-corepack enable && pnpm install && pnpm build && pnpm bundle:cli
-npm install -D /path/to/SmarttyTest/packages/cli/.publish     # in your project
+corepack enable && pnpm install && pnpm build && pnpm release:pack
+# in your project:
+npm install -D /path/to/SmarttyTest/packages/cli/.publish/smarttest-0.2.0.tgz
 ```
 
-## 2. Initialise
+If your repository has no root `package.json` (several independent projects), add a minimal one for repository tooling, as LeadsIt does.
+
+## Set up
 
 ```bash
-npx smarttest init --dry-run    # see exactly what would change
-npx smarttest init              # review the plan, accept or edit each section
+npx smarttest init --dry-run    # print the plan and the diff of every file
+npx smarttest init --yes        # apply it
 ```
+
+Example output on a repository with three runners:
 
 ```text
-Detected: NestJS + TypeScript + Jest · pnpm workspace (3 packages) · Git
+Detected: Wasp + React + Express + Prisma + TypeScript + Vitest + Jest + node:test · npm · 6 independent projects · Git
 
 Recommended
-  Test layout      mirror        (82% of existing tests mirror src/)
-  Adapter          jest          (jest.config.ts found in 3 packages)
-  Change tracking  git + native snapshots
+  Test layout      colocated                  (63% of existing tests follow this convention)
+  Adapter          vitest, jest, node         (existing runner configuration is reused as-is)
   Impact mode      balanced
-  Coverage         existing Jest v8 provider
-
-Warnings
-  4 modules have no matching tests
-  2 configuration files may affect all suites (tsconfig.base.json, jest.preset.js)
+  Skipped tests    backend/**/*redisJobQueue* (your existing test commands skip these, so SmartTest does too)
+  Git hook         smarttest run --staged     (.husky/pre-commit runs 3 full suite(s); one affected-tests run can replace them)
 
 Changes
-  + smarttest.config.ts
-  ~ package.json        add scripts: "test:affected", "test:explain"
-  ~ .gitignore          add .smarttest/
+  + smarttest.config.ts   SmartTest configuration
+  ~ .gitignore            ignore local SmartTest state
 ```
 
-Init is **idempotent**: running it again changes nothing. It is also **reversible**: `npx smarttest init --rollback` undoes it.
+Running `init` again changes nothing. `npx smarttest init --rollback` restores the files it changed, unless you edited them since.
 
-## 3. Run what matters
+## Run
 
 ```bash
-npx smarttest run --affected            # vs. your working tree
-npx smarttest run --affected --base main
-npx smarttest run --all                 # full suite through the same pipeline
+npx smarttest run                  # affected by uncommitted changes
+npx smarttest run --staged         # affected by staged changes, for a pre-commit hook
+npx smarttest run --base main      # affected by the current branch
+npx smarttest run --all            # everything
 ```
 
-<p align="center"><img src="../assets/terminal.svg" alt="smarttest run --affected terminal session" width="90%"></p>
+<p align="center"><img src="../assets/terminal.svg" alt="Terminal: smarttest run selects 12 of 486 test files and reports 474 as not run." width="90%"></p>
 
-## 4. Ask why
+## Check the selection
 
 ```bash
-npx smarttest explain src/auth/AuthService.test.ts
-npx smarttest impact --base main --json   # decision only, no execution
+npx smarttest explain <test>          # why it ran or not
+npx smarttest explain <file>          # which tests cover a file
+npx smarttest validate-selection      # run selection and full suite, compare
+npx smarttest benchmark --commits 20  # replay history: full run vs SmartTest, misses re-checked
+npx smarttest doctor                  # runners, discovery, index, configuration
 ```
 
-## 5. Organise your tests
+## Use it in a Git hook
+
+Replace the test steps of your pre-commit hook with:
 
 ```bash
-npx smarttest generate --sync            # missing / orphaned / renamed tests
-npx smarttest generate --module auth --dry-run
+npx --no-install smarttest run --staged --non-interactive
 ```
 
-Scaffolds use `it.todo(...)`, so a gap stays visible and is never counted as a passing test.
-
-## 6. Reports
+## Reports and generated tests
 
 ```bash
-npx smarttest report --open              # self-contained HTML in .smarttest/reports/
+npx smarttest report --open           # HTML report of the last run
+npx smarttest generate --dry-run      # missing test files as it.todo scaffolds
 ```
 
-## Next
-
-- [How selection works](../concepts/how-selection-works.md) · [Safety model](../concepts/safety-model.md)
-- [CLI reference](../reference/cli.md) · [Configuration](../reference/configuration.md)
-- [GitHub Actions](ci-github-actions.md)
+Next: [how selection works](../concepts/how-selection-works.md), [CLI reference](../reference/cli.md), [configuration](../reference/configuration.md), [running in CI](ci.md).

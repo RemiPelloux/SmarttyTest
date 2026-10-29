@@ -1,16 +1,16 @@
 # Motion design
 
-Motion in SmartTest **explains causality**: a change propagates, the affected parts light up, and the protecting tests turn green. If an animation doesn't show cause and effect, or progress, we don't add it.
+Motion in SmartTest explains causality: a change propagates, the affected parts light up, and the protecting tests turn green. If an animation doesn't show cause and effect, or progress, we don't add it.
 
 <p align="center"><img src="../assets/hero.svg" alt="Hero animation: change ripples through the graph to the selected tests" width="100%"></p>
 
 ## Principles
 
-1. **Meaning over decoration.** Every animated property maps to a state change in the product (changed → affected → selected → skipped).
-2. **Follow the arrow.** Motion travels in the direction of impact: from the change, along reverse dependencies, to the tests. Never backwards.
-3. **The final frame tells the whole story.** Assets are authored so that the static state is the complete, informative end state. Reduced-motion users and static renderers lose nothing.
-4. **Calm loops.** Loops hold the result for most of the cycle (≥ 45 %) and reset with a fade, never a jump cut.
-5. **Fast in the product, narrative in marketing.** UI transitions take 80–360 ms. Only README and docs illustrations use multi-second choreography.
+1. Meaning over decoration. Every animated property maps to a state change in the product (changed → affected → selected → skipped).
+2. Follow the arrow. Motion travels in the direction of impact: from the change, along reverse dependencies, to the tests. Never backwards.
+3. The final frame tells the whole story. Assets are authored so that the static state is the complete, informative end state. Reduced-motion users and static renderers lose nothing.
+4. Calm loops. Loops hold the result for most of the cycle (≥ 45 %) and reset with a fade, never a jump cut.
+5. Fast in the product, narrative in marketing. UI transitions take 80–360 ms. Only README and docs illustrations use multi-second choreography.
 
 ## Tokens
 
@@ -52,8 +52,8 @@ Used in the hero and the impact map, and later in the Studio when an impact is r
 
 ## Technical rules for SVG assets
 
-- **Pure SVG + CSS `@keyframes`.** No JavaScript, no SMIL, no external fonts or images. They render on GitHub through `<img>`, which sandboxes scripts anyway.
-- Animate **only** `opacity`, `transform`, `stroke-dashoffset`, `fill` and `stroke`. Edges use `pathLength="1"` so a single keyframe works for every path.
+- Pure SVG + CSS `@keyframes`. No JavaScript, no SMIL, no external fonts or images. They render on GitHub through `<img>`, which sandboxes scripts anyway.
+- Animate only `opacity`, `transform`, `stroke-dashoffset`, `fill` and `stroke`. Edges use `pathLength="1"` so a single keyframe works for every path.
 - Every asset includes:
 
   ```css
@@ -63,7 +63,7 @@ Used in the hero and the impact map, and later in the Studio when an impact is r
   and its default (non-animated) styles are the final frame.
 - `role="img"` plus `<title>` and `<desc>` describe the story for screen readers.
 - Keep each file under 15 KB.
-- **Never edit the SVGs by hand.** Change the generator and run `pnpm assets:build`.
+- Never edit the SVGs by hand. Change the generator and run `pnpm assets:build`.
 
 ## Motion in the product
 
@@ -77,5 +77,5 @@ Used in the hero and the impact map, and later in the Studio when an impact is r
 
 - No bouncing, elastic or overshoot easing on status. A test result is not playful.
 - No looping motion in the product UI except progress indicators.
-- No motion that could suggest a skipped test ran: skipped items **dim**, they never "pass by".
+- No motion that could suggest a skipped test ran: skipped items dim, they never "pass by".
 - No parallax, no scroll-jacking.

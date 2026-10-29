@@ -6,7 +6,7 @@ One visual language for the README, the docs, the HTML report (1.0) and SmartTes
 
 ## Brand idea
 
-**"A check mark drawn as a dependency graph."** SmartTest's value is the link between a change and the tests that protect it. The logo, the hero and the impact map all show that link: the edge lights up, then the test turns green.
+"A check mark drawn as a dependency graph." SmartTest's value is the link between a change and the tests that protect it. The logo, the hero and the impact map all show that link: the edge lights up, then the test turns green.
 
 ## Color tokens
 
@@ -24,11 +24,11 @@ One visual language for the README, the docs, the HTML report (1.0) and SmartTes
 
 ### Brand
 
-| Token          | Hex                 | Use                                                |
-| -------------- | ------------------- | -------------------------------------------------- |
-| `--st-cyan`    | `#22D3EE`           | Primary accent, focus rings, prompts               |
-| `--st-violet`  | `#8B5CF6`           | Secondary accent, "affected"                       |
-| Brand gradient | cyan → violet, 135° | Logo, headline emphasis. **Never** used for status |
+| Token          | Hex                 | Use                                            |
+| -------------- | ------------------- | ---------------------------------------------- |
+| `--st-cyan`    | `#22D3EE`           | Primary accent, focus rings, prompts           |
+| `--st-violet`  | `#8B5CF6`           | Secondary accent, "affected"                   |
+| Brand gradient | cyan → violet, 135° | Logo, headline emphasis. Never used for status |
 
 ### Status (semantic, never decorative)
 
@@ -42,7 +42,7 @@ One visual language for the README, the docs, the HTML report (1.0) and SmartTes
 | Skipped (not run)   | `--st-skip`   | `#3A4567` | dashed outline + "not run"                          |
 | Cached              | `--st-cyan`   | `#22D3EE` | ■ + ⧉ "cached" badge, never shown as plain "passed" |
 
-In the graph, **circles are source symbols and squares are tests.**
+In the graph, circles are source symbols and squares are tests.
 
 ### Light theme (report & Studio)
 
@@ -57,7 +57,7 @@ In the graph, **circles are source symbols and squares are tests.**
 | `--st-fail`  | `#FB7185` | `#BE123C` |
 | `--st-warn`  | `#FBBF24` | `#B45309` |
 
-All text and status pairs must meet **WCAG 2.2 AA** contrast (4.5:1 for text, 3:1 for UI glyphs) in both themes.
+All text and status pairs must meet WCAG 2.2 AA contrast (4.5:1 for text, 3:1 for UI glyphs) in both themes.
 
 ## Typography
 
@@ -89,4 +89,4 @@ System stacks only. No web fonts in assets, so nothing loads over the network an
 | Separators   | `·` (middle dot), never pipes                                                     |
 | Errors       | `✕ ST_CONFIG_INVALID  message` + indented `hint:` + docs link                     |
 
-The wording rule is that **"skipped" is always followed by "(not run)"** in human output.
+The wording rule is that "skipped" is always followed by "(not run)" in human output.

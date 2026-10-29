@@ -87,7 +87,7 @@ const manifest = {
   engines: { node: rootPkg.engines.node },
   dependencies: { typescript: tsVersion },
   repository: { type: "git", url: "git+https://github.com/RemiPelloux/SmarttyTest.git" },
-  publishConfig: { access: "public", provenance: true },
+  publishConfig: { access: "public" },
 };
 await writeFile(join(out, "package.json"), `${JSON.stringify(manifest, null, 2)}\n`);
 await cp(join(cli, "schemas"), join(out, "schemas"), { recursive: true });

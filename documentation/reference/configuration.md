@@ -1,7 +1,5 @@
 # Configuration reference
 
-> Implemented in **v0.2.0**. Validation errors list every offending path and exit with `ST_CONFIG_INVALID` (3).
-
 SmartTest reads `smarttest.config.{ts,mts,js,mjs,json}` from the project root, or the file given with `--config`. `smarttest init` writes one for you. The file is transpiled on load, so `import { defineConfig } from "smarttest"` works even before the package is resolvable.
 
 ```ts

@@ -11,7 +11,7 @@
 | Sprints | S7 → S8 |
 | Acceptance gate | Supported repositories can be initialised safely with minimal manual configuration. |
 
-**Out of scope for 1.0.0:** Adaptive configuration / `sync` (Release 2).
+**Deferred to [the roadmap](../../roadmap.md):** Adaptive configuration / `sync` (Release 2).
 
 | Implementation | 33 / 33 points done (v0.2.0) |
 
@@ -19,14 +19,14 @@
 
 | ID | Story | Pri | Pts | Sprint | Status | Depends on |
 |---|---|---|---|---|---|---|
-| [ST-070](#st-070) | Setup recommendation engine | Must | 5 | S7 | ✅ done | [ST-021](DET-project-detection.md#st-021), [ST-022](DET-project-detection.md#st-022), [ST-023](DET-project-detection.md#st-023), [ST-024](DET-project-detection.md#st-024), [ST-025](DET-project-detection.md#st-025), [ST-065](RUL-rules-engine.md#st-065) |
-| [ST-071](#st-071) | `smarttest init` wizard and setup modes | Must | 8 | S7 | ✅ done | [ST-070](INI-smart-init.md#st-070), [ST-015](CLI-cli-developer-experience.md#st-015) |
-| [ST-072](#st-072) | Init dry-run and change preview | Must | 3 | S7 | ✅ done | [ST-070](INI-smart-init.md#st-070) |
-| [ST-073](#st-073) | Safe configuration writing | Must | 5 | S7 | ✅ done | [ST-072](INI-smart-init.md#st-072) |
-| [ST-074](#st-074) | Setup validation and setup report | Must | 3 | S7 | ✅ done | [ST-073](INI-smart-init.md#st-073), [ST-049](EXE-test-execution.md#st-049), [ST-050](EXE-test-execution.md#st-050) |
-| [ST-075](#st-075) | Idempotent init | Must | 3 | S8 | ✅ done | [ST-073](INI-smart-init.md#st-073) |
-| [ST-076](#st-076) | Init rollback | Must | 3 | S8 | ✅ done | [ST-073](INI-smart-init.md#st-073) |
-| [ST-077](#st-077) | `smarttest doctor` | Must | 3 | S8 | ✅ done | [ST-074](INI-smart-init.md#st-074) |
+| [ST-070](#st-070) | Setup recommendation engine | Must | 5 | S7 | done | [ST-021](DET-project-detection.md#st-021), [ST-022](DET-project-detection.md#st-022), [ST-023](DET-project-detection.md#st-023), [ST-024](DET-project-detection.md#st-024), [ST-025](DET-project-detection.md#st-025), [ST-065](RUL-rules-engine.md#st-065) |
+| [ST-071](#st-071) | `smarttest init` wizard and setup modes | Must | 8 | S7 | done | [ST-070](INI-smart-init.md#st-070), [ST-015](CLI-cli-developer-experience.md#st-015) |
+| [ST-072](#st-072) | Init dry-run and change preview | Must | 3 | S7 | done | [ST-070](INI-smart-init.md#st-070) |
+| [ST-073](#st-073) | Safe configuration writing | Must | 5 | S7 | done | [ST-072](INI-smart-init.md#st-072) |
+| [ST-074](#st-074) | Setup validation and setup report | Must | 3 | S7 | done | [ST-073](INI-smart-init.md#st-073), [ST-049](EXE-test-execution.md#st-049), [ST-050](EXE-test-execution.md#st-050) |
+| [ST-075](#st-075) | Idempotent init | Must | 3 | S8 | done | [ST-073](INI-smart-init.md#st-073) |
+| [ST-076](#st-076) | Init rollback | Must | 3 | S8 | done | [ST-073](INI-smart-init.md#st-073) |
+| [ST-077](#st-077) | `smarttest doctor` | Must | 3 | S8 | done | [ST-074](INI-smart-init.md#st-074) |
 
 ---
 
@@ -38,9 +38,9 @@
 
 | Priority | Points | Sprint | Spec | Depends on |
 |---|---|---|---|---|
-| 🟥 Must | 5 | S7 | B09, §5.5 | [ST-021](DET-project-detection.md#st-021), [ST-022](DET-project-detection.md#st-022), [ST-023](DET-project-detection.md#st-023), [ST-024](DET-project-detection.md#st-024), [ST-025](DET-project-detection.md#st-025), [ST-065](RUL-rules-engine.md#st-065) |
+| Must | 5 | S7 | B09, §5.5 | [ST-021](DET-project-detection.md#st-021), [ST-022](DET-project-detection.md#st-022), [ST-023](DET-project-detection.md#st-023), [ST-024](DET-project-detection.md#st-024), [ST-025](DET-project-detection.md#st-025), [ST-065](RUL-rules-engine.md#st-065) |
 
-**Status:** ✅ done
+**Status:** done
 
 **Acceptance criteria**
 
@@ -58,9 +58,9 @@
 
 | Priority | Points | Sprint | Spec | Depends on |
 |---|---|---|---|---|
-| 🟥 Must | 8 | S7 | B10, §5.2, §5.6 | [ST-070](INI-smart-init.md#st-070), [ST-015](CLI-cli-developer-experience.md#st-015) |
+| Must | 8 | S7 | B10, §5.2, §5.6 | [ST-070](INI-smart-init.md#st-070), [ST-015](CLI-cli-developer-experience.md#st-015) |
 
-**Status:** ✅ done
+**Status:** done
 
 **Acceptance criteria**
 
@@ -78,9 +78,9 @@
 
 | Priority | Points | Sprint | Spec | Depends on |
 |---|---|---|---|---|
-| 🟥 Must | 3 | S7 | B11, §5.7 | [ST-070](INI-smart-init.md#st-070) |
+| Must | 3 | S7 | B11, §5.7 | [ST-070](INI-smart-init.md#st-070) |
 
-**Status:** ✅ done
+**Status:** done
 
 **Acceptance criteria**
 
@@ -98,9 +98,9 @@
 
 | Priority | Points | Sprint | Spec | Depends on |
 |---|---|---|---|---|
-| 🟥 Must | 5 | S7 | B12, §5.7 | [ST-072](INI-smart-init.md#st-072) |
+| Must | 5 | S7 | B12, §5.7 | [ST-072](INI-smart-init.md#st-072) |
 
-**Status:** ✅ done
+**Status:** done
 
 **Acceptance criteria**
 
@@ -118,9 +118,9 @@
 
 | Priority | Points | Sprint | Spec | Depends on |
 |---|---|---|---|---|
-| 🟥 Must | 3 | S7 | B13, §5.4 | [ST-073](INI-smart-init.md#st-073), [ST-049](EXE-test-execution.md#st-049), [ST-050](EXE-test-execution.md#st-050) |
+| Must | 3 | S7 | B13, §5.4 | [ST-073](INI-smart-init.md#st-073), [ST-049](EXE-test-execution.md#st-049), [ST-050](EXE-test-execution.md#st-050) |
 
-**Status:** ✅ done
+**Status:** done
 
 **Acceptance criteria**
 
@@ -138,9 +138,9 @@
 
 | Priority | Points | Sprint | Spec | Depends on |
 |---|---|---|---|---|
-| 🟥 Must | 3 | S8 | B14, §5.8 | [ST-073](INI-smart-init.md#st-073) |
+| Must | 3 | S8 | B14, §5.8 | [ST-073](INI-smart-init.md#st-073) |
 
-**Status:** ✅ done
+**Status:** done
 
 **Acceptance criteria**
 
@@ -158,9 +158,9 @@
 
 | Priority | Points | Sprint | Spec | Depends on |
 |---|---|---|---|---|
-| 🟥 Must | 3 | S8 | B15, §5.7 | [ST-073](INI-smart-init.md#st-073) |
+| Must | 3 | S8 | B15, §5.7 | [ST-073](INI-smart-init.md#st-073) |
 
-**Status:** ✅ done
+**Status:** done
 
 **Acceptance criteria**
 
@@ -178,9 +178,9 @@
 
 | Priority | Points | Sprint | Spec | Depends on |
 |---|---|---|---|---|
-| 🟥 Must | 3 | S8 | §6.4, §26.2 | [ST-074](INI-smart-init.md#st-074) |
+| Must | 3 | S8 | §6.4, §26.2 | [ST-074](INI-smart-init.md#st-074) |
 
-**Status:** ✅ done
+**Status:** done
 
 **Acceptance criteria**
 

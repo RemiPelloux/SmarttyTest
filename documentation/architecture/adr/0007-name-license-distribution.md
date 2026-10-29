@@ -18,7 +18,7 @@ The spec uses "SmartTest" as a working name and asks for npm availability to be 
 
 - CLI package **`smarttest`** (bin `smarttest`). Internal packages under **`@smarttest/*`**.
 - **Apache-2.0** for the open-source core. It includes an explicit patent grant, which suits enterprise adoption and an open-core model. Cloud and enterprise code live in separate, closed repositories.
-- Publish from CI with npm **trusted publishing / provenance**. Pre-releases go to `next`.
+- Publish locally with `pnpm release:publish` after `pnpm verify`. There is no hosted CI, so no npm provenance attestation. Pre-releases go to the `next` tag.
 
 ## Fallbacks
 

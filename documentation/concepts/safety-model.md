@@ -1,8 +1,6 @@
 # Safety model
 
-> Implemented in **v0.1.0**. The behaviour on this page is covered by unit and integration tests.
-
-No static analysis can guarantee that a skipped test would have passed. SmartTest's job is to make that risk **small, measured and visible**, and never hidden.
+No static analysis can guarantee that a skipped test would have passed. SmartTest's job is to make that risk small, measured and visible, and never hidden.
 
 ## What SmartTest will never do (PRD §32.2)
 
@@ -27,7 +25,7 @@ No static analysis can guarantee that a skipped test would have passed. SmartTes
 
 ## Adoption path we recommend
 
-1. **Observe.** Run `smarttest impact` on PRs without changing CI and read the explanations.
-2. **Validate.** Run `smarttest validate-selection` on a sample of real changes and check that 0 failures are missed.
-3. **Adopt on PRs.** Use `run --affected --mode balanced` on pull requests and keep `run --all` on `main` and nightly.
-4. **Tighten.** Add rules for critical areas (`risk: critical`) so they always run in SAFE mode.
+1. Observe. Run `smarttest impact` on PRs without changing CI and read the explanations.
+2. Validate. Run `smarttest validate-selection` on a sample of real changes and check that 0 failures are missed.
+3. Adopt on PRs. Use `run --affected --mode balanced` on pull requests and keep `run --all` on `main` and nightly.
+4. Tighten. Add rules for critical areas (`risk: critical`) so they always run in SAFE mode.

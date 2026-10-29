@@ -1,56 +1,46 @@
-# Contributing to SmartTest
-
-Thanks for helping! SmartTest is pre-1.0, so the most valuable contributions follow the [v1.0.0 plan](documentation/planning/release-1.0.0/README.md).
+# Contributing
 
 ## Setup
 
 ```bash
-git clone <repo> && cd SmarttyTest
-corepack enable          # provides the pinned pnpm (or use: npx pnpm@12 …)
+corepack enable          # pinned pnpm (or: npx pnpm@12 …)
 pnpm install
-pnpm verify              # lint · boundaries · typecheck · test · planning consistency
+pnpm hooks:install       # pre-push runs `pnpm verify`
+pnpm verify              # lint, package boundaries, typecheck, tests, planning consistency
 ```
 
-Requirements: Node **22.12+** (24 LTS recommended, see `.nvmrc`).
+Node 22.12 or newer (24 recommended, see `.nvmrc`). This repository has no hosted CI: `pnpm verify` is the gate, locally and in the pre-push hook. Before a release, run it on Linux, macOS and Windows.
 
 ## Picking work
 
-1. Find a story in [epics](documentation/planning/release-1.0.0/epics/README.md) or in GitHub issues (`ST-###`).
-2. Check it meets the **Definition of Ready**: its dependencies are done and its ACs are clear.
-3. Comment on the issue to claim it.
+Take a story from the [roadmap](documentation/planning/roadmap.md) or an open issue. Check the [Definition of Ready](documentation/planning/definition-of-ready-and-done.md) first.
 
 ## Making changes
 
-- Branch from `main`: `st-062-explain-command`.
-- Reference the story in commits and the PR: `feat(impact): explain skipped tests (ST-062)`. We use [Conventional Commits](https://www.conventionalcommits.org/).
-- Add a Changeset for user-visible changes (`pnpm changeset`, enabled in ST-099).
-- Meet the [Definition of Done](documentation/planning/release-1.0.0/definition-of-ready-and-done.md).
+- Branch from `main`. Use [Conventional Commits](https://www.conventionalcommits.org/): `feat(graph): resolve method calls through the type checker`.
+- Add a changeset for user-visible changes (`pnpm changeset`).
+- Follow the [Definition of Done](documentation/planning/definition-of-ready-and-done.md).
 
-### Things that need extra care
+Areas that need extra care:
 
-| Area                                    | Why                     | Requirement                                                     |
-| --------------------------------------- | ----------------------- | --------------------------------------------------------------- |
-| `impact-engine`, `rules-engine`         | Selection safety        | 2 approvals. Regression harness green                           |
-| `report-engine`                         | Honesty of results      | Report integrity suite green                                    |
-| Anything writing files in user projects | Non-destructive promise | Dry-run path, atomic write, test proving nothing is overwritten |
-| Exit codes, JSON schemas                | Public contract         | Treated as breaking changes                                     |
+| Area                                                | Why                                  | Requirement                                                         |
+| --------------------------------------------------- | ------------------------------------ | ------------------------------------------------------------------- |
+| `impact-engine`, `dependency-graph`, `rules-engine` | A wrong edge can skip a failing test | Fixture for the new behaviour; regression harness stays at 0 missed |
+| `report-engine`                                     | Reports must not overstate results   | Report integrity suite passes                                       |
+| Anything that writes files in user projects         | Must never overwrite user content    | Dry-run path, atomic write, a test proving nothing is overwritten   |
+| Exit codes, `--json` schemas, config schema         | Public contracts                     | Treated as breaking changes                                         |
 
-## Repository tooling
+## Tooling
 
-| Command                          | Purpose                                                                                        |
-| -------------------------------- | ---------------------------------------------------------------------------------------------- |
-| `pnpm scaffold:package --all`    | Regenerate package boilerplate from `scripts/packages.manifest.json` (never overwrites `src/`) |
-| `pnpm planning:build`            | Regenerate planning docs from `backlog.data.mjs`. Validates dependencies and capacity          |
-| `pnpm planning:issues [--apply]` | Create GitHub labels, milestones and issues from the backlog                                   |
-| `pnpm assets:build`              | Regenerate animated README SVGs                                                                |
-| `pnpm check:boundaries`          | Enforce package boundaries and the local-first rules (ADR-0004)                                |
-| `pnpm bundle:cli`                | Build the self-contained `smarttest` package into `packages/cli/.publish`                      |
-| `node benchmarks/run.mjs`        | Run the performance benchmarks                                                                 |
+| Command                       | Purpose                                                                                        |
+| ----------------------------- | ---------------------------------------------------------------------------------------------- |
+| `pnpm scaffold:package --all` | Regenerate package boilerplate from `scripts/packages.manifest.json` (never overwrites `src/`) |
+| `pnpm check:boundaries`       | Enforce package boundaries and the local-first rules (ADR-0004)                                |
+| `pnpm planning:build`         | Regenerate the foundation backlog pages from `backlog.data.mjs`                                |
+| `pnpm assets:build`           | Regenerate the SVG illustrations                                                               |
+| `pnpm release:pack`           | Build the self-contained `smarttest` tarball                                                   |
+| `node benchmarks/run.mjs`     | Performance benchmarks                                                                         |
 
-## Proposing bigger changes
+Larger changes: open an issue first; architectural changes need an ADR (`documentation/architecture/adr/template.md`).
 
-Open an issue first. For architectural changes, add an ADR (`documentation/architecture/adr/template.md`).
-
-## Code of conduct
-
-This project follows the [Contributor Covenant](CODE_OF_CONDUCT.md).
+Code of conduct: [Contributor Covenant](CODE_OF_CONDUCT.md).

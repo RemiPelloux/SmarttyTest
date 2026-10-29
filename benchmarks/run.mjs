@@ -202,7 +202,7 @@ const lines = [
 ];
 for (const [label, key, target] of TARGETS) {
   lines.push(
-    `| ${label} | < ${fmt(target)} | ${sizes.map((s) => `${fmt(results[s][key])} ${results[s][key] <= target ? "✅" : "❌"}`).join(" | ")} |`,
+    `| ${label} | < ${fmt(target)} | ${sizes.map((s) => `${fmt(results[s][key])} ${results[s][key] <= target ? "met" : "missed"}`).join(" | ")} |`,
   );
 }
 lines.push(
@@ -219,7 +219,7 @@ lines.push(
 );
 lines.push(
   "",
-  "Targets are aspirational engineering targets from PRD §31.3, not guarantees. A ❌ is reported as a miss, never hidden.",
+  "Targets are aspirational engineering targets from PRD §31.3, not guarantees. Misses are reported, not hidden.",
   "",
 );
 await writeFile(outFile, lines.join("\n"));

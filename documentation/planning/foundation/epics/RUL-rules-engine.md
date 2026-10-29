@@ -11,7 +11,7 @@
 | Sprints | S6 → S7 |
 | Acceptance gate | Rule evaluation is deterministic and explainable. |
 
-**Out of scope for 1.0.0:** Visual rules editor (Studio, Release 4).
+**Deferred to [the roadmap](../../roadmap.md):** Visual rules editor (Studio, Release 4).
 
 | Implementation | 24 / 24 points done (v0.2.0) |
 
@@ -19,11 +19,11 @@
 
 | ID | Story | Pri | Pts | Sprint | Status | Depends on |
 |---|---|---|---|---|---|---|
-| [ST-065](#st-065) | Rule schema, scopes and core selectors | Must | 8 | S6 | ✅ done | [ST-003](FND-core-project-foundation.md#st-003), [ST-037](SRC-source-intelligence.md#st-037) |
-| [ST-066](#st-066) | Deterministic precedence and conflict detection | Must | 5 | S7 | ✅ done | [ST-065](RUL-rules-engine.md#st-065) |
-| [ST-067](#st-067) | Decorator, visibility, kind and inheritance selectors | Should | 3 | S7 | ✅ done | [ST-065](RUL-rules-engine.md#st-065), [ST-039](SRC-source-intelligence.md#st-039) |
-| [ST-068](#st-068) | Coverage, criticality and execution policies | Must | 5 | S7 | ✅ done | [ST-065](RUL-rules-engine.md#st-065), [ST-060](IMP-impact-engine-and-selection.md#st-060) |
-| [ST-069](#st-069) | `rules list | validate | explain` | Must | 3 | S7 | ✅ done | [ST-066](RUL-rules-engine.md#st-066) |
+| [ST-065](#st-065) | Rule schema, scopes and core selectors | Must | 8 | S6 | done | [ST-003](FND-core-project-foundation.md#st-003), [ST-037](SRC-source-intelligence.md#st-037) |
+| [ST-066](#st-066) | Deterministic precedence and conflict detection | Must | 5 | S7 | done | [ST-065](RUL-rules-engine.md#st-065) |
+| [ST-067](#st-067) | Decorator, visibility, kind and inheritance selectors | Should | 3 | S7 | done | [ST-065](RUL-rules-engine.md#st-065), [ST-039](SRC-source-intelligence.md#st-039) |
+| [ST-068](#st-068) | Coverage, criticality and execution policies | Must | 5 | S7 | done | [ST-065](RUL-rules-engine.md#st-065), [ST-060](IMP-impact-engine-and-selection.md#st-060) |
+| [ST-069](#st-069) | `rules list | validate | explain` | Must | 3 | S7 | done | [ST-066](RUL-rules-engine.md#st-066) |
 
 ---
 
@@ -35,9 +35,9 @@
 
 | Priority | Points | Sprint | Spec | Depends on |
 |---|---|---|---|---|
-| 🟥 Must | 8 | S6 | I01–I05, §14.2, §14.3 | [ST-003](FND-core-project-foundation.md#st-003), [ST-037](SRC-source-intelligence.md#st-037) |
+| Must | 8 | S6 | I01–I05, §14.2, §14.3 | [ST-003](FND-core-project-foundation.md#st-003), [ST-037](SRC-source-intelligence.md#st-037) |
 
-**Status:** ✅ done
+**Status:** done
 
 **Acceptance criteria**
 
@@ -55,9 +55,9 @@
 
 | Priority | Points | Sprint | Spec | Depends on |
 |---|---|---|---|---|
-| 🟥 Must | 5 | S7 | I10, §14.6 | [ST-065](RUL-rules-engine.md#st-065) |
+| Must | 5 | S7 | I10, §14.6 | [ST-065](RUL-rules-engine.md#st-065) |
 
-**Status:** ✅ done
+**Status:** done
 
 **Acceptance criteria**
 
@@ -75,9 +75,9 @@
 
 | Priority | Points | Sprint | Spec | Depends on |
 |---|---|---|---|---|
-| 🟧 Should | 3 | S7 | I06, §14.3 | [ST-065](RUL-rules-engine.md#st-065), [ST-039](SRC-source-intelligence.md#st-039) |
+| Should | 3 | S7 | I06, §14.3 | [ST-065](RUL-rules-engine.md#st-065), [ST-039](SRC-source-intelligence.md#st-039) |
 
-**Status:** ✅ done
+**Status:** done
 
 **Acceptance criteria**
 
@@ -95,9 +95,9 @@
 
 | Priority | Points | Sprint | Spec | Depends on |
 |---|---|---|---|---|
-| 🟥 Must | 5 | S7 | I07, I08, I09 | [ST-065](RUL-rules-engine.md#st-065), [ST-060](IMP-impact-engine-and-selection.md#st-060) |
+| Must | 5 | S7 | I07, I08, I09 | [ST-065](RUL-rules-engine.md#st-065), [ST-060](IMP-impact-engine-and-selection.md#st-060) |
 
-**Status:** ✅ done
+**Status:** done
 
 **Acceptance criteria**
 
@@ -115,9 +115,9 @@
 
 | Priority | Points | Sprint | Spec | Depends on |
 |---|---|---|---|---|
-| 🟥 Must | 3 | S7 | I11, I12, §14.7 | [ST-066](RUL-rules-engine.md#st-066) |
+| Must | 3 | S7 | I11, I12, §14.7 | [ST-066](RUL-rules-engine.md#st-066) |
 
-**Status:** ✅ done
+**Status:** done
 
 **Acceptance criteria**
 

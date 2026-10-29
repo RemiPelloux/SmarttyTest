@@ -13,9 +13,9 @@
       "!**/.smarttest",
       "!fixtures/projects",
       "!documentation/assets",
-      "!documentation/planning/release-1.0.0/epics",
-      "!documentation/planning/release-1.0.0/sprints.md",
-      "!documentation/planning/release-1.0.0/backlog.csv"
+      "!documentation/planning/foundation/epics",
+      "!documentation/planning/foundation/sprints.md",
+      "!documentation/planning/foundation/backlog.csv"
     ]
   },
   "formatter": {
