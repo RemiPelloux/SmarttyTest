@@ -20,7 +20,7 @@ Reference
 Architecture and design
 - [Architecture overview](architecture/overview.md)
 - [Decision records](architecture/adr/README.md)
-- [Design system](design/design-system.md), [motion](design/motion.md)
+- [Design system](design/design-system.md), [motion](design/motion.md), [Studio design brief](design/studio.md)
 
 Product and planning
 - [Specification (PRD)](product/PRD.md)

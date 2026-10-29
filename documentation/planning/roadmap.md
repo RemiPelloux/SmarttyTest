@@ -158,7 +158,9 @@ SmartTest Studio and the VS Code extension: everything the CLI shows, without th
 
 Built on what exists: `--json` outputs (`impact`, `explain`, `run`), the HTML report, `watch` (in-memory graph patches) and traces.
 
-**Gate:** run, explain, inspect impact and read coverage without the CLI; local security review of Studio passed.
+Studio must be a well-designed product, not a dashboard template. It is built with the frontend design skill's app-screen run, from the [Studio design brief](../design/studio.md): one question per screen, real data from the CLI, the dealt style (data-terminal, on the SmartTest palette) and its signature element, the impact strip.
+
+**Gate:** run, explain, inspect impact and read coverage without the CLI; the design skill's linter and inspector pass with 0 failures at 1440, 768 and 390 pixels, and the screenshot critique is recorded; WCAG 2.2 AA in both themes and full keyboard use; local security review of Studio passed.
 
 ## 1.0.0: Stable (52 pts, plus items carried from 0.6.0 to 0.8.0)
 

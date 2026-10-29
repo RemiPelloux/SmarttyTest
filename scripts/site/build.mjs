@@ -83,6 +83,7 @@ const NAV = [
       ["Architecture", "docs/architecture/overview.html"],
       ["Decision records", "docs/architecture/adr/index.html"],
       ["Design system", "docs/design/design-system.html"],
+      ["Studio design brief", "docs/design/studio.html"],
       ["Specification", "docs/product/PRD.html"],
     ],
   ],
