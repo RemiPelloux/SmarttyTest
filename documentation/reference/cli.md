@@ -13,6 +13,8 @@
 | `smarttest explain <target>`                                    | Why a test was selected or skipped, or which tests protect a file or symbol                                             |
 | `smarttest validate-selection`                                  | Compare the selection against a full reference run                                                                      |
 | `smarttest benchmark`                                           | Replay recent commits: full run vs project-gated run vs SmartTest, with missed failures re-checked on the parent commit |
+| `smarttest trace`                                               | Record which code each test file runs (V8 coverage, one run per test file)                                              |
+| `smarttest shadow`                                              | Run the full suite next to the selection and record drift; `--report` summarises all runs                               |
 | `smarttest graph`                                               | Query or export the dependency graph                                                                                    |
 | `smarttest generate`                                            | Generate or sync the test architecture. Never overwrites                                                                |
 | `smarttest rules list \| validate \| explain <path>`            | Inspect rules                                                                                                           |
@@ -89,7 +91,15 @@ Ctrl-C cancels the runner cleanly and reports `cancelled`.
 
 ## `benchmark`
 
-`--commits <n>` (default 10), `--mode <m>`, `--json`, `-o <file.md>`. It replays commits in a temporary Git worktree that reuses the project's installed `node_modules`. For each commit it runs the full suites, records the suites of the projects the commit touched ("project-gated", what most hooks do), then runs SmartTest's selection. Every failing test that wasn't selected is re-run on the parent commit to tell a real miss from a pre-existing failure. Exits 5 if anything was missed. Writes `.smarttest/reports/benchmark.{md,json}`.
+`--commits <n>` (default 10) or `--since <ref>` (every first-parent commit after it), `--sample <n>` (at most n of them, evenly spaced), `--resume` (reuse commits already measured in `.smarttest/reports/benchmark.json`, which is written after each commit), `--traces` (trace the tests at each parent commit so selection uses observed execution), `--mode <m>`, `--json`, `-o <file.md>`. It replays commits in a temporary Git worktree that reuses the project's installed `node_modules`. For each commit it runs the full suites, records the suites of the projects the commit touched ("project-gated", what most hooks do), then runs SmartTest's selection. Every failing test that wasn't selected is re-run on the parent commit to tell a real miss from a pre-existing failure. Exits 5 if anything was missed. Writes `.smarttest/reports/benchmark.{md,json}`.
+
+## `trace`
+
+`smarttest trace [files…]` runs each test file on its own with `NODE_V8_COVERAGE` (Vitest in worker-thread mode) and stores, per test, the functions it ran in each project file and the content hash of every file it loaded, in `.smarttest/state/traces.json`. `--stale` traces only tests without a fresh trace, `--workers <n>` sets the parallelism (default 4), `--status` counts fresh and stale traces. A test that fails is not traced. See [runtime evidence](../concepts/runtime-evidence.md).
+
+## `shadow`
+
+`smarttest shadow` computes the selection for the current change, runs the full suite, and appends the comparison (selected, failures found, failures missed, times) to `.smarttest/shadow/history.jsonl`. Exits 5 when a failure was missed. `smarttest shadow --report` summarises every recorded run and exits 5 if any run missed a failure. Run it on a schedule in any CI system or locally.
 
 ## `graph`
 

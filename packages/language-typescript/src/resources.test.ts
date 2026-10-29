@@ -8,13 +8,18 @@ describe("resource collection", () => {
       `import type { Lead } from "wasp/entities";
 export function f(ctx: any) { return [process.env.API_URL, process.env["X"], ctx.entities.Job.find()]; }
 export function g(db: any) { return db.user.count(); }
-export function h(l: Lead, t: (k: string) => string, k: string) { return [t("nav.home"), t(k), t(\`menu.\${k}\`)]; }
+export function h(l: Lead, k: string) { return [t("nav.home"), t(k), t(\`menu.\${k}\`)]; }
+export function nav(t: (k: string) => string, k: string) { return t(k); }
+export function page() { const { t } = useTranslation("auth"); const { t: tl } = useTranslation("landing"); return [t("login"), tl("hero"), nav(t, "x")]; }
 const { PORT, ...rest } = process.env;`,
     );
     const res = (n: string) => a.symbols.find((s) => s.qualifiedName === n)?.resources;
     expect(res("f")).toEqual(["env:API_URL", "env:X", "model:Job"]);
     expect(res("g")).toEqual(["model:User"]);
     expect(res("h")).toEqual(["i18n:*", "i18n:menu.*", "i18n:nav.home", "model:Lead"]);
+    // A translation function received as a parameter reads in its callers' namespaces.
+    expect(res("nav")).toBeUndefined();
+    expect(res("page")).toEqual(["i18n:auth.*", "i18n:auth.login", "i18n:landing.hero"]);
     expect(
       a.symbols.find((s) => s.qualifiedName === "PORT")?.resources ?? a.topLevelResources,
     ).toEqual(expect.arrayContaining(["env:*", "env:PORT"]));

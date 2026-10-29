@@ -7,7 +7,7 @@ import { collectMemberUses, type MemberUses, moduleScope, thisScope } from "./me
 import { catalogKeys, collectResources, MODEL_MODULES } from "./resources.js";
 import { StaticPathEvaluator } from "./static-path.js";
 
-export const ANALYZER_VERSION = "ts-4";
+export const ANALYZER_VERSION = "ts-6";
 
 function scriptKind(path: string): ts.ScriptKind {
   if (path.endsWith(".tsx")) return ts.ScriptKind.TSX;

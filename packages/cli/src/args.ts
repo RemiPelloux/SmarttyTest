@@ -50,6 +50,14 @@ export const OPTIONS = {
   // explain
   fresh: { type: "boolean" },
   commits: { type: "string" },
+  since: { type: "string" },
+  sample: { type: "string" },
+  resume: { type: "boolean" },
+  traces: { type: "boolean" },
+  // trace / shadow
+  stale: { type: "boolean" },
+  status: { type: "boolean" },
+  report: { type: "boolean" },
   // snapshot
   keep: { type: "string" },
   force: { type: "boolean" },

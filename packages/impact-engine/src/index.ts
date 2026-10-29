@@ -5,7 +5,7 @@
  * skipped tests are reported as not run; every selection carries its reasons.
  */
 
-import type { DependencyGraph, Seed } from "@smarttest/dependency-graph";
+import { type DependencyGraph, RESOURCE, type Seed } from "@smarttest/dependency-graph";
 import { type RulesEngine, strictestMode } from "@smarttest/rules-engine";
 import type { FileSemanticDiff, ResourceChange } from "@smarttest/semantic-diff";
 import type {
@@ -35,6 +35,18 @@ export interface ImpactInput {
   resources?: ReadonlyMap<string, ResourceChange>;
   /** Generated outputs (`path` glob) and the generator inputs they are built from. */
   generated?: readonly { path: string; from: readonly string[] }[];
+  /** Observed execution from runtime traces (optional). */
+  traces?: TraceEvidence;
+}
+
+/** Runtime traces as seen by the impact engine. */
+export interface TraceEvidence {
+  /** The test has a trace whose recorded file hashes match the base of the change. */
+  isFresh(test: string): boolean;
+  /** Whether the test's trace ran a unit (`*`, `X`, `C.m`) of a file. */
+  executed(test: string, file: string, unit: string): boolean;
+  /** When the test's trace was collected. */
+  collectedAt(test: string): string | undefined;
 }
 
 export interface TriggerHit {
@@ -51,6 +63,10 @@ export interface ImpactDetails {
   uncertainty: { file: string; reasons: string[] }[];
   /** Internal dependencies added or removed by the change, per changed file. */
   graphDiff?: { file: string; added: string[]; removed: string[] }[];
+  /** Tests that static analysis reached but whose fresh trace never ran the changed code. */
+  observedSkips?: { test: string; tracedAt: string }[];
+  /** Changed units no test reaches, statically or in a fresh trace. */
+  unprotected?: string[];
 }
 
 export type ImpactResult = ImpactDecision & { details: ImpactDetails };
@@ -278,6 +294,24 @@ export function decideImpact(input: ImpactInput): ImpactResult {
     });
   }
 
+  // 4b. Observed evidence. Code seeds only: traces do not see env, catalogs or assets.
+  const codeSeeds = details.seeds.filter((s) => s.file !== RESOURCE && input.files.has(s.file));
+  const nonCodeSeeds = details.seeds.filter((s) => !codeSeeds.includes(s));
+  const nonCodeTests = nonCodeSeeds.length ? graph.dependentsOf(nonCodeSeeds).tests : new Map();
+  const traces = input.traces;
+  const ranChange = (test: string) =>
+    codeSeeds.some((s) => s.units.some((u) => traces?.executed(test, s.file, u)));
+  if (traces) {
+    for (const test of allTests) {
+      if (selected.has(test) || !traces.isFresh(test) || !ranChange(test)) continue;
+      const s = codeSeeds.find((x) => x.units.some((u) => traces.executed(test, x.file, u)));
+      select(test, {
+        kind: "observed-execution",
+        message: `Ran ${s?.file} when traced (${traces.collectedAt(test)?.slice(0, 10)})`,
+      });
+    }
+  }
+
   // 5. Rules: risk, mode upgrades, always-run.
   const affectedFiles = [...traversal.affectedFiles].filter((f) => !isTest(f)).sort();
   for (const file of affectedFiles) {
@@ -345,6 +379,24 @@ export function decideImpact(input: ImpactInput): ImpactResult {
     }
   }
 
+  // 5b. In BALANCED and FAST, a fresh trace that never ran the changed code rules a test out when
+  // static analysis is the only reason it was selected. SAFE keeps static selections.
+  const STATIC_KINDS = new Set(["direct-dependency", "transitive-dependency", "rule-match"]);
+  if (traces && mode !== "safe") {
+    const skips: { test: string; tracedAt: string }[] = [];
+    for (const [test, rs] of [...selected]) {
+      const onlyStatic = rs.every(
+        (r) =>
+          STATIC_KINDS.has(r.kind) && !(r.kind === "rule-match" && r.message.startsWith("Rule ")),
+      );
+      if (!onlyStatic || nonCodeTests.has(test) || !traces.isFresh(test) || ranChange(test))
+        continue;
+      selected.delete(test);
+      skips.push({ test, tracedAt: traces.collectedAt(test) ?? "" });
+    }
+    if (skips.length) details.observedSkips = skips;
+  }
+
   // 6. Uncertainty handling, per (effective) mode.
   const relevantUncertainty = new Map<string, string[]>();
   for (const f of affectedFiles) {
@@ -354,6 +406,10 @@ export function decideImpact(input: ImpactInput): ImpactResult {
   const uncertainTests: { test: string; files: string[] }[] = [];
   for (const t of allTests) {
     if (selected.has(t)) continue;
+    if (details.observedSkips?.some((s) => s.test === t)) continue;
+    // A fresh trace shows what the dynamic imports actually loaded.
+    if (traces && mode !== "safe" && traces.isFresh(t) && !ranChange(t) && !nonCodeTests.has(t))
+      continue;
     const u = graph.uncertaintyReachableFrom(t);
     if (u.length) uncertainTests.push({ test: t, files: u.map((x) => x.file) });
   }
@@ -390,6 +446,21 @@ export function decideImpact(input: ImpactInput): ImpactResult {
       `FAST mode: comment/formatting-only changes ignored in ${details.trivialSkipped.join(", ")}`,
     );
 
+  // 7. Changed code that no test reaches (statically or in a fresh trace).
+  const unitList = codeSeeds.flatMap((s) => s.units.map((u) => ({ file: s.file, unit: u })));
+  if (!fallback && unitList.length && unitList.length <= 200) {
+    const unprotected: string[] = [];
+    for (const { file, unit } of unitList) {
+      if (unit === "*") continue;
+      const reached = graph.dependentsOf([{ file, units: [unit] }]).tests.size > 0;
+      const observed = traces
+        ? allTests.some((t) => traces.isFresh(t) && traces.executed(t, file, unit))
+        : false;
+      if (!reached && !observed) unprotected.push(`${file}#${unit}`);
+    }
+    if (unprotected.length) details.unprotected = unprotected;
+  }
+
   return finish();
 
   function finish(): ImpactResult {
@@ -401,6 +472,17 @@ export function decideImpact(input: ImpactInput): ImpactResult {
       .filter((t) => !selected.has(t))
       .map((t) => {
         const n = unresolvedTotal(t);
+        const obs = details.observedSkips?.find((s) => s.test === t);
+        if (obs)
+          return {
+            testId: t,
+            filePath: t,
+            reasons: [
+              `Reachable statically, but its trace (${obs.tracedAt.slice(0, 10)}) never ran the changed code`,
+              "No mandatory trigger matched",
+            ],
+            confidence: "Observed execution: trace fresh for every file the test loaded",
+          };
         return {
           testId: t,
           filePath: t,

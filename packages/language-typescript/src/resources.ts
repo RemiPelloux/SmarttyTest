@@ -15,6 +15,14 @@ export function collectResources(root: ts.Node): string[] {
     ((ts.isIdentifier(e.expression) && e.expression.text === "process") ||
       (ts.isMetaProperty(e.expression) && e.expression.name.text === "meta"));
   const PRISMA_ROOTS = new Set(["prisma", "db"]);
+  const tr = translationBindings(root);
+  /** Qualifies a key read through a translation function with the namespaces it is bound to. */
+  const i18nKeys = (fn: string, key: string, explicitNs?: string): string[] => {
+    if (explicitNs) return [`i18n:${explicitNs}.${key}`];
+    if (key.includes(":")) return [`i18n:${key.replace(":", ".")}`];
+    const ns = tr.namespacesOf(fn);
+    return ns.length ? ns.map((n) => `i18n:${n}.${key}`) : [`i18n:${key}`];
+  };
   const visit = (n: ts.Node): void => {
     if (ts.isPropertyAccessExpression(n)) {
       if (isProcessEnv(n.expression)) out.add(`env:${n.name.text}`);
@@ -54,11 +62,31 @@ export function collectResources(root: ts.Node): string[] {
           ? c.name.text
           : "";
       const arg = n.arguments[0];
-      if (["t", "$t", "translate"].includes(name) && arg) {
-        if (ts.isStringLiteralLike(arg)) out.add(`i18n:${arg.text}`);
-        else if (ts.isTemplateExpression(arg)) out.add(`i18n:${arg.head.text}*`);
-        else out.add("i18n:*");
+      // A translation function received as a parameter reads in its caller's namespaces: the
+      // caller records that when it passes the function on (below).
+      if (tr.isTranslate(name) && arg && !(ts.isIdentifier(c) && tr.isParam(name))) {
+        const opts = n.arguments[1];
+        let explicitNs: string | undefined;
+        if (opts && ts.isObjectLiteralExpression(opts))
+          for (const p of opts.properties)
+            if (
+              ts.isPropertyAssignment(p) &&
+              p.name.getText() === "ns" &&
+              ts.isStringLiteralLike(p.initializer)
+            )
+              explicitNs = p.initializer.text;
+        const keys = ts.isStringLiteralLike(arg)
+          ? i18nKeys(name, arg.text, explicitNs)
+          : ts.isTemplateExpression(arg)
+            ? i18nKeys(name, `${arg.head.text}*`, explicitNs)
+            : i18nKeys(name, "*", explicitNs);
+        for (const k of keys) out.add(k);
       }
+      // Passing a translation function on: the callee may read any key of its namespaces.
+      for (const a of n.arguments)
+        if (ts.isIdentifier(a) && tr.isTranslate(a.text) && !tr.isParam(a.text))
+          for (const k of i18nKeys(a.text, "*")) out.add(k);
+        else if (ts.isPropertyAccessExpression(a) && a.name.text === "t") out.add("i18n:*"); // i18n.t
     } else if (
       ts.isJsxAttribute(n) &&
       n.name.getText() === "i18nKey" &&
@@ -86,6 +114,89 @@ export function collectResources(root: ts.Node): string[] {
   };
   visit(root);
   return [...out].sort();
+}
+
+/**
+ * Translation functions in a declaration and their namespaces: `const { t } = useTranslation("ns")`,
+ * `const { t: tl } = useTranslation(["a", "b"])`, `const t = i18n.getFixedT(lng, "ns")`,
+ * `withTranslation("ns")`. Parameters named like a translation function (`t`, `translate`) are
+ * bound by the caller.
+ */
+function translationBindings(root: ts.Node): {
+  isTranslate(name: string): boolean;
+  isParam(name: string): boolean;
+  namespacesOf(name: string): string[];
+} {
+  const DEFAULT = new Set(["t", "$t", "translate"]);
+  const bound = new Map<string, string[] | undefined>(); // undefined = dynamic namespace
+  const params = new Set<string>();
+  const declared = new Set<string>();
+  let hocNamespaces: string[] | undefined = [];
+  const namespacesOfCall = (call: ts.CallExpression): string[] | undefined => {
+    const c = call.expression;
+    const name = ts.isIdentifier(c) ? c.text : ts.isPropertyAccessExpression(c) ? c.name.text : "";
+    if (name !== "useTranslation" && name !== "withTranslation" && name !== "getFixedT") return [];
+    const arg = name === "getFixedT" ? call.arguments[1] : call.arguments[0];
+    if (!arg) return [];
+    const items = ts.isArrayLiteralExpression(arg) ? [...arg.elements] : [arg];
+    const out: string[] = [];
+    for (const i of items) {
+      if (!ts.isStringLiteralLike(i)) return undefined;
+      out.push(i.text);
+    }
+    return out;
+  };
+  const visit = (n: ts.Node): void => {
+    if (ts.isParameter(n) && ts.isIdentifier(n.name) && DEFAULT.has(n.name.text))
+      params.add(n.name.text);
+    if (ts.isVariableDeclaration(n) && n.initializer) {
+      const init = ts.isAwaitExpression(n.initializer) ? n.initializer.expression : n.initializer;
+      if (ts.isCallExpression(init)) {
+        const ns = namespacesOfCall(init);
+        const c = init.expression;
+        const callee = ts.isIdentifier(c)
+          ? c.text
+          : ts.isPropertyAccessExpression(c)
+            ? c.name.text
+            : "";
+        if (
+          ns === undefined ||
+          ns.length ||
+          callee === "useTranslation" ||
+          callee === "getFixedT"
+        ) {
+          if (ts.isObjectBindingPattern(n.name)) {
+            for (const el of n.name.elements)
+              if ((el.propertyName ?? el.name).getText() === "t" && ts.isIdentifier(el.name)) {
+                bound.set(el.name.text, ns);
+                declared.add(el.name.text);
+              }
+          } else if (ts.isIdentifier(n.name)) {
+            bound.set(n.name.text, ns);
+            declared.add(n.name.text);
+          }
+        }
+      }
+    }
+    if (ts.isCallExpression(n)) {
+      const c = n.expression;
+      if (ts.isIdentifier(c) && c.text === "withTranslation") {
+        const ns = namespacesOfCall(n);
+        hocNamespaces =
+          ns === undefined || hocNamespaces === undefined ? undefined : [...hocNamespaces, ...ns];
+      }
+    }
+    ts.forEachChild(n, visit);
+  };
+  visit(root);
+  return {
+    isTranslate: (name) => DEFAULT.has(name) || bound.has(name),
+    isParam: (name) => params.has(name) && !declared.has(name),
+    namespacesOf: (name) => {
+      if (bound.has(name)) return bound.get(name) ?? [];
+      return hocNamespaces ?? [];
+    },
+  };
 }
 
 /** Modules whose named type/value exports are database models (Prisma client, Wasp entities). */

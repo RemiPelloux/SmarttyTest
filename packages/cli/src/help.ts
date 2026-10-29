@@ -50,10 +50,31 @@ export const COMMANDS: Record<string, { summary: string; usage: string; flags?: 
   benchmark: {
     summary:
       "Replay recent commits: full run vs project-gated run vs SmartTest, with missed failures checked",
-    usage: "smarttest benchmark [--commits n] [--mode m] [--json] [-o file.md]",
+    usage:
+      "smarttest benchmark [--commits n | --since <ref>] [--sample n] [--resume] [--traces] [--mode m] [--json] [-o file.md]",
     flags: [
       "--commits n  how many recent commits to replay (default 10)",
+      "--since <ref>  replay every first-parent commit after <ref>",
+      "--sample n  replay at most n of them, evenly spaced",
+      "--resume  reuse commits already measured in .smarttest/reports/benchmark.json",
+      "--traces  trace the tests at each parent commit so selection uses observed execution",
       "-o file.md  also write the Markdown report there",
+    ],
+  },
+  trace: {
+    summary: "Record which code each test file runs (V8 coverage, one run per test file)",
+    usage: "smarttest trace [files…] [--stale] [--workers n] [--status] [--json]",
+    flags: [
+      "--stale  only trace tests without a fresh trace",
+      "--workers n  test files traced in parallel (default 4)",
+      "--status  show how many traces are fresh",
+    ],
+  },
+  shadow: {
+    summary: "Run the full suite next to the selection and record drift",
+    usage: "smarttest shadow [--base <ref>] [--mode m] [--report] [--json]",
+    flags: [
+      "--report  summarise every recorded Shadow Mode run (exit 1 if any failure was missed)",
     ],
   },
   graph: {

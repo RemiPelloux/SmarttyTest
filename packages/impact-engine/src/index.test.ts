@@ -5,7 +5,7 @@ import type { FileSemanticDiff } from "@smarttest/semantic-diff";
 import type { ChangeSet } from "@smarttest/shared";
 import type { FileAnalysis } from "@smarttest/source-parser";
 import { describe, expect, it } from "vitest";
-import { decideImpact, explainTest } from "./index.js";
+import { decideImpact, explainTest, type TraceEvidence } from "./index.js";
 
 const sources: Record<string, string> = {
   "src/a.ts": "export const a = () => 1;\n",
@@ -75,9 +75,11 @@ function decide(
   diffs: [string, FileSemanticDiff][],
   mode: "fast" | "balanced" | "safe",
   rules = new RulesEngine([]),
+  traces?: TraceEvidence,
 ) {
   const { files, graph, isTest, tests } = setup();
   return decideImpact({
+    ...(traces ? { traces } : {}),
     changeSet: cs,
     diffs: new Map(diffs),
     graph,
@@ -91,7 +93,56 @@ function decide(
 }
 const sel = (d: ReturnType<typeof decide>) => d.selectedTests.map((t) => t.filePath).sort();
 
+/** Fake traces: test → file → executed units. */
+const fakeTraces = (ran: Record<string, Record<string, string[]>>): TraceEvidence => ({
+  isFresh: (t) => t in ran,
+  executed: (t, f, u) => !!ran[t]?.[f] && (u === "*" || (ran[t]?.[f] ?? []).includes(u)),
+  collectedAt: () => "2000-01-01T00:00:00.000Z",
+});
+
 describe("decideImpact", () => {
+  it("observed evidence: fresh traces rule out, add, and resolve uncertainty (not in SAFE)", () => {
+    const traces = fakeTraces({
+      "test/b.test.ts": { "src/b.ts": ["b"] }, // never loaded src/a.ts
+      "test/plugins.test.ts": { "src/plugins.ts": ["load"] }, // dynamic import never loaded a.ts
+      "test/guard.test.ts": { "src/auth/guard.ts": ["guard"], "src/a.ts": ["a"] }, // ran a() at runtime
+    });
+    const d = decide(
+      changed(["src/a.ts"]),
+      [unit("src/a.ts", ["a"])],
+      "balanced",
+      undefined,
+      traces,
+    );
+    expect(sel(d)).toEqual(["test/a.test.ts", "test/guard.test.ts"]);
+    expect(d.selectedTests.find((t) => t.filePath === "test/guard.test.ts")?.reasons[0]?.kind).toBe(
+      "observed-execution",
+    );
+    expect(d.details.observedSkips?.map((s) => s.test)).toEqual(["test/b.test.ts"]);
+    const safe = decide(
+      changed(["src/a.ts"]),
+      [unit("src/a.ts", ["a"])],
+      "safe",
+      undefined,
+      traces,
+    );
+    expect(sel(safe)).toEqual([
+      "test/a.test.ts",
+      "test/b.test.ts",
+      "test/guard.test.ts",
+      "test/plugins.test.ts",
+    ]);
+  });
+
+  it("reports changed units no test reaches", () => {
+    const d = decide(
+      changed(["src/auth/guard.ts", "packages/web/src/x.ts"]),
+      [unit("src/auth/guard.ts", ["unused"])],
+      "balanced",
+    );
+    expect(d.details.unprotected).toEqual(["src/auth/guard.ts#unused"]);
+  });
+
   it("selects direct and transitive tests; unresolvable tests can't be ruled out in BALANCED", () => {
     const d = decide(changed(["src/a.ts"]), [unit("src/a.ts", ["a"])], "balanced");
     expect(sel(d)).toEqual(["test/a.test.ts", "test/b.test.ts", "test/plugins.test.ts"]);

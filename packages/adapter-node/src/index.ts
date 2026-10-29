@@ -137,7 +137,7 @@ export class NodeTestAdapter implements TestAdapter {
       ];
       const res = await runProcess(process.execPath, args, {
         cwd: this.options.cwd,
-        env: { ...process.env, FORCE_COLOR: "0", NO_COLOR: "1" },
+        env: { ...process.env, FORCE_COLOR: "0", NO_COLOR: "1", ...options.env },
         ...(options.timeoutMs ? { timeoutMs: options.timeoutMs } : {}),
         ...(options.signal ? { signal: options.signal } : {}),
       });

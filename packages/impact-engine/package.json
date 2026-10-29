@@ -1,6 +1,6 @@
 {
   "name": "@smarttest/impact-engine",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "Change-impact calculation, safety modes and fallbacks.",
   "license": "Apache-2.0",
   "type": "module",

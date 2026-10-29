@@ -2,6 +2,20 @@
 
 All notable changes are documented here. Releases are managed with [Changesets](https://github.com/changesets/changesets). The project follows [Semantic Versioning](https://semver.org/).
 
+## [0.5.0] — runtime evidence
+
+### Added
+
+- `smarttest trace`: per-test-file V8 coverage for Vitest, Jest and `node:test`, stored as observed execution with the content hash of every loaded file and a runtime/lockfile fingerprint. `--stale` refreshes only stale traces; `--status` counts them.
+- Hybrid selection: in FAST and BALANCED, a fresh trace that never ran the changed code rules out a test selected only by static edges or by uncertainty; a trace that ran changed code adds a test static analysis missed. SAFE only adds. `explain` shows the trace date.
+- Unprotected changes: `impact` lists changed units no test reaches statically or in a fresh trace.
+- `smarttest shadow` and `shadow --report`: full suite next to the selection, recorded in `.smarttest/shadow/history.jsonl`.
+- `benchmark --since <ref>`, `--sample <n>`, `--resume` (results written after each commit) and `--traces`.
+
+### Changed
+
+- Translation keys are qualified by the namespace bound with `useTranslation("ns")` (per binding, aliases included). A translation function received as a parameter reads in its callers' namespaces, so helpers like `getNav(t)` no longer read "any key". On LeadsIt this took one commit from 37 selected test files to 4.
+
 ## [0.4.0] — complete graph
 
 ### Added

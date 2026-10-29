@@ -28,6 +28,8 @@ export interface CommitBenchmark {
   failingInFull: string[];
   missed: string[];
   preexisting: string[];
+  /** Tests ruled out by fresh traces (only with `traces`). */
+  observedSkips?: number;
 }
 
 export interface HistoryBenchmark {
@@ -50,6 +52,16 @@ export interface HistoryBenchmark {
 
 export interface BenchmarkOptions {
   commits: number;
+  /** Replay every first-parent commit after this ref instead of the last `commits`. */
+  since?: string;
+  /** Replay at most this many commits, evenly spaced. */
+  sample?: number;
+  /** Results of an earlier (possibly interrupted) run; commits already measured are not re-run. */
+  previous?: readonly CommitBenchmark[];
+  /** Called after each commit with the results so far (for resuming). */
+  onCommit?: (results: readonly CommitBenchmark[]) => Promise<void> | void;
+  /** Collect traces at each parent commit so selection can use observed execution. */
+  traces?: boolean;
   mode?: SafetyMode;
   configPath?: string;
   onProgress?: (message: string) => void;
@@ -91,11 +103,11 @@ export async function benchmarkHistory(
     "log",
     "--no-merges",
     "--first-parent",
-    `-n${options.commits}`,
+    ...(options.since ? [] : [`-n${options.commits}`]),
     "--format=%H%x09%s",
-    "HEAD",
+    options.since ? `${options.since}..HEAD` : "HEAD",
   ]);
-  const commits = log
+  let commits = log
     .trim()
     .split("\n")
     .filter(Boolean)
@@ -104,6 +116,15 @@ export async function benchmarkHistory(
       return { sha: sha as string, subject: rest.join("\t") };
     })
     .reverse();
+  if (options.sample && commits.length > options.sample) {
+    const step = commits.length / options.sample;
+    const all = commits;
+    commits = Array.from(
+      { length: options.sample },
+      (_, i) => all[Math.floor(i * step)] as (typeof all)[number],
+    );
+  }
+  const done = new Map((options.previous ?? []).map((r) => [r.sha, r]));
   const configPath = options.configPath ?? st.loaded.path;
   const tmp = await mkdtemp(join(tmpdir(), "smarttest-benchmark-"));
   const wt = join(tmp, "repo");
@@ -128,7 +149,22 @@ export async function benchmarkHistory(
     const results: CommitBenchmark[] = [];
     const { SmartTest: Engine } = await import("./smarttest.js");
     for (const [i, c] of commits.entries()) {
+      const prior = done.get(c.sha);
+      if (prior) {
+        results.push(prior);
+        progress(`[${i + 1}/${commits.length}] ${c.sha.slice(0, 8)} (resumed)`);
+        continue;
+      }
       progress(`[${i + 1}/${commits.length}] ${c.sha.slice(0, 8)} ${c.subject.slice(0, 60)}`);
+      if (options.traces) {
+        await git(wt, ["checkout", "-q", "--detach", "--force", `${c.sha}^`]);
+        const parentEngine = await Engine.open({
+          root: projectRoot,
+          ...(configPath ? { configPath } : {}),
+        });
+        const tr = await parentEngine.collectTraces({}).catch(() => undefined);
+        progress(`  traced ${tr?.traced ?? 0} test file(s) at the parent`);
+      }
       await git(wt, ["checkout", "-q", "--detach", "--force", c.sha]);
       const engine = await Engine.open({
         root: projectRoot,
@@ -232,7 +268,11 @@ export async function benchmarkHistory(
         failingInFull: failingFull,
         missed,
         preexisting,
+        ...(analysis.decision.details.observedSkips
+          ? { observedSkips: analysis.decision.details.observedSkips.length }
+          : {}),
       });
+      await options.onCommit?.(results);
       const last = results.at(-1) as CommitBenchmark;
       progress(
         `  ${last.selectedTests}/${last.totalTests} tests · full ${Math.round(fullMs)} ms · gated ${Math.round(projectGatedMs)} ms · smarttest ${Math.round(last.smarttestMs)} ms${missed.length ? ` · MISSED ${missed.length}` : ""}`,

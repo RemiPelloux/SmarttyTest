@@ -31,6 +31,10 @@ export interface ExecutionOptions {
   retries?: number;
   coverage?: boolean;
   signal?: AbortSignal;
+  /** Extra environment variables for the runner process. */
+  env?: Record<string, string>;
+  /** Run so that per-process V8 coverage can be written (Vitest: worker threads instead of forks). */
+  trace?: boolean;
 }
 
 export interface TestExecution {

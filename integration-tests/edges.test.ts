@@ -21,7 +21,7 @@ describe("edges-vitest", () => {
 
   it("environment: a key no code reads keeps the mandatory trigger", async () => {
     const s = await selectedAfter(".env.test", "FEATURE=1", "FEATURE=1\nUNUSED=1");
-    expect(s.length).toBe(15);
+    expect(s.length).toBe(17);
   });
 
   it("assets: a template read through fs selects its reader", async () => {

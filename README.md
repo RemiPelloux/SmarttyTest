@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <img alt="Status: alpha 0.2.0" src="https://img.shields.io/badge/status-alpha%200.2.0-FBBF24?style=flat-square&amp;labelColor=0E1530">
+  <img alt="Status: alpha 0.5.0" src="https://img.shields.io/badge/status-alpha%200.5.0-FBBF24?style=flat-square&amp;labelColor=0E1530">
   <a href="LICENSE"><img alt="License: Apache-2.0" src="https://img.shields.io/badge/license-Apache--2.0-8B5CF6?style=flat-square&amp;labelColor=0E1530"></a>
   <img alt="Node 22.12 or newer" src="https://img.shields.io/badge/node-22.12%2B-34D399?style=flat-square&amp;labelColor=0E1530">
   <img alt="Runners: Jest, Vitest, node:test" src="https://img.shields.io/badge/runners-Jest%20%7C%20Vitest%20%7C%20node%3Atest-22D3EE?style=flat-square&amp;labelColor=0E1530">
@@ -13,7 +13,7 @@
 
 SmartTest runs only the tests a change can affect. It builds a dependency graph of a TypeScript or JavaScript repository (files, symbols, imports, tests), finds what a change reaches, and runs those tests through the project's own runner: Jest, Vitest or `node --test`. Every selected or skipped test comes with the reason.
 
-Status: 0.2.0 alpha. It runs in the pre-commit hook of [LeadsIt](documentation/case-studies/leadsit.md). It is not on npm yet (the package name is still being decided, [ADR-0007](documentation/architecture/adr/0007-name-license-distribution.md)). Next steps are in the [roadmap to 1.0.0](documentation/planning/roadmap.md).
+Status: 0.5.0 alpha. It runs in the pre-commit hook of [LeadsIt](documentation/case-studies/leadsit.md). It is not on npm yet (the package name is still being decided, [ADR-0007](documentation/architecture/adr/0007-name-license-distribution.md)). Next steps are in the [roadmap to 1.0.0](documentation/planning/roadmap.md).
 
 ## Usage
 
@@ -27,10 +27,11 @@ npx smarttest run --base main     # tests affected by the current branch
 npx smarttest run --all           # every test, through the same pipeline
 
 npx smarttest explain <test|file> # why a test was selected or skipped, or which tests cover a file
+npx smarttest trace               # record which code each test runs; later selections use it
 npx smarttest benchmark           # replay recent commits: full run vs SmartTest, with misses checked
 ```
 
-Until the package is published, build it from this repository (see [Development](#development)) and install the tarball: `pnpm release:pack`, then `npm install -D <path>/smarttest-0.2.0.tgz`.
+Until the package is published, build it from this repository (see [Development](#development)) and install the tarball: `pnpm release:pack`, then `npm install -D <path>/smarttest-0.5.0.tgz`.
 
 ## How it works
 
@@ -40,9 +41,10 @@ Until the package is published, build it from this repository (see [Development]
 
 1. Changes come from Git (staged, uncommitted, branch, commit range) or from local snapshots when there is no VCS.
 2. Changed lines are mapped to symbols and classified: comment-only, formatting, implementation, signature, exported API.
-3. The graph is walked backwards from the changed symbols to every test that can reach them. It follows imports, re-exports, barrels, workspace packages, path aliases and computed `import()` paths it can evaluate.
-4. Rules and safety modes widen the selection where needed: global config files, critical paths, and imports that cannot be resolved.
-5. The selected tests run through the project's runner with its own config. Skipped tests are reported as not run, never as passed.
+3. The graph is walked backwards from the changed symbols to every test that can reach them. Methods are nodes of their own, so a change to one method reaches the callers of that method, not every user of the class. The walk follows imports, re-exports, barrels, workspace packages, path aliases, inheritance, CommonJS exports and computed `import()` paths it can evaluate. Environment keys, Prisma models, translation keys, files read through `fs`, snapshots and manual mocks are nodes too.
+4. If `smarttest trace` has recorded which functions each test ran, a test that static analysis reaches but that never ran the changed code is skipped (not in SAFE mode).
+5. Rules and safety modes widen the selection where needed: global config files, critical paths, and imports that cannot be resolved.
+6. The selected tests run through the project's runner with its own config. Skipped tests are reported as not run, never as passed.
 
 <p align="center">
   <img src="documentation/assets/impact-map.svg" width="100%" alt="Impact map: a modified method, its dependents, three selected tests and one skipped test.">
@@ -64,7 +66,7 @@ Confidence
 
 LeadsIt has six independent projects, no root `package.json`, and three runners (Jest, Vitest with a custom config, `node --test`). It was migrated with `init --yes` and `run --staged` in its pre-commit hook. Running every test through SmartTest gives the same 706 results as the three runners.
 
-Replay of its last 12 commits with `smarttest benchmark`:
+Replay of 12 commits with `smarttest benchmark` (SmartTest 0.2.0):
 
 |                 | Full suites | Previous hook (suites of touched projects) | SmartTest |
 | --------------- | ----------- | ------------------------------------------ | --------- |
@@ -72,21 +74,21 @@ Replay of its last 12 commits with `smarttest benchmark`:
 | Test files run  | 1,192       |                                            | 9         |
 | Missed failures |             |                                            | 0         |
 
-Details and caveats: [case study](documentation/case-studies/leadsit.md).
+With 0.5.0, 40 commits sampled from the last 200 replay with 0 missed failures, running 17% of the test files. Details, the 0.5.0 numbers and caveats: [case study](documentation/case-studies/leadsit.md).
 
-## Features in 0.2.0
+## Features in 0.5.0
 
-| Area      | What it does                                                                                                             | Commands                                        |
-| --------- | ------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------- |
-| Setup     | Detects projects, runners, frameworks, VCS, existing hooks and skipped tests; writes a config; idempotent and reversible | `init`, `doctor`, `scan`                        |
-| Changes   | Git staged, uncommitted, branch and commit ranges; native snapshots without VCS                                          | `run`, `impact`, `vcs`, `snapshot`              |
-| Analysis  | TS/JS symbols, imports, CommonJS, JSX, decorators, semantic diff, `.gitignore`-aware file listing                        | `scan`, `graph`                                 |
-| Selection | Direct and transitive dependents, fast/balanced/safe modes, mandatory triggers, conservative fallbacks                   | `impact`, `run`                                 |
-| Rules     | Policies by path, package, class, method or decorator                                                                    | `rules list`, `rules validate`, `rules explain` |
-| Runners   | Jest, Vitest, `node --test`; custom configs; discovery asks each runner which files it collects                          | `run`                                           |
-| Evidence  | Reasons per test, comparison with a full run, history replay                                                             | `explain`, `validate-selection`, `benchmark`    |
-| Generator | Missing test files as `it.todo` scaffolds; never overwrites                                                              | `generate`                                      |
-| Reports   | HTML, JSON, JUnit, Markdown; coverage labelled full or selected                                                          | `report`, `coverage`                            |
+| Area      | What it does                                                                                                                                            | Commands                                                        |
+| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------- |
+| Setup     | Detects projects, runners, frameworks, VCS, existing hooks and skipped tests; writes a config; idempotent and reversible                                | `init`, `doctor`, `scan`                                        |
+| Changes   | Git staged, uncommitted, branch and commit ranges; native snapshots without VCS                                                                         | `run`, `impact`, `vcs`, `snapshot`                              |
+| Analysis  | TS/JS symbols and class members, imports, CommonJS, JSX, decorators, semantic diff, env/Prisma/translation/asset edges, Wasp operations, mock awareness | `scan`, `graph`, `graph why\|cycles\|orphans`                   |
+| Selection | Direct and transitive dependents, fast/balanced/safe modes, mandatory triggers, conservative fallbacks                                                  | `impact`, `run`                                                 |
+| Rules     | Policies by path, package, class, method or decorator                                                                                                   | `rules list`, `rules validate`, `rules explain`                 |
+| Runners   | Jest, Vitest, `node --test`; custom configs; discovery asks each runner which files it collects                                                         | `run`                                                           |
+| Evidence  | Reasons per test, runtime traces, unprotected changes, comparison with a full run, Shadow Mode, history replay                                          | `explain`, `trace`, `validate-selection`, `shadow`, `benchmark` |
+| Generator | Missing test files as `it.todo` scaffolds; never overwrites                                                                                             | `generate`                                                      |
+| Reports   | HTML, JSON, JUnit, Markdown; coverage labelled full or selected                                                                                         | `report`, `coverage`                                            |
 
 What SmartTest does not do: it never reports a skipped test as passed, never treats an unresolvable import as unrelated, never presents partial coverage as project coverage, and never overwrites a file without an explicit `--yes`. A report that breaks one of these rules fails its own integrity check (exit 70).
 

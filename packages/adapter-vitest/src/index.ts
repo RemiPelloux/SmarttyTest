@@ -103,6 +103,7 @@ export class VitestAdapter implements TestAdapter {
         ? ["--config", join(this.options.projectRoot, this.options.configFile)]
         : []),
       ...(options.workers ? [`--maxWorkers=${options.workers}`] : []),
+      ...(options.trace ? ["--pool=threads"] : []),
       ...(options.coverage && this.options.coverageDir
         ? [
             "--coverage.enabled=true",
@@ -115,7 +116,7 @@ export class VitestAdapter implements TestAdapter {
     try {
       const res = await runProcess(process.execPath, args, {
         cwd: this.options.cwd,
-        env: { ...process.env, FORCE_COLOR: "0", NO_COLOR: "1" },
+        env: { ...process.env, FORCE_COLOR: "0", NO_COLOR: "1", ...options.env },
         ...(options.timeoutMs ? { timeoutMs: options.timeoutMs } : {}),
         ...(options.signal ? { signal: options.signal } : {}),
       });

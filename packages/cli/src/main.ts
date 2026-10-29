@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import { join, relative } from "node:path";
 // Types only: the engine (and TypeScript) is loaded lazily, so --help/--version start instantly.
-import type { ChangeSource, RunReport, SmartTest } from "@smarttest/core";
+import type { ChangeSource, CommitBenchmark, RunReport, SmartTest } from "@smarttest/core";
 import type { SafetyMode } from "@smarttest/shared";
 import {
   createLogger,
@@ -314,10 +314,112 @@ async function cmdImpact(ctx: Ctx): Promise<number> {
   ctx.out(`  ${t.pass("SELECTED")}  ${a.decision.selectedTests.length}`);
   for (const s of a.decision.selectedTests)
     ctx.out(`  ${t.green("■")} ${s.filePath}  ${t.dim(s.reasons[0]?.message ?? "")}`);
-  ctx.out(`  ${t.skip("SKIPPED")}   ${a.decision.skippedTests.length} · not run`);
+  const obs = a.decision.details.observedSkips?.length ?? 0;
+  ctx.out(
+    `  ${t.skip("SKIPPED")}   ${a.decision.skippedTests.length} · not run${obs ? t.dim(` (${obs} ruled out by traces that never ran the changed code)`) : ""}`,
+  );
   if (flags.verbose)
     for (const s of a.decision.skippedTests) ctx.out(`  ${t.dim("□")} ${t.dim(s.filePath)}`);
+  const unprotected = a.decision.details.unprotected ?? [];
+  if (unprotected.length) {
+    ctx.out();
+    ctx.out(`  ${t.yellow("UNPROTECTED")} ${unprotected.length} changed unit(s) no test reaches`);
+    for (const u of unprotected.slice(0, flags.verbose ? undefined : 10))
+      ctx.out(`  ${t.yellow("▲")} ${u}`);
+    if (!flags.verbose && unprotected.length > 10)
+      ctx.out(t.dim(`  … ${unprotected.length - 10} more (--verbose)`));
+  }
   return ExitCode.Success;
+}
+
+async function cmdTrace(ctx: Ctx): Promise<number> {
+  const { t, flags } = ctx;
+  const st = await ctx.open();
+  if (flags.status) {
+    const { index } = await st.loadIndex();
+    const view = await st.traceView(undefined, index);
+    const { tests } = await st.discoverTests(index);
+    const fresh = tests.filter((x) => view?.isFresh(x));
+    const traced = tests.filter((x) => view?.trace(x));
+    if (flags.json)
+      ctx.json("trace", { tests: tests.length, traced: traced.length, fresh: fresh.length });
+    else {
+      ctx.out(`${t.bold("Traces")} · ${tests.length} test file(s)`);
+      ctx.out(`  ${pad("Traced", 10)}${traced.length}`);
+      ctx.out(
+        `  ${pad("Fresh", 10)}${fresh.length}  ${t.dim("(every loaded file unchanged since tracing)")}`,
+      );
+      ctx.out(
+        `  ${pad("Stale", 10)}${traced.length - fresh.length}  ${t.dim("(refresh with `smarttest trace --stale`)")}`,
+      );
+    }
+    return ExitCode.Success;
+  }
+  const concurrency = intFlag(flags.workers, "workers");
+  const r = await st.collectTraces({
+    ...(ctx.positionals.length ? { files: ctx.positionals } : {}),
+    ...(flags.stale ? { stale: true } : {}),
+    ...(concurrency ? { concurrency } : {}),
+    onProgress: (m) => {
+      if (!flags.json && !flags.quiet) ctx.err(t.dim(m));
+    },
+  });
+  if (flags.json) ctx.json("trace", { traced: r.traced, failed: r.failed, stored: r.kept });
+  else {
+    ctx.out(
+      `${t.bold("Traced")} ${r.traced} test file(s) · ${r.kept} stored in .smarttest/state/traces.json`,
+    );
+    if (r.failed.length)
+      ctx.out(
+        `  ${t.yellow("▲")} not traced (failed or no coverage written): ${r.failed.slice(0, 5).join(", ")}${r.failed.length > 5 ? "…" : ""}`,
+      );
+  }
+  return ExitCode.Success;
+}
+
+async function cmdShadow(ctx: Ctx): Promise<number> {
+  const { t, flags } = ctx;
+  const st = await ctx.open();
+  if (flags.report) {
+    const r = await st.shadowReport();
+    if (flags.json) ctx.json("shadow", r);
+    else {
+      ctx.out(`${t.bold("Shadow Mode")} · ${r.runs} run(s) recorded`);
+      ctx.out(
+        `  ${pad("Missed", 12)}${r.missed ? t.red(`${r.missed} failure(s) in ${r.runsWithMisses} run(s)`) : t.green("0")}`,
+      );
+      ctx.out(`  ${pad("Selected", 12)}${r.selected}/${r.total} test files`);
+      ctx.out(`  ${pad("Saved", 12)}${r.savedPct}% of full-suite time`);
+      for (const rec of r.records.filter((x) => x.failuresMissed.length).slice(-5))
+        ctx.out(
+          `  ${t.red("✕")} ${rec.at.slice(0, 19)} ${rec.head?.slice(0, 8) ?? ""} ${rec.failuresMissed.join(", ")}`,
+        );
+    }
+    return r.missed ? ExitCode.PolicyFailure : ExitCode.Success;
+  }
+  const source = sourceOf(flags);
+  const mode = modeOf(flags);
+  const spinner = new Spinner(ctx.io, !flags.json && !!ctx.io.stderr.isTTY);
+  spinner.start("Shadow Mode: running the full suite next to the selection…");
+  const { record } = await st
+    .shadow({ ...(source ? { source } : {}), ...(mode ? { mode } : {}) })
+    .finally(() => spinner.stop());
+  if (flags.json) ctx.json("shadow", record);
+  else {
+    ctx.out(
+      `${t.bold("Shadow Mode")} · selected ${record.selected}/${record.total} · mode ${t.violet(record.mode)}`,
+    );
+    ctx.out(
+      `  ${pad("Missed", 12)}${record.failuresMissed.length ? t.red(record.failuresMissed.join(", ")) : t.green("0")}`,
+    );
+    ctx.out(
+      `  ${pad("Full suite", 12)}${formatDuration(record.fullMs)} · selection ${formatDuration(record.selectedMs)}`,
+    );
+    ctx.out(
+      t.dim("  Recorded in .smarttest/shadow/history.jsonl · summary: smarttest shadow --report"),
+    );
+  }
+  return record.failuresMissed.length ? ExitCode.PolicyFailure : ExitCode.Success;
 }
 
 async function cmdExplain(ctx: Ctx): Promise<number> {
@@ -907,9 +1009,30 @@ async function cmdBenchmark(ctx: Ctx): Promise<number> {
   const { benchmarkHistory, benchmarkMarkdown } = await import("@smarttest/core");
   const mode = modeOf(flags);
   const commits = intFlag(flags.commits, "commits") ?? 10;
+  const sample = intFlag(flags.sample, "sample");
+  const jsonPath = join(st.storeDir, "reports", "benchmark.json");
+  let previous: CommitBenchmark[] | undefined;
+  if (flags.resume) {
+    const { readFile } = await import("node:fs/promises");
+    const prior = await readFile(jsonPath, "utf8").then(
+      (x) => JSON.parse(x) as { mode?: string; commits?: CommitBenchmark[] },
+      () => undefined,
+    );
+    if (prior?.commits && (!mode || prior.mode === mode)) previous = prior.commits;
+  }
   const b = await benchmarkHistory(st, {
     commits,
     ...(mode ? { mode } : {}),
+    ...(flags.since ? { since: flags.since } : {}),
+    ...(sample ? { sample } : {}),
+    ...(previous ? { previous } : {}),
+    ...(flags.traces ? { traces: true } : {}),
+    onCommit: async (results) => {
+      await writeFileAtomic(
+        jsonPath,
+        `${JSON.stringify({ mode: mode ?? st.config.mode, partial: true, commits: results }, null, 2)}\n`,
+      );
+    },
     onProgress: (m) => {
       if (!flags.json && !flags.quiet) ctx.err(t.dim(m));
     },
@@ -1132,6 +1255,8 @@ const HANDLERS: Record<string, (ctx: Ctx) => Promise<number>> = {
   vcs: cmdVcs,
   graph: cmdGraph,
   benchmark: cmdBenchmark,
+  trace: cmdTrace,
+  shadow: cmdShadow,
   coverage: cmdCoverage,
   report: cmdReport,
 };

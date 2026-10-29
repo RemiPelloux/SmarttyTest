@@ -18,7 +18,7 @@ Planning is in story points. One sprint is about 40 points. Each version has an 
 | ------- | ------------------ | ------ | ----------------------------------------------------------------------------------------------- |
 | 0.3.0   | Precise graph      | 83     | Released (13 pts moved to 0.8.0): member-level selection, CommonJS symbols, graph queries       |
 | 0.4.0   | Complete graph     | 84     | Released (8 pts moved to 0.7.0): env, asset, Wasp, Prisma, translation, mock and snapshot edges |
-| 0.5.0   | Runtime evidence   | 71     | Observed edges reduce selection by 20% or more, with Shadow Mode at 0 misses                    |
+| 0.5.0   | Runtime evidence   | 71     | Released: traces, hybrid selection, Shadow Mode; reduction target not reached on LeadsIt        |
 | 0.6.0   | Adoption           | 66     | Installed from npm and adopted in five external repositories without config edits               |
 | 0.7.0   | Adaptation and E2E | 84     | Projects that change shape stay correct; Playwright and Cypress selection                       |
 | 0.8.0   | Speed              | 105    | 30% less test time than 0.7 on the benchmark repositories                                       |
@@ -79,20 +79,20 @@ Changes that are not TypeScript code used to fall back to whole files, whole pro
 
 **Gate:** met. The `edges-vitest` fixture has one targeted change per edge type that selects only the affected tests (`integration-tests/edges.test.ts`), and its seven seeded mutations are in the regression harness with 0 missed failures in BALANCED and SAFE.
 
-## 0.5.0: Runtime evidence (71 pts)
+## 0.5.0: Runtime evidence (71 pts), released
 
-Static analysis says what can be reached; runtime traces say what is actually executed. The combination is both safer and tighter.
+Static analysis says what can be reached; runtime traces say what is actually executed.
 
-| Story                                                                                                                                                        | Pts |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------------ | --- |
-| Per-test-file V8 coverage for Vitest, Jest and `node:test`, stored as observed-execution edges with source and environment fingerprints                      | 21  |
-| Trace invalidation: a trace is used only while its fingerprints match; stale traces are dropped, never reused                                                | 8   |
-| Hybrid selection: union of static and observed evidence, both shown in `explain`                                                                             | 8   |
-| Changed-line coverage and a missing-protection report (changed code no test reaches)                                                                         | 13  |
-| Shadow Mode: `smarttest shadow` runs the full suite periodically (locally or in any CI), compares with what SmartTest would have selected, and reports drift | 13  |
-| `benchmark --since <ref>` over hundreds of commits with sampling and resume                                                                                  | 8   |
+| Story                                                                                                                                                                     | Pts | Status                                                 |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --- | ------------------------------------------------------ |
+| Per-test-file V8 coverage for Vitest, Jest and `node:test` (`smarttest trace`), stored as observed execution with file hashes and a runtime/lockfile fingerprint          | 21  | done                                                   |
+| Trace invalidation: a trace is used only while every file it loaded is unchanged at the base of the change; stale traces are ignored; `trace --stale` refreshes them      | 8   | done                                                   |
+| Hybrid selection: traces rule out static-only and uncertainty selections in FAST/BALANCED and add tests static analysis missed; SAFE only adds; `explain` shows the trace | 8   | done                                                   |
+| Unprotected changes: changed units no test reaches statically or in a fresh trace, listed by `impact`                                                                     | 13  | done (unit level; line-level coverage is not reported) |
+| Shadow Mode: `smarttest shadow` and `shadow --report`                                                                                                                     | 13  | done                                                   |
+| `benchmark --since <ref>` with `--sample`, `--resume` and `--traces`                                                                                                      | 8   | done                                                   |
 
-**Gate:** on the benchmark repositories, observed edges reduce selection by 20% or more while Shadow Mode reports 0 missed failures over at least 200 commits.
+**Gate:** partly met. 0 missed failures on the fixtures, on 12 replayed LeadsIt commits with traces, and on 40 commits sampled from the last 200. Observed execution reduced the LeadsIt selection by one test file (11 → 10 on the commits without lockfile changes), short of the 20% target: static selection there is already narrow. The 200-commit Shadow Mode run is not done; it needs a repository with a longer-running suite to be meaningful, which is part of the 0.6.0 external-repository work.
 
 ## 0.6.0: Adoption (66 pts)
 

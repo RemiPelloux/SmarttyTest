@@ -62,6 +62,35 @@ Missed failures: 0 · failures already present in the parent commit: 0
 
 Times are wall-clock on this machine. SmartTest time includes its analysis overhead.
 
+## Update: 0.5.0
+
+LeadsIt now vendors SmartTest 0.5.0 (`tools/smarttest/smarttest-0.5.0.tgz`). Parity is unchanged: `npm run test:all` passes 706 tests. `smarttest trace` records all 100 test files (Jest, Vitest and both `node --test` projects) in 23 seconds.
+
+The benchmark window moved by two commits: the last two are the SmartTest migration itself, which change the root `package.json` and lockfile and therefore run everything.
+
+| Commit                                                   | Changed | Static  | With traces | Missed |
+| -------------------------------------------------------- | ------- | ------- | ----------- | ------ |
+| `47606fc6` fix(outbound): Gmail replies thread for the p | 2       | 1/99    | 0/99        | 0      |
+| `1cfffe0a` feat(outbound): samples a web agency can use  | 3       | 1/99    | 1/99        | 0      |
+| `a1b6112f` feat(seo): titles for the searches Search Con | 27      | 0/99    | 0/99        | 0      |
+| `94d41f82` fix(admin): the owner's own purchases are not | 3       | 1/99    | 1/99        | 0      |
+| `d4338904` fix(ads-monitor): the owner's own test purcha | 1       | 0/99    | 0/99        | 0      |
+| `8c3f094e` fix(admin): melbdu93@live.fr's January paymen | 2       | 1/99    | 1/99        | 0      |
+| `0da20f4a` feat(admin): Cold outreach                    | 21      | 4/100   | 4/100       | 0      |
+| `88bdcd48` fix(admin/outreach): every stage at a glance  | 2       | 0/100   | 0/100       | 0      |
+| `e6fbfdee` docs(outbound): admin → Outreach and sync_adm | 1       | 0/100   | 0/100       | 0      |
+| `42c7810f` feat(outbound): a check-in 4 days after a fre | 7       | 3/100   | 3/100       | 0      |
+| `d310fbac` chore(tests): run only the tests a commit aff | 9       | 100/100 | 100/100     | 0      |
+| `f25b41e6` chore(tests): update vendored SmartTest 0.2.0 | 2       | 100/100 | 100/100     | 0      |
+
+What changed compared with 0.2.0:
+
+- `0da20f4a` and `42c7810f` select more tests (2 → 4, 1 → 3). Both change `schema.prisma` and translation catalogs. 0.2.0 ignored schema changes entirely; 0.4.0 selects the code using the changed models and translation keys.
+- The first 0.4.0 build selected 37 test files for `0da20f4a`. Helpers such as `getFooterNavigation(t)` call `t(item.nameKey)`, which counted as "reads any translation key", and the generated `auth-critical` and `payment-critical` rules then ran every auth and payment test. Translation keys are now qualified by the namespace bound with `useTranslation("ns")`, and a `t` received as a parameter reads in its callers' namespaces. The commit selects 4.
+- Traces removed one test (`47606fc6`): the outbound test loads the changed file but never calls the changed function. Over the ten commits that do not touch the lockfile, observed execution reduced the selection from 11 to 10 test files. Static selection on LeadsIt is already narrow, so the 20% reduction targeted by the 0.5.0 gate is not reached here.
+
+A wider run, `smarttest benchmark --commits 200 --sample 40` (40 commits spread over the last 200), found 0 missed failures. SmartTest ran 522 of 3,052 test-file runs (17%), 354 of 2,884 on the 38 commits without a lockfile change, and saved 63% of the full-run time. Against the project-gated baseline it was 6% slower: on single-project commits the old hook runs one small suite, and SmartTest's analysis time is counted in full.
+
 ## Caveats
 
 - LeadsIt's suites are already fast (about 5–8 s for everything), so the absolute saving per commit is seconds, not minutes. The percentage is what carries over to larger suites.

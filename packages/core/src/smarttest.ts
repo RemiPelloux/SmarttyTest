@@ -82,6 +82,16 @@ import {
 import { planExecution, rootKey } from "@smarttest/test-selector";
 import type { ChangeAnalysisInput, ChangeSource } from "@smarttest/vcs-core";
 import { GitAdapter } from "@smarttest/vcs-git";
+import {
+  cleanDir,
+  hashFile,
+  loadTraces,
+  readV8Coverage,
+  saveTraces,
+  TRACE_STORE_VERSION,
+  type TraceStore,
+  TraceView,
+} from "./traces.js";
 
 const ANALYZERS: Analyzer[] = [typescriptAnalyzer, javascriptAnalyzer];
 
@@ -151,6 +161,30 @@ export interface SelectionValidation {
   analysisOverheadMs: number;
   savedPct: number;
   decision: ImpactResult;
+}
+
+export interface ShadowRecord {
+  at: string;
+  head?: string;
+  mode: string;
+  changed: number;
+  selected: number;
+  total: number;
+  failuresFound: string[];
+  failuresMissed: string[];
+  observedSkips: number;
+  fullMs: number;
+  selectedMs: number;
+}
+
+export interface ShadowReport {
+  runs: number;
+  missed: number;
+  runsWithMisses: number;
+  selected: number;
+  total: number;
+  savedPct: number;
+  records: ShadowRecord[];
 }
 
 const timed = async <T>(
@@ -462,8 +496,10 @@ export class SmartTest {
     const diffs = await timed(timings, "semantic diff", () =>
       this.semanticDiffs(input, index, graphDiff, resources),
     );
+    const traceView = await this.traceView(input, index);
     const decision = await timed(timings, "impact analysis", () =>
       decideImpact({
+        ...(traceView?.size ? { traces: traceView } : {}),
         changeSet: input.changeSet,
         diffs,
         graph,
@@ -514,6 +550,128 @@ export class SmartTest {
       decision,
       timings,
     };
+  }
+
+  /** Fingerprint of the runtime and installed dependencies traces depend on. */
+  async envFingerprint(): Promise<string> {
+    const profile = await this.profile();
+    const parts = [`node ${process.versions.node.split(".")[0]}`];
+    for (const dir of ["", ...profile.workspaces.map((w) => w.dir)])
+      for (const lock of ["package-lock.json", "pnpm-lock.yaml", "yarn.lock", "bun.lock"]) {
+        const f = dir ? `${dir}/${lock}` : lock;
+        const h = await hashFile(this.root, f);
+        if (h) parts.push(`${f}:${h.slice(0, 16)}`);
+      }
+    return createHash("sha256").update(parts.join("|")).digest("hex").slice(0, 16);
+  }
+
+  /** Traces seen at the base of the change: changed files are compared with their old content. */
+  async traceView(
+    input: ChangeAnalysisInput | undefined,
+    index: SymbolIndex,
+  ): Promise<TraceView | undefined> {
+    const store = await loadTraces(this.storeDir);
+    if (!store || !Object.keys(store.tests).length) return undefined;
+    const traced = new Set<string>();
+    for (const t of Object.values(store.tests))
+      for (const f of Object.keys(t.fileHashes)) traced.add(f);
+    const base = new Map<string, string | undefined>();
+    const changed = new Map((input?.changeSet.changes ?? []).map((c) => [c.path, c]));
+    for (const f of traced) {
+      const c = changed.get(f);
+      if (c) {
+        const before =
+          c.type === "added" || !input ? undefined : await input.readBefore(c.previousPath ?? f);
+        base.set(f, before === undefined ? undefined : sha256(before));
+      } else base.set(f, index.get(f)?.hash ?? (await hashFile(this.root, f)));
+    }
+    return new TraceView(store, await this.envFingerprint(), (f) => base.get(f), index.entries());
+  }
+
+  /**
+   * Runs each test file on its own with V8 coverage and stores which functions it ran
+   * (`smarttest trace`). With `stale`, only tests without a fresh trace are run.
+   */
+  async collectTraces(
+    options: {
+      files?: string[];
+      stale?: boolean;
+      concurrency?: number;
+      timeoutMs?: number;
+      onProgress?: (message: string) => void;
+    } = {},
+  ): Promise<{ traced: number; failed: string[]; kept: number; store: TraceStore }> {
+    const { index } = await this.loadIndex();
+    const { tests, roots, assignment } = await this.discoverTests(index);
+    const env = await this.envFingerprint();
+    const previous = await loadTraces(this.storeDir);
+    const store: TraceStore = {
+      version: TRACE_STORE_VERSION,
+      env,
+      tests: previous?.env === env ? { ...previous.tests } : {},
+    };
+    let wanted = options.files?.length ? tests.filter((t) => options.files?.includes(t)) : tests;
+    if (options.stale) {
+      const view = await this.traceView(undefined, index);
+      wanted = wanted.filter((t) => !view?.isFresh(t));
+    }
+    for (const t of Object.keys(store.tests)) if (!tests.includes(t)) delete store.tests[t];
+    const plan = planExecution(wanted, roots, this.config.adapters, assignment);
+    const jobs = plan.groups.flatMap((g) => g.files.map((file) => ({ group: g, file })));
+    const failed: string[] = [];
+    const total = jobs.length;
+    let done = 0;
+    const tmp = join(this.storeDir, "tmp", "traces");
+    await cleanDir(tmp);
+    const worker = async (): Promise<void> => {
+      for (let job = jobs.shift(); job; job = jobs.shift()) {
+        const dir = join(tmp, `${total - jobs.length}-${process.pid}`);
+        const adapter = this.createAdapter({ ...job.group, files: [job.file] });
+        const run = await adapter
+          .execute(
+            { files: [job.file] },
+            {
+              env: { NODE_V8_COVERAGE: dir },
+              trace: true,
+              timeoutMs: options.timeoutMs ?? this.config.timeoutMs,
+            },
+          )
+          .catch(() => undefined);
+        const statuses = (run?.executions ?? []).map((e) => e.status);
+        const passed =
+          statuses.length > 0 &&
+          statuses.every((s) => s === "passed" || s === "skipped" || s === "pending");
+        const { executed, known } = await readV8Coverage(dir, this.root);
+        await cleanDir(dir);
+        done++;
+        if (!passed || !executed.has(job.file)) {
+          failed.push(job.file);
+          delete store.tests[job.file];
+          options.onProgress?.(
+            `[${done}/${total}] ${job.file} — not traced${passed ? " (no coverage written)" : " (failed)"}`,
+          );
+          continue;
+        }
+        const fileHashes: Record<string, string> = {};
+        for (const f of executed.keys()) {
+          const h = index.get(f)?.hash ?? (await hashFile(this.root, f));
+          if (h) fileHashes[f] = h;
+        }
+        store.tests[job.file] = {
+          at: new Date().toISOString(),
+          status: "passed",
+          fileHashes,
+          executed: Object.fromEntries([...executed].map(([f, s]) => [f, [...s].sort()])),
+          known: Object.fromEntries([...known].map(([f, s]) => [f, [...s].sort()])),
+        };
+        options.onProgress?.(`[${done}/${total}] ${job.file} — ${executed.size} file(s)`);
+      }
+    };
+    const n = Math.max(1, Math.min(options.concurrency ?? 4, jobs.length));
+    await Promise.all(Array.from({ length: n }, () => worker()));
+    await cleanDir(tmp);
+    await saveTraces(this.storeDir, store);
+    return { traced: total - failed.length, failed, kept: Object.keys(store.tests).length, store };
   }
 
   private async semanticDiffs(
@@ -1333,6 +1491,68 @@ export class SmartTest {
           )
         : 0,
       decision: analysis.decision,
+    };
+  }
+
+  /**
+   * Shadow Mode: runs the full suite next to the selection for the current change and appends the
+   * comparison to `.smarttest/shadow/history.jsonl`, so drift (missed failures) is visible over time.
+   */
+  async shadow(
+    options: AnalyzeOptions & { signal?: AbortSignal; timeoutMs?: number } = {},
+  ): Promise<{ record: ShadowRecord; validation: SelectionValidation }> {
+    const v = await this.validateSelection(options);
+    const input = v.decision;
+    const head = (await this.git().detect())
+      ? await this.git()
+          .head()
+          .catch(() => undefined)
+      : undefined;
+    const record: ShadowRecord = {
+      at: new Date().toISOString(),
+      ...(head ? { head } : {}),
+      mode: input.safetyMode,
+      changed: input.affectedFiles.length,
+      selected: v.selected,
+      total: v.selected + v.skipped,
+      failuresFound: v.failuresFound,
+      failuresMissed: v.failuresMissed.map((m) => m.test),
+      observedSkips: input.details.observedSkips?.length ?? 0,
+      fullMs: Math.round(v.fullDurationMs),
+      selectedMs: Math.round(v.selectedDurationMs + v.analysisOverheadMs),
+    };
+    const { appendFile, mkdir } = await import("node:fs/promises");
+    await mkdir(join(this.storeDir, "shadow"), { recursive: true });
+    await appendFile(join(this.storeDir, "shadow", "history.jsonl"), `${JSON.stringify(record)}\n`);
+    return { record, validation: v };
+  }
+
+  /** Summary of all Shadow Mode runs recorded in this project. */
+  async shadowReport(): Promise<ShadowReport> {
+    const { readFile } = await import("node:fs/promises");
+    const text = await readFile(join(this.storeDir, "shadow", "history.jsonl"), "utf8").catch(
+      () => "",
+    );
+    const records = text
+      .split("\n")
+      .filter(Boolean)
+      .flatMap((l) => {
+        try {
+          return [JSON.parse(l) as ShadowRecord];
+        } catch {
+          return [];
+        }
+      });
+    const fullMs = records.reduce((a, r) => a + r.fullMs, 0);
+    const selectedMs = records.reduce((a, r) => a + r.selectedMs, 0);
+    return {
+      runs: records.length,
+      missed: records.reduce((a, r) => a + r.failuresMissed.length, 0),
+      runsWithMisses: records.filter((r) => r.failuresMissed.length).length,
+      selected: records.reduce((a, r) => a + r.selected, 0),
+      total: records.reduce((a, r) => a + r.total, 0),
+      savedPct: fullMs ? Math.round(((fullMs - selectedMs) / fullMs) * 100) : 0,
+      records,
     };
   }
 
