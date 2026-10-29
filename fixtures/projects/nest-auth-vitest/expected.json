@@ -1,0 +1,80 @@
+{
+  "runners": [
+    "vitest"
+  ],
+  "frameworks": [
+    "Node.js"
+  ],
+  "layout": "mirror",
+  "testFiles": 7,
+  "relationships": {
+    "src/modules/auth/TokenManager.ts#TokenManager": [
+      "tests/unit/modules/auth/TokenManager.test.ts",
+      "tests/unit/modules/auth/AuthService.test.ts",
+      "tests/unit/modules/auth/AuthController.test.ts",
+      "test/routes/ProtectedRoutes.test.ts"
+    ],
+    "src/modules/auth/AuthService.ts#AuthService": [
+      "tests/unit/modules/auth/AuthService.test.ts",
+      "tests/unit/modules/auth/AuthController.test.ts",
+      "test/routes/ProtectedRoutes.test.ts"
+    ],
+    "src/modules/catalog/CatalogService.ts#CatalogService": [
+      "tests/unit/modules/catalog/CatalogService.test.ts"
+    ],
+    "src/shared/validators/EmailValidator.ts#isEmail": [
+      "tests/unit/shared/validators/EmailValidator.test.ts",
+      "tests/unit/modules/auth/AuthService.test.ts",
+      "tests/unit/modules/auth/AuthController.test.ts",
+      "tests/unit/modules/users/UserService.test.ts",
+      "test/routes/ProtectedRoutes.test.ts"
+    ]
+  },
+  "mutations": [
+    {
+      "file": "src/modules/auth/TokenManager.ts",
+      "find": "token.length > 8",
+      "replace": "token.length > 80",
+      "expectFailing": [
+        "tests/unit/modules/auth/TokenManager.test.ts",
+        "tests/unit/modules/auth/AuthService.test.ts",
+        "test/routes/ProtectedRoutes.test.ts"
+      ]
+    },
+    {
+      "file": "src/modules/catalog/CatalogService.ts",
+      "find": "sum + p.price",
+      "replace": "sum - p.price",
+      "expectFailing": [
+        "tests/unit/modules/catalog/CatalogService.test.ts"
+      ]
+    },
+    {
+      "file": "src/shared/validators/EmailValidator.ts",
+      "find": "return /^",
+      "replace": "return !/^",
+      "expectFailing": [
+        "tests/unit/shared/validators/EmailValidator.test.ts",
+        "tests/unit/modules/auth/AuthService.test.ts",
+        "tests/unit/modules/auth/AuthController.test.ts",
+        "tests/unit/modules/users/UserService.test.ts"
+      ]
+    },
+    {
+      "file": "src/modules/auth/AuthenticationMiddleware.ts",
+      "find": "replace(/^Bearer /, \"\")",
+      "replace": "trim()",
+      "expectFailing": [
+        "test/routes/ProtectedRoutes.test.ts"
+      ]
+    },
+    {
+      "file": "src/modules/users/UserRepository.ts",
+      "find": "this.users.set(id, user);",
+      "replace": "",
+      "expectFailing": [
+        "tests/unit/modules/users/UserService.test.ts"
+      ]
+    }
+  ]
+}

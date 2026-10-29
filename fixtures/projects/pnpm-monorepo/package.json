@@ -1,0 +1,14 @@
+{
+  "name": "fixture-pnpm-monorepo",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "vitest": "^5.0.5"
+  },
+  "workspaces": [
+    "packages/*"
+  ]
+}

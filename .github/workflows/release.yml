@@ -1,0 +1,49 @@
+name: release
+
+# Manual until the npm name is confirmed (ADR-0007). Requires the repository variable
+# SMARTTEST_PUBLISH=true so a stray dispatch can never publish.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency: release-${{ github.ref }}
+
+jobs:
+  release:
+    if: vars.SMARTTEST_PUBLISH == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # version PR + tags
+      pull-requests: write
+      id-token: write # npm provenance (trusted publishing)
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          registry-url: https://registry.npmjs.org
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm verify
+      - name: Version PR or publish
+        id: changesets
+        uses: changesets/action@v1
+        with:
+          version: pnpm changeset version
+          publish: pnpm release:publish
+          createGithubReleases: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NPM_CONFIG_PROVENANCE: "true"
+      - name: SBOM (CycloneDX)
+        if: steps.changesets.outputs.published == 'true'
+        run: npx --yes @cyclonedx/cdxgen@12 -t js -o sbom.cdx.json packages/cli/.publish
+      - uses: actions/upload-artifact@v4
+        if: steps.changesets.outputs.published == 'true'
+        with:
+          name: sbom
+          path: sbom.cdx.json

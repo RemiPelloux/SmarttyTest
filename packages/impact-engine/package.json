@@ -1,0 +1,40 @@
+{
+  "name": "@smarttest/impact-engine",
+  "version": "0.1.0",
+  "description": "Change-impact calculation, safety modes and fallbacks.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "private": true,
+  "exports": {
+    ".": {
+      "@smarttest/source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "typecheck": "tsc -b --noEmit false"
+  },
+  "dependencies": {
+    "@smarttest/shared": "workspace:*",
+    "@smarttest/config": "workspace:*",
+    "@smarttest/dependency-graph": "workspace:*",
+    "@smarttest/semantic-diff": "workspace:*",
+    "@smarttest/rules-engine": "workspace:*",
+    "@smarttest/source-parser": "workspace:*"
+  },
+  "smarttest": {
+    "epic": "IMP",
+    "release": "1.0.0"
+  },
+  "devDependencies": {
+    "@smarttest/language-typescript": "workspace:*"
+  }
+}

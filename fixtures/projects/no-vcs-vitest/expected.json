@@ -1,0 +1,7 @@
+{
+  "runners": [
+    "vitest"
+  ],
+  "vcs": "none",
+  "testFiles": 2
+}

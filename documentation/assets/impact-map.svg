@@ -1,0 +1,139 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="560" viewBox="0 0 1280 560" role="img" aria-labelledby="t d">
+  <title id="t">Impact map: from a modified method to the tests that protect it</title>
+  <desc id="d">AuthService.validateToken is modified. Its dependents AuthController and AuthenticationMiddleware are affected; AuthService.test, AuthController.test and ProtectedRoutes.test are selected. CatalogService.test has no relationship and is skipped, not run. An explanation panel lists the reasons for selecting ProtectedRoutes.test.</desc>
+  <style>
+  .t-sans { font-family: ui-sans-serif, -apple-system, 'Segoe UI', Inter, Roboto, Helvetica, Arial, sans-serif; } .t-mono { font-family: ui-monospace, SFMono-Regular, 'JetBrains Mono', Menlo, Consolas, monospace; }
+  .card { fill: #111A38; stroke: #22305C; stroke-width: 1.5; }
+  .card.changed { stroke: #FBBF24; animation: pulseChanged 2.2s ease-in-out infinite; }
+  @keyframes pulseChanged { 50% { stroke-opacity: .45 } }
+  .card.l1 { stroke: #8B5CF6; animation: litL1 9s ease-out infinite; }
+  .card.l1t { stroke: #34D399; animation: litL1t 9s ease-out infinite; }
+  .card.l2 { stroke: #34D399; animation: litL2 9s ease-out infinite; }
+  @keyframes litL1 { 0%, 19% { stroke: #22305C } 21%, 88% { stroke: #8B5CF6 } 96%, 100% { stroke: #22305C } }
+  @keyframes litL1t { 0%, 19% { stroke: #22305C } 21%, 88% { stroke: #34D399 } 96%, 100% { stroke: #22305C } }
+  @keyframes litL2 { 0%, 37% { stroke: #22305C } 39%, 88% { stroke: #34D399 } 96%, 100% { stroke: #22305C } }
+  .badge-l1t, .badge-l2, .badge-l1 { animation: badgeIn 9s ease-out infinite; }
+  .badge-l1, .badge-l1t { animation-name: badgeIn1; }
+  @keyframes badgeIn1 { 0%, 20% { opacity: 0 } 23%, 88% { opacity: 1 } 96%, 100% { opacity: 0 } }
+  @keyframes badgeIn { 0%, 38% { opacity: 0 } 41%, 88% { opacity: 1 } 96%, 100% { opacity: 0 } }
+  .dimmed { animation: dim 9s ease-out infinite; opacity: .45; }
+  @keyframes dim { 0%, 42% { opacity: 1 } 46%, 88% { opacity: .45 } 96%, 100% { opacity: 1 } }
+  .edge { fill: none; stroke-width: 2.5; stroke-linecap: round; stroke-dasharray: 1; stroke-dashoffset: 0; }
+  .edge.l1 { stroke: #8B5CF6; animation: e1 9s cubic-bezier(0.22, 1, 0.36, 1) infinite; }
+  .edge.l1t { stroke: #34D399; animation: e1 9s cubic-bezier(0.22, 1, 0.36, 1) infinite; }
+  .edge.l2 { stroke: #34D399; animation: e2 9s cubic-bezier(0.22, 1, 0.36, 1) infinite; }
+  @keyframes e1 { 0%, 6% { stroke-dashoffset: 1; opacity: 1 } 20%, 88% { stroke-dashoffset: 0; opacity: 1 } 96%, 100% { stroke-dashoffset: 0; opacity: 0 } }
+  @keyframes e2 { 0%, 24% { stroke-dashoffset: 1; opacity: 1 } 38%, 88% { stroke-dashoffset: 0; opacity: 1 } 96%, 100% { stroke-dashoffset: 0; opacity: 0 } }
+  .why { animation: why 9s cubic-bezier(0.22, 1, 0.36, 1) infinite; }
+  @keyframes why { 0%, 46% { opacity: 0; transform: translateX(16px) } 52%, 88% { opacity: 1; transform: none } 96%, 100% { opacity: 0 } }
+  
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation: none !important; }
+  }</style>
+  <defs>
+    <linearGradient id="imp-bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#070B18"/>
+      <stop offset="1" stop-color="#0E1530"/>
+    </linearGradient>
+    <linearGradient id="imp-brand" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#22D3EE"/>
+      <stop offset="1" stop-color="#8B5CF6"/>
+    </linearGradient>
+    <pattern id="imp-grid" width="32" height="32" patternUnits="userSpaceOnUse">
+      <path d="M32 0H0V32" fill="none" stroke="#ffffff" stroke-opacity="0.045" stroke-width="1"/>
+    </pattern>
+    <filter id="imp-glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="6" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter></defs>
+  
+  <rect width="1280" height="560" rx="24" fill="url(#imp-bg)"/>
+  <rect width="1280" height="560" rx="24" fill="url(#imp-grid)"/>
+  <rect x="0.5" y="0.5" width="1279" height="559" rx="24" fill="none" stroke="#22305C"/>
+  <text class="t-mono" x="40" y="34" font-size="12" letter-spacing="2" fill="#56618A">IMPACT MAP · src/modules/auth</text>
+  <path d="M294 170 C325 170 325 90 356 90" fill="none" stroke="#22305C" stroke-width="1.5"/>
+  <path d="M294 170 C325 170 325 250 356 250" fill="none" stroke="#22305C" stroke-width="1.5"/>
+  <path d="M294 170 C483 170 483 170 672 170" fill="none" stroke="#22305C" stroke-width="1.5"/>
+  <path d="M610 90 C641 90 641 90 672 90" fill="none" stroke="#22305C" stroke-width="1.5"/>
+  <path d="M610 250 C641 250 641 250 672 250" fill="none" stroke="#22305C" stroke-width="1.5"/>
+  <path d="M294 420 C483 420 483 420 672 420" fill="none" stroke="#22305C" stroke-width="1.5" stroke-dasharray="4 6" class="dimmed"/>
+  <text class="t-sans dimmed" x="483" y="410" font-size="12" text-anchor="middle" fill="#56618A">no static or observed relationship</text>
+  <path class="edge l1" pathLength="1" d="M294 170 C325 170 325 90 356 90"/>
+  <path class="edge l1" pathLength="1" d="M294 170 C325 170 325 250 356 250"/>
+  <path class="edge l1t" pathLength="1" d="M294 170 C483 170 483 170 672 170"/>
+  <path class="edge l2" pathLength="1" d="M610 90 C641 90 641 90 672 90"/>
+  <path class="edge l2" pathLength="1" d="M610 250 C641 250 641 250 672 250"/>
+  
+  <g class="">
+    <rect class="card changed" x="40" y="141" width="254" height="58" rx="12"/>
+    <circle cx="59" cy="162" r="5" fill="#FBBF24"/>
+    <text class="t-mono" x="72" y="167" font-size="13" fill="#E8ECF8">AuthService.validateToken()</text>
+    <text class="t-sans" x="72" y="187" font-size="11.5" fill="#8C97BD">modified · implementation</text>
+    <text class="t-mono " x="282" y="134" font-size="10.5" letter-spacing="1.2" text-anchor="end" fill="#FBBF24">MODIFIED</text>
+  </g>
+  <g class="">
+    <rect class="card l1" x="356" y="61" width="254" height="58" rx="12"/>
+    <circle cx="375" cy="82" r="5" fill="#8B5CF6"/>
+    <text class="t-mono" x="388" y="87" font-size="13" fill="#E8ECF8">AuthController</text>
+    <text class="t-sans" x="388" y="107" font-size="11.5" fill="#8C97BD">direct dependent</text>
+    <text class="t-mono badge-l1" x="598" y="54" font-size="10.5" letter-spacing="1.2" text-anchor="end" fill="#8B5CF6">AFFECTED</text>
+  </g>
+  <g class="">
+    <rect class="card l1" x="356" y="221" width="254" height="58" rx="12"/>
+    <circle cx="375" cy="242" r="5" fill="#8B5CF6"/>
+    <text class="t-mono" x="388" y="247" font-size="13" fill="#E8ECF8">AuthenticationMiddleware</text>
+    <text class="t-sans" x="388" y="267" font-size="11.5" fill="#8C97BD">direct dependent</text>
+    <text class="t-mono badge-l1" x="598" y="214" font-size="10.5" letter-spacing="1.2" text-anchor="end" fill="#8B5CF6">AFFECTED</text>
+  </g>
+  <g class="">
+    <rect class="card l2" x="672" y="61" width="254" height="58" rx="12"/>
+    <rect x="686" y="77" width="10" height="10" rx="2.5" fill="#34D399"/>
+    <text class="t-mono" x="704" y="87" font-size="13" fill="#E8ECF8">AuthController.test.ts</text>
+    <text class="t-sans" x="704" y="107" font-size="11.5" fill="#8C97BD">transitive</text>
+    <text class="t-mono badge-l2" x="914" y="54" font-size="10.5" letter-spacing="1.2" text-anchor="end" fill="#34D399">SELECTED</text>
+  </g>
+  <g class="">
+    <rect class="card l1t" x="672" y="141" width="254" height="58" rx="12"/>
+    <rect x="686" y="157" width="10" height="10" rx="2.5" fill="#34D399"/>
+    <text class="t-mono" x="704" y="167" font-size="13" fill="#E8ECF8">AuthService.test.ts</text>
+    <text class="t-sans" x="704" y="187" font-size="11.5" fill="#8C97BD">direct · TESTS edge</text>
+    <text class="t-mono badge-l1t" x="914" y="134" font-size="10.5" letter-spacing="1.2" text-anchor="end" fill="#34D399">SELECTED</text>
+  </g>
+  <g class="">
+    <rect class="card l2" x="672" y="221" width="254" height="58" rx="12"/>
+    <rect x="686" y="237" width="10" height="10" rx="2.5" fill="#34D399"/>
+    <text class="t-mono" x="704" y="247" font-size="13" fill="#E8ECF8">ProtectedRoutes.test.ts</text>
+    <text class="t-sans" x="704" y="267" font-size="11.5" fill="#8C97BD">transitive · rule</text>
+    <text class="t-mono badge-l2" x="914" y="214" font-size="10.5" letter-spacing="1.2" text-anchor="end" fill="#34D399">SELECTED</text>
+  </g>
+  <g class="dimmed">
+    <rect class="card cold" x="40" y="391" width="254" height="58" rx="12"/>
+    <circle cx="59" cy="412" r="5" fill="#56618A"/>
+    <text class="t-mono" x="72" y="417" font-size="13" fill="#E8ECF8">CatalogService</text>
+    <text class="t-sans" x="72" y="437" font-size="11.5" fill="#8C97BD">unchanged</text>
+    
+  </g>
+  <g class="dimmed">
+    <rect class="card skip" x="672" y="391" width="254" height="58" rx="12" stroke-dasharray="5 5"/>
+    <rect x="686" y="407" width="10" height="10" rx="2.5" fill="#56618A"/>
+    <text class="t-mono" x="704" y="417" font-size="13" fill="#E8ECF8">CatalogService.test.ts</text>
+    <text class="t-sans" x="704" y="437" font-size="11.5" fill="#8C97BD">skipped · not run</text>
+    <text class="t-mono " x="914" y="384" font-size="10.5" letter-spacing="1.2" text-anchor="end" fill="#8C97BD">SKIPPED</text>
+  </g>
+  
+  <g class="why">
+    <rect x="958" y="70" width="282" height="232" rx="14" fill="#0B1229" stroke="#22305C"/>
+    <text class="t-mono" x="976" y="100" font-size="11" letter-spacing="1.5" fill="#56618A">$ SMARTTEST EXPLAIN</text>
+    <text class="t-mono" x="976" y="130" font-size="12.5" fill="#34D399">SELECTED</text>
+    <text class="t-mono" x="1048" y="130" font-size="12.5" fill="#E8ECF8">ProtectedRoutes.test.ts</text>
+    <text class="t-sans" x="976" y="160" font-size="12.5" fill="#8C97BD">Reasons</text>
+    <text class="t-sans" x="976" y="184" font-size="12.5" fill="#E8ECF8">• Modified symbol: validateToken</text>
+    <text class="t-sans" x="976" y="206" font-size="12.5" fill="#E8ECF8">• Transitive via Authentication…</text>
+    <text class="t-sans" x="976" y="228" font-size="12.5" fill="#E8ECF8">• Rule: authentication-critical</text>
+    <line x1="976" y1="246" x2="1222" y2="246" stroke="#22305C"/>
+    <text class="t-sans" x="976" y="270" font-size="12" fill="#8C97BD">Analysis: <tspan fill="#34D399">complete</tspan> · mode: <tspan fill="#8B5CF6">balanced</tspan></text>
+    <text class="t-sans" x="976" y="290" font-size="12" fill="#56618A">Skipped tests are reported as not run.</text>
+  </g>
+  <circle cx="45" cy="524" r="5" fill="#FBBF24"/><text class="t-sans" x="56" y="528" font-size="12.5" fill="#8C97BD">Modified</text><circle cx="148.2" cy="524" r="5" fill="#8B5CF6"/><text class="t-sans" x="159.2" y="528" font-size="12.5" fill="#8C97BD">Affected</text><circle cx="251.39999999999998" cy="524" r="5" fill="#34D399"/><text class="t-sans" x="262.4" y="528" font-size="12.5" fill="#8C97BD">Selected</text><circle cx="354.59999999999997" cy="524" r="5" fill="#56618A"/><text class="t-sans" x="365.59999999999997" y="528" font-size="12.5" fill="#8C97BD">Skipped (not run)</text>
+  <text class="t-sans" x="1240" y="528" font-size="12.5" text-anchor="end" fill="#56618A">Every selection has a traceable reason.</text>
+</svg>

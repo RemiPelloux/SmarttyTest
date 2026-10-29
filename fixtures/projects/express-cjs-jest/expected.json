@@ -1,0 +1,30 @@
+{
+  "runners": [
+    "jest"
+  ],
+  "frameworks": [
+    "Node.js"
+  ],
+  "layout": "mirror",
+  "testFiles": 4,
+  "mutations": [
+    {
+      "file": "src/utils/format.js",
+      "find": "${user.first} ${user.last}",
+      "replace": "${user.last} ${user.first}",
+      "expectFailing": [
+        "__tests__/format.test.js",
+        "__tests__/userService.test.js",
+        "__tests__/app.test.js"
+      ]
+    },
+    {
+      "file": "src/billing/invoice.js",
+      "find": "item.price * item.qty",
+      "replace": "item.price - item.qty",
+      "expectFailing": [
+        "__tests__/invoice.test.js"
+      ]
+    }
+  ]
+}

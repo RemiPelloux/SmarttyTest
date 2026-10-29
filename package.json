@@ -1,0 +1,43 @@
+{
+  "name": "smarttest-monorepo",
+  "private": true,
+  "version": "0.0.0",
+  "description": "SmartTest \u2014 Understand the change. Test what matters.",
+  "type": "module",
+  "packageManager": "pnpm@12.16.1",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "build": "pnpm -r --filter \"./packages/**\" build",
+    "typecheck": "tsc -b tsconfig.json",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "format": "biome format --write .",
+    "clean": "pnpm -r exec rm -rf dist *.tsbuildinfo",
+    "scaffold:package": "node scripts/scaffold-package.mjs",
+    "assets:build": "node scripts/brand/build-readme-assets.mjs",
+    "planning:build": "node scripts/planning/generate-backlog.mjs",
+    "planning:issues": "node scripts/planning/create-github-issues.mjs",
+    "verify": "pnpm lint && pnpm check:boundaries && pnpm typecheck && pnpm test && pnpm planning:build --check",
+    "check:boundaries": "node scripts/check-boundaries.mjs",
+    "bundle:cli": "node scripts/release/bundle-cli.mjs",
+    "release:publish": "pnpm bundle:cli && npm publish packages/cli/.publish --provenance --access public",
+    "changeset": "changeset"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.6.4",
+    "@types/node": "^24.0.0",
+    "typescript": "^6.0.3",
+    "vitest": "^5.0.5",
+    "@smarttest/core": "workspace:*",
+    "smarttest": "workspace:*",
+    "esbuild": "^0.28.2",
+    "@changesets/cli": "^3.0.3",
+    "@smarttest/adapter-jest": "workspace:*",
+    "@smarttest/adapter-vitest": "workspace:*",
+    "@smarttest/plugin-sdk": "workspace:*"
+  }
+}

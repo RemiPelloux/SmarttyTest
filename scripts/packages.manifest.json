@@ -1,0 +1,213 @@
+{
+  "$comment": "Source of truth for the v1.0.0 package map. Edit, then run `pnpm scaffold:package --all` (idempotent: never overwrites existing src/ files).",
+  "scope": "@smarttest",
+  "version": "0.1.0",
+  "packages": [
+    {
+      "name": "shared",
+      "epic": "FND",
+      "description": "Shared contracts, primitives, error model and exit codes."
+    },
+    {
+      "name": "config",
+      "epic": "FND",
+      "deps": ["shared"],
+      "description": "Configuration schema, defineConfig() and validation.",
+      "external": {
+        "typescript": "^6.0.3"
+      }
+    },
+    {
+      "name": "plugin-sdk",
+      "epic": "FND",
+      "deps": ["shared"],
+      "description": "Public plugin contracts and capability declarations."
+    },
+    {
+      "name": "project-detector",
+      "epic": "DET",
+      "deps": ["shared", "config"],
+      "description": "Runtime, package manager, framework, test runner and VCS discovery."
+    },
+    {
+      "name": "test-discovery",
+      "epic": "EXE",
+      "deps": ["shared", "plugin-sdk"],
+      "description": "Normalized test discovery across adapters."
+    },
+    {
+      "name": "smart-init",
+      "epic": "INI",
+      "deps": ["shared", "config", "project-detector", "test-discovery"],
+      "description": "Recommendation engine, setup plan, safe writes, rollback."
+    },
+    {
+      "name": "vcs-core",
+      "epic": "VCS",
+      "deps": ["shared", "plugin-sdk"],
+      "description": "Version-control adapter contract and normalized ChangeSet utilities."
+    },
+    {
+      "name": "vcs-git",
+      "epic": "VCS",
+      "deps": ["shared", "vcs-core"],
+      "description": "Git adapter: branches, commits, staged, uncommitted, renames."
+    },
+    {
+      "name": "native-snapshots",
+      "epic": "VCS",
+      "deps": ["shared", "vcs-core"],
+      "description": "Native snapshot engine: baselines, fingerprints, comparisons."
+    },
+    {
+      "name": "source-parser",
+      "epic": "SRC",
+      "deps": ["shared", "plugin-sdk"],
+      "description": "Language-neutral parsing pipeline and parse cache."
+    },
+    {
+      "name": "language-typescript",
+      "epic": "SRC",
+      "deps": ["shared", "plugin-sdk", "source-parser"],
+      "description": "TypeScript language adapter (Compiler API).",
+      "external": {
+        "typescript": "^6.0.3"
+      }
+    },
+    {
+      "name": "language-javascript",
+      "epic": "SRC",
+      "deps": ["shared", "plugin-sdk", "source-parser", "language-typescript"],
+      "description": "JavaScript language adapter (ESM, CJS, JSX)."
+    },
+    {
+      "name": "symbol-index",
+      "epic": "SRC",
+      "deps": ["shared", "source-parser"],
+      "description": "Persistent, incremental symbol index."
+    },
+    {
+      "name": "semantic-diff",
+      "epic": "SRC",
+      "deps": ["shared", "vcs-core", "source-parser", "symbol-index"],
+      "description": "Semantic change classification with uncertainty.",
+      "devDeps": ["language-typescript"]
+    },
+    {
+      "name": "dependency-graph",
+      "epic": "GRA",
+      "deps": ["shared", "source-parser", "symbol-index"],
+      "description": "Hybrid dependency graph with provenance, persistence and queries.",
+      "devDeps": ["language-typescript"]
+    },
+    {
+      "name": "rules-engine",
+      "epic": "RUL",
+      "deps": ["shared", "config"],
+      "description": "Deterministic rule evaluation, precedence and explanations."
+    },
+    {
+      "name": "impact-engine",
+      "epic": "IMP",
+      "deps": [
+        "shared",
+        "config",
+        "dependency-graph",
+        "semantic-diff",
+        "rules-engine",
+        "source-parser"
+      ],
+      "description": "Change-impact calculation, safety modes and fallbacks.",
+      "devDeps": ["language-typescript"]
+    },
+    {
+      "name": "test-selector",
+      "epic": "IMP",
+      "deps": ["shared", "impact-engine", "test-discovery"],
+      "description": "Turns impact decisions into explainable test selections."
+    },
+    {
+      "name": "test-executor",
+      "epic": "EXE",
+      "deps": ["shared", "plugin-sdk"],
+      "description": "Scheduling, timeouts, cancellation, retries and result normalization."
+    },
+    {
+      "name": "adapter-vitest",
+      "epic": "EXE",
+      "deps": ["shared", "plugin-sdk"],
+      "description": "Vitest test runner adapter."
+    },
+    {
+      "name": "adapter-jest",
+      "epic": "EXE",
+      "deps": ["shared", "plugin-sdk"],
+      "description": "Jest test runner adapter."
+    },
+    {
+      "name": "coverage-engine",
+      "epic": "REP",
+      "deps": ["shared"],
+      "description": "Coverage ingestion with explicit scope (full / selected)."
+    },
+    {
+      "name": "test-generator",
+      "epic": "GEN",
+      "deps": [
+        "shared",
+        "config",
+        "source-parser",
+        "symbol-index",
+        "dependency-graph",
+        "rules-engine",
+        "test-discovery"
+      ],
+      "description": "Test architecture generation, layouts, templates and sync."
+    },
+    {
+      "name": "report-engine",
+      "epic": "REP",
+      "deps": ["shared"],
+      "description": "JSON, HTML, JUnit and Markdown reports with integrity checks."
+    },
+    {
+      "name": "core",
+      "epic": "FND",
+      "deps": [
+        "shared",
+        "config",
+        "plugin-sdk",
+        "project-detector",
+        "smart-init",
+        "vcs-core",
+        "vcs-git",
+        "native-snapshots",
+        "source-parser",
+        "language-typescript",
+        "language-javascript",
+        "symbol-index",
+        "semantic-diff",
+        "dependency-graph",
+        "rules-engine",
+        "impact-engine",
+        "test-discovery",
+        "test-selector",
+        "test-executor",
+        "adapter-vitest",
+        "adapter-jest",
+        "coverage-engine",
+        "test-generator",
+        "report-engine"
+      ],
+      "description": "Application core: orchestrates engines behind a stable API used by the CLI and (later) Studio."
+    },
+    {
+      "name": "cli",
+      "publishName": "smarttest",
+      "bin": "smarttest",
+      "epic": "CLI",
+      "deps": ["shared", "config", "core", "smart-init"],
+      "description": "The smarttest command-line interface."
+    }
+  ]
+}

@@ -1,0 +1,315 @@
+"ID","Title","Epic","Epic Name","Sprint","Status","Priority","Points","User Story","Acceptance Criteria","Spec Refs","Depends On","Labels"
+"ST-001","Initialize the TypeScript monorepo","FND","Core Project Foundation","S0","done","Must","3","As a SmartTest contributor, I want a pnpm workspace with strict TypeScript, project references and Vitest, so that every package builds and tests the same way.","- Given a fresh clone, when I run `pnpm i && pnpm build`, then all packages compile with `strict` and `exactOptionalPropertyTypes` enabled
+- `pnpm test` runs Vitest across packages resolving workspace sources without a prior build
+- Node engines are pinned to the supported LTS range and enforced","A01, §4.3","","story;epic:FND;priority:must;release:1.0.0"
+"ST-002","Define and enforce package boundaries","FND","Core Project Foundation","S0","done","Must","3","As a tech lead, I want the package map and allowed dependency directions to be machine-checked, so that the core never depends on CLI, UI or AI packages.","- The manifest `scripts/packages.manifest.json` is the single source of truth and the scaffolder rejects cycles
+- CI fails when a package imports a workspace package not declared in its manifest deps
+- `core` has no dependency on any `ai-*` or `studio-*` package (ADR-0004)","A02, §4.2","ST-001","story;epic:FND;priority:must;release:1.0.0"
+"ST-003","Configuration contract, loader and schema validation","FND","Core Project Foundation","S0","done","Must","5","As a developer, I want a typed `smarttest.config.ts` with clear validation errors, so that misconfiguration is caught before anything runs.","- `defineConfig()` gives editor completion for every 1.0 option
+- Config is discovered from `smarttest.config.{ts,mts,js,mjs,json}` or `--config`
+- Invalid config produces an `ST_CONFIG_INVALID` error listing every offending path with a hint, exit code 3
+- Unknown keys produce warnings, not silent acceptance","A03, §14.5","ST-001","story;epic:FND;priority:must;release:1.0.0"
+"ST-004","Linting, formatting and strict typing gates","FND","Core Project Foundation","S0","done","Must","2","As a SmartTest contributor, I want one fast lint/format tool wired into CI and pre-commit, so that reviews focus on behavior, not style.","- `pnpm lint` (Biome) passes on a clean tree and fails CI on violations
+- `pnpm format` is idempotent
+- Editor settings are committed for VS Code","A04","ST-001","story;epic:FND;priority:must;release:1.0.0"
+"ST-005","Fixture project catalogue","FND","Core Project Foundation","S0","partial","Must","5","As a QA engineer, I want realistic, versioned fixture repositories covering the 1.0 compatibility matrix, so that every engine is tested against the projects we claim to support.","- Fixtures exist for: TS library (Vitest), React (Vitest), Next.js (Jest), Express CJS (Jest), NestJS (Jest), pnpm monorepo, Yarn ESM, no-VCS project
+- Each fixture has an `expected.json` describing detection results and known test↔source relationships
+- A helper materialises a fixture into a temp dir with an optional Git history script","A05, §3.3","ST-001","story;epic:FND;priority:must;release:1.0.0"
+"ST-006","Continuous integration pipeline","FND","Core Project Foundation","S0","partial","Must","3","As a SmartTest contributor, I want CI on every PR across Linux, macOS and Windows and supported Node LTS versions, so that cross-platform regressions are caught before merge.","- Workflow runs lint, typecheck, test and `planning:build --check`
+- Matrix covers ubuntu, macos, windows × Node 22 and 24
+- Workflows use pinned actions and least-privilege `permissions`","A06, §30.6","ST-001, ST-004","story;epic:FND;priority:must;release:1.0.0"
+"ST-007","Structured logging with secret redaction","FND","Core Project Foundation","S0","done","Must","3","As a developer, I want useful `--verbose` logs that never leak secrets, so that I can debug SmartTest safely and share logs.","- Logger supports levels, scoped child loggers and JSON output
+- Values matching token/key patterns and configured env names are redacted in every sink
+- Logs are written to `.smarttest/logs/` with rotation","A07, §30.2","ST-001","story;epic:FND;priority:must;release:1.0.0"
+"ST-008","Stable error model and exit codes","FND","Core Project Foundation","S0","done","Must","2","As a CI maintainer, I want documented, versioned exit codes and error identifiers, so that pipelines can react to failure categories reliably.","- `SmartTestError` carries a stable `code`, `category` and optional `hint`
+- Exit codes 0/1/2/3/4/5/70 are documented in the CLI reference and locked by a test
+- Unexpected errors map to 70 and print a bug-report hint","A08, §26.6","ST-001","story;epic:FND;priority:must;release:1.0.0"
+"ST-009","Plugin SDK foundation and capability model","FND","Core Project Foundation","S0","done","Must","5","As a plugin author, I want typed contracts for language, test-runner and VCS adapters with explicit capabilities, so that new ecosystems can be added without changing the core.","- `TestAdapter`, `LanguageAdapter` and `VersionControlAdapter` contracts are exported from `@smarttest/plugin-sdk`
+- Every capability is `true | false | ""partial""`; undeclared means unsupported
+- A conformance test-kit helper exists that adapters can run against fixtures","A09, §27","ST-002","story;epic:FND;priority:must;release:1.0.0"
+"ST-010","Architecture documentation and ADRs","FND","Core Project Foundation","S0","done","Must","2","As a new contributor, I want an architecture overview and recorded decisions, so that I understand why the system looks the way it does.","- `documentation/architecture/overview.md` describes layers, packages and data flow
+- ADR-0001…0007 are written and reviewed
+- Each package README links its epic and architecture context","A10","","story;epic:FND;priority:must;release:1.0.0"
+"ST-011","Verify product name and npm package availability","FND","Core Project Foundation","S0","partial","Must","1","As a product owner, I want confirmation that we can publish as `smarttest` (or a fallback), so that we don't build a brand we can't ship.","- npm availability of `smarttest`, `@smarttest/*` scope and fallbacks is checked and recorded (`smarttest` was unpublished and may be claimable)
+- A basic trademark/collision search is recorded
+- Decision recorded in ADR-0007 with the chosen name and scope","§40 note","","story;epic:FND;priority:must;release:1.0.0"
+"ST-012","Spike: TypeScript analysis engine","FND","Core Project Foundation","S0","done","Must","3","As a tech lead, I want a time-boxed comparison of the TS 6 Compiler API, the TS 7 native API and tree-sitter, so that the source-intelligence epic starts on a sound, future-proof base.","- Spike measures cold/warm parse time and memory on the monorepo fixture for each option
+- Reports what each option can resolve (aliases, project references, type-only imports)
+- Outcome recorded in ADR-0002 with a migration note for TS 7","§4.3, §9","","story;epic:FND;priority:must;release:1.0.0"
+"ST-013","Spike: local intelligence store","FND","Core Project Foundation","S0","done","Must","2","As a tech lead, I want to choose between `node:sqlite` and `better-sqlite3` for the local store, so that installation stays frictionless on every OS.","- Benchmark insert/query of 100k edges for each option
+- Install works without a compiler toolchain on the CI matrix
+- Outcome recorded in ADR-0003","§4.3, §8.3","","story;epic:FND;priority:must;release:1.0.0"
+"ST-014","Command framework, global flags and help","CLI","CLI Developer Experience","S1","done","Must","5","As a developer, I want a consistent `smarttest <command>` interface with discoverable help, so that I can learn the tool from the terminal.","- Global flags `--config --workspace --json --quiet --verbose --non-interactive --dry-run --help` are parsed uniformly
+- Unknown commands/flags exit 2 with a 'did you mean' suggestion
+- `smarttest --version` and `smarttest help <command>` work
+- Warm startup for `--help` is under 300 ms on the reference machine","§26.2, §26.4","ST-003, ST-008","story;epic:CLI;priority:must;release:1.0.0"
+"ST-015","Output modes for humans and machines","CLI","CLI Developer Experience","S1","done","Must","3","As a CI maintainer, I want colored, compact output in a TTY and plain/JSON output elsewhere, so that the same command works locally and in pipelines.","- Non-TTY output contains no ANSI codes or spinners and never prompts
+- `--json` prints exactly one JSON document on stdout; logs go to stderr
+- `NO_COLOR` and `FORCE_COLOR` are respected","§26.5","ST-014","story;epic:CLI;priority:must;release:1.0.0"
+"ST-016","Interactive root menu","CLI","CLI Developer Experience","S8","done","Should","5","As a developer new to SmartTest, I want `smarttest` with no arguments to show a searchable menu of common actions, so that I don't have to memorise commands.","- Menu shows workspace name, status and the actions: run affected, generate architecture, coverage & reports, diagnostics, settings
+- Arrow keys, Enter and `/` search work; Esc exits
+- In non-TTY or `--non-interactive`, `smarttest` prints help and exits 0","§26.3","ST-063, ST-071","story;epic:CLI;priority:should;release:1.0.0"
+"ST-017","Progress and diagnostics renderer","CLI","CLI Developer Experience","S2","done","Must","3","As a developer, I want clear progress for long steps and structured, actionable errors, so that I always know what SmartTest is doing and how to fix problems.","- Long-running phases render a task list with durations
+- Errors print code, message, hint and docs link; `--verbose` adds the cause chain
+- Warnings are summarised at the end of a command","§26.5","ST-015","story;epic:CLI;priority:must;release:1.0.0"
+"ST-018","`smarttest scan` command","CLI","CLI Developer Experience","S3","done","Must","2","As a developer, I want a read-only command that shows what SmartTest understands about my project, so that I can verify detection and indexing before trusting selection.","- Prints project profile, VCS state, file/symbol/edge counts and unresolved imports
+- `--json` output is schema-versioned
+- Never writes outside `.smarttest/`","§26.2","ST-019, ST-037","story;epic:CLI;priority:must;release:1.0.0"
+"ST-019","Runtime environment scan","DET","Project Detection","S1","done","Must","3","As a developer, I want SmartTest to detect OS, CPU, memory, Node version and permissions, so that it can choose sane worker counts and warn about unsupported runtimes.","- Returns OS, arch, Node version, CPU count, free memory and writable state of the project root
+- Unsupported Node versions produce an actionable diagnostic
+- Environment variables are only read from an allow-list; values never logged","B01, §5.3","ST-001","story;epic:DET;priority:must;release:1.0.0"
+"ST-020","Package manager and workspace detection","DET","Project Detection","S1","done","Must","5","As a developer in a monorepo, I want npm, pnpm and Yarn projects and their workspaces to be detected, so that SmartTest understands package boundaries.","- Detects npm/pnpm/Yarn (classic & berry) from lockfiles and `packageManager`
+- Lists workspace packages with names, paths and internal dependencies
+- Conflicting lockfiles produce a warning, not a guess","B02, §3.3","ST-005","story;epic:DET;priority:must;release:1.0.0"
+"ST-021","Framework detection with evidence","DET","Project Detection","S1","done","Must","5","As a developer, I want React, Next.js, Express, NestJS and plain Node libraries recognised, so that recommendations fit my stack.","- Each detected framework lists its evidence (manifest dep, config file, import)
+- Unknown frameworks don't block detection; the project is treated as generic Node
+- Detection results match `expected.json` for every fixture","B03, §3.3","ST-020","story;epic:DET;priority:must;release:1.0.0"
+"ST-022","Test runner and test convention detection","DET","Project Detection","S1","done","Must","5","As a QA engineer, I want Jest/Vitest, their configs, test file patterns, setup files and placement conventions detected, so that SmartTest reuses what already exists.","- Detects Jest and Vitest including config files and per-workspace configs
+- Infers placement convention (mirror / colocated / mixed) with ratios
+- Lists fixtures, mocks and setup files without modifying them","B04, B06, §5.3","ST-020","story;epic:DET;priority:must;release:1.0.0"
+"ST-023","Source layout and import alias analysis","DET","Project Detection","S2","done","Must","5","As a developer, I want source roots, entry points, generated dirs and path aliases detected, so that analysis covers the right files.","- Reads `tsconfig` paths/baseUrl, package `exports`/`imports` and bundler aliases where statically declared
+- Proposes include/exclude globs; generated/build dirs excluded by default
+- Ambiguities are reported as warnings with evidence","B05, §5.3","ST-020","story;epic:DET;priority:must;release:1.0.0"
+"ST-024","Version control detection","DET","Project Detection","S1","done","Must","2","As a developer, I want Git, nested repositories and no-VCS projects detected, so that the right change source is chosen automatically.","- Detects Git root, worktrees and nested repos; reports repository boundaries
+- SVN/Mercurial/Perforce markers are detected and reported as 'not supported in 1.0'
+- No VCS → native snapshots recommended","B07, §7.8","ST-001","story;epic:DET;priority:must;release:1.0.0"
+"ST-025","Coverage provider and CI detection","DET","Project Detection","S2","done","Should","2","As a CI maintainer, I want existing coverage providers and CI config files detected, so that SmartTest integrates without duplicating setup.","- Detects v8/istanbul providers and reporter config for Jest and Vitest
+- Detects GitHub Actions, GitLab CI, Jenkins and Azure Pipelines files
+- Results feed the setup recommendation engine","B08, §5.3","ST-022","story;epic:DET;priority:should;release:1.0.0"
+"ST-026","VCS adapter contract and normalized ChangeSet","VCS","Version Control & Native Snapshots","S1","done","Must","3","As a plugin author, I want a provider-neutral change model with explicit completeness, so that the impact engine never depends on Git specifics.","- `ChangeSet` supports added/modified/deleted/renamed with optional ranges and hashes
+- `completeness` is mandatory; partial results carry warnings
+- Revision refs are provider-scoped and cannot be compared across providers","D01, §7.3, §7.4","ST-009","story;epic:VCS;priority:must;release:1.0.0"
+"ST-027","Git branch and commit comparison","VCS","Version Control & Native Snapshots","S1","done","Must","5","As a developer, I want `--base main` and commit-range comparisons, so that I can test exactly what my branch changes.","- `--base <ref>` compares against the merge-base by default; `--base-mode=direct` compares directly
+- Changed line ranges are produced for modified files
+- Shallow clones without the base produce a clear error with a fetch hint (exit 4)","D02, D03, §7.5","ST-026, ST-024","story;epic:VCS;priority:must;release:1.0.0"
+"ST-028","Git staged, uncommitted and untracked changes","VCS","Version Control & Native Snapshots","S2","done","Must","3","As a developer, I want `--staged` and `--uncommitted` modes, so that I get fast feedback before committing.","- `--staged` uses the index only; `--uncommitted` includes working tree + untracked (respecting .gitignore)
+- Binary files are reported but not parsed
+- Results are identical to `git diff` on the fixture scenarios","D04, §7.5","ST-027","story;epic:VCS;priority:must;release:1.0.0"
+"ST-029","Git renames, deletions, worktrees and nested repos","VCS","Version Control & Native Snapshots","S2","done","Must","5","As a developer, I want renames and deletions handled correctly in all repo shapes, so that moved code doesn't look like brand-new code.","- Renames carry `previousPath`; deletions mark dependent tests as affected
+- Works from a linked worktree and inside a monorepo sub-package
+- Nested repositories are not silently mixed; each boundary is reported","D05, §7.5","ST-027","story;epic:VCS;priority:must;release:1.0.0"
+"ST-030","Native snapshot baseline and content fingerprints","VCS","Version Control & Native Snapshots","S2","done","Must","8","As a developer without version control, I want SmartTest to track changes using its own snapshots, so that intelligent selection works in any folder.","- `snapshot create` stores content hashes (not copies by default) under `.smarttest/state/`
+- Incremental fingerprinting uses mtime+size pre-checks and content hashes to confirm
+- Rename detection by content hash for unchanged files
+- Snapshots are deduplicated and never copy the whole repository","D06, D07, §8","ST-026, ST-013","story;epic:VCS;priority:must;release:1.0.0"
+"ST-031","Snapshot comparison with completeness reporting","VCS","Version Control & Native Snapshots","S3","done","Must","5","As a developer, I want to diff the working tree against a snapshot, so that I see exactly what changed since my last verified run.","- `snapshot diff [id]` produces a normalized ChangeSet
+- When content is not stored, changed ranges are reported as unknown and completeness = partial
+- A snapshot is labelled 'verified baseline' only when linked to execution evidence","D08, §8.7","ST-030","story;epic:VCS;priority:must;release:1.0.0"
+"ST-032","Hybrid mode: Git + native snapshots","VCS","Version Control & Native Snapshots","S3","done","Should","3","As a developer, I want Git revisions plus native snapshots for local incremental analysis, so that repeated local runs are fast between commits.","- In hybrid mode, local runs diff against the last snapshot; `--base` diffs against Git
+- Snapshot ids are never treated as Git commits
+- Mode is visible in `vcs status`","D09, §8.5","ST-031, ST-028","story;epic:VCS;priority:should;release:1.0.0"
+"ST-033","`snapshot` and `vcs` commands","VCS","Version Control & Native Snapshots","S3","done","Must","3","As a developer, I want commands to create, list, inspect, diff snapshots and inspect VCS state, so that change tracking is transparent.","- `snapshot create|list|inspect|diff` and `vcs detect|status` implemented with `--json`
+- `vcs connect` switches the provider explicitly
+- Every command documented in the CLI reference","§8.6","ST-031, ST-014","story;epic:VCS;priority:must;release:1.0.0"
+"ST-034","Snapshot retention and prune","VCS","Version Control & Native Snapshots","S10","done","Should","2","As a developer, I want old snapshots pruned by a retention policy, so that `.smarttest/` doesn't grow without bounds.","- `snapshot prune` honours `keep`/`maxAge` config and never deletes verified baselines without `--force`
+- Dry-run lists what would be removed
+- Prune is safe to interrupt","D14, §8.4","ST-033","story;epic:VCS;priority:should;release:1.0.0"
+"ST-035","TypeScript program loader","SRC","Source Intelligence","S2","done","Must","5","As a developer, I want SmartTest to load my TS project exactly as `tsc` sees it, so that aliases, project references and type-only imports are understood.","- Honours tsconfig `extends`, `paths`, `references` and per-package configs
+- Type-only imports are recorded with a `type-only` flag
+- Files outside include globs are not analysed","E01","ST-012, ST-023","story;epic:SRC;priority:must;release:1.0.0"
+"ST-036","JavaScript parsing for ESM, CJS and JSX","SRC","Source Intelligence","S2","done","Must","5","As a developer with a JS codebase, I want plain JS projects analysed too, so that I don't need TypeScript to benefit.","- Parses ESM `import`/`export`, CJS `require`/`module.exports` and JSX
+- Dynamic `import()` and computed `require()` are recorded as unresolved with reason
+- Express CJS fixture produces the expected relationships","E02, §3.3","ST-012","story;epic:SRC;priority:must;release:1.0.0"
+"ST-037","Symbol index","SRC","Source Intelligence","S3","done","Must","8","As a SmartTest engine, I want every module, class, function, method, property and type indexed with stable ids, so that impact can be computed below file level.","- Symbols follow the `SourceSymbol` model with stable ids across unrelated edits
+- Qualified names are unique within a workspace
+- Index for each fixture matches its golden snapshot","E03, §9.2, §9.3","ST-035, ST-036","story;epic:SRC;priority:must;release:1.0.0"
+"ST-038","Import resolution","SRC","Source Intelligence","S3","done","Must","8","As a developer, I want imports resolved through aliases, workspaces, `exports` maps and barrel files, so that dependencies across packages are not missed.","- Resolves relative, alias, workspace-package and `exports`-conditioned imports
+- Barrel re-exports are followed to the defining symbol
+- Every unresolved import is recorded with file, specifier and reason — never dropped","E04","ST-035, ST-036, ST-020","story;epic:SRC;priority:must;release:1.0.0"
+"ST-039","Class, method and decorator analysis","SRC","Source Intelligence","S4","done","Must","5","As a NestJS developer, I want classes, methods, inheritance and decorators analysed, so that rules and selection can target `*Service` methods precisely.","- Captures extends/implements, constructor-injected dependencies and decorators with arguments
+- Method visibility is recorded
+- NestJS fixture produces the expected class graph","E05, §9.2","ST-037","story;epic:SRC;priority:must;release:1.0.0"
+"ST-040","Export and public API analysis","SRC","Source Intelligence","S5","done","Must","3","As a library author, I want the public API surface of each package computed, so that exported-API changes trigger broader verification.","- Public API = symbols reachable from package entry points/`exports`
+- Exported vs internal is a symbol attribute
+- API surface diff is available to semantic diff","E06","ST-038","story;epic:SRC;priority:must;release:1.0.0"
+"ST-041","Semantic diff with uncertainty","SRC","Source Intelligence","S4","done","Must","8","As a developer, I want changes classified (comment-only, formatting, implementation, signature, exported API…), so that trivial edits don't trigger large test runs and risky ones do.","- Classifies every §9.4 kind and maps changed ranges to symbols
+- Each classification has a confidence; anything unclear is `unclassifiable` (never 'no-op')
+- Comment/formatting-only changes are only treated as no-op in FAST mode, never in SAFE","E07, §9.4","ST-037, ST-027, ST-031","story;epic:SRC;priority:must;release:1.0.0"
+"ST-042","Incremental parsing and persistent index","SRC","Source Intelligence","S5","done","Must","5","As a developer, I want only changed and invalidated files re-parsed, so that warm analysis stays fast on large repos.","- Second run with one changed file re-parses only that file and its invalidated dependents
+- Index invalidates on tsconfig/package.json changes
+- Warm diff analysis < 500 ms on the medium benchmark repo","E08, §9.5","ST-037, ST-045","story;epic:SRC;priority:must;release:1.0.0"
+"ST-043","Generated-code policies","SRC","Source Intelligence","S5","partial","Should","3","As a developer, I want generated directories handled by explicit rules, so that build output never pollutes the graph.","- Config option `generated: [{ path, policy: exclude | test-source | rebuild-required }]`
+- Detected generated dirs (e.g. `.next`, `dist`) are excluded by default
+- Changes to a generator's input mark `rebuild-required` outputs as affected","E10, §9.6","ST-023","story;epic:SRC;priority:should;release:1.0.0"
+"ST-044","Graph model with provenance and confidence","GRA","Dependency Graph","S3","done","Must","5","As a SmartTest engine, I want typed nodes and edges carrying provenance and confidence, so that evidence is never mixed without trace.","- Supports all §10.2 node kinds and §10.3 edge kinds
+- Every edge has `provenance` and `confidence`; unknown stays unknown
+- Uncertainty metadata (unresolved imports, dynamic patterns) attaches to nodes","F01, F02, F08, §10.2, §10.3","ST-009","story;epic:GRA;priority:must;release:1.0.0"
+"ST-045","Persistent graph storage","GRA","Dependency Graph","S3","done","Must","5","As a developer, I want the graph persisted locally, so that warm runs don't rebuild everything.","- Graph stored in `.smarttest/state/index.db` with a schema version and migrations
+- Corrupt or incompatible stores are detected and rebuilt with a warning
+- Writes are transactional","F03, §8.3","ST-044, ST-013","story;epic:GRA;priority:must;release:1.0.0"
+"ST-046","Reverse and transitive traversal with cycle safety","GRA","Dependency Graph","S4","done","Must","5","As a SmartTest engine, I want fast reverse-dependency and transitive queries, so that every test reachable from a change is found.","- Reverse traversal returns paths, not only node sets
+- Cycles terminate and are reported
+- Warm selection query < 200 ms on the medium benchmark repo","F04, F05, F06, §10.7","ST-045","story;epic:GRA;priority:must;release:1.0.0"
+"ST-047","Incremental graph updates","GRA","Dependency Graph","S5","partial","Must","5","As a developer, I want the graph updated incrementally after changes, so that analysis cost scales with the change, not the repo.","- Updating one file rewrites only its nodes/edges in one transaction
+- Result is identical to a full rebuild (property test over fixture edits)
+- Batch updates are supported for large change sets","F07","ST-046, ST-042","story;epic:GRA;priority:must;release:1.0.0"
+"ST-048","Graph snapshots, query API and `smarttest graph`","GRA","Dependency Graph","S5","done","Should","5","As a developer, I want to query and export the graph, so that I can inspect relationships and feed future visual tools.","- `smarttest graph --from <symbol|file> --direction dependents|dependencies --depth n`
+- Export to JSON and DOT
+- Graph snapshots can be associated with native snapshots","F09, F10, §26.2","ST-046","story;epic:GRA;priority:should;release:1.0.0"
+"ST-049","Vitest adapter","EXE","Test Execution","S4","done","Must","8","As a Vitest user, I want SmartTest to discover and run my Vitest tests through Vitest itself, so that I keep my runner, config and plugins.","- Discovers test files and test cases using the project's Vitest config
+- Runs a file selection (and test-case selection where supported) and returns normalized results
+- Declares capabilities honestly; results match a native `vitest run` on fixtures","J01, §15.1","ST-009, ST-022","story;epic:EXE;priority:must;release:1.0.0"
+"ST-050","Jest adapter","EXE","Test Execution","S4","done","Must","8","As a Jest user, I want SmartTest to discover and run my Jest tests through Jest itself, so that I keep my runner, config and transforms.","- Discovers tests using the project's Jest config, including multi-project configs
+- Runs file selections and returns normalized results
+- Results match a native `jest` run on fixtures","J02, §15.1","ST-009, ST-022","story;epic:EXE;priority:must;release:1.0.0"
+"ST-051","Normalized test model and honest result statuses","EXE","Test Execution","S4","done","Must","5","As a developer, I want one test model and status vocabulary across runners, so that reports never misrepresent what happened.","- Statuses: passed, failed, skipped, pending, cancelled, timed-out, flaky, infrastructure-error (cached-* reserved)
+- 'Skipped by selection' is distinct from 'skipped by the test' and is never counted as passed
+- Runner crashes map to infrastructure-error, exit code 4","J03, J04, §15.5","ST-049, ST-050","story;epic:EXE;priority:must;release:1.0.0"
+"ST-052","Test-to-source mapping (TESTS edges)","EXE","Test Execution","S5","done","Must","3","As a SmartTest engine, I want test files linked to the source symbols they import and exercise statically, so that selection can walk from code to tests.","- TESTS edges created from test-file imports to symbols, including through mocks (`vi.mock`/`jest.mock` recorded as uncertainty)
+- Test files with no resolvable target are flagged
+- Mapping matches `expected.json` relationships on fixtures","K02, §10.3","ST-044, ST-038, ST-049, ST-050","story;epic:EXE;priority:must;release:1.0.0"
+"ST-053","Scheduling, timeouts and cancellation","EXE","Test Execution","S5","done","Must","5","As a developer, I want selected tests run in parallel with timeouts and clean cancellation, so that runs are fast and Ctrl-C never leaves orphans.","- Worker count derives from CPU/memory unless configured
+- Global and per-run timeouts produce `timed-out` statuses
+- SIGINT cancels child processes and reports `cancelled` within 2 s","J05, J06, J07, §15.3","ST-051","story;epic:EXE;priority:must;release:1.0.0"
+"ST-054","Retry policies and flaky marking","EXE","Test Execution","S8","done","Should","3","As a QA engineer, I want configurable retries where a pass-after-fail stays visibly flaky, so that instability is surfaced, not hidden.","- `retries` configurable globally and by rule
+- A test that fails then passes is reported as `flaky`, never as plain `passed`
+- Flaky occurrences are recorded in `.smarttest/runs/`","J08, J11, §15.6","ST-053","story;epic:EXE;priority:should;release:1.0.0"
+"ST-055","Execution and analysis telemetry (local only)","EXE","Test Execution","S10","done","Should","3","As a developer, I want timings for every phase recorded locally, so that I can see SmartTest's overhead versus its savings.","- Records scan, parse, graph update, impact, discovery, execution and report durations and peak memory
+- Nothing leaves the machine; no telemetry is sent anywhere
+- Timings appear in JSON/HTML reports","J12, §31.4","ST-053","story;epic:EXE;priority:should;release:1.0.0"
+"ST-056","Direct test selection","IMP","Impact Engine & Selection","S5","done","Must","5","As a developer, I want tests that directly target changed symbols selected, so that the most relevant tests always run.","- Changed test files are always selected
+- Tests with a TESTS edge to a changed symbol are selected with reason `direct-dependency`
+- Output conforms to `ImpactDecision`","G01, §11.2","ST-041, ST-046, ST-052","story;epic:IMP;priority:must;release:1.0.0"
+"ST-057","Transitive test selection","IMP","Impact Engine & Selection","S5","done","Must","3","As a developer, I want tests reachable through dependents selected, so that regressions in callers are caught.","- Selection includes tests reachable via reverse IMPORTS/CALLS/EXTENDS/INSTANTIATES edges
+- Each selected test carries the graph path as evidence
+- Depth limits are mode-dependent and reported","G02","ST-056","story;epic:IMP;priority:must;release:1.0.0"
+"ST-058","Mandatory selection triggers","IMP","Impact Engine & Selection","S6","done","Must","5","As a tech lead, I want broad verification forced for global-impact changes, so that config and dependency changes can't slip through.","- Changes to tsconfig, runner config, package manifests/lockfiles, env config and global setup files trigger the full suite (or configured scope)
+- Each trigger is reported with reason `mandatory-trigger`
+- Rules can add triggers but cannot remove built-in ones","G05, §11.4","ST-056, ST-065","story;epic:IMP;priority:must;release:1.0.0"
+"ST-059","Safe fallback on partial analysis","IMP","Impact Engine & Selection","S5","done","Must","3","As a developer, I want SmartTest to widen or run everything when it isn't sure, so that uncertainty never silently drops tests.","- Unresolved imports/dynamic patterns touching the change trigger fallback per mode
+- `analysisStatus` = partial/fallback and `fallbackApplied` = true are reported
+- Fallback reason is printed in the summary","G09, §1.5, §32.2","ST-056","story;epic:IMP;priority:must;release:1.0.0"
+"ST-060","FAST, BALANCED and SAFE modes","IMP","Impact Engine & Selection","S6","done","Must","5","As a developer, I want to choose a safety mode per run, rule or CI context, so that local feedback is fast and releases are strict.","- `--mode fast|balanced|safe`; default balanced
+- SAFE widens selection, ignores comment-only optimisations and forces full suite on any uncertainty
+- Mode used is shown in output and reports","G06, G07, G08, §11.3","ST-057, ST-058, ST-059","story;epic:IMP;priority:must;release:1.0.0"
+"ST-061","Risk classification","IMP","Impact Engine & Selection","S6","done","Should","3","As a tech lead, I want changes classified by risk using rules and change kind, so that critical code is treated more conservatively.","- Risk = max(rule risk, change-kind risk)
+- Critical risk upgrades the effective mode to SAFE for affected areas
+- Risk appears in explain output","G04","ST-041, ST-065","story;epic:IMP;priority:should;release:1.0.0"
+"ST-062","Selection explanations: `smarttest explain`","IMP","Impact Engine & Selection","S6","done","Must","5","As a developer, I want to ask why any test was selected or skipped, so that I can trust — or challenge — every decision.","- `smarttest explain <test>` lists reasons (symbols, paths, rules, triggers) for selected tests
+- For skipped tests it lists why plus a confidence statement bounded by the dependency model
+- `--json` exposes the full reason objects","G10, §11.6","ST-056","story;epic:IMP;priority:must;release:1.0.0"
+"ST-063","`smarttest run --affected` and `smarttest impact`","IMP","Impact Engine & Selection","S6","done","Must","5","As a developer, I want one command to analyse changes and run only affected tests, so that I get the core value of SmartTest.","- `run --affected` = change detection → impact → execution → summary
+- `impact` prints the decision without running tests
+- `run --all` runs the full suite through the same pipeline
+- Summary shows selected, executed, skipped (not run), passed, failed and duration","§11, §26.2, §40","ST-057, ST-059, ST-053, ST-014","story;epic:IMP;priority:must;release:1.0.0"
+"ST-064","`smarttest validate-selection`","IMP","Impact Engine & Selection","S9","done","Must","5","As a team lead evaluating SmartTest, I want to compare a selective run against a full reference run, so that I have evidence before trusting selection in CI.","- Runs selection and full suite on the same change and compares outcomes
+- Reports selected, skipped, failures found, failures missed, time saved, analysis overhead, flaky interference
+- Any missed failure exits 5 and prints the dependency gap","G12, §11.7, §32.4","ST-063, ST-095","story;epic:IMP;priority:must;release:1.0.0"
+"ST-065","Rule schema, scopes and core selectors","RUL","Rules Engine","S6","done","Must","8","As a tech lead, I want rules by path, package, module, class, function and method, so that testing policies follow our architecture.","- Rules match by path glob, package, class/function/method name patterns
+- Rules may declare `require`, `coverage`, `risk`, `execution`, `generate`
+- Rule evaluation for a symbol is a pure function with golden tests","I01–I05, §14.2, §14.3","ST-003, ST-037","story;epic:RUL;priority:must;release:1.0.0"
+"ST-066","Deterministic precedence and conflict detection","RUL","Rules Engine","S7","done","Must","5","As a tech lead, I want predictable outcomes when rules overlap, so that policies can't silently weaken each other.","- Precedence: specificity, then declaration order; documented
+- Mandatory safeguards cannot be weakened by lower-priority rules
+- Conflicting templates/destinations raise `ST_RULE_CONFLICT` (exit 3)","I10, §14.6","ST-065","story;epic:RUL;priority:must;release:1.0.0"
+"ST-067","Decorator, visibility, kind and inheritance selectors","RUL","Rules Engine","S7","done","Should","3","As a NestJS developer, I want rules like 'every `@Controller` needs integration tests', so that framework conventions map to policies.","- Selectors for decorator, visibility, symbol kind, implements/extends
+- Selectors combine with AND semantics
+- Covered by golden tests on the NestJS fixture","I06, §14.3","ST-065, ST-039","story;epic:RUL;priority:should;release:1.0.0"
+"ST-068","Coverage, criticality and execution policies","RUL","Rules Engine","S7","done","Must","5","As a tech lead, I want rules to require test categories, coverage thresholds and always-run behavior, so that critical areas get stronger protection.","- `execution.alwaysRunOnAffected` and `execution.mode` honoured by the impact engine
+- Missing required test categories are reported as policy findings
+- Coverage thresholds are evaluated when coverage is available, otherwise reported as 'not evaluated'","I07, I08, I09","ST-065, ST-060","story;epic:RUL;priority:must;release:1.0.0"
+"ST-069","`rules list | validate | explain`","RUL","Rules Engine","S7","done","Must","3","As a developer, I want to inspect which rules apply to a file or symbol and why, so that policy decisions are transparent.","- `rules list` shows all rules with scope and source
+- `rules validate` checks schema and conflicts
+- `rules explain <path|symbol>` shows matched rules, precedence and effective policy","I11, I12, §14.7","ST-066","story;epic:RUL;priority:must;release:1.0.0"
+"ST-070","Setup recommendation engine","INI","Smart Init","S7","done","Must","5","As a developer, I want a recommended setup plan with a reason for every choice, so that I understand and trust what init proposes.","- Plan covers layout, naming, adapters, coverage provider, include/exclude, impact mode, snapshots, store dir, workers and suggested rules
+- Every recommendation has a reason and evidence
+- Warnings list untested modules and global-impact config files","B09, §5.5","ST-021, ST-022, ST-023, ST-024, ST-025, ST-065","story;epic:INI;priority:must;release:1.0.0"
+"ST-071","`smarttest init` wizard and setup modes","INI","Smart Init","S7","done","Must","8","As a developer, I want interactive, automatic, advanced and non-interactive init, so that setup fits my context, including CI.","- Interactive mode shows the plan and lets me accept/edit each section
+- `--auto` applies only low-risk actions; `--advanced` exposes all options
+- `--yes --non-interactive` never prompts; missing required input exits 3 deterministically","B10, §5.2, §5.6","ST-070, ST-015","story;epic:INI;priority:must;release:1.0.0"
+"ST-072","Init dry-run and change preview","INI","Smart Init","S7","done","Must","3","As a cautious developer, I want to see every file init would create or modify, so that nothing surprises me.","- `init --dry-run` prints a diff of every change and writes nothing (verified by FS snapshot)
+- Preview distinguishes create / modify / skip-existing
+- Same plan is produced by dry-run and real run","B11, §5.7","ST-070","story;epic:INI;priority:must;release:1.0.0"
+"ST-073","Safe configuration writing","INI","Smart Init","S7","done","Must","5","As a developer, I want init to merge into my existing files safely, so that my configuration and scripts are preserved.","- Atomic writes (temp + rename); package.json scripts merged without duplicates or reformatting unrelated keys
+- Name collisions detected; existing files never replaced without explicit approval
+- `.smarttest/` added to .gitignore; no dependency major upgrades; no install hooks executed","B12, §5.7","ST-072","story;epic:INI;priority:must;release:1.0.0"
+"ST-074","Setup validation and setup report","INI","Smart Init","S7","done","Must","3","As a developer, I want init to verify the setup works and summarise what it did, so that I know I'm ready to run.","- Validates config schema and that the chosen adapter discovers tests
+- Writes `.smarttest/reports/setup.md` with actions, warnings and next steps
+- Unsupported setups produce actionable diagnostics instead of partial installs","B13, §5.4","ST-073, ST-049, ST-050","story;epic:INI;priority:must;release:1.0.0"
+"ST-075","Idempotent init","INI","Smart Init","S8","done","Must","3","As a developer, I want re-running init to be harmless, so that I can safely re-run it after upgrades.","- Second run on an initialised fixture produces zero changes
+- User edits to generated config are preserved
+- Covered by a test across all 8 fixtures","B14, §5.8","ST-073","story;epic:INI;priority:must;release:1.0.0"
+"ST-076","Init rollback","INI","Smart Init","S8","done","Must","3","As a developer, I want to undo what init changed, so that trying SmartTest is risk-free.","- Init records a change journal in `.smarttest/state/init-journal.json`
+- `init --rollback` restores modified files and removes created ones (if unmodified since)
+- Files edited after init are reported, not overwritten","B15, §5.7","ST-073","story;epic:INI;priority:must;release:1.0.0"
+"ST-077","`smarttest doctor`","INI","Smart Init","S8","done","Must","3","As a developer, I want a diagnostic command that checks my setup, so that I can fix problems without reading source code.","- Checks runtime, config validity, adapter discovery, VCS state, store health and stale index
+- Each finding has severity, explanation and fix hint
+- Exit code reflects worst finding category","§6.4, §26.2","ST-074","story;epic:INI;priority:must;release:1.0.0"
+"ST-078","Mirror and colocated layouts","GEN","Test Architecture Generator","S8","done","Must","5","As a developer, I want test paths computed from source paths using mirror or colocated layout, so that my test tree stays organised automatically.","- Mirror maps `src/modules/auth/AuthService.ts` → `tests/unit/modules/auth/AuthService.test.ts`
+- Colocated maps to `src/modules/auth/AuthService.test.ts`
+- The detected existing convention is the default","H01, H02, §13.4","ST-037, ST-022","story;epic:GEN;priority:must;release:1.0.0"
+"ST-079","Domain and custom layouts with naming tokens","GEN","Test Architecture Generator","S9","done","Should","5","As a tech lead, I want domain grouping and custom path templates, so that the generator fits our conventions.","- Tokens `{ClassName} {FunctionName} {MethodName} {FileName} {ModuleName} {PackageName} {DomainName} {Type} {Extension}` supported
+- Invalid templates fail validation with the offending token
+- Domain layout groups by configured domain mapping","H03, H04, H05, §13.5","ST-078","story;epic:GEN;priority:should;release:1.0.0"
+"ST-080","Class and module templates","GEN","Test Architecture Generator","S8","done","Must","5","As a developer, I want templates per symbol type (service, controller, repository, util), so that scaffolds start with the right structure.","- Built-in templates for Jest and Vitest; selection driven by rules `generate.template`
+- Custom templates loadable from the project
+- Templates render valid imports for the target symbol","H06, H07","ST-065","story;epic:GEN;priority:must;release:1.0.0"
+"ST-081","Unit and integration scaffolding without fake coverage","GEN","Test Architecture Generator","S8","done","Must","8","As a developer, I want test skeletons with one explicit TODO per public method, so that gaps are visible and never counted as passing tests.","- Scaffolds use `it.todo`/`test.todo` (never empty passing tests)
+- Generated files compile; unresolved dependencies are reported
+- `smarttest generate --class|--module|--type` targets work","H08, H09, §13.8","ST-078, ST-080, ST-082","story;epic:GEN;priority:must;release:1.0.0"
+"ST-082","Existing test detection and collision prevention","GEN","Test Architecture Generator","S8","done","Must","5","As a developer, I want the generator to recognise existing tests and never overwrite them, so that my work is safe.","- A source file already covered by a test (any location) is not scaffolded again
+- Path collisions are reported; nothing is overwritten by default
+- `--force` is not offered for files containing non-generated code","H10, H11, §13.8","ST-052, ST-078","story;epic:GEN;priority:must;release:1.0.0"
+"ST-083","Generator dry-run and atomic writes","GEN","Test Architecture Generator","S9","done","Must","3","As a developer, I want to preview generated files and have writes be atomic, so that partial generation never corrupts my tree.","- `generate --dry-run` lists files and contents without writing
+- Writes are all-or-nothing per run
+- Generation is repeatable: second run yields no changes","H12, §13.8","ST-081","story;epic:GEN;priority:must;release:1.0.0"
+"ST-084","Architecture sync: missing, orphaned and renamed","GEN","Test Architecture Generator","S9","done","Should","5","As a QA engineer, I want `generate --sync` to report missing tests, orphaned tests and renamed sources, so that test architecture keeps up with refactors.","- Reports missing test files, orphaned tests and moved/renamed sources
+- Proposes moves/creations; applies nothing without approval
+- Works with rename info from Git and snapshots","H13, H14, §13.9","ST-082, ST-029","story;epic:GEN;priority:should;release:1.0.0"
+"ST-085","JSON report with a versioned schema","REP","Reporting & Coverage Scope","S9","done","Must","3","As a CI maintainer, I want a machine-readable report of every run, so that I can build tooling on top of SmartTest.","- JSON report includes change analysis, decision, executions, coverage scope and timings
+- Published JSON Schema with `schemaVersion`
+- Skipped-by-selection and executed tests are separate collections","O01, §25.2","ST-063","story;epic:REP;priority:must;release:1.0.0"
+"ST-086","Self-contained HTML report","REP","Reporting & Coverage Scope","S9","done","Must","8","As a developer, I want an attractive, offline HTML report, so that I can review and share results easily.","- Single file, no network requests; sections: summary, change analysis, selection with reasons, executions, coverage, performance
+- Follows the design system (dark/light, reduced motion, WCAG AA contrast, keyboard navigation)
+- Untrusted strings (paths, logs, test names) are escaped; no script injection possible
+- Generated in < 2 s for the medium benchmark repo","O02, §25.3","ST-085","story;epic:REP;priority:must;release:1.0.0"
+"ST-087","JUnit XML export","REP","Reporting & Coverage Scope","S9","done","Must","2","As a CI maintainer, I want JUnit XML output, so that existing CI test dashboards keep working.","- Valid JUnit XML for executed tests
+- Selection-skipped tests are optional (`--junit-include-skipped`) and marked with a skip reason, never as passed
+- Validated against a JUnit XSD in tests","O03","ST-051","story;epic:REP;priority:must;release:1.0.0"
+"ST-088","Coverage ingestion with explicit scope","REP","Reporting & Coverage Scope","S9","done","Should","5","As a developer, I want coverage from my runner ingested and labelled full or selected, so that partial coverage is never mistaken for project coverage.","- Ingests istanbul JSON / lcov from Jest and Vitest
+- Every coverage figure is labelled `full` or `selected`; they are never merged
+- `smarttest coverage` prints the latest coverage with scope and age","K01, K10, §16.2","ST-049, ST-050","story;epic:REP;priority:should;release:1.0.0"
+"ST-089","Impact explanations in reports","REP","Reporting & Coverage Scope","S9","done","Must","3","As a reviewer, I want selection reasons visible in reports, so that I can audit a run without re-running commands.","- Each selected test lists its reasons; skipped tests list skip reasons
+- Fallbacks and mandatory triggers are highlighted
+- Analysis completeness is shown at the top","O05, §11.6","ST-062, ST-085","story;epic:REP;priority:must;release:1.0.0"
+"ST-090","Report integrity validation","REP","Reporting & Coverage Scope","S10","done","Must","3","As a team lead, I want automated checks that reports never overstate results, so that our quality signals are honest.","- Integrity suite asserts: skipped ≠ passed, cached ≠ fresh, partial ≠ full coverage, partial analysis is flagged
+- Runs in CI for every report format
+- Violations fail the build","O09, §25.4, §32.2","ST-086, ST-087","story;epic:REP;priority:must;release:1.0.0"
+"ST-091","Markdown / PR summary export","REP","Reporting & Coverage Scope","S9","done","Should","2","As a developer, I want a compact Markdown summary, so that I can paste it into a PR or job summary.","- `report --format markdown` produces a summary under 65 kB
+- Written to `$GITHUB_STEP_SUMMARY` when present
+- Contains link to the HTML artifact when known","O10","ST-085","story;epic:REP;priority:should;release:1.0.0"
+"ST-092","Versioned machine-readable output contracts","CI","CI Integration","S10","done","Must","2","As a CI maintainer, I want stable JSON schemas for `scan`, `impact`, `run` and `explain`, so that scripts don't break between minor versions.","- Schemas published in the package and docs
+- Breaking schema changes require a major version (checked by a schema-diff test)
+- All `--json` outputs validate against their schema in tests","P09","ST-085","story;epic:CI;priority:must;release:1.0.0"
+"ST-093","GitHub Actions template","CI","CI Integration","S10","done","Must","3","As a CI maintainer, I want a documented workflow for affected tests on PRs, so that adoption in CI takes minutes.","- Template fetches enough history for merge-base, runs `run --affected --mode balanced` on PRs and `--all` on main
+- Uses least-privilege permissions and is safe for fork PRs (no secrets required)
+- Uploads HTML/JSON/JUnit artifacts and writes the job summary","P01, P07","ST-063, ST-091","story;epic:CI;priority:must;release:1.0.0"
+"ST-094","Basic CI quality gates","CI","CI Integration","STRETCH","todo","Could","3","As a tech lead, I want CI to fail on policy findings (missing required categories, forbidden fallbacks), so that policies are enforced, not just reported.","- `run --fail-on policy` exits 5 on policy findings
+- Gates are configurable per rule
+- Gate results appear in all report formats","P03, §16.4","ST-068","story;epic:CI;priority:could;release:1.0.0"
+"ST-095","Regression-detection benchmark harness","QLT","Reliability & Performance","S6","done","Must","5","As a QA engineer, I want a harness that injects known regressions into fixtures and checks they're caught, so that we can prove selection safety.","- Each fixture defines ≥ 10 seeded mutations with the tests expected to fail
+- Harness runs `run --affected` per mutation and records missed failures
+- CI fails if any known reproducible failure is missed","R09, §11.7, G acceptance gate","ST-005, ST-063","story;epic:QLT;priority:must;release:1.0.0"
+"ST-096","Performance benchmarks under documented conditions","QLT","Reliability & Performance","S10","done","Must","5","As a product owner, I want reproducible benchmarks for startup, analysis, selection and reports, so that our performance claims are honest.","- Benchmark repos (small / medium / large) and reference hardware documented
+- Measures warm startup, warm diff analysis, warm selection, report generation, end-to-end savings
+- Results published in `benchmarks/RESULTS.md`; targets marked met / not met","R01, R02, §31.3","ST-047, ST-063","story;epic:QLT;priority:must;release:1.0.0"
+"ST-097","Cross-platform validation","QLT","Reliability & Performance","S10","partial","Must","3","As a Windows developer, I want SmartTest to behave identically on Windows, macOS and Linux, so that I'm not a second-class user.","- Path normalisation (separators, case-insensitivity) covered by tests
+- Full e2e suite green on the 3-OS CI matrix
+- Known platform limitations documented","R08","ST-006","story;epic:QLT;priority:must;release:1.0.0"
+"ST-098","Performance regression CI","QLT","Reliability & Performance","STRETCH","todo","Could","3","As a SmartTest contributor, I want CI to flag performance regressions, so that speed doesn't erode release after release.","- Benchmarks run nightly; > 15 % regression opens an issue
+- Results stored as artifacts for trend comparison
+- Noise threshold documented","R11","ST-096","story;epic:QLT;priority:could;release:1.0.0"
+"ST-099","npm publishing with provenance and changesets","REL","Release & Supply Chain","S10","partial","Must","3","As a release manager, I want automated, signed releases with changelogs, so that users can verify what they install.","- Changesets drive versions and CHANGELOG
+- Publishing from CI uses npm provenance / trusted publishing; no long-lived tokens
+- Pre-releases published under `next` dist-tag","§30.6","ST-006, ST-011","story;epic:REL;priority:must;release:1.0.0"
+"ST-100","SBOM, dependency audit and secret scanning","REL","Release & Supply Chain","S10","partial","Must","2","As a security reviewer, I want an SBOM and automated supply-chain checks, so that enterprises can approve SmartTest.","- CycloneDX SBOM attached to each release
+- Dependency audit and secret scanning run in CI and block on high severity
+- `SECURITY.md` describes disclosure process","§30.6","ST-006","story;epic:REL;priority:must;release:1.0.0"
+"ST-101","Documentation verified against the product","REL","Release & Supply Chain","S10","partial","Must","5","As a new user, I want docs whose commands actually work, so that I can succeed without asking for help.","- Getting-started, CLI reference and configuration reference complete for 1.0
+- Doc code blocks tagged `verify` are executed against fixtures in CI
+- Time-to-first-affected-run under 5 minutes in a usability test with 3 external developers","§26, §38.2","ST-063, ST-071, ST-081","story;epic:REL;priority:must;release:1.0.0"
+"ST-102","Example projects","REL","Release & Supply Chain","S6","partial","Should","3","As a evaluator, I want runnable example projects in `examples/`, so that I can try SmartTest before touching my repo.","- `examples/node`, `react`, `nestjs`, `monorepo`, `no-vcs` each with a README walkthrough
+- Examples run in CI against the current build
+- Each example demonstrates `run --affected` and `explain`","§4.2","ST-005","story;epic:REL;priority:should;release:1.0.0"
+"ST-103","Clean removal path","REL","Release & Supply Chain","S10","done","Must","2","As a developer, I want to remove SmartTest without losing any tests, so that adoption is reversible.","- `smarttest uninstall --dry-run` lists config, scripts and `.smarttest/` to remove
+- Generated tests are kept by default (they belong to the user)
+- Documented manual removal steps","§38.2, §1.4 Non-destructive","ST-076","story;epic:REL;priority:must;release:1.0.0"

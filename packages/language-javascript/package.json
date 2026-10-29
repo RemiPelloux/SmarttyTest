@@ -1,0 +1,35 @@
+{
+  "name": "@smarttest/language-javascript",
+  "version": "0.1.0",
+  "description": "JavaScript language adapter (ESM, CJS, JSX).",
+  "license": "Apache-2.0",
+  "type": "module",
+  "private": true,
+  "exports": {
+    ".": {
+      "@smarttest/source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "typecheck": "tsc -b --noEmit false"
+  },
+  "dependencies": {
+    "@smarttest/shared": "workspace:*",
+    "@smarttest/plugin-sdk": "workspace:*",
+    "@smarttest/source-parser": "workspace:*",
+    "@smarttest/language-typescript": "workspace:*"
+  },
+  "smarttest": {
+    "epic": "SRC",
+    "release": "1.0.0"
+  }
+}

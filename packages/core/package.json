@@ -1,0 +1,55 @@
+{
+  "name": "@smarttest/core",
+  "version": "0.1.0",
+  "description": "Application core: orchestrates engines behind a stable API used by the CLI and (later) Studio.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "private": true,
+  "exports": {
+    ".": {
+      "@smarttest/source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "typecheck": "tsc -b --noEmit false"
+  },
+  "dependencies": {
+    "@smarttest/shared": "workspace:*",
+    "@smarttest/config": "workspace:*",
+    "@smarttest/plugin-sdk": "workspace:*",
+    "@smarttest/project-detector": "workspace:*",
+    "@smarttest/smart-init": "workspace:*",
+    "@smarttest/vcs-core": "workspace:*",
+    "@smarttest/vcs-git": "workspace:*",
+    "@smarttest/native-snapshots": "workspace:*",
+    "@smarttest/source-parser": "workspace:*",
+    "@smarttest/language-typescript": "workspace:*",
+    "@smarttest/language-javascript": "workspace:*",
+    "@smarttest/symbol-index": "workspace:*",
+    "@smarttest/semantic-diff": "workspace:*",
+    "@smarttest/dependency-graph": "workspace:*",
+    "@smarttest/rules-engine": "workspace:*",
+    "@smarttest/impact-engine": "workspace:*",
+    "@smarttest/test-discovery": "workspace:*",
+    "@smarttest/test-selector": "workspace:*",
+    "@smarttest/test-executor": "workspace:*",
+    "@smarttest/adapter-vitest": "workspace:*",
+    "@smarttest/adapter-jest": "workspace:*",
+    "@smarttest/coverage-engine": "workspace:*",
+    "@smarttest/test-generator": "workspace:*",
+    "@smarttest/report-engine": "workspace:*"
+  },
+  "smarttest": {
+    "epic": "FND",
+    "release": "1.0.0"
+  }
+}

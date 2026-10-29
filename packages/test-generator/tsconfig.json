@@ -1,0 +1,32 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "dist"
+  },
+  "include": ["src"],
+  "exclude": ["src/**/*.test.ts"],
+  "references": [
+    {
+      "path": "../shared"
+    },
+    {
+      "path": "../config"
+    },
+    {
+      "path": "../source-parser"
+    },
+    {
+      "path": "../symbol-index"
+    },
+    {
+      "path": "../dependency-graph"
+    },
+    {
+      "path": "../rules-engine"
+    },
+    {
+      "path": "../test-discovery"
+    }
+  ]
+}

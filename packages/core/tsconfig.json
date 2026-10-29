@@ -1,0 +1,83 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "dist"
+  },
+  "include": ["src"],
+  "exclude": ["src/**/*.test.ts"],
+  "references": [
+    {
+      "path": "../shared"
+    },
+    {
+      "path": "../config"
+    },
+    {
+      "path": "../plugin-sdk"
+    },
+    {
+      "path": "../project-detector"
+    },
+    {
+      "path": "../smart-init"
+    },
+    {
+      "path": "../vcs-core"
+    },
+    {
+      "path": "../vcs-git"
+    },
+    {
+      "path": "../native-snapshots"
+    },
+    {
+      "path": "../source-parser"
+    },
+    {
+      "path": "../language-typescript"
+    },
+    {
+      "path": "../language-javascript"
+    },
+    {
+      "path": "../symbol-index"
+    },
+    {
+      "path": "../semantic-diff"
+    },
+    {
+      "path": "../dependency-graph"
+    },
+    {
+      "path": "../rules-engine"
+    },
+    {
+      "path": "../impact-engine"
+    },
+    {
+      "path": "../test-discovery"
+    },
+    {
+      "path": "../test-selector"
+    },
+    {
+      "path": "../test-executor"
+    },
+    {
+      "path": "../adapter-vitest"
+    },
+    {
+      "path": "../adapter-jest"
+    },
+    {
+      "path": "../coverage-engine"
+    },
+    {
+      "path": "../test-generator"
+    },
+    {
+      "path": "../report-engine"
+    }
+  ]
+}

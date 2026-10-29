@@ -1,0 +1,34 @@
+name: Bug report
+description: Something behaves incorrectly
+labels: ["bug"]
+body:
+  - type: dropdown
+    id: kind
+    attributes:
+      label: Kind
+      options:
+        - "Selection safety: a test that should have run was skipped"
+        - "Honesty: report/CLI misrepresents results"
+        - "Destructive: SmartTest modified files unexpectedly"
+        - Crash / error
+        - Other
+    validations: { required: true }
+  - type: textarea
+    id: what
+    attributes:
+      {
+        label: What happened,
+        description: "Include `smarttest explain <test>` output for selection issues.",
+      }
+    validations: { required: true }
+  - type: textarea
+    id: repro
+    attributes: { label: Reproduction, description: "Commands, minimal repo, or fixture." }
+    validations: { required: true }
+  - type: textarea
+    id: env
+    attributes:
+      {
+        label: Environment,
+        description: "`smarttest doctor --json` output (secrets are redacted).",
+      }

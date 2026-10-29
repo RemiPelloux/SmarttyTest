@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://smarttest.dev/schemas/impact.v1.json",
+  "title": "smarttest impact --json (v1)",
+  "type": "object",
+  "required": ["schemaVersion", "command", "description", "changeSet", "decision", "timings"],
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "command": {
+      "const": "impact"
+    },
+    "changeSet": {
+      "type": "object",
+      "required": ["provider", "changes", "completeness", "warnings"]
+    },
+    "decision": {
+      "type": "object",
+      "required": [
+        "selectedTests",
+        "skippedTests",
+        "affectedFiles",
+        "affectedSymbols",
+        "analysisStatus",
+        "safetyMode",
+        "reasons",
+        "warnings",
+        "fallbackApplied"
+      ]
+    }
+  }
+}

@@ -1,0 +1,114 @@
+# CLI reference
+
+> Implemented in **v0.1.0**. Every command below is exercised by the test suite (`integration-tests/cli.test.ts`).
+
+## Commands
+
+| Command                                                         | Purpose                                                                     |
+| --------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| `smarttest`                                                     | Interactive menu in a terminal. Prints help otherwise                       |
+| `smarttest init`                                                | Detect, plan, preview and apply setup. Idempotent and reversible            |
+| `smarttest doctor`                                              | Diagnose runtime, config, rules, VCS, index and runners                     |
+| `smarttest scan`                                                | Show what SmartTest understands about the project (read-only)               |
+| `smarttest impact`                                              | Compute the decision without running tests                                  |
+| `smarttest run`                                                 | Run affected tests (default) or the full suite (`--all`)                    |
+| `smarttest explain <target>`                                    | Why a test was selected or skipped, or which tests protect a file or symbol |
+| `smarttest validate-selection`                                  | Compare the selection against a full reference run                          |
+| `smarttest graph`                                               | Query or export the dependency graph                                        |
+| `smarttest generate`                                            | Generate or sync the test architecture. Never overwrites                    |
+| `smarttest rules list \| validate \| explain <path>`            | Inspect rules                                                               |
+| `smarttest snapshot create \| list \| inspect \| diff \| prune` | Native snapshots                                                            |
+| `smarttest vcs detect \| status \| connect <git\|native>`       | Version-control state                                                       |
+| `smarttest coverage`                                            | Latest ingested coverage, with its scope (full or selected)                 |
+| `smarttest report`                                              | Re-render reports from the last run                                         |
+| `smarttest uninstall`                                           | Remove SmartTest config, scripts and local state. Tests are kept            |
+
+Planned for later releases: `sync`, `migrate` and `watch` (Release 2), `ai …` and `autopilot` (Release 3), `studio` / `open` (Release 4). These names are reserved and answer with `ST_NOT_AVAILABLE`.
+
+## Global flags
+
+| Flag                          | Meaning                                                                         |
+| ----------------------------- | ------------------------------------------------------------------------------- |
+| `--config <path>`             | Use a specific config file                                                      |
+| `--mode fast\|balanced\|safe` | Safety mode (default `balanced`). For `generate`, `--mode scaffold`             |
+| `--json`                      | One JSON document on stdout ([schemas](#json-output)). Logs go to stderr        |
+| `-q, --quiet` / `--verbose`   | Less / more output. `--verbose` mirrors debug logs to stderr                    |
+| `--non-interactive`           | Never prompt. Missing confirmation exits 3. Also implied by `CI` or a non-TTY   |
+| `--dry-run`                   | Show changes, write nothing (`init`, `generate`, `snapshot prune`, `uninstall`) |
+| `-y, --yes`                   | Accept the plan without prompting (`init`, `uninstall`)                         |
+| `-o, --output <path>`         | Report directory (`run`, `report`) or export file (`graph`)                     |
+| `-h, --help`, `-v, --version` |                                                                                 |
+
+`NO_COLOR` and `FORCE_COLOR` are respected. When stdout is not a TTY, output has no colours or spinners and there are no prompts.
+
+## Change sources (`run`, `impact`, `explain`, `validate-selection`)
+
+| Flag                                   | Compares                                                                                               |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| _(none)_                               | Git: HEAD → working tree incl. untracked (or `vcs.base` if configured). No Git: latest native snapshot |
+| `--base <ref>`                         | merge-base(`<ref>`, HEAD) → working tree                                                               |
+| `--base-mode direct`                   | `<ref>` → working tree, without the merge-base                                                         |
+| `--staged`                             | HEAD → index                                                                                           |
+| `--uncommitted`                        | HEAD → working tree, including untracked files                                                         |
+| `--since-snapshot` / `--snapshot <id>` | latest (or given) native snapshot → working tree (hybrid mode works with Git too)                      |
+
+## `run`
+
+| Flag             | Meaning                                                                       |
+| ---------------- | ----------------------------------------------------------------------------- |
+| `--affected`     | Analyse changes and run affected tests (default)                              |
+| `--all`          | Full suite through the same pipeline                                          |
+| `--coverage`     | Collect coverage through the runner's provider. Labelled `selected` or `full` |
+| `--retries <n>`  | Retry failing files. A pass after a retry is reported as **flaky**            |
+| `--timeout <ms>` | Per-runner timeout. Unfinished files become `timed-out`                       |
+| `--workers <n>`  | Passed to the runner as `--maxWorkers`                                        |
+| `--format <f>`   | Repeatable: `html`, `json`, `junit`, `markdown` (default from config)         |
+| `--open`         | Open the HTML report                                                          |
+
+In GitHub Actions the Markdown summary is appended to `$GITHUB_STEP_SUMMARY` automatically. Ctrl-C cancels the runner cleanly and reports `cancelled`.
+
+## `init`
+
+| Flag                          | Meaning                                                                                  |
+| ----------------------------- | ---------------------------------------------------------------------------------------- |
+| `--dry-run`                   | Print the plan and a diff of every file. Writes nothing                                  |
+| `--yes`                       | Apply all planned changes                                                                |
+| `--auto`                      | Apply low-risk changes only (config file, `.gitignore`). Leaves `package.json` alone     |
+| `--advanced`                  | Choose layout and mode interactively                                                     |
+| `--layout <l>` / `--mode <m>` | Override recommendations                                                                 |
+| `--rollback`                  | Undo what init changed. Files edited since init are reported and left untouched (exit 5) |
+
+## `generate`
+
+| Flag                                          | Meaning                                                                 |
+| --------------------------------------------- | ----------------------------------------------------------------------- |
+| `--class <C>` / `--module <m>` / `--path <p>` | Target selection                                                        |
+| `--type unit\|integration\|e2e`               | Category, used in mirror/domain paths                                   |
+| `--dry-run`                                   | List files (and contents with `--verbose`) without writing              |
+| `--sync`                                      | Report missing tests, orphaned tests and renamed sources. Proposes only |
+
+## `graph`
+
+`--from <file | file#Symbol>`, `--direction dependents|dependencies`, `--depth <n>`, `--format json|dot`, `-o <file>`. Without `--from` the whole graph is exported.
+
+## `snapshot`
+
+`create [--content] [--label <l>]` · `list` · `inspect [id]` · `diff [id]` · `prune [--keep <n>] [--force] [--dry-run]`. Verified baselines (snapshots taken after a fully passing run) survive pruning unless `--force` is passed.
+
+## JSON output
+
+Every `--json` document has `schemaVersion` and `command`. Schemas ship with the package in [`packages/cli/schemas/`](../../packages/cli/schemas): `run`, `impact`, `scan`, `explain` and `error`. Breaking a schema requires a major version.
+
+## Exit codes
+
+These are versioned and part of the public contract (locked by a test in `@smarttest/shared`).
+
+| Code | Category                | Examples                                                                     |
+| ---- | ----------------------- | ---------------------------------------------------------------------------- |
+| 0    | Success                 | All selected tests passed                                                    |
+| 1    | Test failure            | A test failed, timed out or was cancelled                                    |
+| 2    | Invalid usage           | Unknown command or flag, bad argument                                        |
+| 3    | Configuration failure   | Invalid config, rule conflict, confirmation required in non-interactive mode |
+| 4    | Infrastructure failure  | Runner crashed or missing, Git base missing in a shallow clone               |
+| 5    | Safety / policy failure | `validate-selection` found a missed failure, rollback conflict               |
+| 70   | Internal error          | A SmartTest bug (e.g. a report integrity violation)                          |

@@ -1,0 +1,38 @@
+{
+  "name": "smarttest",
+  "version": "0.1.0",
+  "description": "The smarttest command-line interface.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "private": false,
+  "bin": {
+    "smarttest": "./dist/bin.js"
+  },
+  "exports": {
+    ".": {
+      "@smarttest/source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "typecheck": "tsc -b --noEmit false"
+  },
+  "dependencies": {
+    "@smarttest/shared": "workspace:*",
+    "@smarttest/config": "workspace:*",
+    "@smarttest/core": "workspace:*",
+    "@smarttest/smart-init": "workspace:*"
+  },
+  "smarttest": {
+    "epic": "CLI",
+    "release": "1.0.0"
+  }
+}

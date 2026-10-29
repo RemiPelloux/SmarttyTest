@@ -1,0 +1,83 @@
+{
+  "files": [],
+  "references": [
+    {
+      "path": "packages/shared"
+    },
+    {
+      "path": "packages/config"
+    },
+    {
+      "path": "packages/plugin-sdk"
+    },
+    {
+      "path": "packages/project-detector"
+    },
+    {
+      "path": "packages/test-discovery"
+    },
+    {
+      "path": "packages/smart-init"
+    },
+    {
+      "path": "packages/vcs-core"
+    },
+    {
+      "path": "packages/vcs-git"
+    },
+    {
+      "path": "packages/native-snapshots"
+    },
+    {
+      "path": "packages/source-parser"
+    },
+    {
+      "path": "packages/language-typescript"
+    },
+    {
+      "path": "packages/language-javascript"
+    },
+    {
+      "path": "packages/symbol-index"
+    },
+    {
+      "path": "packages/semantic-diff"
+    },
+    {
+      "path": "packages/dependency-graph"
+    },
+    {
+      "path": "packages/rules-engine"
+    },
+    {
+      "path": "packages/impact-engine"
+    },
+    {
+      "path": "packages/test-selector"
+    },
+    {
+      "path": "packages/test-executor"
+    },
+    {
+      "path": "packages/adapter-vitest"
+    },
+    {
+      "path": "packages/adapter-jest"
+    },
+    {
+      "path": "packages/coverage-engine"
+    },
+    {
+      "path": "packages/test-generator"
+    },
+    {
+      "path": "packages/report-engine"
+    },
+    {
+      "path": "packages/core"
+    },
+    {
+      "path": "packages/cli"
+    }
+  ]
+}

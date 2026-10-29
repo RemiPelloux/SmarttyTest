@@ -1,0 +1,33 @@
+{
+  "name": "@smarttest/rules-engine",
+  "version": "0.1.0",
+  "description": "Deterministic rule evaluation, precedence and explanations.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "private": true,
+  "exports": {
+    ".": {
+      "@smarttest/source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "typecheck": "tsc -b --noEmit false"
+  },
+  "dependencies": {
+    "@smarttest/shared": "workspace:*",
+    "@smarttest/config": "workspace:*"
+  },
+  "smarttest": {
+    "epic": "RUL",
+    "release": "1.0.0"
+  }
+}

@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://smarttest.dev/schemas/run.v1.json",
+  "title": "smarttest run --json (v1)",
+  "type": "object",
+  "required": ["schemaVersion", "command", "report", "reports", "integrityIssues"],
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "command": {
+      "const": "run"
+    },
+    "report": {
+      "type": "object",
+      "required": [
+        "schemaVersion",
+        "tool",
+        "runId",
+        "command",
+        "startedAt",
+        "finishedAt",
+        "project",
+        "mode",
+        "change",
+        "decision",
+        "executions",
+        "summary",
+        "timings",
+        "warnings"
+      ],
+      "properties": {
+        "decision": {
+          "type": "object",
+          "required": [
+            "selectedTests",
+            "skippedTests",
+            "affectedFiles",
+            "affectedSymbols",
+            "analysisStatus",
+            "safetyMode",
+            "reasons",
+            "warnings",
+            "fallbackApplied"
+          ]
+        },
+        "summary": {
+          "type": "object",
+          "required": [
+            "totalTests",
+            "selected",
+            "executed",
+            "skippedBySelection",
+            "passed",
+            "failed",
+            "flaky",
+            "timedOut",
+            "cancelled",
+            "infrastructureErrors",
+            "skippedByTests",
+            "durationMs"
+          ]
+        },
+        "executions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["file", "adapter", "status", "durationMs", "tests"]
+          }
+        }
+      }
+    },
+    "reports": {
+      "type": "object"
+    },
+    "integrityIssues": {
+      "type": "array"
+    }
+  }
+}

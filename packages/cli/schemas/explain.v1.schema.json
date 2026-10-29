@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://smarttest.dev/schemas/explain.v1.json",
+  "title": "smarttest explain --json (v1)",
+  "type": "object",
+  "required": ["schemaVersion", "command", "kind", "target"],
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "command": {
+      "const": "explain"
+    },
+    "kind": {
+      "enum": ["test", "source"]
+    }
+  }
+}

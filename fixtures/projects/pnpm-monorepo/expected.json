@@ -1,0 +1,30 @@
+{
+  "runners": [
+    "vitest"
+  ],
+  "workspaces": [
+    "@demo/core-lib",
+    "@demo/app"
+  ],
+  "testFiles": 4,
+  "mutations": [
+    {
+      "file": "packages/core-lib/src/price.ts",
+      "find": "(1 + VAT)",
+      "replace": "(1 - VAT)",
+      "expectFailing": [
+        "packages/core-lib/test/price.test.ts",
+        "packages/app/test/checkout.test.ts"
+      ]
+    },
+    {
+      "file": "packages/core-lib/src/format.ts",
+      "find": "toFixed(2)",
+      "replace": "toFixed(1)",
+      "expectFailing": [
+        "packages/core-lib/test/format.test.ts",
+        "packages/app/test/banner.test.ts"
+      ]
+    }
+  ]
+}

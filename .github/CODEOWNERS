@@ -1,0 +1,8 @@
+# Default owner
+*                                   @RemiPelloux
+
+# Selection safety & honesty need focused review
+/packages/impact-engine/            @RemiPelloux
+/packages/rules-engine/             @RemiPelloux
+/packages/report-engine/            @RemiPelloux
+/packages/shared/src/errors.ts      @RemiPelloux
