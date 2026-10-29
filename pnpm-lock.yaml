@@ -236,6 +236,18 @@ importers:
         specifier: workspace:*
         version: link:../shared
 
+  packages/adapter-node:
+    dependencies:
+      '@smarttest/plugin-sdk':
+        specifier: workspace:*
+        version: link:../plugin-sdk
+      '@smarttest/shared':
+        specifier: workspace:*
+        version: link:../shared
+      '@smarttest/test-discovery':
+        specifier: workspace:*
+        version: link:../test-discovery
+
   packages/adapter-vitest:
     dependencies:
       '@smarttest/plugin-sdk':
@@ -274,6 +286,9 @@ importers:
       '@smarttest/adapter-jest':
         specifier: workspace:*
         version: link:../adapter-jest
+      '@smarttest/adapter-node':
+        specifier: workspace:*
+        version: link:../adapter-node
       '@smarttest/adapter-vitest':
         specifier: workspace:*
         version: link:../adapter-vitest

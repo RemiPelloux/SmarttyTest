@@ -61,6 +61,11 @@ export interface RunReport {
   executions: FileExecution[];
   summary: RunSummary;
   coverage?: CoverageSummary;
+  /**
+   * Estimated test time of the files that were NOT run, from their last recorded durations.
+   * Always an estimate: runner start-up and transforms are not included.
+   */
+  estimate?: { skippedTestTimeMs: number; knownSkipped: number; totalSkipped: number };
   timings: Record<string, number>;
   warnings: string[];
 }
@@ -230,6 +235,11 @@ export function toMarkdown(report: RunReport, htmlLink?: string): string {
       "",
       `Coverage (${report.coverage.scope === "full" ? "full suite" : "selected tests only — not project coverage"}): lines ${report.coverage.lines}% · branches ${report.coverage.branches}%`,
     );
+  if (report.estimate?.knownSkipped)
+    out.push(
+      "",
+      `≈ ${formatDuration(report.estimate.skippedTestTimeMs)} of test time not run (estimate from previous runs of ${report.estimate.knownSkipped}/${report.estimate.totalSkipped} skipped files)`,
+    );
   if (htmlLink) out.push("", `[Full HTML report](${htmlLink})`);
   let md = `${out.join("\n")}\n`;
   if (md.length > 65_000) md = `${md.slice(0, 64_000)}\n\n… truncated\n`;
@@ -365,7 +375,7 @@ ${warn ? `<h2>Warnings</h2><ul>${warn}</ul>` : ""}
 <h2>Skipped by selection (not run)</h2>${skipRows || '<p class="muted">Nothing skipped.</p>'}
 <h2>Change analysis</h2><ul>${changes || "<li class=muted>No changes</li>"}</ul>
 ${report.coverage ? `<h2>Coverage — ${report.coverage.scope === "full" ? "full suite" : "selected tests only (not project coverage)"}</h2><div class="grid"><div class="card"><b>${report.coverage.lines}%</b><span>lines</span></div><div class="card"><b>${report.coverage.branches}%</b><span>branches</span></div><div class="card"><b>${report.coverage.functions}%</b><span>functions</span></div></div>` : ""}
-<h2>Performance</h2><table>${timings}</table>
+<h2>Performance</h2><table>${timings}${report.estimate?.knownSkipped ? `<tr><td>test time not run (estimate, ${report.estimate.knownSkipped}/${report.estimate.totalSkipped} skipped files with history)</td><td>≈ ${esc(formatDuration(report.estimate.skippedTestTimeMs))}</td></tr>` : ""}</table>
 <p class="meta">smarttest ${esc(report.tool.version)} · schema v${report.schemaVersion} · run ${esc(report.runId)}</p>
 </main>
 </body>

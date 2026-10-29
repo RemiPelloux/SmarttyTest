@@ -266,6 +266,10 @@ function printRun(ctx: Ctx, report: RunReport, written: Record<string, string>):
     ctx.out(
       `  ${t.dim("Coverage")} lines ${report.coverage.lines}% · branches ${report.coverage.branches}% ${t.dim(`(${report.coverage.scope === "full" ? "full suite" : "selected tests only — not project coverage"})`)}`,
     );
+  if (report.estimate?.knownSkipped)
+    ctx.out(
+      `  ${t.dim("Saved")}    ≈ ${formatDuration(report.estimate.skippedTestTimeMs)} of test time not run ${t.dim(`(estimate from previous runs of ${report.estimate.knownSkipped}/${report.estimate.totalSkipped} skipped files)`)}`,
+    );
   if (written.html) ctx.out(`  ${t.dim("Report")}   ${rel(ctx, written.html)}`);
   if (report.decision.selectedTests.length)
     ctx.out(`  ${t.dim("↳ why these tests?")} ${t.cyan("smarttest explain <test>")}`);

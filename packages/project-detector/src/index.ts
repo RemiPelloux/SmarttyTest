@@ -29,6 +29,8 @@ export interface RuntimeInfo {
 export interface WorkspacePackage {
   name: string;
   dir: string;
+  /** Declared by a workspace manifest, or an independent nested project. */
+  kind: "workspace" | "nested";
   dependencies: string[];
   manifest: PackageManifest;
 }
@@ -52,9 +54,11 @@ export interface PackageManifest {
 }
 
 export interface RunnerInfo {
-  adapter: "vitest" | "jest";
+  adapter: "vitest" | "jest" | "node";
   dir: string;
   configFile?: string;
+  /** Test file patterns given on the command line (node --test). */
+  patterns?: string[];
   evidence: string[];
 }
 
@@ -194,21 +198,24 @@ async function detectWorkspaces(
   root: string,
   manifest: PackageManifest | undefined,
 ): Promise<WorkspacePackage[]> {
-  const globs = (await workspaceGlobs(root, manifest)).filter((g) => !g.startsWith("!"));
-  const negated = (await workspaceGlobs(root, manifest))
-    .filter((g) => g.startsWith("!"))
-    .map((g) => g.slice(1));
-  if (!globs.length) return [];
+  const all = await workspaceGlobs(root, manifest);
+  const globs = all.filter((g) => !g.startsWith("!"));
+  const negated = all.filter((g) => g.startsWith("!")).map((g) => g.slice(1));
   const manifests = await walkFiles(root, { include: ["**/package.json"] });
   const out: WorkspacePackage[] = [];
   for (const m of manifests) {
     const dir = m === "package.json" ? "" : m.slice(0, -"/package.json".length);
-    if (!dir || !matchGlob(dir, globs) || matchGlob(dir, negated)) continue;
+    if (!dir) continue;
+    // Declared workspaces when the root has them; otherwise every nested project counts
+    // (repos made of independent packages, e.g. backend/ + app/ without a root manifest).
+    const declared = globs.length > 0;
+    if (declared && (!matchGlob(dir, globs) || matchGlob(dir, negated))) continue;
     const pkg = await readJson<PackageManifest>(join(root, m));
     if (!pkg) continue;
     out.push({
       name: pkg.name ?? dir,
       dir,
+      kind: declared ? "workspace" : "nested",
       dependencies: Object.keys({
         ...pkg.dependencies,
         ...pkg.devDependencies,
@@ -228,12 +235,21 @@ const FRAMEWORKS: { name: string; deps: string[]; files?: string[] }[] = [
     deps: ["next"],
     files: ["next.config.js", "next.config.mjs", "next.config.ts"],
   },
+  { name: "Wasp", deps: ["wasp"], files: ["main.wasp", "main.wasp.ts"] },
   { name: "NestJS", deps: ["@nestjs/core"], files: ["nest-cli.json"] },
+  { name: "Remix", deps: ["@remix-run/react", "@react-router/dev"] },
+  { name: "Astro", deps: ["astro"], files: ["astro.config.mjs", "astro.config.ts"] },
   { name: "React", deps: ["react"] },
-  { name: "Express", deps: ["express"] },
   { name: "Vue", deps: ["vue"] },
   { name: "Svelte", deps: ["svelte"] },
+  { name: "Express", deps: ["express"] },
   { name: "Fastify", deps: ["fastify"] },
+  { name: "Hono", deps: ["hono"] },
+  {
+    name: "Prisma",
+    deps: ["@prisma/client", "prisma"],
+    files: ["schema.prisma", "prisma/schema.prisma"],
+  },
 ];
 
 function allDeps(m: PackageManifest | undefined): Record<string, string> {
@@ -282,47 +298,98 @@ const RUNNER_CONFIGS: Record<"vitest" | "jest", string[]> = {
   ],
 };
 
+const CUSTOM_VITEST_CONFIG = /^vitest(?:\.[\w-]+)?\.config(?:\.[\w-]+)?\.[cm]?[jt]s$/;
+const CUSTOM_JEST_CONFIG = /^jest(?:\.[\w-]+)?\.config(?:\.[\w-]+)?\.(?:[cm]?[jt]s|json)$/;
+
+/** `--config <file>` / `-c <file>` / `--config=<file>` in a script command. */
+function scriptConfig(cmd: string, runner: string): string | undefined {
+  const m = new RegExp(`\\b${runner}\\b[^&|;]*?(?:--config[= ]|\\s-c\\s)([^\\s&|;]+)`).exec(cmd);
+  return m?.[1]?.replace(/^\.\//, "");
+}
+
 async function detectRunners(
   root: string,
   manifests: { dir: string; manifest: PackageManifest }[],
 ): Promise<RunnerInfo[]> {
   const out: RunnerInfo[] = [];
+  const prefix = (dir: string) => (dir ? `${dir}/` : "");
+  const add = (info: RunnerInfo) => {
+    const existing = out.find(
+      (r) => r.adapter === info.adapter && r.dir === info.dir && r.configFile === info.configFile,
+    );
+    if (existing)
+      existing.evidence.push(...info.evidence.filter((e) => !existing.evidence.includes(e)));
+    else out.push(info);
+  };
   for (const { dir, manifest } of manifests) {
+    let entries: string[] = [];
+    try {
+      entries = await readdir(join(root, dir));
+    } catch {
+      continue;
+    }
+    const scripts = Object.entries(manifest.scripts ?? {});
     for (const adapter of ["vitest", "jest"] as const) {
-      const evidence: string[] = [];
-      let configFile: string | undefined;
-      for (const file of RUNNER_CONFIGS[adapter]) {
-        if (await exists(join(root, dir, file))) {
-          configFile = dir ? `${dir}/${file}` : file;
-          evidence.push(`config ${configFile}`);
-          break;
-        }
+      const configs = new Map<string, string[]>();
+      const standard = RUNNER_CONFIGS[adapter].find((f) => entries.includes(f));
+      if (standard) configs.set(standard, [`config ${prefix(dir)}${standard}`]);
+      for (const e of entries) {
+        if (
+          e !== standard &&
+          (adapter === "vitest" ? CUSTOM_VITEST_CONFIG : CUSTOM_JEST_CONFIG).test(e)
+        )
+          configs.set(e, [`config ${prefix(dir)}${e}`]);
       }
-      if (adapter === "jest" && manifest.jest)
-        evidence.push(`${dir ? `${dir}/` : ""}package.json "jest" field`);
-      if (allDeps(manifest)[adapter])
-        evidence.push(`${dir ? `${dir}/` : ""}package.json depends on ${adapter}`);
-      const script = Object.entries(manifest.scripts ?? {}).find(([, cmd]) =>
-        new RegExp(`\\b${adapter}\\b`).test(cmd),
-      );
-      if (script) evidence.push(`script "${script[0]}": ${script[1]}`);
-      // vite.config with a "test" block counts for vitest
-      if (adapter === "vitest" && !configFile) {
+      for (const [name, cmd] of scripts) {
+        const cfg = scriptConfig(cmd, adapter);
+        if (cfg && entries.includes(cfg))
+          configs.set(cfg, [...(configs.get(cfg) ?? []), `script "${name}": ${cmd}`]);
+      }
+      if (adapter === "vitest" && !configs.size) {
         for (const vc of [
           "vite.config.ts",
           "vite.config.js",
           "vite.config.mts",
           "vite.config.mjs",
         ]) {
-          const text = await readText(join(root, dir, vc));
-          if (text && /\btest\s*:/.test(text)) {
-            configFile = dir ? `${dir}/${vc}` : vc;
-            evidence.push(`${configFile} has a test block`);
-          }
+          const text = entries.includes(vc) ? await readText(join(root, dir, vc)) : undefined;
+          if (text && /\btest\s*:/.test(text))
+            configs.set(vc, [`${prefix(dir)}${vc} has a test block`]);
         }
       }
-      if (evidence.length)
-        out.push({ adapter, dir, ...(configFile ? { configFile } : {}), evidence });
+      const depEvidence: string[] = [];
+      if (allDeps(manifest)[adapter])
+        depEvidence.push(`${prefix(dir)}package.json depends on ${adapter}`);
+      if (adapter === "jest" && manifest.jest)
+        depEvidence.push(`${prefix(dir)}package.json "jest" field`);
+      const plainScript = scripts.find(
+        ([, cmd]) => new RegExp(`\\b${adapter}\\b`).test(cmd) && !scriptConfig(cmd, adapter),
+      );
+      if (plainScript) depEvidence.push(`script "${plainScript[0]}": ${plainScript[1]}`);
+      for (const [cfg, evidence] of configs)
+        add({
+          adapter,
+          dir,
+          configFile: `${prefix(dir)}${cfg}`,
+          evidence: [...evidence, ...depEvidence],
+        });
+      // A runner used without any config file runs with its defaults — only when no explicit config exists.
+      if (!configs.size && depEvidence.length) add({ adapter, dir, evidence: depEvidence });
+    }
+    // Node's built-in runner: `node --test [patterns]`
+    const nodeScript = scripts.find(([, cmd]) => /\bnode\b[^&|;]*\s--test\b/.test(cmd));
+    if (nodeScript) {
+      const patterns = (/--test\b((?:\s+(?!-)[^\s&|;]+)*)/.exec(nodeScript[1])?.[1] ?? "")
+        .trim()
+        .split(/\s+/)
+        .filter((p) => p && !p.startsWith("-"))
+        .map((p) => p.replace(/^["']|["']$/g, "").replace(/^\.\//, ""));
+      add({
+        adapter: "node",
+        dir,
+        ...(patterns.length ? { patterns } : {}),
+        evidence: [`script "${nodeScript[0]}": ${nodeScript[1]}`],
+      });
     }
   }
   return out;

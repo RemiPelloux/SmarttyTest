@@ -5,7 +5,15 @@ updates:
     schedule: { interval: weekly }
     groups:
       dev-tooling:
-        patterns: ["@biomejs/*", "typescript", "vitest", "@types/*"]
+        patterns: ["@biomejs/*", "vitest", "@vitest/*", "esbuild", "@changesets/*"]
+    ignore:
+      # TypeScript 7 (native compiler) removed the programmatic API SmartTest analyses with.
+      # Migration is tracked in the 1.x roadmap (ADR-0002); stay on 6.x until then.
+      - dependency-name: typescript
+        update-types: ["version-update:semver-major"]
+      # Keep Node typings aligned with the oldest supported LTS (22.12).
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
   - package-ecosystem: github-actions
     directory: /
     schedule: { interval: weekly }

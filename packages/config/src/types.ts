@@ -3,7 +3,18 @@ import type { SafetyMode } from "@smarttest/shared";
 export type TestLayout = "mirror" | "colocated" | "domain" | "custom";
 export type TestCategory = "unit" | "integration" | "e2e";
 export type RiskLevel = "low" | "medium" | "high" | "critical";
-export type AdapterId = "vitest" | "jest";
+export type AdapterId = "vitest" | "jest" | "node";
+
+/** Explicit runner declaration (overrides detection). */
+export interface RunnerDeclaration {
+  adapter: AdapterId;
+  /** Project-relative directory the runner executes from ("" = root). */
+  dir?: string;
+  /** Runner config file, relative to the project root. */
+  config?: string;
+  /** Test patterns (node --test). */
+  patterns?: string[];
+}
 export type ReportFormat = "html" | "json" | "junit" | "markdown";
 
 export interface RuleMatch {
@@ -47,7 +58,11 @@ export interface SmartTestConfig {
     naming?: string;
     match?: string[];
     templates?: string;
+    /** "runner" (default): ask each runner which files it collects (cached). "static": filename patterns only. */
+    discovery?: "runner" | "static";
   };
+  /** Explicit runners; when set, detection is not used. */
+  runners?: RunnerDeclaration[];
   generated?: GeneratedPolicy[];
   /** Extra mandatory triggers (globs). Built-in triggers can never be removed. */
   triggers?: string[];
@@ -72,7 +87,9 @@ export interface ResolvedConfig {
     naming?: string;
     match?: string[];
     templates?: string;
+    discovery: "runner" | "static";
   };
+  runners: RunnerDeclaration[];
   generated: GeneratedPolicy[];
   triggers: string[];
   rules: Rule[];

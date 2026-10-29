@@ -3,12 +3,12 @@
 </p>
 
 <p align="center">
-  <a href="documentation/planning/release-1.0.0/README.md"><img alt="status: alpha, v0.1.0" src="https://img.shields.io/badge/status-alpha_·_v0.1.0-FBBF24?style=flat-square&labelColor=0E1530"></a>
-  <a href="documentation/planning/release-1.0.0/sprints.md"><img alt="next: v1.0.0" src="https://img.shields.io/badge/next-v1.0.0-22D3EE?style=flat-square&labelColor=0E1530"></a>
-  <a href="LICENSE"><img alt="license: Apache-2.0" src="https://img.shields.io/badge/license-Apache--2.0-8B5CF6?style=flat-square&labelColor=0E1530"></a>
-  <img alt="node >= 22.12" src="https://img.shields.io/badge/node-%E2%89%A522.12-34D399?style=flat-square&labelColor=0E1530">
-  <img alt="TypeScript strict" src="https://img.shields.io/badge/TypeScript-strict-22D3EE?style=flat-square&labelColor=0E1530">
-  <img alt="AI optional" src="https://img.shields.io/badge/AI-optional-8C97BD?style=flat-square&labelColor=0E1530">
+  <a href="documentation/planning/release-1.0.0/README.md"><img alt="Status: alpha 0.2.0" src="https://img.shields.io/badge/status-alpha%200.2.0-FBBF24?style=flat-square&amp;labelColor=0E1530"></a>
+  <a href="documentation/planning/README.md"><img alt="Next: 1.0.0" src="https://img.shields.io/badge/next-1.0.0-22D3EE?style=flat-square&amp;labelColor=0E1530"></a>
+  <a href="LICENSE"><img alt="License: Apache-2.0" src="https://img.shields.io/badge/license-Apache--2.0-8B5CF6?style=flat-square&amp;labelColor=0E1530"></a>
+  <img alt="Node 22.12 or newer" src="https://img.shields.io/badge/node-22.12%2B-34D399?style=flat-square&amp;labelColor=0E1530">
+  <img alt="TypeScript strict" src="https://img.shields.io/badge/TypeScript-strict-22D3EE?style=flat-square&amp;labelColor=0E1530">
+  <img alt="Runners: Jest, Vitest, node:test" src="https://img.shields.io/badge/runners-Jest%20%7C%20Vitest%20%7C%20node%3Atest-8C97BD?style=flat-square&amp;labelColor=0E1530">
 </p>
 
 <p align="center">

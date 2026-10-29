@@ -145,6 +145,12 @@
       "description": "Jest test runner adapter."
     },
     {
+      "name": "adapter-node",
+      "epic": "EXE",
+      "deps": ["shared", "plugin-sdk", "test-discovery"],
+      "description": "Node.js built-in test runner (node --test) adapter."
+    },
+    {
       "name": "coverage-engine",
       "epic": "REP",
       "deps": ["shared"],
@@ -195,6 +201,7 @@
         "test-executor",
         "adapter-vitest",
         "adapter-jest",
+        "adapter-node",
         "coverage-engine",
         "test-generator",
         "report-engine"

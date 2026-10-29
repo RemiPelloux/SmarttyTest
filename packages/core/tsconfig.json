@@ -71,6 +71,9 @@
       "path": "../adapter-jest"
     },
     {
+      "path": "../adapter-node"
+    },
+    {
       "path": "../coverage-engine"
     },
     {

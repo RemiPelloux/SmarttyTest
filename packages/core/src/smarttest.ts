@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { join } from "node:path";
 import { JestAdapter } from "@smarttest/adapter-jest";
+import { NodeTestAdapter } from "@smarttest/adapter-node";
 import { VitestAdapter } from "@smarttest/adapter-vitest";
 import {
   BUILTIN_TRIGGERS,
@@ -34,8 +35,10 @@ import {
   type Logger,
   matchGlob,
   readJson,
+  readText,
   type SafetyMode,
   SmartTestError,
+  sha256,
   silentLogger,
   walkFiles,
   writeJson,
@@ -55,6 +58,7 @@ import {
   assignRunner,
   discoverTestFiles,
   isTestFile,
+  NODE_TEST_DEFAULTS,
   type RunnerRoot,
 } from "@smarttest/test-discovery";
 import { type ExecutionEvent, executeGroups, type Group } from "@smarttest/test-executor";
@@ -65,7 +69,7 @@ import {
   type SyncReport,
   syncReport,
 } from "@smarttest/test-generator";
-import { planExecution } from "@smarttest/test-selector";
+import { planExecution, rootKey } from "@smarttest/test-selector";
 import type { ChangeAnalysisInput, ChangeSource } from "@smarttest/vcs-core";
 import { GitAdapter } from "@smarttest/vcs-git";
 
@@ -91,6 +95,8 @@ export interface Analysis {
   testFiles: string[];
   unassignedTests: string[];
   runnerRoots: RunnerRoot[];
+  /** Which runner root collected each test file. */
+  assignment: Map<string, RunnerRoot>;
   decision: ImpactResult;
   timings: Record<string, number>;
 }
@@ -201,11 +207,19 @@ export class SmartTest {
 
   async runnerRoots(): Promise<RunnerRoot[]> {
     const profile = await this.profile();
-    let roots: RunnerRoot[] = profile.runners.map((r) => ({
-      adapter: r.adapter,
-      dir: r.dir,
-      ...(r.configFile ? { configFile: r.configFile } : {}),
-    }));
+    let roots: RunnerRoot[] = this.config.runners.length
+      ? this.config.runners.map((r) => ({
+          adapter: r.adapter,
+          dir: r.dir ?? "",
+          ...(r.config ? { configFile: r.config } : {}),
+          ...(r.patterns ? { patterns: r.patterns } : {}),
+        }))
+      : profile.runners.map((r) => ({
+          adapter: r.adapter,
+          dir: r.dir,
+          ...(r.configFile ? { configFile: r.configFile } : {}),
+          ...(r.patterns ? { patterns: r.patterns } : {}),
+        }));
     if (this.config.adapters.length)
       roots = roots.filter((r) => this.config.adapters.includes(r.adapter));
     // A dependency without config still runs from the package dir; prefer roots with config at equal depth.
@@ -306,17 +320,106 @@ export class SmartTest {
     return new DependencyGraph(index.entries(), this.isTest);
   }
 
+  /**
+   * Test discovery. In "runner" mode (default) every runner root is asked which files it actually
+   * collects (respecting its own include/exclude config), cached until its config, package.json or
+   * the set of test-looking files changes. "static" mode uses filename patterns only.
+   */
   async discoverTests(
     index: SymbolIndex,
-  ): Promise<{ tests: string[]; unassigned: string[]; roots: RunnerRoot[] }> {
+    options: { fresh?: boolean } = {},
+  ): Promise<{
+    tests: string[];
+    unassigned: string[];
+    roots: RunnerRoot[];
+    assignment: Map<string, RunnerRoot>;
+    warnings: string[];
+    perRoot: Map<string, number>;
+  }> {
     const roots = await this.runnerRoots();
-    const candidates = discoverTestFiles([...index.entries().keys()], this.config.tests.match);
-    if (!roots.length) return { tests: candidates, unassigned: [], roots };
-    const tests: string[] = [];
-    const unassigned: string[] = [];
-    for (const t of candidates)
-      (assignRunner(t, roots, this.config.adapters) ? tests : unassigned).push(t);
-    return { tests, unassigned, roots };
+    const analysed = [...index.entries().keys()];
+    const analysedSet = new Set(analysed);
+    const looksLikeTest = (f: string, root?: RunnerRoot) => {
+      if (this.isTest(f)) return true;
+      if (root?.adapter !== "node") return false;
+      const rel = root.dir ? f.slice(root.dir.length + 1) : f;
+      return matchGlob(
+        rel,
+        root.patterns?.length
+          ? root.patterns.map((p) => (/[*?{]/.test(p) ? p : `${p.replace(/\/$/, "")}/**`))
+          : NODE_TEST_DEFAULTS,
+      );
+    };
+    const staticCandidates = discoverTestFiles(analysed, this.config.tests.match);
+    const assignment = new Map<string, RunnerRoot>();
+    const warnings: string[] = [];
+    const perRoot = new Map<string, number>();
+    if (!roots.length)
+      return { tests: staticCandidates, unassigned: [], roots, assignment, warnings, perRoot };
+    const inRoot = (f: string, root: RunnerRoot) => root.dir === "" || f.startsWith(`${root.dir}/`);
+    if (this.config.tests.discovery === "static") {
+      const unassigned: string[] = [];
+      const candidates = new Set([
+        ...staticCandidates,
+        ...analysed.filter((f) =>
+          roots.some((r) => r.adapter === "node" && inRoot(f, r) && looksLikeTest(f, r)),
+        ),
+      ]);
+      for (const t of [...candidates].sort()) {
+        const r = assignRunner(t, roots, this.config.adapters);
+        if (r) assignment.set(t, r);
+        else unassigned.push(t);
+      }
+      for (const r of roots)
+        perRoot.set(rootKey(r), [...assignment.values()].filter((x) => x === r).length);
+      return { tests: [...assignment.keys()], unassigned, roots, assignment, warnings, perRoot };
+    }
+    const cachePath = join(this.storeDir, "state", "discovery.json");
+    const cache = options.fresh
+      ? {}
+      : ((await readJson<Record<string, string[]>>(cachePath)) ?? {});
+    const nextCache: Record<string, string[]> = {};
+    for (const root of roots) {
+      const candidates = analysed.filter((f) => inRoot(f, root) && looksLikeTest(f, root)).sort();
+      const cfg = root.configFile ? ((await readText(join(this.root, root.configFile))) ?? "") : "";
+      const pkg = (await readText(join(this.root, root.dir, "package.json"))) ?? "";
+      const key = sha256(
+        [rootKey(root), (root.patterns ?? []).join(","), cfg, pkg, candidates.join("\n")].join(
+          "\u0000",
+        ),
+      );
+      let files = cache[key];
+      if (!files) {
+        try {
+          files = (
+            await this.createAdapter({
+              adapter: root.adapter,
+              dir: root.dir,
+              files: [],
+              ...(root.configFile ? { configFile: root.configFile } : {}),
+              ...(root.patterns ? { patterns: root.patterns } : {}),
+            } as Group).discover()
+          ).map((t) => t.filePath);
+        } catch (error) {
+          warnings.push(
+            `${root.adapter} (${root.dir || "."}) discovery failed — using filename patterns: ${(error as Error).message.split("\n")[0]}`,
+          );
+          files = candidates;
+        }
+      }
+      nextCache[key] = files;
+      let count = 0;
+      for (const f of files) {
+        if (!analysedSet.has(f)) continue; // excluded by smarttest config
+        if (!assignment.has(f)) assignment.set(f, root);
+        count++;
+      }
+      perRoot.set(rootKey(root), count);
+    }
+    await writeJson(cachePath, nextCache);
+    const tests = [...assignment.keys()].sort();
+    const unassigned = staticCandidates.filter((f) => !assignment.has(f));
+    return { tests, unassigned, roots, assignment, warnings, perRoot };
   }
 
   // ── Analysis & impact ───────────────────────────────────────────────────────────────────
@@ -326,7 +429,13 @@ export class SmartTest {
     const input = await timed(timings, "change detection", () => this.changeInput(options.source));
     const { index, stats } = await timed(timings, "index update", () => this.loadIndex());
     const graph = await timed(timings, "graph build", () => this.buildGraph(index));
-    const { tests, unassigned, roots } = await this.discoverTests(index);
+    const {
+      tests,
+      unassigned,
+      roots,
+      assignment,
+      warnings: discoveryWarnings,
+    } = await this.discoverTests(index);
     const diffs = await timed(timings, "semantic diff", () => this.semanticDiffs(input, index));
     const decision = await timed(timings, "impact analysis", () =>
       decideImpact({
@@ -342,9 +451,10 @@ export class SmartTest {
         packageOf: this.packageOf,
       }),
     );
+    decision.warnings.push(...discoveryWarnings);
     if (unassigned.length)
       decision.warnings.push(
-        `${unassigned.length} test file(s) are not covered by any configured runner: ${unassigned.slice(0, 3).join(", ")}`,
+        `${unassigned.length} file(s) look like tests but no runner collects them, so they never run (e.g. ${unassigned.slice(0, 2).join(", ")})`,
       );
     await writeJson(join(this.storeDir, "runs", "last-decision.json"), {
       createdAt: new Date().toISOString(),
@@ -370,6 +480,7 @@ export class SmartTest {
       testFiles: tests,
       unassignedTests: unassigned,
       runnerRoots: roots,
+      assignment,
       decision,
       timings,
     };
@@ -430,11 +541,21 @@ export class SmartTest {
 
   private createAdapter(group: Group, coverageDir?: string): TestAdapter {
     const cwd = join(this.root, group.dir);
-    const g = group as Group & { configFile?: string };
-    const base = { projectRoot: this.root, cwd, ...(coverageDir ? { coverageDir } : {}) };
+    const g = group as Group & { configFile?: string; patterns?: string[] };
+    const base = {
+      projectRoot: this.root,
+      cwd,
+      ...(coverageDir ? { coverageDir } : {}),
+      ...(g.configFile ? { configFile: g.configFile } : {}),
+    };
     if (group.adapter === "jest") return new JestAdapter(base);
     if (group.adapter === "vitest") return new VitestAdapter(base);
-    void g;
+    if (group.adapter === "node")
+      return new NodeTestAdapter({
+        projectRoot: this.root,
+        cwd,
+        ...(g.patterns ? { patterns: g.patterns } : {}),
+      });
     throw new SmartTestError(`Unknown adapter ${group.adapter}`, {
       code: "ST_UNKNOWN_ADAPTER",
       category: "configuration",
@@ -478,6 +599,7 @@ export class SmartTest {
       analysis.decision.selectedTests.map((t) => t.filePath),
       analysis.runnerRoots,
       this.config.adapters,
+      analysis.assignment,
     );
     const coverageDirs: string[] = [];
     const summary = await timed(timings, "test execution", () =>
@@ -522,6 +644,22 @@ export class SmartTest {
         );
     }
     const executions: FileExecution[] = summary.files.map((f) => ({ ...f }));
+    // Duration history: estimate what skipping saved, then record fresh measurements.
+    const durationsPath = join(this.storeDir, "state", "durations.json");
+    const durations = (await readJson<Record<string, number>>(durationsPath)) ?? {};
+    const skipped = analysis.decision.skippedTests.map((t) => t.filePath);
+    const known = skipped.filter((f) => durations[f] !== undefined);
+    const estimate = known.length
+      ? {
+          skippedTestTimeMs: known.reduce((a, f) => a + (durations[f] ?? 0), 0),
+          knownSkipped: known.length,
+          totalSkipped: skipped.length,
+        }
+      : undefined;
+    for (const e of executions)
+      if (e.status !== "cancelled" && e.status !== "infrastructure-error")
+        durations[e.file] = Math.round(e.durationMs);
+    await writeJson(durationsPath, durations);
     const durationMs = Object.values(timings).reduce((a, b) => a + b, 0);
     const report: RunReport = {
       schemaVersion: 1,
@@ -549,6 +687,7 @@ export class SmartTest {
           }
         : {}),
       timings,
+      ...(estimate ? { estimate } : {}),
       warnings: [...warnings, ...summary.infrastructureErrors],
     };
     const integrityIssues = validateReportIntegrity(report);
@@ -1006,69 +1145,47 @@ export class SmartTest {
           check: "index",
           message: `${s.dynamic} dynamic import(s)/require(s) with non-literal paths`,
         });
-      const { tests, unassigned, roots } = await this.discoverTests(index);
+      const {
+        unassigned,
+        roots,
+        perRoot,
+        warnings: dw,
+      } = await this.discoverTests(index, { fresh: true });
       if (!roots.length)
         out.push({
           severity: "error",
           check: "runner",
-          message: "No Jest or Vitest setup found",
-          hint: "Install vitest or jest",
+          message: "No Jest, Vitest or node:test setup found",
+          hint: "Install vitest or jest, or declare `runners` in smarttest.config",
         });
       for (const r of roots) {
-        try {
-          const discovered = await this.createAdapter({
-            adapter: r.adapter,
-            dir: r.dir,
-            files: [],
-          }).discover();
-          const staticSet = new Set(
-            tests.filter(
-              (t) =>
-                assignRunner(t, roots)?.dir === r.dir &&
-                assignRunner(t, roots)?.adapter === r.adapter,
-            ),
-          );
-          const runnerSet = new Set(discovered.map((d) => d.filePath));
-          const onlyStatic = [...staticSet].filter((t) => !runnerSet.has(t));
-          const onlyRunner = [...runnerSet].filter((t) => !staticSet.has(t));
-          out.push({
-            severity: "ok",
-            check: "runner",
-            message: `${r.adapter} (${r.dir || "."}) discovers ${runnerSet.size} test file(s)`,
-          });
-          if (onlyStatic.length)
-            out.push({
-              severity: "warn",
-              check: "runner",
-              message: `${onlyStatic.length} file(s) look like tests but ${r.adapter} doesn't collect them: ${onlyStatic.slice(0, 3).join(", ")}`,
-              hint: "Adjust the runner include patterns or `tests.match`",
-            });
-          if (onlyRunner.length)
-            out.push({
-              severity: "warn",
-              check: "runner",
-              message: `${onlyRunner.length} test file(s) collected by ${r.adapter} aren't recognised by SmartTest: ${onlyRunner.slice(0, 3).join(", ")}`,
-              hint: "Set `tests.match` in smarttest.config",
-            });
-        } catch (error) {
-          out.push({
-            severity: "error",
-            check: "runner",
-            message: (error as Error).message,
-            hint: "Is the runner installed? Try running it directly.",
-          });
-        }
+        out.push({
+          severity: "ok",
+          check: "runner",
+          message: `${r.adapter} (${r.dir || "."}${r.configFile ? ` · ${r.configFile}` : ""}) collects ${perRoot.get(rootKey(r)) ?? 0} test file(s)`,
+        });
       }
+      for (const w of dw)
+        out.push({
+          severity: "error",
+          check: "runner",
+          message: w,
+          hint: "Is the runner installed? Try running it directly.",
+        });
       if (unassigned.length)
         out.push({
           severity: "warn",
           check: "runner",
-          message: `${unassigned.length} test file(s) outside any runner root`,
+          message: `${unassigned.length} file(s) look like tests but no configured runner collects them (e.g. ${unassigned.slice(0, 3).join(", ")})`,
+          hint: "They never run. Add them to a runner's include patterns, declare `runners`, or set `tests.match`.",
         });
     } catch (error) {
       out.push({ severity: "error", check: "index", message: (error as Error).message });
     }
-    if (!(await exists(join(this.root, "node_modules"))))
+    if (
+      (await exists(join(this.root, "package.json"))) &&
+      !(await exists(join(this.root, "node_modules")))
+    )
       out.push({
         severity: "warn",
         check: "dependencies",
@@ -1086,7 +1203,12 @@ export class SmartTest {
     const t0 = performance.now();
     const analysis = await this.analyze(options);
     const analysisOverheadMs = performance.now() - t0;
-    const plan = planExecution(analysis.testFiles, analysis.runnerRoots, this.config.adapters);
+    const plan = planExecution(
+      analysis.testFiles,
+      analysis.runnerRoots,
+      this.config.adapters,
+      analysis.assignment,
+    );
     const full = await executeGroups(plan.groups, {
       createAdapter: (g) => this.createAdapter(g),
       timeoutMs: options.timeoutMs ?? this.config.timeoutMs,

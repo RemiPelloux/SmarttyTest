@@ -7,7 +7,7 @@ const MODES = ["fast", "balanced", "safe"];
 const RISKS = ["low", "medium", "high", "critical"];
 const CATEGORIES = ["unit", "integration", "e2e"];
 const LAYOUTS = ["mirror", "colocated", "domain", "custom"];
-const ADAPTERS = ["vitest", "jest"];
+const ADAPTERS = ["vitest", "jest", "node"];
 const FORMATS = ["html", "json", "junit", "markdown"];
 const POLICIES = ["exclude", "test-source", "rebuild-required"];
 const MATCH_KEYS = [
@@ -30,8 +30,9 @@ const TOP_KEYS: Record<string, string[] | null> = {
   adapters: null,
   vcs: ["provider", "base", "snapshots"],
   snapshots: ["storeContent", "keep"],
-  tests: ["layout", "directory", "naming", "match", "templates"],
+  tests: ["layout", "directory", "naming", "match", "templates", "discovery"],
   generated: null,
+  runners: null,
   triggers: null,
   rules: null,
   retries: null,
@@ -109,6 +110,30 @@ export function validateConfig(raw: unknown): { errors: ConfigIssue[]; warnings:
         if (c.tests[k] !== undefined && typeof c.tests[k] !== "string")
           err(`tests.${k}`, "must be a string");
     }
+  }
+  if (
+    isObj(c.tests) &&
+    c.tests.discovery !== undefined &&
+    !["runner", "static"].includes(c.tests.discovery as string)
+  ) {
+    err("tests.discovery", "must be runner or static");
+  }
+  if (c.runners !== undefined) {
+    if (!Array.isArray(c.runners)) err("runners", "must be an array");
+    else
+      for (const [i, r] of c.runners.entries()) {
+        const p = `runners[${i}]`;
+        if (!isObj(r)) {
+          err(p, "must be an object");
+          continue;
+        }
+        if (!ADAPTERS.includes(r.adapter as string))
+          err(`${p}.adapter`, `must be one of ${ADAPTERS.join(", ")}`);
+        for (const k of ["dir", "config"])
+          if (r[k] !== undefined && typeof r[k] !== "string") err(`${p}.${k}`, "must be a string");
+        if (r.patterns !== undefined && !isStrArr(r.patterns))
+          err(`${p}.patterns`, "must be an array of globs");
+      }
   }
   if (c.reports !== undefined) {
     if (!isObj(c.reports)) err("reports", "must be an object");

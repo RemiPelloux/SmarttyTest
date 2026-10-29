@@ -3,7 +3,7 @@
  */
 import { matchGlob } from "@smarttest/shared";
 
-export type AdapterId = "vitest" | "jest";
+export type AdapterId = "vitest" | "jest" | "node";
 
 /** Union of Vitest and Jest default test patterns. */
 const DEFAULT_TEST_FILE = /(?:^|\/)(?:__tests__\/.+|[^/]+\.(?:test|spec))\.[cm]?[jt]sx?$/;
@@ -32,7 +32,19 @@ export interface RunnerRoot {
   /** Project-relative POSIX directory ("" = project root). */
   dir: string;
   configFile?: string;
+  /** Explicit test patterns (node --test <patterns>). */
+  patterns?: string[];
 }
+
+/** Node's built-in runner default patterns (node --test without arguments). */
+export const NODE_TEST_DEFAULTS = [
+  "**/*.test.{js,cjs,mjs}",
+  "**/*-test.{js,cjs,mjs}",
+  "**/*_test.{js,cjs,mjs}",
+  "**/test-*.{js,cjs,mjs}",
+  "**/test.{js,cjs,mjs}",
+  "**/test/**/*.{js,cjs,mjs}",
+];
 
 /** Assigns a test file to the deepest runner root that contains it. */
 export function assignRunner(

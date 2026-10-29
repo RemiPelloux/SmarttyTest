@@ -20,7 +20,7 @@ export interface GenerateOptions {
   layout: TestLayout;
   directory: string;
   naming?: string;
-  runner: "vitest" | "jest";
+  runner: "vitest" | "jest" | "node";
   type: TestCategory;
   moduleType: "esm" | "cjs";
   templatesDir?: string;
@@ -149,6 +149,12 @@ export function renderScaffold(
     "",
   ];
   if (opts.runner === "vitest" && !cjs) lines.push(`import { describe, it } from "vitest";`);
+  if (opts.runner === "node")
+    lines.push(
+      cjs
+        ? `const { describe, it } = require("node:test");`
+        : `import { describe, it } from "node:test";`,
+    );
   if (cjs) {
     const names = a.moduleKind === "cjs" ? [] : named;
     lines.push(
