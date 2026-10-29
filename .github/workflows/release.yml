@@ -42,7 +42,7 @@ jobs:
       - name: SBOM (CycloneDX)
         if: steps.changesets.outputs.published == 'true'
         run: npx --yes @cyclonedx/cdxgen@12 -t js -o sbom.cdx.json packages/cli/.publish
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: steps.changesets.outputs.published == 'true'
         with:
           name: sbom
