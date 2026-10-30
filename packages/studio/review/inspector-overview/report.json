@@ -1,6 +1,6 @@
 {
-  "url": "http://127.0.0.1:4319/#token=aE6RyJV50rgUDm-lguNONWvI4mlNbJ-GyEiAEMvUuuY",
-  "at": "2026-10-30T13:27:41.089Z",
+  "url": "http://127.0.0.1:4391/#token=REDACTED",
+  "at": "2026-10-30T17:35:30.621Z",
   "allow": [],
   "viewports": [
     {
@@ -8,10 +8,10 @@
       "height": 900,
       "load": "load",
       "screens": 2,
-      "filled": [0.77, 0.61],
+      "filled": [0.64, 0.54],
       "motion": {
-        "elements": 153,
-        "css": 153,
+        "elements": 5,
+        "css": 5,
         "transitions": 0,
         "scripted": 0,
         "videos": 0,
@@ -23,13 +23,13 @@
           "h": 900
         },
         "page": {
-          "height": 1501,
-          "screens": 1.7,
-          "words": 1495,
+          "height": 1137,
+          "screens": 1.3,
+          "words": 220,
           "img": 1,
           "video": 0,
           "canvas": 0,
-          "svg": 12,
+          "svg": 9,
           "sections": 4,
           "horizontalOverflow": 0,
           "overflowCulprits": [],
@@ -56,7 +56,7 @@
           "weight": 700,
           "tracking": -0.02,
           "leading": 1.15,
-          "top": 42,
+          "top": 44,
           "tag": "h1",
           "kind": "heading",
           "align": "left",
@@ -83,44 +83,37 @@
           "families": [
             {
               "family": "ui-monospace",
-              "share": 0.98,
+              "share": 0.87,
               "mono": true
             },
             {
               "family": "ui-sans-serif",
-              "share": 0.02,
+              "share": 0.13,
               "mono": false
             }
           ],
           "familyCount": 2,
-          "sizes": [12, 13, 14, 22, 26],
-          "sizeCount": 5,
+          "sizes": [9, 12, 13, 14, 18, 20, 22, 26],
+          "sizeCount": 8,
           "notLoaded": [],
-          "body": {
-            "font": "ui-sans-serif",
-            "size": 13,
-            "leading": 1.45,
-            "weight": 400,
-            "tracking": 0,
-            "contrast": 15.2
-          },
-          "measureChars": 125,
+          "body": null,
+          "measureChars": null,
           "max": {
             "size": 26,
             "vw": 1.8,
             "font": "ui-sans-serif",
             "text": "Overview"
           },
-          "monoShare": 0.98,
-          "monoProseShare": 0.74,
+          "monoShare": 0.87,
+          "monoProseShare": 0.8,
           "monoFamilies": ["ui-monospace"],
-          "monoSamples": ["smarttest-monorepo", "/", "git", "/", "balanced mode", "Refresh"],
+          "monoSamples": ["fixture-edges-vitest", "/", "git", "/", "balanced mode", "Refresh"],
           "microLabels": 0,
           "microLabelShare": 0,
           "microSamples": [],
           "upperShare": 0,
-          "centerShare": 0,
-          "smallText": 541
+          "centerShare": 0.02,
+          "smallText": 3
         },
         "eyebrows": [],
         "numbered": [],
@@ -135,7 +128,7 @@
           "sectionBgs": [
             {
               "color": "#111a38",
-              "top": 426,
+              "top": 242,
               "hsl": {
                 "h": 226,
                 "s": 0.53,
@@ -145,24 +138,24 @@
           ],
           "textColors": [
             {
-              "color": "#e8ecf8",
-              "share": 0.47
+              "color": "#8c97bd",
+              "share": 0.65
             },
             {
-              "color": "#8c97bd",
-              "share": 0.42
+              "color": "#e8ecf8",
+              "share": 0.28
             },
             {
               "color": "#fbbf24",
-              "share": 0.06
+              "share": 0.04
             },
             {
-              "color": "#34d399",
-              "share": 0.05
+              "color": "#22d3ee",
+              "share": 0.02
             },
             {
-              "color": "#6d78a2",
-              "share": 0.01
+              "color": "#7e89b2",
+              "share": 0
             }
           ],
           "button": {
@@ -177,15 +170,15 @@
           "lowContrast": []
         },
         "buttons": {
-          "count": 1,
-          "inHero": 1,
+          "count": 4,
+          "inHero": 4,
           "radius": 4,
-          "height": 38,
+          "height": 28,
           "withShadow": 0,
           "withGradient": 0,
-          "mono": 0,
+          "mono": 3,
           "upper": 0,
-          "heroLabels": ["Skip to content"]
+          "heroLabels": ["Skip to content", "Refresh", "Run affected r", "Open run"]
         },
         "surfaces": {
           "shadowStatic": 0,
@@ -195,7 +188,7 @@
           "scrims": 0,
           "gradientSamples": [],
           "gradientText": 0,
-          "hairlines": 151,
+          "hairlines": 12,
           "hairlineSamples": [
             "aside.rail 56px",
             "div.facts 1320px",
@@ -203,7 +196,7 @@
             "button.strip__row.row-enter 1318px",
             "button.strip__row.row-enter 1318px"
           ],
-          "outlinedBoxes": 5,
+          "outlinedBoxes": 4,
           "dashed": 0,
           "blurred": 0,
           "roundedBoxes": 4,
@@ -229,24 +222,24 @@
           "w": 1440,
           "h": 900
         },
-        "pageH": 1501,
+        "pageH": 1137,
         "margins": {
-          "left": 8,
-          "right": 33
+          "left": 6,
+          "right": 32
         },
         "sections": [
           {
             "sel": "div.strip",
             "tag": "div",
-            "top": 426,
-            "height": 368,
-            "words": 45,
+            "top": 242,
+            "height": 350,
+            "words": 54,
             "media": 0,
             "middle": 0,
             "heading": null,
             "left": 89,
             "right": 33,
-            "textLeft": 103,
+            "textLeft": 105,
             "textRight": 49,
             "fullBleed": false,
             "footer": false,
@@ -257,14 +250,14 @@
           {
             "sel": "section.section",
             "tag": "section",
-            "top": 815,
-            "height": 250,
-            "words": 49,
+            "top": 612,
+            "height": 245,
+            "words": 56,
             "media": 0,
-            "middle": 259,
+            "middle": 143,
             "heading": {
               "text": "Result and evidence",
-              "size": 13,
+              "size": 14,
               "tag": "h2"
             },
             "left": 88,
@@ -280,14 +273,14 @@
           {
             "sel": "section.section",
             "tag": "section",
-            "top": 1084,
-            "height": 357,
-            "words": 59,
+            "top": 877,
+            "height": 200,
+            "words": 26,
             "media": 0,
             "middle": 0,
             "heading": {
               "text": "First selected tests",
-              "size": 13,
+              "size": 14,
               "tag": "h2"
             },
             "left": 88,
@@ -306,7 +299,7 @@
           {
             "text": "Overview",
             "size": 26,
-            "top": 42,
+            "top": 44,
             "firstScreen": true
           }
         ],
@@ -314,19 +307,27 @@
         "edges": [
           {
             "x": 88,
+            "n": 3
+          },
+          {
+            "x": 105,
+            "n": 1
+          },
+          {
+            "x": 950,
             "n": 1
           }
         ],
-        "leftBlocks": 1,
-        "bodySize": 12,
+        "leftBlocks": 5,
+        "bodySize": 13,
         "stage": false,
         "explains": false,
         "slivers": [],
-        "voidShare": 0.07,
+        "voidShare": 0.06,
         "voidBox": {
-          "x": 960,
-          "y": 240,
-          "w": 480,
+          "x": 240,
+          "y": 600,
+          "w": 420,
           "h": 180
         }
       },
@@ -345,8 +346,8 @@
         },
         "topbar": null,
         "canvas": {
-          "left": 33,
-          "right": 33
+          "left": 32,
+          "right": 32
         },
         "hero": {
           "text": "Overview",
@@ -359,7 +360,7 @@
           "weight": 700,
           "tracking": -0.02,
           "leading": 1.15,
-          "top": 42,
+          "top": 44,
           "tag": "h1",
           "kind": "heading",
           "align": "left",
@@ -367,26 +368,15 @@
         },
         "charts": 2,
         "layout": {
-          "panels": 6,
-          "firstScreen": 5,
-          "ragged": [
-            {
-              "diff": 61,
-              "top": 842
-            }
-          ],
-          "voids": [
-            {
-              "gap": 42,
-              "at": 1021,
-              "panel": "Last run"
-            }
-          ]
+          "panels": 5,
+          "firstScreen": 4,
+          "ragged": [],
+          "voids": []
         },
         "tiles": 0,
         "panels": {
-          "count": 7,
-          "radii": [[8, 4], [0, 3]],
+          "count": 5,
+          "radii": [[8, 4], [0, 1]],
           "heavyBorders": 0,
           "borderSamples": [],
           "heavyShadows": 0,
@@ -402,15 +392,15 @@
         "numbers": {
           "cells": 0,
           "leftAligned": 0,
-          "figures": 2,
-          "tabularShare": 1,
-          "kpiMax": 22
+          "figures": 0,
+          "tabularShare": null,
+          "kpiMax": null
         },
         "rows": null,
         "chartHues": 0,
         "placeholders": [],
         "type": {
-          "under13": 0.96,
+          "under13": 0.04,
           "tiny": 0,
           "tinySamples": [],
           "sizes": [12, 13, 14, 22, 26]
@@ -418,9 +408,9 @@
         "title": {
           "text": "Overview",
           "size": 26,
-          "top": 42
+          "top": 44
         },
-        "colourShare": 0.028
+        "colourShare": 0.008
       },
       "consoleErrors": []
     },
@@ -428,11 +418,11 @@
       "width": 768,
       "height": 1024,
       "load": "load",
-      "screens": 12,
-      "filled": [0.7, 0.93, 0.92, 0.95, 0.91, 0.92, 0.93, 0.93, 0.95, 0.91, 0.93, 0.95],
+      "screens": 2,
+      "filled": [0.65, 0.54],
       "motion": {
-        "elements": 155,
-        "css": 155,
+        "elements": 5,
+        "css": 5,
         "transitions": 0,
         "scripted": 0,
         "videos": 0,
@@ -444,13 +434,13 @@
           "h": 1024
         },
         "page": {
-          "height": 15314,
-          "screens": 15,
-          "words": 1492,
+          "height": 1695,
+          "screens": 1.7,
+          "words": 217,
           "img": 1,
           "video": 0,
           "canvas": 0,
-          "svg": 12,
+          "svg": 9,
           "sections": 4,
           "horizontalOverflow": 0,
           "overflowCulprits": [],
@@ -477,7 +467,7 @@
           "weight": 700,
           "tracking": -0.02,
           "leading": 1.15,
-          "top": 36,
+          "top": 38,
           "tag": "h1",
           "kind": "heading",
           "align": "left",
@@ -504,44 +494,37 @@
           "families": [
             {
               "family": "ui-monospace",
-              "share": 0.98,
+              "share": 0.87,
               "mono": true
             },
             {
               "family": "ui-sans-serif",
-              "share": 0.02,
+              "share": 0.13,
               "mono": false
             }
           ],
           "familyCount": 2,
-          "sizes": [11, 12, 13, 14, 19, 22],
-          "sizeCount": 6,
+          "sizes": [9, 12, 13, 14, 18, 19, 20, 22],
+          "sizeCount": 8,
           "notLoaded": [],
-          "body": {
-            "font": "ui-sans-serif",
-            "size": 13,
-            "leading": 1.45,
-            "weight": 400,
-            "tracking": 0,
-            "contrast": 15.2
-          },
-          "measureChars": 106,
+          "body": null,
+          "measureChars": null,
           "max": {
             "size": 22,
             "vw": 2.9,
             "font": "ui-sans-serif",
             "text": "Overview"
           },
-          "monoShare": 0.98,
-          "monoProseShare": 0.74,
+          "monoShare": 0.87,
+          "monoProseShare": 0.8,
           "monoFamilies": ["ui-monospace"],
-          "monoSamples": ["Overview", "Impact", "Tests", "Trust", "Source", "smarttest-monorepo"],
+          "monoSamples": ["Overview", "Impact", "Tests", "Trust", "Source", "fixture-edges-vitest"],
           "microLabels": 0,
           "microLabelShare": 0,
           "microSamples": [],
           "upperShare": 0,
-          "centerShare": 0,
-          "smallText": 539
+          "centerShare": 0.04,
+          "smallText": 3
         },
         "eyebrows": [],
         "numbered": [],
@@ -556,7 +539,7 @@
           "sectionBgs": [
             {
               "color": "#111a38",
-              "top": 551,
+              "top": 351,
               "hsl": {
                 "h": 226,
                 "s": 0.53,
@@ -566,24 +549,24 @@
           ],
           "textColors": [
             {
-              "color": "#e8ecf8",
-              "share": 0.47
+              "color": "#8c97bd",
+              "share": 0.64
             },
             {
-              "color": "#8c97bd",
-              "share": 0.42
+              "color": "#e8ecf8",
+              "share": 0.28
             },
             {
               "color": "#fbbf24",
-              "share": 0.06
+              "share": 0.04
             },
             {
-              "color": "#34d399",
-              "share": 0.05
+              "color": "#22d3ee",
+              "share": 0.03
             },
             {
-              "color": "#6d78a2",
-              "share": 0.01
+              "color": "#7e89b2",
+              "share": 0
             }
           ],
           "button": {
@@ -598,15 +581,15 @@
           "lowContrast": []
         },
         "buttons": {
-          "count": 1,
-          "inHero": 1,
+          "count": 4,
+          "inHero": 4,
           "radius": 4,
-          "height": 38,
+          "height": 28,
           "withShadow": 0,
           "withGradient": 0,
-          "mono": 0,
+          "mono": 3,
           "upper": 0,
-          "heroLabels": ["Skip to content"]
+          "heroLabels": ["Skip to content", "Refresh", "Run affected r", "Open run"]
         },
         "surfaces": {
           "shadowStatic": 0,
@@ -616,7 +599,7 @@
           "scrims": 0,
           "gradientSamples": [],
           "gradientText": 0,
-          "hairlines": 153,
+          "hairlines": 14,
           "hairlineSamples": [
             "aside.rail 768px",
             "div.facts 736px",
@@ -624,7 +607,7 @@
             "div.fact 368px",
             "button.strip__row.row-enter 734px"
           ],
-          "outlinedBoxes": 5,
+          "outlinedBoxes": 4,
           "dashed": 0,
           "blurred": 0,
           "roundedBoxes": 4,
@@ -650,17 +633,17 @@
           "w": 768,
           "h": 1024
         },
-        "pageH": 15314,
+        "pageH": 1695,
         "margins": {
-          "left": 17,
-          "right": 17
+          "left": 16,
+          "right": 16
         },
         "sections": [
           {
             "sel": "header.title-row",
             "tag": "header",
             "top": 16,
-            "height": 122,
+            "height": 125,
             "words": 29,
             "media": 0,
             "middle": 0,
@@ -672,7 +655,7 @@
             "left": 16,
             "right": 16,
             "textLeft": 16,
-            "textRight": 129,
+            "textRight": 161,
             "fullBleed": false,
             "footer": false,
             "hero": true,
@@ -682,35 +665,16 @@
           {
             "sel": "div.facts",
             "tag": "div",
-            "top": 150,
-            "height": 178,
-            "words": 35,
+            "top": 153,
+            "height": 181,
+            "words": 32,
             "media": 0,
-            "middle": 215,
+            "middle": 194,
             "heading": null,
             "left": 16,
-            "right": 119,
+            "right": 98,
             "textLeft": 16,
-            "textRight": 119,
-            "fullBleed": false,
-            "footer": false,
-            "hero": true,
-            "continues": false,
-            "pinned": false
-          },
-          {
-            "sel": "div.notice",
-            "tag": "div",
-            "top": 340,
-            "height": 125,
-            "words": 43,
-            "media": 0,
-            "middle": 0,
-            "heading": null,
-            "left": 51,
-            "right": 47,
-            "textLeft": 51,
-            "textRight": 47,
+            "textRight": 98,
             "fullBleed": false,
             "footer": false,
             "hero": true,
@@ -720,33 +684,33 @@
           {
             "sel": "div.strip",
             "tag": "div",
-            "top": 551,
-            "height": 13802,
-            "words": 840,
+            "top": 351,
+            "height": 562,
+            "words": 46,
             "media": 0,
             "middle": 0,
             "heading": null,
             "left": 17,
             "right": 17,
-            "textLeft": 30,
+            "textLeft": 31,
             "textRight": 31,
             "fullBleed": false,
             "footer": false,
-            "hero": false,
+            "hero": true,
             "continues": false,
             "pinned": false
           },
           {
             "sel": "section.section",
             "tag": "section",
-            "top": 14373,
-            "height": 486,
-            "words": 49,
+            "top": 933,
+            "height": 464,
+            "words": 56,
             "media": 0,
-            "middle": 60,
+            "middle": 47,
             "heading": {
               "text": "Result and evidence",
-              "size": 13,
+              "size": 14,
               "tag": "h2"
             },
             "left": 16,
@@ -762,14 +726,14 @@
           {
             "sel": "section.section",
             "tag": "section",
-            "top": 14879,
-            "height": 357,
-            "words": 59,
+            "top": 1417,
+            "height": 200,
+            "words": 26,
             "media": 0,
             "middle": 0,
             "heading": {
               "text": "First selected tests",
-              "size": 13,
+              "size": 14,
               "tag": "h2"
             },
             "left": 16,
@@ -788,7 +752,7 @@
           {
             "text": "Overview",
             "size": 22,
-            "top": 36,
+            "top": 38,
             "firstScreen": true
           }
         ],
@@ -796,11 +760,15 @@
         "edges": [
           {
             "x": 16,
-            "n": 1
+            "n": 3
+          },
+          {
+            "x": 33,
+            "n": 2
           }
         ],
-        "leftBlocks": 1,
-        "bodySize": 12,
+        "leftBlocks": 5,
+        "bodySize": 13,
         "stage": false,
         "explains": false,
         "slivers": [],
@@ -817,8 +785,8 @@
         "sidebar": null,
         "topbar": null,
         "canvas": {
-          "left": 17,
-          "right": 17
+          "left": 16,
+          "right": 16
         },
         "hero": {
           "text": "Overview",
@@ -831,29 +799,23 @@
           "weight": 700,
           "tracking": -0.02,
           "leading": 1.15,
-          "top": 36,
+          "top": 38,
           "tag": "h1",
           "kind": "heading",
           "align": "left",
           "position": "left"
         },
-        "charts": 142,
+        "charts": 7,
         "layout": {
-          "panels": 6,
+          "panels": 5,
           "firstScreen": 3,
           "ragged": [],
-          "voids": [
-            {
-              "gap": 42,
-              "at": 14579,
-              "panel": "Last run"
-            }
-          ]
+          "voids": []
         },
         "tiles": 0,
         "panels": {
-          "count": 149,
-          "radii": [[0, 145], [8, 4]],
+          "count": 8,
+          "radii": [[0, 4], [8, 4]],
           "heavyBorders": 0,
           "borderSamples": [],
           "heavyShadows": 0,
@@ -869,25 +831,25 @@
         "numbers": {
           "cells": 0,
           "leftAligned": 0,
-          "figures": 2,
-          "tabularShare": 1,
-          "kpiMax": 19
+          "figures": 0,
+          "tabularShare": null,
+          "kpiMax": null
         },
         "rows": null,
         "chartHues": 0,
         "placeholders": [],
         "type": {
-          "under13": 0.96,
+          "under13": 0.06,
           "tiny": 0,
           "tinySamples": [],
-          "sizes": [11, 12, 13, 14, 19, 22]
+          "sizes": [12, 13, 14, 19, 22]
         },
         "title": {
           "text": "Overview",
           "size": 22,
-          "top": 36
+          "top": 38
         },
-        "colourShare": 0.015
+        "colourShare": 0.012
       },
       "consoleErrors": []
     },
@@ -895,11 +857,11 @@
       "width": 390,
       "height": 844,
       "load": "load",
-      "screens": 12,
-      "filled": [0.47, 0.91, 0.91, 0.91, 0.91, 0.91, 0.91, 0.91, 0.91, 0.91, 0.91, 0.92],
+      "screens": 2,
+      "filled": [0.82, 0.31],
       "motion": {
-        "elements": 154,
-        "css": 154,
+        "elements": 5,
+        "css": 5,
         "transitions": 0,
         "scripted": 0,
         "videos": 0,
@@ -911,13 +873,13 @@
           "h": 844
         },
         "page": {
-          "height": 15682,
-          "screens": 18.6,
-          "words": 1352,
+          "height": 1685,
+          "screens": 2,
+          "words": 206,
           "img": 1,
           "video": 0,
           "canvas": 0,
-          "svg": 12,
+          "svg": 9,
           "sections": 4,
           "horizontalOverflow": 0,
           "overflowCulprits": [],
@@ -944,7 +906,7 @@
           "weight": 700,
           "tracking": -0.02,
           "leading": 1.15,
-          "top": 36,
+          "top": 38,
           "tag": "h1",
           "kind": "heading",
           "align": "left",
@@ -975,7 +937,7 @@
             "align": "left",
             "position": "center",
             "widthRatio": 0.92,
-            "top": 36,
+            "top": 38,
             "tag": "h1",
             "kind": "heading"
           }
@@ -993,44 +955,37 @@
           "families": [
             {
               "family": "ui-monospace",
-              "share": 0.97,
+              "share": 0.86,
               "mono": true
             },
             {
               "family": "ui-sans-serif",
-              "share": 0.03,
+              "share": 0.14,
               "mono": false
             }
           ],
           "familyCount": 2,
-          "sizes": [11, 12, 13, 14, 19, 22],
-          "sizeCount": 6,
+          "sizes": [9, 12, 13, 14, 16, 19, 20, 22],
+          "sizeCount": 8,
           "notLoaded": [],
-          "body": {
-            "font": "ui-sans-serif",
-            "size": 13,
-            "leading": 1.45,
-            "weight": 400,
-            "tracking": 0,
-            "contrast": 15.2
-          },
-          "measureChars": 49,
+          "body": null,
+          "measureChars": null,
           "max": {
             "size": 22,
             "vw": 5.6,
             "font": "ui-sans-serif",
             "text": "Overview"
           },
-          "monoShare": 0.97,
-          "monoProseShare": 0.95,
+          "monoShare": 0.86,
+          "monoProseShare": 0.79,
           "monoFamilies": ["ui-monospace"],
-          "monoSamples": ["Overview", "Impact", "Tests", "Trust", "Source", "smarttest-monorepo"],
+          "monoSamples": ["Overview", "Impact", "Tests", "Trust", "Source", "fixture-edges-vitest"],
           "microLabels": 0,
           "microLabelShare": 0,
           "microSamples": [],
           "upperShare": 0,
-          "centerShare": 0,
-          "smallText": 539
+          "centerShare": 0.05,
+          "smallText": 3
         },
         "eyebrows": [],
         "numbered": [],
@@ -1045,43 +1000,34 @@
           "sectionBgs": [
             {
               "color": "#111a38",
-              "top": 804,
+              "top": 421,
               "hsl": {
                 "h": 226,
                 "s": 0.53,
                 "l": 0.14
-              }
-            },
-            {
-              "color": "#070b18",
-              "top": 14852,
-              "hsl": {
-                "h": 226,
-                "s": 0.55,
-                "l": 0.06
               }
             }
           ],
           "textColors": [
             {
               "color": "#8c97bd",
-              "share": 0.53
+              "share": 0.66
             },
             {
               "color": "#e8ecf8",
-              "share": 0.32
+              "share": 0.25
             },
             {
               "color": "#fbbf24",
-              "share": 0.07
+              "share": 0.05
             },
             {
-              "color": "#34d399",
-              "share": 0.06
+              "color": "#22d3ee",
+              "share": 0.03
             },
             {
-              "color": "#6d78a2",
-              "share": 0.01
+              "color": "#7e89b2",
+              "share": 0
             }
           ],
           "button": {
@@ -1096,15 +1042,15 @@
           "lowContrast": []
         },
         "buttons": {
-          "count": 1,
-          "inHero": 1,
+          "count": 4,
+          "inHero": 3,
           "radius": 4,
-          "height": 38,
+          "height": 36,
           "withShadow": 0,
           "withGradient": 0,
-          "mono": 0,
+          "mono": 3,
           "upper": 0,
-          "heroLabels": ["Skip to content"]
+          "heroLabels": ["Skip to content", "Refresh", "Run affected r"]
         },
         "surfaces": {
           "shadowStatic": 0,
@@ -1114,15 +1060,15 @@
           "scrims": 0,
           "gradientSamples": [],
           "gradientText": 0,
-          "hairlines": 155,
+          "hairlines": 10,
           "hairlineSamples": [
             "aside.rail 390px",
             "div.facts 358px",
-            "div.fact 358px",
-            "div.fact 358px",
-            "div.fact 358px"
+            "button.strip__row.row-enter 356px",
+            "button.strip__row.row-enter 356px",
+            "button.strip__row.row-enter 356px"
           ],
-          "outlinedBoxes": 5,
+          "outlinedBoxes": 4,
           "dashed": 0,
           "blurred": 0,
           "roundedBoxes": 4,
@@ -1148,7 +1094,7 @@
           "w": 390,
           "h": 844
         },
-        "pageH": 15682,
+        "pageH": 1685,
         "margins": {
           "left": 16,
           "right": 17
@@ -1158,7 +1104,7 @@
             "sel": "header.title-row",
             "tag": "header",
             "top": 16,
-            "height": 142,
+            "height": 154,
             "words": 29,
             "media": 0,
             "middle": 0,
@@ -1170,7 +1116,7 @@
             "left": 16,
             "right": 16,
             "textLeft": 16,
-            "textRight": 36,
+            "textRight": 46,
             "fullBleed": false,
             "footer": false,
             "hero": true,
@@ -1180,16 +1126,16 @@
           {
             "sel": "div.facts",
             "tag": "div",
-            "top": 170,
-            "height": 354,
-            "words": 35,
+            "top": 182,
+            "height": 223,
+            "words": 32,
             "media": 0,
-            "middle": 0,
+            "middle": 52,
             "heading": null,
             "left": 16,
-            "right": 122,
+            "right": 28,
             "textLeft": 16,
-            "textRight": 122,
+            "textRight": 28,
             "fullBleed": false,
             "footer": false,
             "hero": true,
@@ -1197,54 +1143,35 @@
             "pinned": false
           },
           {
-            "sel": "div.notice",
-            "tag": "div",
-            "top": 537,
-            "height": 162,
-            "words": 43,
-            "media": 0,
-            "middle": 0,
-            "heading": null,
-            "left": 44,
-            "right": 51,
-            "textLeft": 44,
-            "textRight": 51,
-            "fullBleed": false,
-            "footer": false,
-            "hero": false,
-            "continues": false,
-            "pinned": false
-          },
-          {
             "sel": "div.strip",
             "tag": "div",
-            "top": 804,
-            "height": 13763,
-            "words": 700,
+            "top": 421,
+            "height": 446,
+            "words": 35,
             "media": 0,
             "middle": 0,
             "heading": null,
             "left": 17,
             "right": 17,
-            "textLeft": 30,
+            "textLeft": 31,
             "textRight": 31,
             "fullBleed": false,
             "footer": false,
-            "hero": false,
+            "hero": true,
             "continues": false,
             "pinned": false
           },
           {
             "sel": "section.section",
             "tag": "section",
-            "top": 14587,
-            "height": 622,
-            "words": 49,
+            "top": 887,
+            "height": 480,
+            "words": 56,
             "media": 0,
             "middle": 0,
             "heading": {
               "text": "Result and evidence",
-              "size": 13,
+              "size": 14,
               "tag": "h2"
             },
             "left": 16,
@@ -1260,20 +1187,20 @@
           {
             "sel": "section.section",
             "tag": "section",
-            "top": 15229,
-            "height": 375,
-            "words": 59,
+            "top": 1387,
+            "height": 220,
+            "words": 26,
             "media": 0,
             "middle": 0,
             "heading": {
               "text": "First selected tests",
-              "size": 13,
+              "size": 14,
               "tag": "h2"
             },
             "left": 16,
             "right": 17,
             "textLeft": 16,
-            "textRight": 20,
+            "textRight": 31,
             "fullBleed": false,
             "footer": true,
             "hero": false,
@@ -1286,7 +1213,7 @@
           {
             "text": "Overview",
             "size": 22,
-            "top": 36,
+            "top": 38,
             "firstScreen": true
           }
         ],
@@ -1294,11 +1221,15 @@
         "edges": [
           {
             "x": 16,
-            "n": 1
+            "n": 3
+          },
+          {
+            "x": 33,
+            "n": 2
           }
         ],
-        "leftBlocks": 1,
-        "bodySize": 12,
+        "leftBlocks": 5,
+        "bodySize": 13,
         "stage": false,
         "explains": false,
         "slivers": [],
@@ -1316,7 +1247,7 @@
         "topbar": null,
         "canvas": {
           "left": 16,
-          "right": 17
+          "right": 16
         },
         "hero": {
           "text": "Overview",
@@ -1329,29 +1260,23 @@
           "weight": 700,
           "tracking": -0.02,
           "leading": 1.15,
-          "top": 36,
+          "top": 38,
           "tag": "h1",
           "kind": "heading",
           "align": "left",
           "position": "left"
         },
-        "charts": 142,
+        "charts": 7,
         "layout": {
-          "panels": 7,
-          "firstScreen": 3,
+          "panels": 5,
+          "firstScreen": 2,
           "ragged": [],
-          "voids": [
-            {
-              "gap": 42,
-              "at": 14793,
-              "panel": "Last run"
-            }
-          ]
+          "voids": []
         },
         "tiles": 0,
         "panels": {
-          "count": 151,
-          "radii": [[0, 147], [8, 4]],
+          "count": 8,
+          "radii": [[0, 4], [8, 4]],
           "heavyBorders": 0,
           "borderSamples": [],
           "heavyShadows": 0,
@@ -1367,80 +1292,55 @@
         "numbers": {
           "cells": 0,
           "leftAligned": 0,
-          "figures": 2,
-          "tabularShare": 1,
-          "kpiMax": 19
+          "figures": 0,
+          "tabularShare": null,
+          "kpiMax": null
         },
         "rows": null,
         "chartHues": 0,
         "placeholders": [],
         "type": {
-          "under13": 0.96,
+          "under13": 0.06,
           "tiny": 0,
           "tinySamples": [],
-          "sizes": [11, 12, 13, 14, 19, 22]
+          "sizes": [12, 13, 14, 19, 22]
         },
         "title": {
           "text": "Overview",
           "size": 22,
-          "top": 36
+          "top": 38
         },
-        "colourShare": 0.002
+        "colourShare": 0.011
       },
       "consoleErrors": []
     }
   ],
-  "findings": [
-    {
-      "level": "WARN",
-      "id": "tiny-text",
-      "width": 1440,
-      "message": "96% of the text is under 13px.",
-      "fix": "Data and labels read at 13–14px; keep 11–12px for sublines and axis ticks.",
-      "alsoAt": [768, 390]
-    },
-    {
-      "level": "WARN",
-      "id": "ragged-row",
-      "width": 1440,
-      "message": "1 pair(s) of cards in one row end at different heights (by 61px).",
-      "fix": "Cards that share a row share a bottom edge: balance them by their content (the same number of rows, a block of similar height beside it), or stack them. In testing, ragged rows were marked down every time."
-    },
-    {
-      "level": "WARN",
-      "id": "panel-void",
-      "width": 1440,
-      "message": "1 card(s) hold a blank band inside: 42px in \"Last run\".",
-      "fix": "A card stretches to its neighbour only when it has content to fill. Keep a legend or a note directly under its chart (only an action or a total may sit at a stretched card's foot), let a short card keep its own height (align-items: start), and let a filtered block shrink to its rows."
-    }
-  ],
+  "findings": [],
   "images": [
     {
       "viewport": "desktop",
       "width": 1440,
-      "fold": "/home/tkmremi/orca/projects/SmarttyTest/packages/studio/review/inspector-overview/desktop-fold.jpg",
+      "fold": "/home/tkmremi/.cache/claude-tmp/claude-1000/-home-tkmremi-orca-projects-SmarttyTest/6c1d1a32-5870-449c-a52e-79700978de4e/scratchpad/insp-final/desktop-fold.jpg",
       "pages": [
-        "/home/tkmremi/orca/projects/SmarttyTest/packages/studio/review/inspector-overview/desktop-page-01.jpg"
+        "/home/tkmremi/.cache/claude-tmp/claude-1000/-home-tkmremi-orca-projects-SmarttyTest/6c1d1a32-5870-449c-a52e-79700978de4e/scratchpad/insp-final/desktop-page-01.jpg"
       ],
       "film": []
     },
     {
       "viewport": "tablet",
       "width": 768,
-      "fold": "/home/tkmremi/orca/projects/SmarttyTest/packages/studio/review/inspector-overview/tablet-fold.jpg",
+      "fold": "/home/tkmremi/.cache/claude-tmp/claude-1000/-home-tkmremi-orca-projects-SmarttyTest/6c1d1a32-5870-449c-a52e-79700978de4e/scratchpad/insp-final/tablet-fold.jpg",
       "pages": [
-        "/home/tkmremi/orca/projects/SmarttyTest/packages/studio/review/inspector-overview/tablet-page-01.jpg",
-        "/home/tkmremi/orca/projects/SmarttyTest/packages/studio/review/inspector-overview/tablet-page-02.jpg"
+        "/home/tkmremi/.cache/claude-tmp/claude-1000/-home-tkmremi-orca-projects-SmarttyTest/6c1d1a32-5870-449c-a52e-79700978de4e/scratchpad/insp-final/tablet-page-01.jpg"
       ],
       "film": []
     },
     {
       "viewport": "mobile",
       "width": 390,
-      "fold": "/home/tkmremi/orca/projects/SmarttyTest/packages/studio/review/inspector-overview/mobile-fold.jpg",
+      "fold": "/home/tkmremi/.cache/claude-tmp/claude-1000/-home-tkmremi-orca-projects-SmarttyTest/6c1d1a32-5870-449c-a52e-79700978de4e/scratchpad/insp-final/mobile-fold.jpg",
       "pages": [
-        "/home/tkmremi/orca/projects/SmarttyTest/packages/studio/review/inspector-overview/mobile-page-01.jpg",
-        "/home/tkmremi/orca/projects/SmarttyTest/packages/studio/review/inspector-overview/mobile-page-02.jpg"
+        "/home/tkmremi/.cache/claude-tmp/claude-1000/-home-tkmremi-orca-projects-SmarttyTest/6c1d1a32-5870-449c-a52e-79700978de4e/scratchpad/insp-final/mobile-page-01.jpg"
       ],
       "film": []
     }

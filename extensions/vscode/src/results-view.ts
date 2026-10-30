@@ -2,7 +2,9 @@ import { join } from "node:path";
 import * as vscode from "vscode";
 import type { FileExecution, RunReport, RunResult, TestExecution } from "./core/contracts.js";
 import {
+  type FileResultGroup,
   groupFiles,
+  groupHasFailure,
   type ResultState,
   type RunVerdict,
   statusIcon,
@@ -22,6 +24,7 @@ interface FileNode {
   readonly kind: "file";
   readonly file: FileExecution;
   readonly state: ResultState;
+  readonly group: FileResultGroup;
 }
 
 interface TestNode {
@@ -58,11 +61,13 @@ export class SmartTestResultsProvider implements vscode.TreeDataProvider<Node>, 
   readonly #onDidChangeTreeData = new vscode.EventEmitter<Node | undefined>();
   readonly onDidChangeTreeData = this.#onDidChangeTreeData.event;
   #report: RunReport | undefined;
+  #groups: readonly FileResultGroup[] = [];
   #integrityIssues: readonly string[] = [];
   #projectDir: string | undefined;
 
   setReport(result: RunResult, projectDir: string): void {
     this.#report = result.report;
+    this.#groups = groupFiles(result.report);
     this.#integrityIssues = result.integrityIssues;
     this.#projectDir = projectDir;
     this.#onDidChangeTreeData.fire(undefined);
@@ -70,6 +75,7 @@ export class SmartTestResultsProvider implements vscode.TreeDataProvider<Node>, 
 
   clear(): void {
     this.#report = undefined;
+    this.#groups = [];
     this.#projectDir = undefined;
     this.#integrityIssues = [];
     this.#onDidChangeTreeData.fire(undefined);
@@ -93,9 +99,14 @@ export class SmartTestResultsProvider implements vscode.TreeDataProvider<Node>, 
         return item;
       }
       case "file": {
+        // Large runs have thousands of tests; only files with a failure open.
         const item = new vscode.TreeItem(
           element.file.file,
-          vscode.TreeItemCollapsibleState.Expanded,
+          element.group.tests.length === 0
+            ? vscode.TreeItemCollapsibleState.None
+            : groupHasFailure(element.group)
+              ? vscode.TreeItemCollapsibleState.Expanded
+              : vscode.TreeItemCollapsibleState.Collapsed,
         );
         item.description = `${statusLabel(element.file.status)} · ${element.file.tests.length} test(s)`;
         item.tooltip = element.file.error
@@ -155,12 +166,12 @@ export class SmartTestResultsProvider implements vscode.TreeDataProvider<Node>, 
           label: "Warnings",
           description: this.#report.warnings.join("; "),
         });
-      for (const group of groupFiles(this.#report))
-        nodes.push({ kind: "file", file: group.file, state: group.state });
+      for (const group of this.#groups)
+        nodes.push({ kind: "file", file: group.file, state: group.state, group });
       return nodes;
     }
     if (element.kind === "file")
-      return element.file.tests.map((test) => ({
+      return element.group.tests.map((test) => ({
         kind: "test",
         test,
         file: element.file.file,

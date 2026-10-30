@@ -1,15 +1,15 @@
 /**
  * Per-file analysis orchestration, independent of the VS Code API:
- * graph units → one `explain` per unit → protection statements. Explain calls
- * are bounded and a single failing explain only makes that symbol unknown.
+ * graph units → one `explain <file> --units` call → protection statements.
+ * A CLI without `--units` falls back to one bounded `explain` per unit, where a
+ * single failing explain only makes that symbol unknown.
  */
 import type { ExplainResult, GraphDump, ScanResult } from "./contracts.js";
 import { isCancelledError } from "./errors.js";
-import { sameProjectPath } from "./paths.js";
 import type { Protection } from "./protection.js";
 import { buildProtection } from "./protection.js";
 import { mapLimit } from "./scheduler.js";
-import { type GraphUnit, unitsForFile } from "./symbols.js";
+import { type GraphUnit, projectPathKey, unitsByFile } from "./symbols.js";
 
 export interface FileAnalysis {
   readonly file: string;
@@ -28,30 +28,77 @@ export interface AnalyzeFileOptions {
   readonly concurrency: number;
   readonly signal: AbortSignal;
   readonly explain: (unit: GraphUnit, signal: AbortSignal) => Promise<ExplainResult>;
+  /** Explains every unit at once; per-unit results are read from `units`. */
+  readonly explainUnits?: (
+    units: readonly GraphUnit[],
+    signal: AbortSignal,
+  ) => Promise<ExplainResult>;
   readonly platform?: NodeJS.Platform;
+  /** Per-snapshot lookup tables; built on demand when omitted. */
+  readonly index?: FileIndex;
+}
+
+/** Graph units and scan warnings grouped by file, built once per snapshot. */
+export interface FileIndex {
+  readonly units: ReadonlyMap<string, readonly GraphUnit[]>;
+  readonly warnings: ReadonlyMap<string, readonly string[]>;
+  readonly platform: NodeJS.Platform;
+}
+
+export function buildFileIndex(
+  graph: GraphDump,
+  scan: ScanResult,
+  platform: NodeJS.Platform = process.platform,
+): FileIndex {
+  const warnings = new Map<string, string[]>();
+  const add = (file: string, warning: string): void => {
+    const key = projectPathKey(file, platform);
+    const list = warnings.get(key);
+    if (list) list.push(warning);
+    else warnings.set(key, [warning]);
+  };
+  for (const unresolved of scan.unresolved)
+    add(unresolved.file, `unresolved import ${unresolved.specifier}`);
+  for (const dynamic of scan.dynamic) add(dynamic.file, `dynamic import: ${dynamic.detail}`);
+  return { units: unitsByFile(graph, platform), warnings, platform };
 }
 
 export function fileWarnings(scan: ScanResult, file: string, platform?: NodeJS.Platform): string[] {
+  const key = projectPathKey(file, platform);
   const warnings: string[] = [];
-  for (const unresolved of scan.unresolved) {
-    if (sameProjectPath(unresolved.file, file, platform))
+  for (const unresolved of scan.unresolved)
+    if (projectPathKey(unresolved.file, platform) === key)
       warnings.push(`unresolved import ${unresolved.specifier}`);
-  }
-  for (const dynamic of scan.dynamic) {
-    if (sameProjectPath(dynamic.file, file, platform))
+  for (const dynamic of scan.dynamic)
+    if (projectPathKey(dynamic.file, platform) === key)
       warnings.push(`dynamic import: ${dynamic.detail}`);
-  }
   return warnings;
 }
 
 export async function analyzeFile(options: AnalyzeFileOptions): Promise<FileAnalysis> {
-  const units = unitsForFile(options.graph, options.file, options.platform);
+  const index =
+    options.index ??
+    buildFileIndex(options.graph, options.scan, options.platform ?? process.platform);
+  const key = projectPathKey(options.file, index.platform);
+  const units = [...(index.units.get(key) ?? [])];
   const truncated = units.length > Math.max(0, options.maxUnits);
   // A partial analysis would let the extension call a symbol "unprotected"
   // because its explain call was never made. Hide protection instead.
   const capped = truncated ? [] : units;
-  const warnings = fileWarnings(options.scan, options.file, options.platform);
+  const warnings = [...(index.warnings.get(key) ?? [])];
   let explainFailures = 0;
+
+  const batch = new Map<string, ExplainResult>();
+  if (options.explainUnits && capped.length) {
+    try {
+      const all = await options.explainUnits(capped, options.signal);
+      if (all.kind === "source" && all.units)
+        for (const u of all.units) batch.set(u.unit, { ...all, tests: u.tests });
+    } catch (error) {
+      if (isCancelledError(error)) throw error;
+      // An older CLI without `--units`: explain each unit on its own below.
+    }
+  }
 
   const protections = await mapLimit(
     capped,
@@ -59,7 +106,8 @@ export async function analyzeFile(options: AnalyzeFileOptions): Promise<FileAnal
     async (unit): Promise<Protection> => {
       options.signal.throwIfAborted();
       try {
-        const result = await options.explain(unit, options.signal);
+        const result =
+          batch.get(unit.qualifiedName) ?? (await options.explain(unit, options.signal));
         if (result.kind !== "source")
           return buildProtection({
             unitId: unit.id,

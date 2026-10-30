@@ -10,7 +10,7 @@
 | `smarttest scan`                                                | Show what SmartTest understands about the project (read-only)                                                           |
 | `smarttest impact`                                              | Compute the decision without running tests                                                                              |
 | `smarttest run`                                                 | Run affected tests (default) or the full suite (`--all`)                                                                |
-| `smarttest explain <target>`                                    | Why a test was selected or skipped, or which tests protect a file or symbol                                             |
+| `smarttest explain <target> [--units A,B]`                      | Why a test was selected or skipped, or which tests protect a file or symbol; `--units` adds a per-unit breakdown        |
 | `smarttest validate-selection`                                  | Compare the selection against a full reference run                                                                      |
 | `smarttest benchmark`                                           | Replay recent commits: full run vs project-gated run vs SmartTest, with missed failures re-checked on the parent commit |
 | `smarttest hook install \| uninstall \| status`                 | Put `smarttest run --staged` in the pre-commit hook (husky, lefthook, simple-git-hooks or `.git/hooks`)                 |

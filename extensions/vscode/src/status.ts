@@ -14,6 +14,8 @@ export class SmartTestStatusBar implements vscode.Disposable {
   #busy: string | undefined;
   #run: RunReport | undefined;
   #runFolderKey: string | undefined;
+  /** The active file whose analysis is in progress (first open, or after a save). */
+  #analysing: string | undefined;
 
   constructor(state: ExtensionState) {
     this.#state = state;
@@ -42,6 +44,11 @@ export class SmartTestStatusBar implements vscode.Disposable {
     if (vscode.window.activeTextEditor?.document.uri.toString() !== uri.toString()) return;
     this.#last = { uri: uri.toString(), analysis };
     this.#error = undefined;
+    this.render();
+  }
+
+  setAnalysing(uri: vscode.Uri | undefined): void {
+    this.#analysing = uri?.toString();
     this.render();
   }
 
@@ -91,6 +98,13 @@ export class SmartTestStatusBar implements vscode.Disposable {
       return;
     }
     const analysis = this.#last?.analysis;
+    const active = vscode.window.activeTextEditor?.document.uri.toString();
+    if (!analysis && this.#analysing && this.#analysing === active) {
+      this.#item.text = "$(sync~spin) SmartTest: analysing this file";
+      this.#item.tooltip = "SmartTest is finding the tests that reach this file's symbols.";
+      this.#item.show();
+      return;
+    }
     if (!analysis) {
       this.#item.text = "$(shield) SmartTest";
       this.#item.tooltip =
@@ -102,12 +116,7 @@ export class SmartTestStatusBar implements vscode.Disposable {
     const parts: string[] = [];
     if (summary.protectedUnits > 0) parts.push(`${summary.protectedUnits} protected`);
     if (summary.unknownUnits > 0) parts.push(`${summary.unknownUnits} uncertain`);
-    if (summary.unprotectedUnits > 0)
-      parts.push(
-        summary.protectedUnits === 0 && summary.unknownUnits === 0
-          ? `${summary.unprotectedUnits} without a static test path`
-          : `${summary.unprotectedUnits} without static path`,
-      );
+    if (summary.unprotectedUnits > 0) parts.push(`${summary.unprotectedUnits} without a test path`);
     this.#item.text = `$(shield) SmartTest: ${parts.length > 0 ? parts.join(" · ") : "no symbols"}`;
     const problems = this.#state.settingProblems(folder);
     this.#item.tooltip = [

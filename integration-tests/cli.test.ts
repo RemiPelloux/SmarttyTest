@@ -72,6 +72,23 @@ describe("smarttest CLI", () => {
     expect(check(await schema("error"), JSON.parse(json.out))).toEqual([]);
   });
 
+  it("explain --units matches one explain per unit, in one call", async () => {
+    const dir = await materialize("nest-auth-vitest", { git: true });
+    const file = "src/modules/catalog/CatalogService.ts";
+    const units = ["CatalogService", "CatalogService.list", "CatalogService.total"];
+    const batch = JSON.parse(
+      (await cli(dir, "explain", file, "--units", units.join(","), "--json")).out,
+    );
+    expect(check(await schema("explain"), batch)).toEqual([]);
+    expect(batch.units.map((u: { unit: string }) => u.unit)).toEqual(units);
+    for (const [i, unit] of units.entries()) {
+      const one = JSON.parse((await cli(dir, "explain", `${file}#${unit}`, "--json")).out);
+      expect(batch.units[i].tests, unit).toEqual(one.tests);
+    }
+    expect(batch.units.some((u: { tests: unknown[] }) => u.tests.length > 0)).toBe(true);
+    expect((await cli(dir, "explain", `${file}#CatalogService`, "--units", "x")).code).toBe(2);
+  }, 120_000);
+
   it("emits schema-valid JSON for scan, impact, explain and run", async () => {
     const dir = await materialize("nest-auth-vitest", { git: true });
     await edit(dir, "src/modules/catalog/CatalogService.ts", "sum + p.price", "p.price + sum");

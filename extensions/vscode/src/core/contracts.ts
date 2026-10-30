@@ -35,6 +35,8 @@ export interface SourceExplain {
   readonly target: string;
   readonly description: string;
   readonly tests: readonly SourceTestHit[];
+  /** `explain <file> --units`: the tests protecting each named unit. */
+  readonly units?: readonly { readonly unit: string; readonly tests: readonly SourceTestHit[] }[];
   readonly uncertainty: readonly Uncertainty[];
   readonly rules: readonly string[];
   readonly risk: RiskLevel;
@@ -507,18 +509,32 @@ export function parseExplainJson(stdout: string): ExplainResult {
         reasons: asStringArray(record.reasons, `${path}.reasons`),
       };
     });
-    return {
-      kind: "source",
-      target: asString(envelope.target, "$.target"),
-      description: asString(envelope.description, "$.description"),
-      tests: asArray(envelope.tests, "$.tests").map((item, index) => {
-        const path = `$.tests[${index}]`;
+    const hits = (value: unknown, at: string): SourceTestHit[] =>
+      asArray(value, at).map((item, index) => {
+        const path = `${at}[${index}]`;
         const record = asRecord(item, path);
         return {
           test: asString(record.test, `${path}.test`),
           path: asStringArray(record.path, `${path}.path`),
         };
-      }),
+      });
+    return {
+      kind: "source",
+      target: asString(envelope.target, "$.target"),
+      description: asString(envelope.description, "$.description"),
+      tests: hits(envelope.tests, "$.tests"),
+      ...(envelope.units === undefined
+        ? {}
+        : {
+            units: asArray(envelope.units, "$.units").map((item, index) => {
+              const path = `$.units[${index}]`;
+              const record = asRecord(item, path);
+              return {
+                unit: asString(record.unit, `${path}.unit`),
+                tests: hits(record.tests, `${path}.tests`),
+              };
+            }),
+          }),
       uncertainty,
       rules: asStringArray(envelope.rules, "$.rules"),
       risk: asString(envelope.risk, "$.risk"),

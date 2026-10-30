@@ -4,28 +4,45 @@
  * what makes multi-root workspaces behave independently.
  */
 import * as vscode from "vscode";
-import { explainArgs, explainTarget, graphArgs, scanArgs } from "./cli/commands.js";
-import { resolveExecutable } from "./cli/executable.js";
+import {
+  explainArgs,
+  explainTarget,
+  explainUnitsArgs,
+  graphArgs,
+  scanArgs,
+} from "./cli/commands.js";
+import { type ExecutableResolution, resolveExecutable } from "./cli/executable.js";
 import { type CliResult, runCli } from "./cli/runner.js";
-import { analyzeFile, type FileAnalysis } from "./core/analysis.js";
+import { analyzeFile, buildFileIndex, type FileAnalysis, type FileIndex } from "./core/analysis.js";
 import type { GraphDump, ScanResult, SourceExplain } from "./core/contracts.js";
 import { parseExplainJson, parseGraphDump, parseScanJson } from "./core/contracts.js";
 import { errorMessage, isCancelledError, SmartTestExtensionError } from "./core/errors.js";
 import { toProjectPath } from "./core/paths.js";
+import { ConcurrencyLimiter, SharedTasks } from "./core/scheduler.js";
 import { type ExtensionSettings, readSettings } from "./core/settings.js";
+import type { GraphUnit } from "./core/symbols.js";
 
 interface ProjectSnapshot {
   readonly graph: GraphDump;
   readonly scan: ScanResult;
+  readonly index: FileIndex;
   readonly executable: string;
-  readonly loadedAt: number;
   readonly generation: number;
 }
 
+/**
+ * Analyses depend only on the on-disk graph and scan (the snapshot), not on the
+ * editor buffer, so they are keyed on (project path, snapshot generation):
+ * typing does not re-run them, saving invalidates the snapshot and so them.
+ */
 interface CachedAnalysis {
-  readonly version: number;
   readonly generation: number;
   readonly analysis: FileAnalysis;
+}
+
+interface CachedExecutable {
+  readonly configuredPath: string;
+  readonly resolution: ExecutableResolution;
 }
 
 interface FolderState {
@@ -35,9 +52,14 @@ interface FolderState {
   loadingController: AbortController | undefined;
   generation: number;
   readonly analyses: Map<string, CachedAnalysis>;
+  /** In-flight analyses keyed by `${generation}:${projectPath}`. */
+  readonly inflight: SharedTasks<FileAnalysis>;
+  /** One explain bound for the whole folder, shared by every analysis. */
+  readonly explainLimit: ConcurrencyLimiter;
+  executable: CachedExecutable | undefined;
+  /** The CLI rejected `explain --units` (older than 0.9.0): explain one unit per call. */
+  noBatchExplain: boolean;
 }
-
-const SNAPSHOT_TTL_MS = 10_000;
 
 export interface ResolvedFolder {
   readonly folder: vscode.WorkspaceFolder;
@@ -91,10 +113,22 @@ export class ExtensionState implements vscode.Disposable {
 
   resolveFolder(folder: vscode.WorkspaceFolder): ResolvedFolder {
     const settings = this.settingsFor(folder);
-    const resolution = resolveExecutable({
-      configuredPath: settings.executablePath,
-      workspaceDir: folder.uri.fsPath,
-    });
+    const state = this.#folderState(folder);
+    // Resolution stats the filesystem; it is cached until settings, trust or
+    // a manual refresh invalidate it. A failed lookup is never cached.
+    const cached =
+      state.executable?.configuredPath === settings.executablePath
+        ? state.executable.resolution
+        : undefined;
+    const resolution =
+      cached ??
+      resolveExecutable({
+        configuredPath: settings.executablePath,
+        workspaceDir: folder.uri.fsPath,
+      });
+    state.executable = resolution
+      ? { configuredPath: settings.executablePath, resolution }
+      : undefined;
     if (!resolution)
       throw new SmartTestExtensionError(
         settings.executablePath
@@ -111,9 +145,9 @@ export class ExtensionState implements vscode.Disposable {
 
   async snapshot(folder: vscode.WorkspaceFolder, signal: AbortSignal): Promise<ProjectSnapshot> {
     const state = this.#folderState(folder);
-    const now = Date.now();
-    if (state.snapshot && now - state.snapshot.loadedAt < SNAPSHOT_TTL_MS) return state.snapshot;
-    if (state.loading) return await state.loading;
+    // No TTL: saves and the file-system watcher invalidate the snapshot.
+    if (state.snapshot) return state.snapshot;
+    if (state.loading) return await abortable(state.loading, signal);
 
     const loading = this.#loadSnapshot(folder, state).finally(() => {
       if (state.loading === loading) state.loading = undefined;
@@ -150,11 +184,13 @@ export class ExtensionState implements vscode.Disposable {
       this.#logCli("scan", scanResult);
       this.#logCli("graph", graphResult);
       state.generation += 1;
+      const graph = parseGraphDump(graphResult.stdout);
+      const scan = parseScanJson(scanResult.stdout);
       const snapshot: ProjectSnapshot = {
-        graph: parseGraphDump(graphResult.stdout),
-        scan: parseScanJson(scanResult.stdout),
+        graph,
+        scan,
+        index: buildFileIndex(graph, scan),
         executable: resolved.executable,
-        loadedAt: Date.now(),
         generation: state.generation,
       };
       state.snapshot = snapshot;
@@ -162,6 +198,7 @@ export class ExtensionState implements vscode.Disposable {
       return snapshot;
     } catch (error) {
       controller.abort();
+      state.executable = undefined;
       throw error;
     } finally {
       if (state.loadingController === controller) state.loadingController = undefined;
@@ -181,39 +218,76 @@ export class ExtensionState implements vscode.Disposable {
 
     const state = this.#folderState(folder);
     const cached = state.analyses.get(projectPath);
-    if (
-      cached &&
-      cached.version === document.version &&
-      state.snapshot &&
-      cached.generation === state.snapshot.generation
-    )
+    if (cached && state.snapshot && cached.generation === state.snapshot.generation)
       return cached.analysis;
 
     const snapshot = await this.snapshot(folder, signal);
+    const settled = state.analyses.get(projectPath);
+    if (settled && settled.generation === snapshot.generation) return settled.analysis;
+    // CodeLens, hover and the active-editor task often ask for the same file at
+    // once; they share one analysis, aborted only when all of them cancel.
+    return await state.inflight.run(`${snapshot.generation}:${projectPath}`, signal, (shared) =>
+      this.#analyze(folder, state, snapshot, projectPath, shared),
+    );
+  }
+
+  async #analyze(
+    folder: vscode.WorkspaceFolder,
+    state: FolderState,
+    snapshot: ProjectSnapshot,
+    projectPath: string,
+    signal: AbortSignal,
+  ): Promise<FileAnalysis> {
     const resolved = this.resolveFolder(folder);
+    state.explainLimit.setLimit(resolved.settings.maxConcurrentExplain);
     const analysis = await analyzeFile({
       file: projectPath,
       graph: snapshot.graph,
       scan: snapshot.scan,
+      index: snapshot.index,
       maxUnits: resolved.settings.maxUnitsPerFile,
-      concurrency: resolved.settings.maxConcurrentExplain,
+      // The folder-wide limiter is the real bound; mapLimit only feeds it.
+      concurrency: Number.MAX_SAFE_INTEGER,
       signal,
-      explain: async (unit, explainSignal) => {
-        const result = await runCli({
-          executable: snapshot.executable,
-          args: explainArgs(explainTarget(projectPath, unit.qualifiedName)),
-          cwd: folder.uri.fsPath,
-          signal: explainSignal,
-          timeoutMs: resolved.settings.analysisTimeoutMs,
-        });
-        return parseExplainJson(result.stdout);
-      },
+      ...(state.noBatchExplain
+        ? {}
+        : {
+            explainUnits: (units: readonly GraphUnit[], explainSignal: AbortSignal) =>
+              state.explainLimit.run(async () => {
+                try {
+                  const result = await runCli({
+                    executable: snapshot.executable,
+                    args: explainUnitsArgs(
+                      projectPath,
+                      units.map((u) => u.qualifiedName),
+                    ),
+                    cwd: folder.uri.fsPath,
+                    signal: explainSignal,
+                    timeoutMs: resolved.settings.analysisTimeoutMs,
+                  });
+                  return parseExplainJson(result.stdout);
+                } catch (error) {
+                  if (error instanceof SmartTestExtensionError && error.cliCode === "ST_USAGE")
+                    state.noBatchExplain = true;
+                  throw error;
+                }
+              }, explainSignal),
+          }),
+      explain: (unit, explainSignal) =>
+        state.explainLimit.run(async () => {
+          const result = await runCli({
+            executable: snapshot.executable,
+            args: explainArgs(explainTarget(projectPath, unit.qualifiedName)),
+            cwd: folder.uri.fsPath,
+            signal: explainSignal,
+            timeoutMs: resolved.settings.analysisTimeoutMs,
+          });
+          return parseExplainJson(result.stdout);
+        }, explainSignal),
     });
-    state.analyses.set(projectPath, {
-      version: document.version,
-      generation: snapshot.generation,
-      analysis,
-    });
+    // A newer snapshot may have replaced this one while explain calls ran.
+    if (state.snapshot?.generation === snapshot.generation)
+      state.analyses.set(projectPath, { generation: snapshot.generation, analysis });
     return analysis;
   }
 
@@ -224,6 +298,7 @@ export class ExtensionState implements vscode.Disposable {
     state.snapshot = undefined;
     state.loading = undefined;
     state.analyses.clear();
+    state.inflight.clear();
     state.generation += 1;
   }
 
@@ -243,6 +318,9 @@ export class ExtensionState implements vscode.Disposable {
       state.snapshot = undefined;
       state.loading = undefined;
       state.analyses.clear();
+      state.inflight.clear();
+      state.executable = undefined;
+      state.noBatchExplain = false;
       state.generation += 1;
     }
   }
@@ -257,6 +335,10 @@ export class ExtensionState implements vscode.Disposable {
         loadingController: undefined,
         generation: 0,
         analyses: new Map(),
+        inflight: new SharedTasks<FileAnalysis>(),
+        explainLimit: new ConcurrencyLimiter(this.settingsFor(folder).maxConcurrentExplain),
+        executable: undefined,
+        noBatchExplain: false,
       };
       this.#folders.set(folder.uri.toString(), state);
     }

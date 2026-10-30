@@ -4,9 +4,16 @@
  */
 import { existsSync } from "node:fs";
 import { lstat, mkdir, mkdtemp, rm, rmdir, symlink } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { availableParallelism, tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { matchGlob, readJson, runProcess, SmartTestError, writeJson } from "@smarttest/shared";
+import {
+  mapLimit,
+  matchGlob,
+  readJson,
+  runProcess,
+  SmartTestError,
+  writeJson,
+} from "@smarttest/shared";
 import type { ChangeAnalysisInput } from "@smarttest/vcs-core";
 
 /** Git puts these in a hook's environment; a temporary worktree must not inherit them. */
@@ -115,7 +122,8 @@ export async function assertPushIsHead(cwd: string, refs: readonly PushRef[]): P
 }
 
 async function git(cwd: string, args: string[], env?: NodeJS.ProcessEnv) {
-  return runProcess("git", ["-c", "core.quotePath=false", ...args], {
+  // Paths are repository-relative even when the user configured `diff.relative`.
+  return runProcess("git", ["-c", "core.quotePath=false", "-c", "diff.relative=false", ...args], {
     cwd,
     ...(env ? { env } : {}),
   });
@@ -140,11 +148,20 @@ export async function setAside(
     if (r.code !== 0) throw failure(`git ${args.join(" ")} failed`, r.stderr);
     return names(r.stdout);
   };
-  const unstaged = await lines(["diff", "--name-only"]);
-  const untracked = await lines(["ls-files", "--others", "--exclude-standard"]);
-  // For a push, staged-but-uncommitted content is also *not* what is being pushed.
-  const staged = kind === "push" ? await lines(["diff", "--cached", "--name-only"]) : [];
+  const [unstaged, untracked, staged] = await Promise.all([
+    lines(["diff", "--name-only"]),
+    lines(["ls-files", "--others", "--exclude-standard"]),
+    // For a push, staged-but-uncommitted content is also *not* what is being pushed.
+    kind === "push" ? lines(["diff", "--cached", "--name-only"]) : [],
+  ]);
   return { unstaged, untracked, staged };
+}
+
+/** Repository-relative paths inside the project at `prefix`, made project-relative. */
+export function projectPaths(prefix: string, paths: readonly string[]): Set<string> {
+  if (!prefix) return new Set(paths);
+  const p = `${prefix.replace(/\/$/, "")}/`;
+  return new Set(paths.filter((f) => f.startsWith(p)).map((f) => f.slice(p.length)));
 }
 
 export interface Isolation {
@@ -351,7 +368,9 @@ export function planChecks(
   const byProject = new Map<string, ChangedFile[]>();
   for (const f of changed) {
     const p = projectOf(f.path, projects);
-    byProject.set(p, [...(byProject.get(p) ?? []), f]);
+    const files = byProject.get(p);
+    if (files) files.push(f);
+    else byProject.set(p, [f]);
   }
   const out: { name: string; project: string; command: string }[] = [];
   for (const c of checks) {
@@ -382,33 +401,33 @@ export async function runChecks(
   planned: readonly { name: string; project: string; command: string }[],
   timeoutMs: number,
   signal?: AbortSignal,
+  concurrency = availableParallelism(),
 ): Promise<CheckResult[]> {
-  return Promise.all(
-    planned.map(async (p) => {
-      const t = performance.now();
-      const done = (status: "passed" | "failed", output?: string): CheckResult => ({
-        ...p,
-        status,
-        durationMs: Math.round(performance.now() - t),
-        ...(output ? { output } : {}),
+  // Bounded: a monorepo commit can plan one type-check per affected project.
+  return mapLimit(planned, concurrency, async (p) => {
+    const t = performance.now();
+    const done = (status: "passed" | "failed", output?: string): CheckResult => ({
+      ...p,
+      status,
+      durationMs: Math.round(performance.now() - t),
+      ...(output ? { output } : {}),
+    });
+    if (signal?.aborted) return done("failed", "cancelled before it started");
+    try {
+      const r = await runProcess("sh", ["-c", p.command], {
+        cwd: join(root, p.project),
+        timeoutMs,
+        env: cleanGitEnv(),
+        ...(signal ? { signal } : {}),
       });
-      if (signal?.aborted) return done("failed", "cancelled before it started");
-      try {
-        const r = await runProcess("sh", ["-c", p.command], {
-          cwd: join(root, p.project),
-          timeoutMs,
-          env: cleanGitEnv(),
-          ...(signal ? { signal } : {}),
-        });
-        if (r.cancelled) return done("failed", "cancelled before it completed");
-        if (r.timedOut) return done("failed", `timed out after ${timeoutMs} ms`);
-        const output = `${r.stdout}\n${r.stderr}`.trim().split("\n").slice(-15).join("\n");
-        return done(r.code === 0 ? "passed" : "failed", r.code === 0 ? undefined : output);
-      } catch (error) {
-        return done("failed", `could not start the check: ${(error as Error).message}`);
-      }
-    }),
-  );
+      if (r.cancelled) return done("failed", "cancelled before it completed");
+      if (r.timedOut) return done("failed", `timed out after ${timeoutMs} ms`);
+      const output = `${r.stdout}\n${r.stderr}`.trim().split("\n").slice(-15).join("\n");
+      return done(r.code === 0 ? "passed" : "failed", r.code === 0 ? undefined : output);
+    } catch (error) {
+      return done("failed", `could not start the check: ${(error as Error).message}`);
+    }
+  });
 }
 
 // ── Records ────────────────────────────────────────────────────────────────────────────────

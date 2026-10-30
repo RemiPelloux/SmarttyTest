@@ -1,6 +1,6 @@
 # Commit and push hooks
 
-A hook tests the content being committed or pushed. In 0.9.0, `run --staged` uses the Git index and `run --push` uses committed content. When the working tree differs, SmartTest creates a temporary checkout, links installed dependencies, runs there, and removes the checkout. It never stashes the user's work.
+A hook tests the content being committed or pushed. In 0.9.0, `run --staged` uses the Git index and `run --push` uses committed content. When the working tree differs, SmartTest creates a temporary checkout, links installed dependencies, runs there, and removes the checkout. It never stashes the user's work. Files whose content is the same in the checkout and the working tree keep the working tree's index entries, so the next normal run does not re-read the whole project.
 
 ## Install
 
@@ -39,7 +39,7 @@ The compact output shows the changed-file count, selected tests, failing files a
 
 ## Project checks
 
-Checks run in the affected project's directory, alongside the tests:
+Checks run in the affected project's directory, alongside the tests, at most one per CPU core at a time:
 
 ```ts
 import { defineConfig } from "smarttest";

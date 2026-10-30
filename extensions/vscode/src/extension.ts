@@ -17,6 +17,15 @@ let results: SmartTestResultsProvider | undefined;
 let saveScheduler: KeyedScheduler | undefined;
 let activeTask: LatestTask | undefined;
 
+/** Sources, configs and manifests that can change the scan or the graph. */
+const WATCH_GLOB = "**/*.{ts,tsx,mts,cts,js,jsx,mjs,cjs,json}";
+/**
+ * Dependency, state and build-output folders: a watch build writing there would otherwise rebuild
+ * the snapshot on every emit. Saves in the editor always refresh, wherever the file is.
+ */
+const IGNORED_PATH =
+  /\/(node_modules|\.git|\.smarttest|coverage|dist|build|out|\.next|\.turbo|\.cache)\//;
+
 const SELECTOR: vscode.DocumentSelector = [
   { language: "typescript", scheme: "file" },
   { language: "javascript", scheme: "file" },
@@ -46,23 +55,26 @@ export function activate(context: vscode.ExtensionContext): void {
 
   registerCommands(context, { state, status, results, codeLens });
 
+  // Saves and out-of-editor file changes both land here; invalidation and the
+  // CodeLens refresh happen once per debounced burst, not once per event.
   saveScheduler = new KeyedScheduler({
-    delayMs: () => {
-      const folder = activeFolder();
+    delayMs: (key) => {
+      const folder = folderByKey(key);
       return folder ? (state?.settingsFor(folder).refreshDelayMs ?? 350) : 350;
     },
     run: async (key, signal) => {
-      if (!state?.trusted) return;
-      const folder = vscode.workspace.workspaceFolders?.find(
-        (candidate) => candidate.uri.toString() === key,
-      );
-      if (!folder) return;
+      const folder = folderByKey(key);
+      if (!folder || !state) return;
+      state.invalidateFolder(folder);
       const document = vscode.window.activeTextEditor?.document;
-      if (document && state.folderFor(document.uri)?.uri.toString() === key) {
+      const inFolder = !!document && state.folderFor(document.uri)?.uri.toString() === key;
+      if (document && inFolder) status?.clearAnalysis(document.uri);
+      codeLens?.refresh();
+      if (!state.trusted) return;
+      if (document && inFolder) {
         const analysis = await state.analyzeDocument(document, signal);
         if (analysis) status?.setAnalysis(document.uri, analysis);
       }
-      codeLens?.refresh();
     },
     onError: (key, error) => {
       if (isCancelledError(error) || !output || !status) return;
@@ -86,8 +98,13 @@ export function activate(context: vscode.ExtensionContext): void {
         status?.clearAnalysis();
         return;
       }
-      const analysis = await state.analyzeDocument(document, signal);
-      if (analysis) status?.setAnalysis(document.uri, analysis);
+      status?.setAnalysing(document.uri);
+      try {
+        const analysis = await state.analyzeDocument(document, signal);
+        if (analysis) status?.setAnalysis(document.uri, analysis);
+      } finally {
+        status?.setAnalysing(undefined);
+      }
     },
     onError: (error) => {
       if (isCancelledError(error) || !output || !status) return;
@@ -95,6 +112,17 @@ export function activate(context: vscode.ExtensionContext): void {
       status.setError(error instanceof Error ? error.message : String(error));
     },
   });
+
+  // Files changed outside the editor (git checkout, codegen, another tool)
+  // invalidate the snapshot the same way a save does.
+  const watcher = vscode.workspace.createFileSystemWatcher(WATCH_GLOB);
+  const scheduleRefresh = (uri: vscode.Uri, saved = false): void => {
+    if (!state || !saveScheduler || uri.scheme !== "file") return;
+    if (!saved && IGNORED_PATH.test(uri.path)) return;
+    const folder = state.folderFor(uri);
+    if (!folder) return;
+    saveScheduler.trigger(folder.uri.toString());
+  };
 
   context.subscriptions.push(
     vscode.window.onDidChangeActiveTextEditor((editor) => {
@@ -104,16 +132,11 @@ export function activate(context: vscode.ExtensionContext): void {
       if (!editor) return;
       activeTask?.trigger();
     }),
-    vscode.workspace.onDidSaveTextDocument((document) => {
-      if (!state || !saveScheduler) return;
-      const folder = state.folderFor(document.uri);
-      if (!folder) return;
-      state.invalidateDocument(document);
-      state.invalidateFolder(folder);
-      status?.clearAnalysis(document.uri);
-      saveScheduler.trigger(folder.uri.toString());
-      codeLens?.refresh();
-    }),
+    vscode.workspace.onDidSaveTextDocument((document) => scheduleRefresh(document.uri, true)),
+    watcher,
+    watcher.onDidCreate((uri) => scheduleRefresh(uri)),
+    watcher.onDidChange((uri) => scheduleRefresh(uri)),
+    watcher.onDidDelete((uri) => scheduleRefresh(uri)),
     vscode.workspace.onDidChangeConfiguration((event) => {
       if (!event.affectsConfiguration("smarttest")) return;
       codeLens?.refresh();
@@ -137,10 +160,8 @@ export function activate(context: vscode.ExtensionContext): void {
   );
 }
 
-function activeFolder(): vscode.WorkspaceFolder | undefined {
-  const document = vscode.window.activeTextEditor?.document;
-  if (!document) return undefined;
-  return state?.folderFor(document.uri);
+function folderByKey(key: string): vscode.WorkspaceFolder | undefined {
+  return vscode.workspace.workspaceFolders?.find((candidate) => candidate.uri.toString() === key);
 }
 
 export function deactivate(): void {

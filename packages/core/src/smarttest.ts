@@ -47,6 +47,7 @@ import {
   ExitCode,
   exists,
   type Logger,
+  mapLimit,
   matchGlob,
   readJson,
   readText,
@@ -111,6 +112,7 @@ import {
   median,
   type PushRef,
   planChecks,
+  projectPaths,
   readPrePushRefs,
   runChecks,
   saveHookRecords,
@@ -155,6 +157,8 @@ export interface OpenOptions {
   logger?: Logger;
   /** Use this state directory (absolute) instead of the project's (temporary checkouts). */
   storeDir?: string;
+  /** Temporary checkouts: the working tree they mirror (see `UpdateOptions.mirror`). */
+  mirror?: { root: string; differs: ReadonlySet<string> };
 }
 
 export interface AnalyzeOptions {
@@ -341,13 +345,20 @@ export class SmartTest {
     readonly loaded: LoadedConfig,
     public logger: Logger,
     storeDir?: string,
+    private readonly mirror?: OpenOptions["mirror"],
   ) {
     this.storeDir = storeDir ?? join(root, loaded.config.storeDir);
   }
 
   static async open(options: OpenOptions): Promise<SmartTest> {
     const loaded = await loadConfig(options.root, options.configPath);
-    return new SmartTest(options.root, loaded, options.logger ?? silentLogger, options.storeDir);
+    return new SmartTest(
+      options.root,
+      loaded,
+      options.logger ?? silentLogger,
+      options.storeDir,
+      options.mirror,
+    );
   }
 
   useLogger(logger: Logger): this {
@@ -473,7 +484,10 @@ export class SmartTest {
     return this.withoutOwnState(await this.git().getChangeInput(src));
   }
 
-  /** SmartTest's own state (store, reports) is never a change to the project. */
+  /**
+   * SmartTest's own state (store, reports) is never a change to the project. `readBefore` is
+   * memoised: semantic diff, traces and Studio read the same files, each read a VCS process.
+   */
   private withoutOwnState(input: ChangeAnalysisInput): ChangeAnalysisInput {
     const own = [this.config.storeDir, this.config.reports.outputDir].map((d) =>
       d.replace(/^\.\//, "").replace(/\/$/, ""),
@@ -481,9 +495,13 @@ export class SmartTest {
     const changes = input.changeSet.changes.filter(
       (c) => !own.some((d) => c.path === d || c.path.startsWith(`${d}/`)),
     );
-    return changes.length === input.changeSet.changes.length
-      ? input
-      : { ...input, changeSet: { ...input.changeSet, changes } };
+    return {
+      ...input,
+      readBefore: memoiseReadBefore(input),
+      ...(changes.length === input.changeSet.changes.length
+        ? {}
+        : { changeSet: { ...input.changeSet, changes } }),
+    };
   }
 
   // ── Index & graph ───────────────────────────────────────────────────────────────────────
@@ -539,6 +557,7 @@ export class SmartTest {
         analyzers: ANALYZERS,
         resolver,
         contextKey,
+        ...(this.mirror ? { mirror: this.mirror } : {}),
         ...(pool
           ? {
               parseMany: async (jobs: { path: string; content: string }[]) =>
@@ -876,10 +895,11 @@ export class SmartTest {
       readBefore: (path) => runWithEnvScope(ambientGitEnv, () => readBefore(path)),
     };
     const profile = await this.profile();
+    const prefix = await git.prefix();
     const iso = await isolate({
       projectRoot: this.root,
       repoRoot,
-      prefix: await git.prefix(),
+      prefix,
       kind,
       input,
       aside,
@@ -905,6 +925,10 @@ export class SmartTest {
           ...(configPath ? { configPath } : {}),
           storeDir: this.storeDir,
           logger: this.logger,
+          mirror: {
+            root: this.root,
+            differs: projectPaths(prefix, [...aside.unstaged, ...aside.staged]),
+          },
         });
         const outputDir = isAbsolute(this.config.reports.outputDir)
           ? this.config.reports.outputDir
@@ -1203,13 +1227,24 @@ export class SmartTest {
   ): Promise<Map<string, FileSemanticDiff>> {
     const diffs = new Map<string, FileSemanticDiff>();
     const { readFile } = await import("node:fs/promises");
+    // Each "before" read is a VCS process: start the ones the loop below needs together.
+    const resource = (path: string) =>
+      isEnvFile(path) || isPrismaSchema(path) || isJsonCatalog(path, LOCALE_PATH);
+    await mapLimit(
+      input.changeSet.changes.filter(
+        (c) =>
+          c.type !== "added" &&
+          (resource(c.path) ||
+            (c.type !== "deleted" &&
+              index.get(c.path) !== undefined &&
+              ANALYZERS.some((a) => a.supports(c.path)))),
+      ),
+      8,
+      (c) => input.readBefore(c.previousPath ?? c.path),
+    );
     for (const change of input.changeSet.changes) {
       // Resource files (env, Prisma schema, JSON catalogs): key-level diff.
-      if (
-        isEnvFile(change.path) ||
-        isPrismaSchema(change.path) ||
-        isJsonCatalog(change.path, LOCALE_PATH)
-      ) {
+      if (resource(change.path)) {
         const beforeText =
           change.type === "added"
             ? undefined
@@ -1684,7 +1719,14 @@ export class SmartTest {
 
   // ── Explain & graph ─────────────────────────────────────────────────────────────────────
 
-  async explain(target: string, options: AnalyzeOptions & { fresh?: boolean } = {}) {
+  async explain(
+    target: string,
+    options: AnalyzeOptions & {
+      fresh?: boolean;
+      /** Per-unit breakdown for these units of a source file, in one graph build. */
+      units?: readonly string[];
+    } = {},
+  ) {
     const saved = options.fresh
       ? undefined
       : await readJson<{ decision: ImpactResult; description: string }>(
@@ -1720,6 +1762,8 @@ export class SmartTest {
       });
     }
     const hits = graph.dependentsOf([{ file, units: [unit] }]);
+    const testsOf = (h: typeof hits) =>
+      [...h.tests.values()].map((x) => ({ test: x.test, path: x.path }));
     const policy = new RulesEngine(effectiveRules(this.config)).evaluateAll([
       { path: file },
       ...(index.get(file)?.symbols ?? []).map((s) => ({
@@ -1737,7 +1781,15 @@ export class SmartTest {
       kind: "source" as const,
       target,
       description,
-      tests: [...hits.tests.values()].map((h) => ({ test: h.test, path: h.path })),
+      tests: testsOf(hits),
+      ...(options.units
+        ? {
+            units: options.units.map((u) => ({
+              unit: u,
+              tests: testsOf(graph.dependentsOf([{ file, units: [u] }])),
+            })),
+          }
+        : {}),
       uncertainty: graph.uncertaintyReachableFrom(file),
       rules: policy.matched.map((m) => m.rule.name),
       risk: policy.risk,
@@ -2660,6 +2712,25 @@ export class SmartTest {
       dynamic,
     };
   }
+}
+
+const memoised = new WeakSet<ChangeAnalysisInput["readBefore"]>();
+
+function memoiseReadBefore(input: ChangeAnalysisInput): ChangeAnalysisInput["readBefore"] {
+  if (memoised.has(input.readBefore)) return input.readBefore;
+  const read = input.readBefore.bind(input);
+  const cache = new Map<string, Promise<string | undefined>>();
+  const readBefore = (path: string) => {
+    let hit = cache.get(path);
+    if (!hit) {
+      hit = read(path);
+      cache.set(path, hit);
+      hit.catch(() => cache.delete(path));
+    }
+    return hit;
+  };
+  memoised.add(readBefore);
+  return readBefore;
 }
 
 function stripDetails(decision: ImpactResult): RunReport["decision"] {

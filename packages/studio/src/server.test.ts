@@ -234,6 +234,27 @@ describe("methods", () => {
     expect(ok.json).toEqual({ cancelled: false });
   });
 
+  it("answers a malformed or oversized body as a client error, not a server error", async () => {
+    const post = (body: string) =>
+      fetch(`${base}/api/refresh`, {
+        method: "POST",
+        headers: {
+          "x-smarttest-token": handle.token,
+          "content-type": "application/json",
+          origin: origin(),
+        },
+        body,
+      });
+    const malformed = await post("{not json");
+    expect(malformed.status).toBe(400);
+    expect(((await malformed.json()) as StudioApiError).error.code).toBe("ST_STUDIO_BODY");
+    const oversized = await post(JSON.stringify({ pad: "x".repeat(70 * 1024) }));
+    expect(oversized.status).toBe(413);
+    expect(((await oversized.json()) as StudioApiError).error.code).toBe(
+      "ST_STUDIO_BODY_TOO_LARGE",
+    );
+  });
+
   it("refuses a protocol method that no route allows", async () => {
     const { res } = await api("/api/session", { method: "PUT" });
     expect(res.status).toBe(405);
@@ -279,6 +300,11 @@ describe("read models", () => {
     expect(source.lines.length).toBeGreaterThan(0);
     expect(source.changedLines.length).toBeGreaterThan(0);
     expect(source.units.some((unit) => unit.changed)).toBe(true);
+    // Unit spans use the same one-based numbering as the lines they mark.
+    const capitalize = source.units.find((unit) => unit.name === "capitalize");
+    expect(capitalize?.startLine).toBe(
+      source.lines.find((line) => line.text.includes("function capitalize"))?.n,
+    );
     expect(source.note).toBeNull();
   });
 

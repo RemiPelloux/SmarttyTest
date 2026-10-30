@@ -44,6 +44,13 @@ export function graphArgs(): string[] {
 }
 
 /** `file#Class.method`, `file#fn` or `file#*` — never an absolute path. */
+/** One analysis for every unit of a file (`--units`, SmartTest 0.9.0+). */
+export function explainUnitsArgs(file: string, units: readonly string[]): string[] {
+  if (file.startsWith("-") || file.includes("\0") || units.some((u) => u.includes(",")))
+    throw new Error("Refusing to pass an option-looking or ambiguous target to smarttest explain.");
+  return ["explain", file, "--units", units.join(","), "--json"];
+}
+
 export function explainTarget(file: string, qualifiedName?: string): string {
   return qualifiedName ? `${file}#${qualifiedName}` : `${file}#*`;
 }

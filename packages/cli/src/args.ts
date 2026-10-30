@@ -56,6 +56,7 @@ export const OPTIONS = {
   depth: { type: "string" },
   // explain
   fresh: { type: "boolean" },
+  units: { type: "string" },
   commits: { type: "string" },
   since: { type: "string" },
   sample: { type: "string" },

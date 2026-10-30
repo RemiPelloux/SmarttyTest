@@ -548,9 +548,23 @@ async function cmdExplain(ctx: Ctx): Promise<number> {
   const st = await ctx.open();
   const source = sourceOf(flags);
   const mode = modeOf(flags);
+  const units =
+    typeof flags.units === "string"
+      ? flags.units
+          .split(",")
+          .map((u) => u.trim())
+          .filter(Boolean)
+      : undefined;
+  if (units && target.includes("#"))
+    throw new SmartTestError("--units takes a file, not file#Symbol", {
+      code: "ST_USAGE",
+      category: "usage",
+      hint: "smarttest explain src/a.ts --units A,B.method",
+    });
   const r = await st.explain(target.replace(/\\/g, "/").replace(/^\.\//, ""), {
     ...(source ? { source } : {}),
     ...(mode ? { mode } : {}),
+    ...(units ? { units } : {}),
     fresh: !!flags.fresh,
   });
   if (flags.json) {
@@ -581,6 +595,10 @@ async function cmdExplain(ctx: Ctx): Promise<number> {
     if (!r.tests.length)
       ctx.out(
         `  ${t.yellow("▲")} No test depends on it — consider \`smarttest generate --path ${target.split("#")[0]}\``,
+      );
+    for (const u of r.units ?? [])
+      ctx.out(
+        `  ${t.bold(u.unit)}  ${u.tests.length ? `${u.tests.length} test file(s)` : t.yellow("no test depends on it")}`,
       );
     for (const u of r.uncertainty) ctx.out(`  ${t.yellow("▲")} ${u.file}: ${u.reasons.join("; ")}`);
   }

@@ -81,6 +81,16 @@ export function groupFiles(report: RunReport): FileResultGroup[] {
   }));
 }
 
+/** A file starts expanded in the results view only when something in it went wrong. */
+export function groupHasFailure(group: FileResultGroup): boolean {
+  const failing = (state: ResultState): boolean =>
+    state === "failed" ||
+    state === "cached-failure" ||
+    state === "timed-out" ||
+    state === "infrastructure-error";
+  return failing(group.state) || group.tests.some((test) => failing(resultState(test.status)));
+}
+
 export interface RunVerdict {
   readonly state: "passed" | "failed" | "incomplete" | "cancelled";
   readonly headline: string;

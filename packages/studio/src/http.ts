@@ -90,6 +90,9 @@ export async function sendFile(
     const stream = createReadStream(absPath);
     stream.on("error", reject);
     stream.on("end", resolve);
+    // A client that disconnects mid-file destroys the stream without `end` or `error`; `close`
+    // settles the promise either way (resolve is a no-op once it has settled).
+    stream.on("close", resolve);
     res.on("close", () => stream.destroy());
     stream.pipe(res);
   });

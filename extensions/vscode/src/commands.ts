@@ -120,6 +120,8 @@ export function registerCommands(
   deps: CommandDependencies,
 ): void {
   const { state, status, results, codeLens } = deps;
+  /** Folders with a run in flight; a second run would race the first one's report. */
+  const running = new Set<string>();
 
   const showImpact = async (...args: unknown[]): Promise<void> => {
     const uri = seekDocument(args[0]);
@@ -198,6 +200,13 @@ export function registerCommands(
         await vscode.commands.executeCommand("workbench.action.openSettings", "smarttest.baseRef");
       return;
     }
+    const runKey = folder.uri.toString();
+    if (running.has(runKey)) {
+      void vscode.window.showInformationMessage(
+        "SmartTest is already running affected tests for this folder.",
+      );
+      return;
+    }
     let resolution: ReturnType<ExtensionState["resolveFolder"]>;
     try {
       resolution = state.resolveFolder(folder);
@@ -206,6 +215,7 @@ export function registerCommands(
       return;
     }
 
+    running.add(runKey);
     status.setBusy(forFile ? "running affected tests for this file" : "running affected tests");
     status.setError(undefined);
     try {
@@ -219,6 +229,8 @@ export function registerCommands(
         },
         async (progress, token) => {
           const controller = signalFromProgress(token);
+          // Impact first: an empty selection must not record a (passing) run, which would also
+          // advance a native snapshot baseline.
           progress.report({ message: "analysing the change set" });
           const impactResult = await runCli({
             executable: resolution.executable,
@@ -285,6 +297,8 @@ export function registerCommands(
         return;
       }
       reportFailure(deps, "runAffected", error);
+    } finally {
+      running.delete(runKey);
     }
   };
 
@@ -340,11 +354,16 @@ export function registerCommands(
     const document = vscode.window.activeTextEditor?.document;
     if (state.trusted && document) {
       const controller = new AbortController();
+      status.setBusy("refreshing analysis");
       try {
         const analysis = await state.analyzeDocument(document, controller.signal);
+        status.setBusy(undefined);
         if (analysis) status.setAnalysis(document.uri, analysis);
       } catch (error) {
+        status.setBusy(undefined);
+        // A failed or superseded refresh is not "refreshed".
         if (!isCancelledError(error)) reportFailure(deps, "refresh", error);
+        return;
       }
     }
     void vscode.window.showInformationMessage("SmartTest analysis refreshed.");

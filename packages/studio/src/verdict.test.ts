@@ -52,6 +52,11 @@ describe("run verdict", () => {
     expect(
       runVerdictOf(summary({ selected: 0, executed: 0, passed: 0, skippedBySelection: 4 }), 0),
     ).toBe("passed");
-    expect(runVerdictOf(summary({ passed: 0, cached: 4 }), 2)).toBe("passed");
+  });
+
+  it("never calls a run in which every test came from cache passed (ADR-0009)", () => {
+    expect(runVerdictOf(summary({ passed: 0, cached: 4 }), 2)).toBe("cached-pass");
+    expect(runVerdictOf(summary({ passed: 1, cached: 3 }), 2)).toBe("passed");
+    expect(runVerdictOf(summary({ passed: 0, cached: 4, failed: 1 }), 2)).toBe("failed");
   });
 });

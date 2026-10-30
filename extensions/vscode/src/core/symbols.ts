@@ -4,7 +4,7 @@
  * A unit the provider does not show gets no CodeLens: no range, no claim.
  */
 import type { GraphDump } from "./contracts.js";
-import { sameProjectPath, toPosix } from "./paths.js";
+import { stripLeadingDotSlash, toPosix } from "./paths.js";
 
 export type UnitKind = "function" | "method" | "class";
 
@@ -52,31 +52,51 @@ function unitKind(kind: string): UnitKind | undefined {
   return undefined;
 }
 
+/** Lookup key that compares like `sameProjectPath` (case-insensitive on Windows). */
+export function projectPathKey(path: string, platform: NodeJS.Platform = process.platform): string {
+  const normal = stripLeadingDotSlash(toPosix(path));
+  return platform === "win32" ? normal.toLowerCase() : normal;
+}
+
 /**
- * Graph nodes for one file. `graph --format json` is the only contract that
- * lists symbols with their units, so it is the source of truth for "does this
- * unit exist at all?" — `explain` alone cannot distinguish an unknown unit from
- * a known unit with no tests.
+ * Graph units grouped by file, built once per graph snapshot. `graph --format
+ * json` is the only contract that lists symbols with their units, so it is the
+ * source of truth for "does this unit exist at all?" — `explain` alone cannot
+ * distinguish an unknown unit from a known unit with no tests.
  */
-export function unitsForFile(
+export function unitsByFile(
   graph: GraphDump,
-  file: string,
   platform: NodeJS.Platform = process.platform,
-): GraphUnit[] {
-  const target = toPosix(file);
-  const units: GraphUnit[] = [];
+): Map<string, GraphUnit[]> {
+  const byFile = new Map<string, GraphUnit[]>();
+  const seen = new Set<string>();
   for (const node of graph.nodes) {
-    const nodeFile = node.filePath ?? node.id.split("#")[0] ?? "";
-    if (!sameProjectPath(nodeFile, target, platform)) continue;
     const kind = unitKind(node.kind);
     if (!kind) continue;
     const hash = node.id.indexOf("#");
     if (hash < 0) continue;
     const qualifiedName = node.id.slice(hash + 1);
     if (!qualifiedName) continue;
+    if (seen.has(node.id)) continue;
+    seen.add(node.id);
+    const key = projectPathKey(node.filePath ?? node.id.slice(0, hash), platform);
+    let units = byFile.get(key);
+    if (!units) {
+      units = [];
+      byFile.set(key, units);
+    }
     units.push({ id: node.id, qualifiedName, kind });
   }
-  return units.filter((unit, index) => units.findIndex((u) => u.id === unit.id) === index);
+  return byFile;
+}
+
+/** Graph units for one file; prefer `unitsByFile` when looking up many files. */
+export function unitsForFile(
+  graph: GraphDump,
+  file: string,
+  platform: NodeJS.Platform = process.platform,
+): GraphUnit[] {
+  return [...(unitsByFile(graph, platform).get(projectPathKey(file, platform)) ?? [])];
 }
 
 function isContainer(kind: DocumentSymbolKind): boolean {
@@ -119,9 +139,12 @@ export function matchUnitsToSymbols(
 ): UnitBinding[] {
   const candidates: Candidate[] = [];
   collect(symbols, [], candidates);
+  const byName = new Map<string, Candidate>();
+  for (const candidate of candidates)
+    if (!byName.has(candidate.qualifiedName)) byName.set(candidate.qualifiedName, candidate);
   const bindings: UnitBinding[] = [];
   for (const unit of units) {
-    const match = candidates.find((candidate) => candidate.qualifiedName === unit.qualifiedName);
+    const match = byName.get(unit.qualifiedName);
     if (!match) continue;
     bindings.push({ unit, range: match.range });
   }

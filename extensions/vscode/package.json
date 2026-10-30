@@ -185,7 +185,7 @@
           "minimum": 1,
           "maximum": 8,
           "scope": "resource",
-          "description": "Parallel `smarttest explain` processes used to compute per-symbol protection."
+          "description": "Parallel `smarttest explain` processes per workspace folder. With SmartTest 0.9.0+ one process explains a whole file; this bound matters for older CLIs and several open files."
         },
         "smarttest.maxUnitsPerFile": {
           "type": "number",

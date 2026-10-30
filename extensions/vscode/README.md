@@ -63,7 +63,7 @@ Settings, executable lookup, `cwd`, graph, scan and analysis caches are all per 
 | `smarttest.codeLens.enabled`     | `true`        | CodeLens on/off.                                                                |
 | `smarttest.hover.enabled`        | `true`        | Hover on/off.                                                                   |
 | `smarttest.statusBar.enabled`    | `true`        | Status bar item on/off.                                                         |
-| `smarttest.maxConcurrentExplain` | `2`           | Parallel `explain` processes per file.                                          |
+| `smarttest.maxConcurrentExplain` | `2`           | Parallel `explain` processes per workspace folder.                              |
 | `smarttest.maxUnitsPerFile`      | `150`         | Above this many units the file's protection is **hidden**, not partially shown. |
 | `smarttest.analysisTimeoutMs`    | `120000`      | Timeout for scan/graph/impact/explain.                                          |
 | `smarttest.runTimeoutMs`         | `900000`      | Timeout for a run started here.                                                 |
@@ -72,7 +72,7 @@ Settings, executable lookup, `cwd`, graph, scan and analysis caches are all per 
 
 1. `smarttest scan --json` supplies the project profile, unresolved imports and dynamic imports.
 2. `smarttest graph --format json` supplies the file's function/method/class units. `--format json` is used because `graph --json` prints only statistics.
-3. `smarttest explain <file>#<Unit> --json` is called once per unit, bounded by `maxConcurrentExplain`, with cancellation and a timeout.
+3. `smarttest explain <file> --units <A,B.method> --json` is called once per file, with cancellation and a timeout. A CLI older than 0.9.0 rejects `--units`; the extension then calls `explain <file>#<Unit>` once per unit, bounded by `maxConcurrentExplain` per workspace folder.
 4. `smarttest impact --json` and `smarttest run --affected --json` drive the run commands.
 
 Every response is validated. A missing field is a `SmartTestExtensionError` with a stable code (`ST_EXT_CONTRACT`, `ST_EXT_SCHEMA_VERSION`, `ST_EXT_TIMEOUT`, …), not a zero that would look like "unprotected". Child processes are killed on cancellation and timeout.
@@ -105,7 +105,7 @@ The root `verify` gate runs `pnpm extension:verify`, which runs this package's `
 
 ### Testing against the real CLI
 
-The integration suite is part of the normal `test` run. It uses `packages/cli/dist/bin.js` when that build exists and runs `scan`, `graph`, per-unit `explain`, `impact` and a real affected Vitest run against `fixtures/projects/ts-lib-vitest` (copied to a temporary git repository for the write/run cases). Set `SMARTTEST_CLI` to point at another build. If no CLI build exists the suite reports itself as skipped rather than substituting canned JSON.
+The integration suite is part of the normal `test` run. It uses `packages/cli/dist/bin.js` when that build exists and runs `scan`, `graph`, per-file `explain --units`, `impact` and a real affected Vitest run against `fixtures/projects/ts-lib-vitest` (copied to a temporary git repository for the write/run cases). Set `SMARTTEST_CLI` to point at another build. If no CLI build exists the suite reports itself as skipped rather than substituting canned JSON.
 
 ```bash
 pnpm build
@@ -119,8 +119,8 @@ pnpm --dir extensions/vscode test
 ## Known limitations
 
 - No extension-host tests: CodeLens/Hover/status bar/commands are thin adapters over the tested core, but their VS Code wiring has not been executed in a real host here.
-- Per-symbol protection costs one `explain` process per unit; large files are capped by `smarttest.maxUnitsPerFile`.
-- The graph snapshot is cached for 10 seconds and invalidated on save. A change made outside VS Code is visible after a refresh.
+- Per-symbol protection costs one `explain` process per file (one per unit with older CLIs); large files are capped by `smarttest.maxUnitsPerFile`.
+- The graph snapshot is kept until a save, a settings or trust change, Refresh, or a source/config file changed outside VS Code (a file watcher; `node_modules`, `.git`, `.smarttest`, `coverage`, `dist`, `build`, `out`, `.next`, `.turbo` and `.cache` are ignored unless the file is saved in the editor).
 - `Run Affected Tests for This File` cannot scope execution to one file because the CLI has no such selector. It runs the change set and reports the intersection.
 - Symbol ranges come from the language server, not from SmartTest. Without a TypeScript/JavaScript language provider there are no lenses.
 

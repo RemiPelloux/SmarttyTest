@@ -39,10 +39,12 @@ import {
   buildSnapshot,
   cacheInfo,
   fileIndexOf,
+  isIndexedFile,
   type LastRunFacts,
   loadCoverage,
   loadLastRun,
   overviewOf,
+  readLastRunReport,
   type Snapshot,
   safeProjectPath,
   sourceOf,
@@ -102,6 +104,8 @@ class Studio {
   private inflight: Promise<Snapshot> | null = null;
   private last: LastRunFacts = EMPTY_LAST;
   private coverage: Snapshot["coverage"] = null;
+  /** Run state has been read at least once; `coverage` stays null in projects without coverage. */
+  private runStateLoaded = false;
   private source: ChangeSource | null = null;
   private readonly clients = new Set<ServerResponse>();
   private heartbeat: NodeJS.Timeout | null = null;
@@ -130,12 +134,16 @@ class Studio {
   }
 
   private async loadRunState(): Promise<void> {
-    const [run, cache, flaky, coverage] = await Promise.all([
-      loadLastRun(this.st.storeDir),
+    const [report, cache, flaky] = await Promise.all([
+      readLastRunReport(this.st.storeDir),
       cacheInfo(this.st.storeDir),
       this.st.flakyTests().catch(() => []),
-      loadCoverage(this.st.storeDir),
     ]);
+    const [run, coverage] = await Promise.all([
+      loadLastRun(this.st.storeDir, report),
+      loadCoverage(this.st.storeDir, report),
+    ]);
+    this.runStateLoaded = true;
     this.last = {
       run,
       cache: {
@@ -173,7 +181,7 @@ class Studio {
       const started = Date.now();
       const analysis: Analysis = await this.st.analyze(this.source ? { source: this.source } : {});
       const view = await this.st.traceView(analysis.input, analysis.index);
-      if (this.coverage === null) await this.loadRunState();
+      if (!this.runStateLoaded) await this.loadRunState();
       const snapshot = await buildSnapshot(this.st, view, this.coverage, analysis);
       this.snapshot = snapshot;
       this.broadcast({
@@ -415,11 +423,19 @@ function handleError(res: ServerResponse, error: unknown): void {
     sendError(res, statusFor(error), error.code, error.message, error.hint ?? null);
     return;
   }
-  const e = error as { code?: string; message?: string; hint?: string };
+  const e = error as { code?: string; message?: string; hint?: string; status?: unknown };
+  // readJsonBody tags its own client errors (400 malformed, 413 too large).
+  const status = e.status === 400 || e.status === 413 ? e.status : 500;
   sendError(
     res,
-    500,
-    typeof e.code === "string" ? e.code : "ST_STUDIO_INTERNAL",
+    status,
+    typeof e.code === "string"
+      ? e.code
+      : status === 413
+        ? "ST_STUDIO_BODY_TOO_LARGE"
+        : status === 400
+          ? "ST_STUDIO_BODY"
+          : "ST_STUDIO_INTERNAL",
     e.message ?? "Studio hit an unexpected error",
     e.hint ?? null,
   );
@@ -428,9 +444,7 @@ function handleError(res: ServerResponse, error: unknown): void {
 function apiRoutes(studio: Studio): ApiRoute[] {
   const sourceFile = async (path: string) => {
     const { snapshot } = await studio.current();
-    const index = fileIndexOf(snapshot);
-    const known = index.files.some((file) => file.path === path);
-    if (!known)
+    if (!isIndexedFile(snapshot, path))
       throw new SmartTestError(`${path} is not part of this project's analysed files`, {
         code: "ST_STUDIO_FILE",
         category: "usage",

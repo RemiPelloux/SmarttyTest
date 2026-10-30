@@ -4,6 +4,7 @@ import {
   bindingAtPosition,
   type DocumentSymbolNode,
   matchUnitsToSymbols,
+  unitsByFile,
   unitsForFile,
 } from "../src/core/symbols.js";
 
@@ -67,6 +68,28 @@ describe("graph units", () => {
     expect(unitsForFile(graph, "src/a.ts", "win32")).toHaveLength(3);
     expect(unitsForFile(graph, "SRC/A.TS", "win32")).toHaveLength(3);
     expect(unitsForFile(graph, "src/A.ts", "linux")).toHaveLength(0);
+  });
+
+  it("indexes every file once and drops duplicate unit ids", () => {
+    const index = unitsByFile(
+      {
+        nodes: [
+          ...graph.nodes,
+          { id: "src/a.ts#run", kind: "function", label: "run", filePath: "src/a.ts" },
+          { id: "./src/c.ts#c", kind: "function", label: "c" },
+        ],
+        edges: [],
+      },
+      "linux",
+    );
+    expect(index.get("src/a.ts")?.map((unit) => unit.id)).toEqual([
+      "src/a.ts#run",
+      "src/a.ts#A",
+      "src/a.ts#A.run",
+    ]);
+    expect(index.get("src/b.ts")?.map((unit) => unit.id)).toEqual(["src/b.ts#B"]);
+    expect(index.get("src/c.ts")?.map((unit) => unit.qualifiedName)).toEqual(["c"]);
+    expect(index.has("src/a.test.ts")).toBe(false);
   });
 });
 

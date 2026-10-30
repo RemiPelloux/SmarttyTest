@@ -1,212 +1,474 @@
-[
-  {
-    "route": "overview",
-    "theme": "dark",
-    "width": 1440,
-    "title": "Overview",
-    "overflow": false
-  },
-  {
-    "route": "overview",
-    "theme": "dark",
-    "width": 768,
-    "title": "Overview",
-    "overflow": false
-  },
-  {
-    "route": "overview",
-    "theme": "dark",
-    "width": 390,
-    "title": "Overview",
-    "overflow": false
-  },
-  {
-    "route": "impact",
-    "theme": "dark",
-    "width": 1440,
-    "title": "Impact",
-    "overflow": false
-  },
-  {
-    "route": "impact",
-    "theme": "dark",
-    "width": 768,
-    "title": "Impact",
-    "overflow": false
-  },
-  {
-    "route": "impact",
-    "theme": "dark",
-    "width": 390,
-    "title": "Impact",
-    "overflow": false
-  },
-  {
-    "route": "tests",
-    "theme": "dark",
-    "width": 1440,
-    "title": "Tests",
-    "overflow": false
-  },
-  {
-    "route": "tests",
-    "theme": "dark",
-    "width": 768,
-    "title": "Tests",
-    "overflow": false
-  },
-  {
-    "route": "tests",
-    "theme": "dark",
-    "width": 390,
-    "title": "Tests",
-    "overflow": false
-  },
-  {
-    "route": "trust",
-    "theme": "dark",
-    "width": 1440,
-    "title": "Trust",
-    "overflow": false
-  },
-  {
-    "route": "trust",
-    "theme": "dark",
-    "width": 768,
-    "title": "Trust",
-    "overflow": false
-  },
-  {
-    "route": "trust",
-    "theme": "dark",
-    "width": 390,
-    "title": "Trust",
-    "overflow": false
-  },
-  {
-    "route": "source",
-    "theme": "dark",
-    "width": 1440,
-    "title": "Source",
-    "overflow": false
-  },
-  {
-    "route": "source",
-    "theme": "dark",
-    "width": 768,
-    "title": "Source",
-    "overflow": false
-  },
-  {
-    "route": "source",
-    "theme": "dark",
-    "width": 390,
-    "title": "Source",
-    "overflow": false
-  },
-  {
-    "route": "overview",
-    "theme": "light",
-    "width": 1440,
-    "title": "Overview",
-    "overflow": false
-  },
-  {
-    "route": "overview",
-    "theme": "light",
-    "width": 768,
-    "title": "Overview",
-    "overflow": false
-  },
-  {
-    "route": "overview",
-    "theme": "light",
-    "width": 390,
-    "title": "Overview",
-    "overflow": false
-  },
-  {
-    "route": "impact",
-    "theme": "light",
-    "width": 1440,
-    "title": "Impact",
-    "overflow": false
-  },
-  {
-    "route": "impact",
-    "theme": "light",
-    "width": 768,
-    "title": "Impact",
-    "overflow": false
-  },
-  {
-    "route": "impact",
-    "theme": "light",
-    "width": 390,
-    "title": "Impact",
-    "overflow": false
-  },
-  {
-    "route": "tests",
-    "theme": "light",
-    "width": 1440,
-    "title": "Tests",
-    "overflow": false
-  },
-  {
-    "route": "tests",
-    "theme": "light",
-    "width": 768,
-    "title": "Tests",
-    "overflow": false
-  },
-  {
-    "route": "tests",
-    "theme": "light",
-    "width": 390,
-    "title": "Tests",
-    "overflow": false
-  },
-  {
-    "route": "trust",
-    "theme": "light",
-    "width": 1440,
-    "title": "Trust",
-    "overflow": false
-  },
-  {
-    "route": "trust",
-    "theme": "light",
-    "width": 768,
-    "title": "Trust",
-    "overflow": false
-  },
-  {
-    "route": "trust",
-    "theme": "light",
-    "width": 390,
-    "title": "Trust",
-    "overflow": false
-  },
-  {
-    "route": "source",
-    "theme": "light",
-    "width": 1440,
-    "title": "Source",
-    "overflow": false
-  },
-  {
-    "route": "source",
-    "theme": "light",
-    "width": 768,
-    "title": "Source",
-    "overflow": false
-  },
-  {
-    "route": "source",
-    "theme": "light",
-    "width": 390,
-    "title": "Source",
-    "overflow": false
-  }
-]
+{
+  "capturedAt": "2026-10-30",
+  "target": "edges-vitest fixture copied to a temp dir, git init, 5 staged changes incl. a rename (src/stats.ts -> src/statistics.ts), plus 640 generated bulk test files to exercise the 600-row caps",
+  "browser": "Chromium (system /usr/bin/chromium) via Playwright 1.56.1, deviceScaleFactor 1, reduced motion for screenshots",
+  "screens": [
+    {
+      "route": "overview",
+      "theme": "dark",
+      "width": 1440,
+      "title": "Overview",
+      "overflow": false,
+      "consoleErrors": 0
+    },
+    {
+      "route": "impact",
+      "theme": "dark",
+      "width": 1440,
+      "title": "Impact",
+      "overflow": false,
+      "consoleErrors": 0
+    },
+    {
+      "route": "tests",
+      "theme": "dark",
+      "width": 1440,
+      "title": "Tests",
+      "overflow": false,
+      "consoleErrors": 0
+    },
+    {
+      "route": "trust",
+      "theme": "dark",
+      "width": 1440,
+      "title": "Trust",
+      "overflow": false,
+      "consoleErrors": 0
+    },
+    {
+      "route": "source",
+      "theme": "dark",
+      "width": 1440,
+      "title": "Source",
+      "overflow": false,
+      "consoleErrors": 0
+    },
+    {
+      "route": "overview",
+      "theme": "dark",
+      "width": 768,
+      "title": "Overview",
+      "overflow": false,
+      "consoleErrors": 0
+    },
+    {
+      "route": "impact",
+      "theme": "dark",
+      "width": 768,
+      "title": "Impact",
+      "overflow": false,
+      "consoleErrors": 0
+    },
+    {
+      "route": "tests",
+      "theme": "dark",
+      "width": 768,
+      "title": "Tests",
+      "overflow": false,
+      "consoleErrors": 0
+    },
+    {
+      "route": "trust",
+      "theme": "dark",
+      "width": 768,
+      "title": "Trust",
+      "overflow": false,
+      "consoleErrors": 0
+    },
+    {
+      "route": "source",
+      "theme": "dark",
+      "width": 768,
+      "title": "Source",
+      "overflow": false,
+      "consoleErrors": 0
+    },
+    {
+      "route": "overview",
+      "theme": "dark",
+      "width": 390,
+      "title": "Overview",
+      "overflow": false,
+      "consoleErrors": 0
+    },
+    {
+      "route": "impact",
+      "theme": "dark",
+      "width": 390,
+      "title": "Impact",
+      "overflow": false,
+      "consoleErrors": 0
+    },
+    {
+      "route": "tests",
+      "theme": "dark",
+      "width": 390,
+      "title": "Tests",
+      "overflow": false,
+      "consoleErrors": 0
+    },
+    {
+      "route": "trust",
+      "theme": "dark",
+      "width": 390,
+      "title": "Trust",
+      "overflow": false,
+      "consoleErrors": 0
+    },
+    {
+      "route": "source",
+      "theme": "dark",
+      "width": 390,
+      "title": "Source",
+      "overflow": false,
+      "consoleErrors": 0
+    },
+    {
+      "route": "overview",
+      "theme": "light",
+      "width": 1440,
+      "title": "Overview",
+      "overflow": false,
+      "consoleErrors": 0
+    },
+    {
+      "route": "impact",
+      "theme": "light",
+      "width": 1440,
+      "title": "Impact",
+      "overflow": false,
+      "consoleErrors": 0
+    },
+    {
+      "route": "tests",
+      "theme": "light",
+      "width": 1440,
+      "title": "Tests",
+      "overflow": false,
+      "consoleErrors": 0
+    },
+    {
+      "route": "trust",
+      "theme": "light",
+      "width": 1440,
+      "title": "Trust",
+      "overflow": false,
+      "consoleErrors": 0
+    },
+    {
+      "route": "source",
+      "theme": "light",
+      "width": 1440,
+      "title": "Source",
+      "overflow": false,
+      "consoleErrors": 0
+    },
+    {
+      "route": "overview",
+      "theme": "light",
+      "width": 768,
+      "title": "Overview",
+      "overflow": false,
+      "consoleErrors": 0
+    },
+    {
+      "route": "impact",
+      "theme": "light",
+      "width": 768,
+      "title": "Impact",
+      "overflow": false,
+      "consoleErrors": 0
+    },
+    {
+      "route": "tests",
+      "theme": "light",
+      "width": 768,
+      "title": "Tests",
+      "overflow": false,
+      "consoleErrors": 0
+    },
+    {
+      "route": "trust",
+      "theme": "light",
+      "width": 768,
+      "title": "Trust",
+      "overflow": false,
+      "consoleErrors": 0
+    },
+    {
+      "route": "source",
+      "theme": "light",
+      "width": 768,
+      "title": "Source",
+      "overflow": false,
+      "consoleErrors": 0
+    },
+    {
+      "route": "overview",
+      "theme": "light",
+      "width": 390,
+      "title": "Overview",
+      "overflow": false,
+      "consoleErrors": 0
+    },
+    {
+      "route": "impact",
+      "theme": "light",
+      "width": 390,
+      "title": "Impact",
+      "overflow": false,
+      "consoleErrors": 0
+    },
+    {
+      "route": "tests",
+      "theme": "light",
+      "width": 390,
+      "title": "Tests",
+      "overflow": false,
+      "consoleErrors": 0
+    },
+    {
+      "route": "trust",
+      "theme": "light",
+      "width": 390,
+      "title": "Trust",
+      "overflow": false,
+      "consoleErrors": 0
+    },
+    {
+      "route": "source",
+      "theme": "light",
+      "width": 390,
+      "title": "Source",
+      "overflow": false,
+      "consoleErrors": 0
+    }
+  ],
+  "interactions": [
+    {
+      "name": "tests: tab counts rendered",
+      "pass": true,
+      "detail": "[[\"tests-all\",\"657\"],[\"tests-selected\",\"3\"],[\"tests-failed\",\"0\"],[\"tests-cached\",\"1\"],[\"tests-skipped\",\"654\"],[\"tests-flaky\",\"0\"]]"
+    },
+    {
+      "name": "tests: 600-row cap",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "name": "tests: cap note",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "name": "shortcut /: focuses tests search",
+      "pass": true,
+      "detail": "INPUT#|tests|"
+    },
+    {
+      "name": "tests: filter keeps focus and caret while typing",
+      "pass": true,
+      "detail": "[\"b01\",true,3]"
+    },
+    {
+      "name": "tests: filter narrows rows",
+      "pass": true,
+      "detail": "10"
+    },
+    {
+      "name": "tests: shown count updates",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "name": "Escape in the filter clears it and the rows together",
+      "pass": true,
+      "detail": "[[\"\",true],600]"
+    },
+    {
+      "name": "second Escape leaves the field",
+      "pass": true,
+      "detail": "BODY#||"
+    },
+    {
+      "name": "tests: ArrowRight moves focus to next tab",
+      "pass": true,
+      "detail": "BUTTON#tests-selected||"
+    },
+    {
+      "name": "tests: selected tab active",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "name": "tests: Selected tab shows 3 rows",
+      "pass": true,
+      "detail": "3"
+    },
+    {
+      "name": "tests: row click opens source",
+      "pass": true,
+      "detail": "http://127.0.0.1:4391/source?path=tests%2Fgreet.test.ts"
+    },
+    {
+      "name": "browser Back returns to Tests (popstate)",
+      "pass": true,
+      "detail": "Tests"
+    },
+    {
+      "name": "tests: keyboard Enter on file button opens source",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "name": "source: renamed file highlights only its changed line",
+      "pass": true,
+      "detail": "[\"2\"]"
+    },
+    {
+      "name": "source: unit rule on the unit's first line",
+      "pass": true,
+      "detail": "[\"1\"]"
+    },
+    {
+      "name": "source: modified file highlights line 3",
+      "pass": true,
+      "detail": "[\"3\"]"
+    },
+    {
+      "name": "source: file list keeps its scroll after picking a file",
+      "pass": true,
+      "detail": "300"
+    },
+    {
+      "name": "source: focus stays on the picked file",
+      "pass": true,
+      "detail": "BUTTON#||src:src/ops/getTotal.ts"
+    },
+    {
+      "name": "source: viewer shows the picked file",
+      "pass": true,
+      "detail": "src/ops/getTotal.ts vs src/ops/getTotal.ts"
+    },
+    {
+      "name": "source: filter keeps focus",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "name": "source: filter narrows list",
+      "pass": true,
+      "detail": "src/greet.ts,tests/greet.test.ts"
+    },
+    {
+      "name": "? opens shortcuts dialog",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "name": "Tab stays inside dialog",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "name": "shortcut list lays out as two columns (CSP-safe)",
+      "pass": true,
+      "detail": "23.4062px 440.594px"
+    },
+    {
+      "name": "Escape closes dialog",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "name": "g i goes to Impact",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "name": "g t goes to Tests",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "name": "g o goes to Overview",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "name": "theme toggle switches to light",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "name": "theme toggle back to dark",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "name": "rail mark has no UA button border",
+      "pass": true,
+      "detail": "0px"
+    },
+    {
+      "name": "r starts a run and opens the drawer",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "name": "run: streamed to completion over SSE",
+      "pass": true,
+      "detail": "Run run_ed2887d2affected tests \u00b7 balanced \u00b7 git \u00b7 HEAD\u2026working treeRun passed \u00b7 2 cached, not run3 test files selected \u00b7 654 not run by selection \u00b7 selection 60"
+    },
+    {
+      "name": "run: showed live 'Running' state",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "name": "run: per-file marks",
+      "pass": true,
+      "detail": "[\"passed:\u2713passed\",\"cached-pass:\u29c9cached, not run\",\"cached-pass:\u29c9cached, not run\"]"
+    },
+    {
+      "name": "run: no raw status token leaks into copy",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "name": "run: re-render count during run stayed bounded",
+      "pass": true,
+      "detail": "5"
+    },
+    {
+      "name": "Escape closes run drawer",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "name": "overview: last run panel shows the run",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "name": "tests: row Run runs one file",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "name": "run: an all-cached run is not called passed",
+      "pass": true,
+      "detail": "No test ran: every selected test was served from cache [\"cached-pass:\u29c9cached, not run\"]"
+    },
+    {
+      "name": "tests: last result after a single-file run shows that file (cached results read as cached, not run)",
+      "pass": true,
+      "detail": "[\"\u29c9cached, not run\",\"no result\",\"no result\"]"
+    },
+    {
+      "name": "no console errors (CSP etc.)",
+      "pass": true,
+      "detail": ""
+    }
+  ]
+}

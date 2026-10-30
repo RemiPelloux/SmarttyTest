@@ -60,6 +60,12 @@ let shell = null;
 let streamStop = null;
 let reloadTimer = null;
 let sourceRequest = 0;
+let renderFrame = 0;
+let queryTimer = null;
+/** Files already in `state.runResults` for the open run, so each streamed result is O(1). */
+let runSeen = new Set();
+
+const QUERY_DEBOUNCE_MS = 120;
 
 const ctx = { state, actions: null, navigate, helpers: { loadingOrError } };
 
@@ -70,6 +76,7 @@ const actions = {
       iconName: "refresh",
       size: "btn--small",
       disabled: state.refreshing,
+      fk: "refresh",
       onClick: refresh,
     }),
   runButton: (scope = "affected") =>
@@ -80,6 +87,7 @@ const actions = {
       size: "btn--small",
       shortcut: scope === "affected" ? "r" : null,
       disabled: isRunActive(state.run),
+      fk: `run-${scope}`,
       onClick: () => run(scope),
     }),
   refresh,
@@ -101,7 +109,7 @@ const actions = {
     state.runPhase = null;
     state.runSelection = null;
     state.runGroups = [];
-    state.runResults = runData.executions ?? [];
+    setRunResults(runData.executions ?? []);
     state.runSummary = runData.summary;
     render();
   },
@@ -124,20 +132,24 @@ const actions = {
   },
   selectSource: (path) => {
     state.sourcePath = path;
+    // Keep the address in step, so a background reload (which reads ?path=) and a page reload
+    // both stay on the file the reader picked.
+    history.replaceState(null, "", `/source?path=${encodeURIComponent(path)}`);
     void loadSource(path);
     render();
   },
   setSourceQuery: (value) => {
     state.sourceQuery = value;
-    render();
+    renderSoon();
   },
   selectTestsTab: (id) => {
     state.testsTab = id;
     render();
   },
-  setTestsQuery: (value) => {
+  setTestsQuery: (value, { immediate = false } = {}) => {
     state.testsQuery = value;
-    render();
+    if (immediate) render();
+    else renderSoon();
   },
   exportTests,
   toggleTheme,
@@ -340,7 +352,14 @@ function applyStreamEvent(event) {
   }
   if (!state.run || (event.runId && event.runId !== state.run.id)) return;
   applyRunEvent(event);
-  render();
+  // A large run streams thousands of results in a burst; draw at most once per frame.
+  scheduleRender();
+}
+
+/** Replaces the run's result list and the index used to skip duplicates. */
+function setRunResults(list) {
+  state.runResults = list;
+  runSeen = new Set(list.map((result) => result.file));
 }
 
 function applyRunEvent(event) {
@@ -388,10 +407,12 @@ function applyRunEvent(event) {
     return;
   }
   if (event.type === "result") {
-    if (!state.runResults.some((r) => r.file === event.execution.file))
-      state.runResults.push(event.execution);
-    if (!state.run.executions.some((r) => r.file === event.execution.file))
-      state.run.executions.push(event.execution);
+    const file = event.execution.file;
+    if (runSeen.has(file)) return;
+    runSeen.add(file);
+    state.runResults.push(event.execution);
+    // A restored run shares one array between the two; push once.
+    if (state.run.executions !== state.runResults) state.run.executions.push(event.execution);
     return;
   }
   if (event.type === "summary") {
@@ -405,7 +426,7 @@ function applyRunEvent(event) {
     state.run = event.run;
     state.runOpen = true;
     state.runSummary = event.run.summary;
-    state.runResults = event.run.executions ?? [];
+    setRunResults(event.run.executions ?? []);
     state.runPhase =
       event.run.error?.message ?? (event.run.state === "cancelled" ? "Run cancelled" : null);
     if (!state.runVerdict) state.runVerdict = runVerdict(event.run);
@@ -566,7 +587,7 @@ async function run(scope, file) {
     state.runPhase = "Selecting tests for the current change";
     state.runSelection = null;
     state.runGroups = [];
-    state.runResults = [];
+    setRunResults([]);
     state.runSummary = null;
     render();
   } catch (error) {
@@ -610,7 +631,7 @@ async function restoreRun() {
     const one = await api(`/api/runs/${encodeURIComponent(runs.active)}`);
     state.run = one.run;
     state.runOpen = true;
-    state.runResults = one.run.executions ?? [];
+    setRunResults(one.run.executions ?? []);
     state.runSummary = one.run.summary;
     state.runVerdict = runVerdict(one.run);
     for (const event of one.events ?? []) {
@@ -711,7 +732,6 @@ function mountShell() {
       type: "button",
       title: "SmartTest Studio",
       "aria-label": "Studio overview",
-      style: "border:0;background:transparent;padding:0;cursor:pointer",
       onClick: () => navigate("/overview"),
     },
     h("img", { src: "./favicon.svg", alt: "" }),
@@ -788,19 +808,117 @@ function renderPairing(message) {
       form,
       h(
         "p",
-        { class: "hint", style: "margin-top:12px" },
+        { class: "hint pairing__hint" },
         "The token stays in this tab. Studio never stores it in a cookie or sends it to another host.",
       ),
     ),
   );
 }
 
+/** Coalesces renders requested in a burst (stream events) into one per animation frame. */
+function scheduleRender() {
+  if (renderFrame) return;
+  renderFrame = requestAnimationFrame(() => {
+    renderFrame = 0;
+    render();
+  });
+}
+
+/** Debounced render for typing in a filter field. */
+function renderSoon() {
+  clearTimeout(queryTimer);
+  queryTimer = setTimeout(() => {
+    queryTimer = null;
+    render();
+  }, QUERY_DEBOUNCE_MS);
+}
+
+/**
+ * A render rebuilds the screen and the run drawer. Before it does, remember which control had
+ * focus (by id, `data-search` or `data-fk`), and afterwards put back focus and every `data-scroll`
+ * region's position, so a streamed result or a filter keystroke never drops the reader's place.
+ */
+function captureView() {
+  const active = document.activeElement;
+  let focus = null;
+  if (active instanceof HTMLElement && active !== document.body) {
+    const selector = active.id
+      ? `#${CSS.escape(active.id)}`
+      : active.dataset.search
+        ? `[data-search="${CSS.escape(active.dataset.search)}"]`
+        : active.dataset.fk
+          ? `[data-fk="${CSS.escape(active.dataset.fk)}"]`
+          : null;
+    if (selector) {
+      focus = { selector, start: null, end: null, direction: "none" };
+      if (active instanceof HTMLInputElement) {
+        focus.start = active.selectionStart;
+        focus.end = active.selectionEnd;
+        focus.direction = active.selectionDirection ?? "none";
+      }
+    }
+  }
+  return { focus };
+}
+
+/**
+ * Where each `data-scroll` region was last scrolled by the reader. Recorded on scroll rather than
+ * read back at render time, so a render that lands mid-layout can never record a zero.
+ */
+const scrollMemory = new Map();
+document.addEventListener(
+  "scroll",
+  (event) => {
+    const el = event.target;
+    if (el instanceof HTMLElement && el.dataset.scroll)
+      scrollMemory.set(el.dataset.scroll, [el.scrollTop, el.scrollLeft]);
+  },
+  { capture: true, passive: true },
+);
+
+function restoreView({ focus }) {
+  for (const el of document.querySelectorAll("[data-scroll]")) {
+    const saved = scrollMemory.get(el.dataset.scroll);
+    if (!saved) continue;
+    el.scrollTop = saved[0];
+    el.scrollLeft = saved[1];
+  }
+  if (!focus) return;
+  const current = document.activeElement;
+  if (current && current !== document.body && current.isConnected) return;
+  const el = document.querySelector(focus.selector);
+  if (!(el instanceof HTMLElement) || el.hasAttribute("disabled")) return;
+  el.focus({ preventScroll: true });
+  if (el instanceof HTMLInputElement && focus.start !== null && focus.end !== null) {
+    const length = el.value.length;
+    try {
+      el.setSelectionRange(
+        Math.min(focus.start, length),
+        Math.min(focus.end, length),
+        focus.direction,
+      );
+    } catch {
+      /* some input types do not expose a selection */
+    }
+  }
+}
+
 function render() {
   if (!state.token) return;
+  if (renderFrame) {
+    cancelAnimationFrame(renderFrame);
+    renderFrame = 0;
+  }
+  if (queryTimer) {
+    clearTimeout(queryTimer);
+    queryTimer = null;
+  }
   if (!shell) mountShell();
   updateShell();
+  const view = captureView();
   replace(shell.main, buildScreen());
   renderRun(ctx);
+  restoreView(view);
   document.title = `Studio · ${NAV.find((item) => item.view === currentRoute().view)?.label ?? "Overview"}`;
 }
 
@@ -828,16 +946,16 @@ function navigate(path) {
 function shortcuts() {
   let close = () => {};
   const row = (keys, text) =>
-    h("div", { style: "display:contents" }, h("dt", null, keys), h("dd", null, text));
+    h("div", { class: "dl-row" }, h("dt", null, keys), h("dd", null, text));
   close = openDialog({
     title: "Keyboard shortcuts",
     body: h(
       "dl",
-      { style: "margin-top:10px;display:grid;grid-template-columns:max-content 1fr;gap:6px 14px" },
+      null,
       row("r", "Run the affected tests"),
       row("?", "This list"),
       row("/", "Focus the search field on Tests or Source"),
-      row("Esc", "Close the run panel or this dialog"),
+      row("Esc", "Clear a filter, leave a field, close the run panel or this dialog"),
       row("g o", "Go to Overview"),
       row("g i", "Go to Impact"),
       row("g t", "Go to Tests"),
@@ -863,7 +981,7 @@ async function start() {
   state.runOpen = false;
   state.runVerdict = null;
   state.runPhase = null;
-  state.runResults = [];
+  setRunResults([]);
   state.runSummary = null;
   render();
   try {
@@ -901,7 +1019,18 @@ document.addEventListener("keydown", (event) => {
   if (document.querySelector('[role="dialog"]')) return;
   if (event.metaKey || event.ctrlKey || event.altKey) return;
   if (isTyping(event)) {
-    if (event.key === "Escape" && event.target instanceof HTMLElement) event.target.blur();
+    if (event.key !== "Escape" || !(event.target instanceof HTMLElement)) return;
+    const target = event.target;
+    // A native search field clears itself on Escape without an input event, which would leave
+    // the filter applied to an empty-looking field. Clear it through the filter instead; a
+    // second Escape leaves the field.
+    if (target instanceof HTMLInputElement && target.dataset.search && target.value) {
+      event.preventDefault();
+      target.value = "";
+      target.dispatchEvent(new Event("input", { bubbles: true }));
+      return;
+    }
+    target.blur();
     return;
   }
   if (goUntil > Date.now()) {
@@ -941,7 +1070,8 @@ document.addEventListener("keydown", (event) => {
   }
 });
 
-document.addEventListener("popstate", () => {
+// popstate fires on window, never on document: Back and Forward depend on this listener.
+window.addEventListener("popstate", () => {
   const route = currentRoute();
   if (route.view === "source") {
     const wanted = new URLSearchParams(location.search).get("path");

@@ -1,6 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CancelledError } from "../src/core/errors.js";
-import { KeyedScheduler, LatestTask, mapLimit } from "../src/core/scheduler.js";
+import {
+  ConcurrencyLimiter,
+  KeyedScheduler,
+  LatestTask,
+  mapLimit,
+  SharedTasks,
+} from "../src/core/scheduler.js";
 
 beforeEach(() => vi.useFakeTimers());
 afterEach(() => vi.useRealTimers());
@@ -82,6 +88,115 @@ describe("KeyedScheduler", () => {
     await vi.advanceTimersByTimeAsync(11);
     expect(started.sort()).toEqual(["a", "b"]);
     scheduler.dispose();
+  });
+
+  it("reads the delay on every trigger, per key", async () => {
+    let delay = 10;
+    const keys: string[] = [];
+    const started: string[] = [];
+    const scheduler = new KeyedScheduler({
+      delayMs: (key) => {
+        keys.push(key);
+        return delay;
+      },
+      run: async (key) => {
+        started.push(key);
+      },
+      onError: () => undefined,
+    });
+    scheduler.trigger("a");
+    await vi.advanceTimersByTimeAsync(11);
+    expect(started).toEqual(["a"]);
+    delay = 100;
+    scheduler.trigger("a");
+    await vi.advanceTimersByTimeAsync(50);
+    expect(started).toEqual(["a"]);
+    await vi.advanceTimersByTimeAsync(51);
+    expect(started).toEqual(["a", "a"]);
+    expect(keys).toEqual(["a", "a"]);
+    scheduler.dispose();
+  });
+});
+
+describe("ConcurrencyLimiter", () => {
+  it("bounds work across independent callers", async () => {
+    vi.useRealTimers();
+    const limiter = new ConcurrencyLimiter(2);
+    let active = 0;
+    let max = 0;
+    const work = async (): Promise<void> => {
+      active += 1;
+      max = Math.max(max, active);
+      await new Promise<void>((resolve) => setTimeout(resolve, 1));
+      active -= 1;
+    };
+    // Two "analyses", each with its own mapLimit of 3, share the limiter.
+    await Promise.all([
+      mapLimit([1, 2, 3], 3, () => limiter.run(work)),
+      mapLimit([1, 2, 3], 3, () => limiter.run(work)),
+    ]);
+    expect(max).toBe(2);
+    expect(limiter.active).toBe(0);
+  });
+
+  it("drops a queued caller whose signal aborts", async () => {
+    const limiter = new ConcurrencyLimiter(1);
+    let release: () => void = () => undefined;
+    const first = limiter.run(() => new Promise<void>((resolve) => (release = resolve)));
+    const controller = new AbortController();
+    const second = vi.fn(async () => undefined);
+    const queued = limiter.run(second, controller.signal);
+    controller.abort();
+    await expect(queued).rejects.toMatchObject({ name: "AbortError" });
+    release();
+    await first;
+    expect(second).not.toHaveBeenCalled();
+    expect(limiter.active).toBe(0);
+  });
+});
+
+describe("SharedTasks", () => {
+  it("shares one in-flight promise between callers with the same key", async () => {
+    const tasks = new SharedTasks<number>();
+    const start = vi.fn(async () => 42);
+    const a = new AbortController();
+    const b = new AbortController();
+    const results = await Promise.all([
+      tasks.run("k", a.signal, start),
+      tasks.run("k", b.signal, start),
+    ]);
+    expect(results).toEqual([42, 42]);
+    expect(start).toHaveBeenCalledTimes(1);
+    expect(tasks.size).toBe(0);
+  });
+
+  it("aborts the shared work only when every waiter cancels", async () => {
+    const tasks = new SharedTasks<void>();
+    let sharedSignal: AbortSignal | undefined;
+    const start = (signal: AbortSignal): Promise<void> => {
+      sharedSignal = signal;
+      return hanging(signal);
+    };
+    const a = new AbortController();
+    const b = new AbortController();
+    const first = tasks.run("k", a.signal, start);
+    const second = tasks.run("k", b.signal, start);
+    a.abort();
+    await expect(first).rejects.toMatchObject({ name: "AbortError" });
+    expect(sharedSignal?.aborted).toBe(false);
+    b.abort();
+    await expect(second).rejects.toMatchObject({ name: "AbortError" });
+    expect(sharedSignal?.aborted).toBe(true);
+    expect(tasks.size).toBe(0);
+  });
+
+  it("starts fresh work after the previous run was abandoned", async () => {
+    const tasks = new SharedTasks<number>();
+    const a = new AbortController();
+    const abandoned = tasks.run("k", a.signal, hanging as (signal: AbortSignal) => Promise<never>);
+    a.abort();
+    await expect(abandoned).rejects.toMatchObject({ name: "AbortError" });
+    await expect(tasks.run("k", new AbortController().signal, async () => 7)).resolves.toBe(7);
   });
 });
 

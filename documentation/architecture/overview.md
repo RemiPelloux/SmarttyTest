@@ -150,7 +150,7 @@ sequenceDiagram
 
 Studio binds to loopback and serves its packaged assets without a CDN. A session token, host checks and origin checks protect its API; state changes require POST. It delegates analysis and execution to `core` and stores reports in the same `.smarttest/` directory as the CLI. Only Studio may import `node:http` and `node:net`; network imports remain forbidden in the engine packages. The VS Code extension calls the installed local CLI in a trusted workspace.
 
-Commit and push profiles share the core API. When the working tree differs from the content under test, core creates a temporary checkout, materialises the staged index or committed HEAD and links installed dependencies. Checks and tests use that checkout; reports and history use the original store. The user's index and working files are not stashed or rewritten. Push hooks validate Git's input refs and reject non-HEAD content that the profile cannot test.
+Commit and push profiles share the core API. When the working tree differs from the content under test, core creates a temporary checkout, materialises the staged index or committed HEAD and links installed dependencies. Checks and tests use that checkout; reports, history and the symbol index use the original store. The checkout records the working tree's file stats for content it shares with the working tree, so isolation does not invalidate the incremental index. The user's index and working files are not stashed or rewritten. Push hooks validate Git's input refs and reject non-HEAD content that the profile cannot test.
 
 ## Local intelligence store
 

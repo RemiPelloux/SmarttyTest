@@ -48,6 +48,12 @@ export interface UpdateOptions {
    */
   parseMany?: (jobs: { path: string; content: string }[]) => Promise<FileAnalysis[] | undefined>;
   parallelThreshold?: number;
+  /**
+   * `root` is a temporary checkout of `mirror.root` whose content differs only in `differs`
+   * (root-relative). Stats are taken from the mirror for the other files, so a checkout with
+   * fresh mtimes neither re-reads every file nor overwrites the mirror's recorded stats.
+   */
+  mirror?: { root: string; differs: ReadonlySet<string> };
 }
 
 export class SymbolIndex {
@@ -151,12 +157,22 @@ export class SymbolIndex {
           // statSync: thousands of awaited stats cost far more than the syscalls themselves.
           const s = statSync(join(options.root, path));
           st = [s.mtimeMs, s.size];
+          if (options.mirror) {
+            const m = options.mirror.differs.has(path)
+              ? undefined
+              : statSync(join(options.mirror.root, path), { throwIfNoEntry: false });
+            st = m && m.size === s.size ? [m.mtimeMs, m.size] : undefined;
+          }
         } catch {
           this.files.delete(path);
           continue;
         }
         const prev = this.fileStats.get(path);
-        if (
+        if (!st) {
+          // Content differs from the mirror: read it, and never let the mirror's stats vouch for
+          // the analysis recorded here.
+          if (this.fileStats.delete(path)) statsChanged = true;
+        } else if (
           cached &&
           prev &&
           prev[0] === st[0] &&

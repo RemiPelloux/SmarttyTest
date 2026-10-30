@@ -8,11 +8,11 @@ The server defaults to `127.0.0.1:4173`. If that port is occupied it falls back 
 
 - Overview shows changed files, affected units, selected files, uncertainty, fallback reasons and the last recorded run.
 - Impact connects changed files and units to selected tests, explains selection reasons, and previews source.
-- Tests filters discovered test files by selected, failed, cached, skipped or flaky state; search narrows rows and CSV export uses the current filter. Run affected, all tests, or an individual file.
+- Tests filters discovered test files by selected, failed, cached, skipped or flaky state; search narrows rows and CSV export uses the current filter (every matching row, even past the 600 rows drawn on screen). Run affected, all tests, or an individual file. A file whose results all came from cache reads "cached, not run"; a run in which every selected test was cached says no test ran.
 - Trust shows recorded shadow replays, benchmark totals, cache evidence, flaky history, hook history and coverage when available. Missing benchmark measurements produce an unavailable state, never zero missed failures.
 - Source lists indexed files and displays current source, changed lines, units and fresh observed execution evidence. Deleted, unreadable or outside-root symlink targets are unavailable.
 
-A live run drawer receives selection, runner groups, retry, results and final status over SSE. Only one run can execute in a Studio session; cancellation requests cancellation from the runner. Integrity issues, cancellation and short execution lists block a passed verdict. Cached results are explicitly cached, and skipped tests are not passed.
+A live run drawer receives selection, runner groups, retry, results and final status over SSE. Only one run can execute in a Studio session; cancellation requests cancellation from the runner. Integrity issues, cancellation and short execution lists block a passed verdict. A run in which every selected test came from cache has the verdict `cached-pass`, never passed (ADR-0009); skipped tests are not passed.
 
 ## Coverage and trace evidence
 
@@ -22,7 +22,7 @@ Fresh traces establish that a test executed a named unit. The Source viewer proj
 
 ## Keyboard and themes
 
-`r` runs affected tests; `/` focuses Tests or Source search; `?` opens shortcuts; Escape closes a dialog or run drawer (first Escape blurs an input). `g o`, `g i`, `g t` navigate within a one-second sequence. Shortcuts pause while typing or a dialog is open. Dialog Tab focus loops and Escape returns focus. Use the rail theme control; `?theme=light` and `?theme=dark` also choose a persisted theme.
+`r` runs affected tests; `/` focuses Tests or Source search; `?` opens shortcuts; Escape closes a dialog or run drawer; in a filter field the first Escape clears the filter and the next one leaves the field. `g o`, `g i`, `g t` navigate within a one-second sequence. Shortcuts pause while typing or a dialog is open. Dialog Tab focus loops and Escape returns focus. Use the rail theme control; `?theme=light` and `?theme=dark` also choose a persisted theme.
 
 ## Embedding and assets
 

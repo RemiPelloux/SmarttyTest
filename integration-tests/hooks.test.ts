@@ -1,4 +1,5 @@
 import { spawnSync } from "node:child_process";
+import { statSync } from "node:fs";
 import {
   chmod,
   copyFile,
@@ -95,6 +96,30 @@ describe("commit hooks run the staged content", () => {
     });
     expect(result.outcome?.exitCode).toBe(0);
     expect(result.outcome?.report.summary.failed).toBe(0);
+  }, 120_000);
+
+  it("keeps the working tree's index stats across an isolated run", async () => {
+    const dir = await materialize("ts-lib-vitest", { git: true });
+    await (await SmartTest.open({ root: dir })).analyze();
+    await edit(dir, stringsTest, 'toBe("Ada")', 'toBe("Adah")');
+    git(dir, "add", stringsTest);
+    await writeFile(join(dir, "scratch.txt"), "untracked\n");
+
+    await (await SmartTest.open({ root: dir })).runHook("pre-commit", { cache: false });
+
+    const { stats } = JSON.parse(
+      await readFile(join(dir, ".smarttest", "state", "index.json"), "utf8"),
+    ) as { stats: Record<string, [number, number]> };
+    const files = Object.keys(stats);
+    expect(files.length).toBeGreaterThan(1);
+    // Every recorded stat is the working tree's, never the temporary checkout's.
+    for (const f of files) {
+      const s = statSync(join(dir, f));
+      expect(stats[f], f).toEqual([s.mtimeMs, s.size]);
+    }
+    // The next run in the working tree reuses every file it did not change.
+    const after = await (await SmartTest.open({ root: dir })).analyze();
+    expect(after.indexStats.parsed).toBe(0);
   }, 120_000);
 
   it("uses the staged config, not the dirty working-tree copy", async () => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { analyzeFile, fileWarnings } from "../src/core/analysis.js";
+import { analyzeFile, buildFileIndex, fileWarnings } from "../src/core/analysis.js";
 import type { GraphDump, ScanResult, SourceExplain } from "../src/core/contracts.js";
 
 const graph: GraphDump = {
@@ -58,6 +58,62 @@ describe("file analysis", () => {
     ]);
   });
 
+  it("explains all units in one batch call when the CLI supports --units", async () => {
+    let perUnit = 0;
+    let batches = 0;
+    const result = await analyzeFile({
+      file: "src/a.ts",
+      graph,
+      scan: scan(),
+      maxUnits: 10,
+      concurrency: 2,
+      signal,
+      explain: async (unit) => {
+        perUnit++;
+        return source(unit.id, []);
+      },
+      explainUnits: async (units) => {
+        batches++;
+        return {
+          ...source("src/a.ts", ["test/a.test.ts"]),
+          units: units.map((u) => ({
+            unit: u.qualifiedName,
+            tests:
+              u.qualifiedName === "A.run" ? [{ test: "test/a.test.ts", path: ["src/a.ts"] }] : [],
+          })),
+        };
+      },
+    });
+    expect([batches, perUnit]).toEqual([1, 0]);
+    expect(result.protections.map((p) => [p.qualifiedName, p.state])).toEqual([
+      ["run", "unprotected"],
+      ["A", "unprotected"],
+      ["A.run", "protected"],
+    ]);
+  });
+
+  it("falls back to one explain per unit when the batch call fails", async () => {
+    let perUnit = 0;
+    const result = await analyzeFile({
+      file: "src/a.ts",
+      graph,
+      scan: scan(),
+      maxUnits: 10,
+      concurrency: 2,
+      signal,
+      explain: async (unit) => {
+        perUnit++;
+        return source(unit.id, ["test/a.test.ts"]);
+      },
+      explainUnits: async () => {
+        throw new Error("Unknown option '--units'");
+      },
+    });
+    expect(perUnit).toBe(3);
+    expect(result.explainFailures).toBe(0);
+    expect(result.protections.every((p) => p.state === "protected")).toBe(true);
+  });
+
   it("a single failed explain makes only that symbol unknown", async () => {
     const result = await analyzeFile({
       file: "src/a.ts",
@@ -103,6 +159,42 @@ describe("file analysis", () => {
     });
     expect(result.warnings).toEqual(["unresolved import ./generated"]);
     expect(result.protections.every((p) => p.state === "unknown")).toBe(true);
+  });
+});
+
+describe("file index", () => {
+  it("groups units and warnings per file once per snapshot", async () => {
+    const index = buildFileIndex(
+      graph,
+      scan({
+        unresolved: [
+          { file: "src/a.ts", specifier: "./x" },
+          { file: "src/b.ts", specifier: "./y" },
+        ],
+        dynamic: [{ file: "./src/a.ts", detail: "import(name)" }],
+      }),
+      "linux",
+    );
+    expect(index.units.get("src/a.ts")).toHaveLength(3);
+    expect(index.warnings.get("src/a.ts")).toEqual([
+      "unresolved import ./x",
+      "dynamic import: import(name)",
+    ]);
+    expect(index.warnings.get("src/b.ts")).toEqual(["unresolved import ./y"]);
+
+    const result = await analyzeFile({
+      file: "src/a.ts",
+      graph: { nodes: [], edges: [] },
+      scan: scan(),
+      index,
+      maxUnits: 10,
+      concurrency: 1,
+      signal,
+      explain: async (unit) => source(unit.id, ["test/a.test.ts"]),
+    });
+    // The supplied index is used instead of re-reading graph and scan.
+    expect(result.units).toHaveLength(3);
+    expect(result.warnings).toEqual(["unresolved import ./x", "dynamic import: import(name)"]);
   });
 });
 

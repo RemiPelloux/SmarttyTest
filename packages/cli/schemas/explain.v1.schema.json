@@ -13,6 +13,14 @@
     },
     "kind": {
       "enum": ["test", "source"]
+    },
+    "units": {
+      "description": "With --units: tests protecting each named unit of the source file.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["unit", "tests"]
+      }
     }
   }
 }

@@ -3,7 +3,7 @@
  * believing it: what ran, what the evidence has missed, and what the graph actually read.
  */
 
-import { facts, panel, screenHead, section } from "./screens.js";
+import { facts, firstDraw, panel, screenHead, section } from "./screens.js";
 import {
   button,
   dataTable,
@@ -22,16 +22,39 @@ import {
 } from "./ui.js";
 
 function toolbar(...children) {
+  return h("div", { class: "toolbar" }, children);
+}
+
+function searchField({ key, placeholder, label, value, onInput }) {
   return h(
-    "div",
-    { style: "display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:10px 0" },
-    children,
+    "label",
+    { class: "search" },
+    icon("search", 14),
+    h("input", {
+      class: "input",
+      type: "search",
+      placeholder,
+      value,
+      "data-search": key,
+      "aria-label": label,
+      autocomplete: "off",
+      spellcheck: false,
+      onInput,
+    }),
+  );
+}
+
+/** A path that wraps after a slash rather than inside a name. */
+function breakablePath(path) {
+  const parts = path.split("/");
+  return parts.flatMap((part, index) =>
+    index < parts.length - 1 ? [`${part}/`, h("wbr")] : [part],
   );
 }
 
 function resultMark(row) {
   const result = row.result;
-  if (!result) return statusMark("skipped", { text: "not run" });
+  if (!result) return h("span", { class: "status", dataset: { status: "none" } }, "no result");
   if (result.status === "timed-out") return statusMark("timed-out");
   if (result.status === "infrastructure-error")
     return statusMark("infrastructure-error", { text: "infra error" });
@@ -39,7 +62,9 @@ function resultMark(row) {
   if (result.cached === result.tests && result.tests > 0)
     return statusMark("cached-pass", { text: "cached, not run" });
   if (result.status === "failed") return statusMark("failed");
-  if (result.cached) return statusMark("passed", { text: `${num(result.cached)} cached` });
+  if (!result.passed && !result.cached) return statusMark("skipped", { text: "no test ran" });
+  if (result.cached)
+    return statusMark("passed", { text: `passed · ${num(result.cached)} cached, not run` });
   return statusMark("passed");
 }
 
@@ -62,6 +87,24 @@ function countTabs(rows) {
   ];
 }
 
+/** Rows drawn at once; the filter and the CSV export still cover every row. */
+const MAX_TEST_ROWS = 600;
+const MAX_SOURCE_FILES = 600;
+
+/** Lower-cased search text per row (or file), built once per loaded data object. */
+const searchTextOf = new WeakMap();
+
+function searchText(item, build) {
+  let text = searchTextOf.get(item);
+  if (text === undefined) {
+    text = build(item).toLowerCase();
+    searchTextOf.set(item, text);
+  }
+  return text;
+}
+
+const testSearchText = (row) => `${row.filePath} ${row.adapter ?? ""} ${row.reasons.join(" ")}`;
+
 export function filteredTests(state, tests) {
   const query = state.testsQuery.trim().toLowerCase();
   return tests.rows.filter((row) => {
@@ -71,9 +114,7 @@ export function filteredTests(state, tests) {
     if (state.testsTab === "cached" && !row.result?.cached) return false;
     if (state.testsTab === "flaky" && !row.flaky) return false;
     if (!query) return true;
-    return `${row.filePath} ${row.adapter ?? ""} ${row.reasons.join(" ")}`
-      .toLowerCase()
-      .includes(query);
+    return searchText(row, testSearchText).includes(query);
   });
 }
 
@@ -83,6 +124,8 @@ export function renderTests(ctx) {
   if (!tests) return ctx.helpers.loadingOrError("tests");
   const tabItems = countTabs(tests.rows);
   const rows = filteredTests(state, tests);
+  const visibleRows = rows.slice(0, MAX_TEST_ROWS);
+  const animateRows = firstDraw(tests);
   const selected = rows.filter((r) => r.selection === "selected").length;
   const failed = rows.filter((r) => r.result?.failed).length;
   const cached = rows.filter((r) => r.result?.cached).length;
@@ -102,7 +145,11 @@ export function renderTests(ctx) {
               " · ",
               h("strong", null, plural(failed, "failed file")),
               " · ",
-              h("strong", null, plural(cached, "file with cached results")),
+              h(
+                "strong",
+                null,
+                plural(cached, "file with cached results", "files with cached results"),
+              ),
               ` · last run ${relativeTime(tests.generatedAt)}`,
             ]
           : "No test file was discovered in this project.",
@@ -143,21 +190,20 @@ export function renderTests(ctx) {
       idPrefix: "tests",
     }),
     toolbar(
+      searchField({
+        key: "tests",
+        placeholder: "Filter by path, runner or reason",
+        label: "Filter tests",
+        value: state.testsQuery,
+        onInput: (event) => ctx.actions.setTestsQuery(event.target.value),
+      }),
       h(
-        "label",
-        { style: "flex:1 1 260px;display:flex;align-items:center;gap:7px" },
-        icon("search", 13),
-        h("input", {
-          class: "input",
-          type: "search",
-          placeholder: "Filter by path, runner or reason",
-          value: state.testsQuery,
-          "data-search": "tests",
-          "aria-label": "Filter tests",
-          onInput: (event) => ctx.actions.setTestsQuery(event.target.value),
-        }),
+        "span",
+        { class: "toolbar__count", role: "status" },
+        rows.length > visibleRows.length
+          ? `${num(visibleRows.length)} of ${num(rows.length)} shown`
+          : `${num(rows.length)} shown`,
       ),
-      h("span", { class: "hint" }, `${num(rows.length)} shown`),
       button({
         label: "Export CSV",
         iconName: "download",
@@ -183,10 +229,11 @@ export function renderTests(ctx) {
                   {
                     class: "row-btn",
                     type: "button",
-                    title: row.filePath,
+                    title: `Open ${row.filePath} in Source`,
+                    "data-fk": `test:${row.filePath}`,
                     onClick: () => ctx.actions.openSource(row.filePath),
                   },
-                  row.filePath,
+                  breakablePath(row.filePath),
                 ),
             },
             {
@@ -196,10 +243,8 @@ export function renderTests(ctx) {
             },
             {
               label: "Selection",
-              cell: (row) =>
-                row.selection
-                  ? selectionMark(row.selection)
-                  : h("span", { class: "status", dataset: { status: "skipped" } }, "–"),
+              hidePhone: true,
+              cell: (row) => selectionMark(row.selection),
             },
             {
               label: "Last result",
@@ -210,11 +255,7 @@ export function renderTests(ctx) {
               align: "right",
               hidePhone: true,
               cell: (row) =>
-                h(
-                  "span",
-                  { class: "mono", style: "font-variant-numeric:tabular-nums" },
-                  row.result ? duration(row.result.durationMs) : "–",
-                ),
+                h("span", { class: "mono" }, row.result ? duration(row.result.durationMs) : "–"),
             },
             {
               label: "Evidence",
@@ -247,6 +288,7 @@ export function renderTests(ctx) {
                     iconName: "play",
                     size: "btn--small",
                     title: `Run ${row.filePath} alone`,
+                    fk: `run:${row.filePath}`,
                     disabled: Boolean(
                       state.run &&
                         state.runOpen &&
@@ -259,12 +301,13 @@ export function renderTests(ctx) {
                 ),
             },
           ],
-          rows,
+          rows: visibleRows,
           rowKey: (row) => row.filePath,
           onRowClick: (row) => ctx.actions.openSource(row.filePath),
           rowProps: (row, index) => ({
-            class: "row-enter",
-            vars: { "--i": String(Math.min(index, 16)) },
+            ...(animateRows
+              ? { class: "row-enter", vars: { "--i": String(Math.min(index, 16)) } }
+              : {}),
             "data-dim": String(row.selection === "skipped"),
           }),
         })
@@ -282,9 +325,21 @@ export function renderTests(ctx) {
             ? "Clear the filter to see the tests in this tab."
             : "The count in the tab is the number of rows beside it, not an estimate.",
           actions: state.testsQuery
-            ? [button({ label: "Clear filter", onClick: () => ctx.actions.setTestsQuery("") })]
+            ? [
+                button({
+                  label: "Clear filter",
+                  onClick: () => ctx.actions.setTestsQuery("", { immediate: true }),
+                }),
+              ]
             : [],
         }),
+    rows.length > visibleRows.length
+      ? h(
+          "p",
+          { class: "hint mt-8" },
+          `Showing the first ${num(visibleRows.length)} of ${num(rows.length)} rows. Filter or pick a tab to narrow the list; Export CSV includes every row.`,
+        )
+      : null,
     section({
       title: "Honesty rules",
       body: h(
@@ -330,8 +385,13 @@ function shadowTable(shadow) {
   });
 }
 
+/** A shadow history with no replayed run is no measurement at all, not "0 missed". */
+function measuredShadow(trust) {
+  return trust.shadow?.runs ? trust.shadow : null;
+}
+
 function trustFacts(trust, traces) {
-  const shadow = trust.shadow;
+  const shadow = measuredShadow(trust);
   const benchmark = trust.benchmark;
   const saved = benchmark?.savedPct ?? shadow?.savedPct ?? null;
   return facts([
@@ -383,7 +443,7 @@ function coveragePanel(coverage) {
           ]),
           h(
             "p",
-            { class: "detail__meta", style: "margin-top:8px" },
+            { class: "detail__meta mt-8" },
             `${plural(coverage.files, "file")} · ${relativeTime(coverage.at)} · ${
               coverage.scope === "full"
                 ? "full suite"
@@ -410,14 +470,36 @@ function hooksPanel(hooks) {
             "div",
             { class: "run-summary" },
             h("div", null, h("b", null, num(hooks.runs)), h("span", null, "runs")),
-            h("div", null, h("b", null, duration(hooks.medianMs)), h("span", null, "median")),
-            h("div", null, h("b", null, duration(hooks.slowestMs)), h("span", null, "slowest")),
-            h("div", null, h("b", null, num(hooks.failures)), h("span", null, "failures")),
+            h(
+              "div",
+              null,
+              h("b", null, hooks.runs ? duration(hooks.medianMs) : "–"),
+              h("span", null, "median"),
+            ),
+            h(
+              "div",
+              null,
+              h("b", null, hooks.runs ? duration(hooks.slowestMs) : "–"),
+              h("span", null, "slowest"),
+            ),
+            h(
+              "div",
+              null,
+              h("b", null, hooks.runs ? num(hooks.failures) : "–"),
+              h("span", null, "failures"),
+            ),
           ),
+          hooks.runs
+            ? null
+            : h(
+                "p",
+                { class: "detail__meta mt-8" },
+                "No hook run recorded yet, so there is no timing to show.",
+              ),
           hooks.bypasses.length
             ? h(
                 "div",
-                { style: "margin-top:10px" },
+                { class: "mt-12" },
                 h("p", { class: "fact__label" }, "Bypasses"),
                 hooks.bypasses
                   .slice(0, 4)
@@ -433,7 +515,7 @@ function hooksPanel(hooks) {
           hooks.withoutHook.without.length
             ? h(
                 "div",
-                { style: "margin-top:10px" },
+                { class: "mt-12" },
                 h("p", { class: "fact__label" }, "Commits without the hook"),
                 hooks.withoutHook.without
                   .slice(0, 4)
@@ -459,7 +541,7 @@ export function renderTrust(ctx) {
   const { state } = ctx;
   const trust = state.data.trust;
   if (!trust) return ctx.helpers.loadingOrError("trust");
-  const shadow = trust.shadow;
+  const shadow = measuredShadow(trust);
   const benchmark = trust.benchmark;
 
   const finding = shadow
@@ -520,7 +602,7 @@ export function renderTrust(ctx) {
     }),
     h(
       "div",
-      { class: "split", style: "margin-top:18px" },
+      { class: "split split--even split--spaced" },
       benchmark
         ? panel({
             title: "Benchmark",
@@ -541,7 +623,7 @@ export function renderTrust(ctx) {
               ]),
               h(
                 "p",
-                { class: "detail__meta", style: "margin-top:8px" },
+                { class: "detail__meta mt-8" },
                 `${num(benchmark.selectedTests)} of ${num(benchmark.totalTests)} tests selected · generated ${relativeTime(benchmark.at)}`,
               ),
             ),
@@ -558,7 +640,7 @@ export function renderTrust(ctx) {
     ),
     h(
       "div",
-      { class: "split", style: "margin-top:18px" },
+      { class: "split split--even split--spaced" },
       panel({
         title: "Flaky tests",
         note: `${plural(trust.flaky.length, "test")} above the threshold`,
@@ -601,8 +683,10 @@ export function renderSource(ctx) {
   const index = state.data.files;
   if (!index) return ctx.helpers.loadingOrError("source");
   const query = state.sourceQuery.trim().toLowerCase();
-  const all = index.files.filter((f) => !query || f.path.toLowerCase().includes(query));
-  const visible = all.slice(0, 600);
+  const all = query
+    ? index.files.filter((f) => searchText(f, (file) => file.path).includes(query))
+    : index.files;
+  const visible = all.slice(0, MAX_SOURCE_FILES);
   const path = state.sourcePath ?? visible[0]?.path ?? null;
   const source = state.data.source && state.data.source.path === path ? state.data.source : null;
   const changed = source ? new Set(source.changedLines ?? []) : new Set();
@@ -614,68 +698,83 @@ export function renderSource(ctx) {
   const list = h(
     "div",
     { class: "list" },
-    h("div", { class: "list__head" }, `${num(all.length)} files`),
-    toolbar(
-      h(
-        "label",
-        { style: "flex:1;display:flex;align-items:center;gap:7px;padding:0 10px" },
-        icon("search", 13),
-        h("input", {
-          class: "input",
-          type: "search",
-          placeholder: "Filter files",
-          value: state.sourceQuery,
-          "data-search": "source",
-          "aria-label": "Filter source files",
-          onInput: (event) => ctx.actions.setSourceQuery(event.target.value),
-        }),
-      ),
-    ),
     h(
       "div",
-      { class: "list__scroll" },
-      visible.map((file) =>
-        h(
-          "button",
-          {
-            class: "list__item",
-            type: "button",
-            "aria-current": String(file.path === path),
-            onClick: () => ctx.actions.selectSource(file.path),
-          },
-          h(
-            "span",
-            { class: "list__name" },
-            h("code", { title: file.path }, file.path),
-            file.changed ? h("span", { class: "badge badge--changed" }, "changed") : null,
-            file.test ? h("span", { class: "badge badge--test" }, "test") : null,
-          ),
-          h("span", { class: "list__file" }, file.test ? "test file" : "source file"),
-        ),
-      ),
+      { class: "list__head" },
+      query ? `${num(all.length)} of ${num(index.files.length)} files` : `${num(all.length)} files`,
     ),
+    toolbar(
+      searchField({
+        key: "source",
+        placeholder: "Filter files",
+        label: "Filter source files",
+        value: state.sourceQuery,
+        onInput: (event) => ctx.actions.setSourceQuery(event.target.value),
+      }),
+    ),
+    visible.length
+      ? h(
+          "div",
+          { class: "list__scroll", "data-scroll": "source-files" },
+          visible.map((file) => {
+            const cut = file.path.lastIndexOf("/");
+            return h(
+              "button",
+              {
+                class: "list__item",
+                type: "button",
+                title: file.path,
+                "data-fk": `src:${file.path}`,
+                "aria-current": String(file.path === path),
+                onClick: () => ctx.actions.selectSource(file.path),
+              },
+              h(
+                "span",
+                { class: "list__name" },
+                h("code", null, cut >= 0 ? file.path.slice(cut + 1) : file.path),
+                file.changed ? h("span", { class: "badge badge--changed" }, "changed") : null,
+                file.test ? h("span", { class: "badge badge--test" }, "test") : null,
+              ),
+              h("span", { class: "list__file" }, cut >= 0 ? file.path.slice(0, cut + 1) : "./"),
+            );
+          }),
+        )
+      : empty({
+          title: "No file matches this filter",
+          body: "The filter matches anywhere in the path.",
+          actions: [
+            button({ label: "Clear filter", onClick: () => ctx.actions.setSourceQuery("") }),
+          ],
+        }),
     all.length > visible.length
       ? h(
           "p",
-          { class: "hint", style: "padding:8px 12px" },
+          { class: "hint hint--pad" },
           `Showing the first ${num(visible.length)} of ${num(all.length)}. Filter to narrow the list.`,
         )
       : null,
   );
 
+  const cut = path ? path.lastIndexOf("/") : -1;
   const viewer = h(
     "div",
     { class: "source" },
     h(
       "div",
       { class: "source__head" },
-      h("div", { class: "source__title" }, path ?? "No file"),
+      h(
+        "div",
+        { class: "source__path", title: path ?? "" },
+        h("span", { class: "source__base" }, path ? path.slice(cut + 1) : "No file"),
+        cut > 0 ? h("span", { class: "source__dir" }, path.slice(0, cut + 1)) : null,
+      ),
       source
         ? h(
             "div",
             { class: "source__meta" },
             h("span", null, source.language),
             h("span", null, `${num(source.lines.length)} lines`),
+            changed.size ? h("span", null, `${num(changed.size)} changed`) : null,
             source.traces
               ? h(
                   "span",
@@ -687,11 +786,14 @@ export function renderSource(ctx) {
         : null,
     ),
     !source
-      ? state.sourceLoading
+      ? state.sourceLoading || (path && !state.errors.get("source-file"))
         ? loading("Reading the file…")
         : empty({
-            title: "Pick a file",
-            body: "The source viewer shows only files in the analysed project.",
+            title: path ? "This file could not be read" : "Pick a file",
+            body: path
+              ? (state.errors.get("source-file")?.message ??
+                "Studio shows only files inside the analysed project.")
+              : "The source viewer shows only files in the analysed project.",
           })
       : !source.exists
         ? empty({
@@ -702,10 +804,10 @@ export function renderSource(ctx) {
           })
         : h(
             "div",
-            { class: "source__body" },
+            { class: "source__body", "data-scroll": `source:${source.path}` },
             h(
               "div",
-              { class: "code", "aria-label": `Source of ${source.path}` },
+              { class: "code", role: "region", "aria-label": `Source of ${source.path}` },
               source.lines.map((line) => {
                 const unit = unitStarts.get(line.n);
                 return h(
@@ -719,7 +821,7 @@ export function renderSource(ctx) {
               }),
             ),
           ),
-    source?.note ? h("p", { class: "hint", style: "padding:0 14px 8px" }, source.note) : null,
+    source?.note ? h("p", { class: "hint source__note" }, source.note) : null,
     h(
       "div",
       { class: "source__legend" },
@@ -735,7 +837,12 @@ export function renderSource(ctx) {
         h("span", { class: "legend-swatch legend-swatch--observed" }),
         "unit ran under a fresh trace",
       ),
-      h("span", null, "a dot marks a unit start"),
+      h(
+        "span",
+        null,
+        h("span", { class: "legend-swatch legend-swatch--unit" }),
+        "a rule marks where a unit starts",
+      ),
     ),
   );
 
@@ -755,7 +862,7 @@ export function renderSource(ctx) {
       ),
       actions: [ctx.actions.refreshButton(), ctx.actions.runButton("affected")],
     }),
-    h("div", { class: "split split--source", style: "margin-top:14px" }, list, viewer),
+    h("div", { class: "split split--source split--spaced" }, list, viewer),
     source?.units.length
       ? section({
           title: "Units in this file",

@@ -1,8 +1,16 @@
 import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { Analysis, SmartTest } from "@smarttest/core";
 import { describe, expect, it } from "vitest";
-import { benchmarkOf, loadCoverage, loadLastRun, readProjectFile } from "./snapshot.js";
+import {
+  benchmarkOf,
+  buildSnapshot,
+  loadCoverage,
+  loadLastRun,
+  readProjectFile,
+  readProjectFileHead,
+} from "./snapshot.js";
 
 const report = {
   schemaVersion: 1,
@@ -54,6 +62,94 @@ describe("source containment", () => {
       expect(await readProjectFile(root, "outside/secret.ts")).toBeNull();
     } finally {
       await rm(base, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("bounded reads", () => {
+  it("reads only the head of a large file and says it was truncated", async () => {
+    const root = await mkdtemp(join(tmpdir(), "studio-head-"));
+    try {
+      await writeFile(join(root, "big.ts"), `${"a".repeat(10)}é${"b".repeat(10)}`);
+      const head = await readProjectFileHead(root, "big.ts", { maxBytes: 11 });
+      // 11 bytes ends inside the two-byte "é"; the partial character is dropped.
+      expect(head).toEqual({ text: "a".repeat(10), truncated: true });
+      const whole = await readProjectFileHead(root, "big.ts", { maxBytes: 1024 });
+      expect(whole).toEqual({ text: `${"a".repeat(10)}é${"b".repeat(10)}`, truncated: false });
+      await mkdir(join(root, "dir"));
+      expect(await readProjectFileHead(root, "dir")).toBeNull();
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("snapshot line diffs", () => {
+  it("reads renamed files from their old path and never asks the base for added files", async () => {
+    const root = await mkdtemp(join(tmpdir(), "studio-diffs-"));
+    try {
+      await writeFile(join(root, "new-name.ts"), "one\ntwo changed\nthree");
+      await writeFile(join(root, "added.ts"), "fresh\nfile");
+      const asked: string[] = [];
+      const base: Record<string, string> = { "old-name.ts": "one\ntwo\nthree" };
+      const analysis = {
+        root,
+        input: {
+          description: "fixture",
+          changeSet: {
+            provider: "git",
+            completeness: "complete",
+            warnings: [],
+            changes: [
+              { path: "new-name.ts", type: "renamed", previousPath: "old-name.ts" },
+              { path: "added.ts", type: "added" },
+            ],
+          },
+          readBefore: async (path: string) => {
+            asked.push(path);
+            return base[path];
+          },
+        },
+        diffs: new Map(),
+        index: { get: () => undefined },
+        testFiles: [],
+        timings: {},
+        decision: {
+          analysisStatus: "complete",
+          safetyMode: "balanced",
+          fallbackApplied: false,
+          warnings: [],
+          selectedTests: [],
+          skippedTests: [],
+          affectedFiles: [],
+          affectedSymbols: [],
+          details: { uncertainty: [], triggers: [] },
+        },
+      } as unknown as Analysis;
+      const st = {
+        config: { mode: "balanced" },
+        profile: async () => ({
+          name: "fixture",
+          root,
+          vcs: { provider: "git" },
+          packageManager: { name: "pnpm" },
+          runtime: { node: "22" },
+          runners: [],
+          workspaces: [],
+        }),
+      } as unknown as SmartTest;
+      const snapshot = await buildSnapshot(st, undefined, null, analysis);
+      expect(asked).toEqual(["old-name.ts"]);
+      expect(snapshot.diffs.get("new-name.ts")).toEqual({
+        added: [2],
+        removed: 1,
+        approximate: false,
+      });
+      expect(snapshot.diffs.get("added.ts")?.added).toEqual([1, 2]);
+      const files = snapshot.impact.change.files;
+      expect(files.find((f) => f.path === "new-name.ts")?.addedLines).toEqual([2]);
+    } finally {
+      await rm(root, { recursive: true, force: true });
     }
   });
 });

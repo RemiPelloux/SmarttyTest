@@ -195,11 +195,27 @@ export function statusMark(status, { text = null, title = null } = {}) {
   );
 }
 
+/**
+ * A file path as a shrinkable directory and a basename that stays readable when the column is
+ * narrow. The full path is always the title.
+ */
+export function filePath(path, { className = "" } = {}) {
+  const text = String(path ?? "");
+  const cut = text.lastIndexOf("/");
+  return h(
+    "span",
+    { class: `fpath ${className}`.trim(), title: text },
+    cut >= 0 ? h("span", { class: "fpath__dir" }, text.slice(0, cut + 1)) : null,
+    h("span", { class: "fpath__base" }, cut >= 0 ? text.slice(cut + 1) : text),
+  );
+}
+
+/** Selection is not a result, so it never borrows the pass colour. */
 export function selectionMark(selection) {
   if (selection === "selected")
     return h(
       "span",
-      { class: "status", dataset: { status: "passed" } },
+      { class: "status", dataset: { status: "selected" } },
       h("span", { class: "status__glyph", "aria-hidden": "true" }, "■"),
       h("span", null, "selected"),
     );
@@ -210,7 +226,7 @@ export function selectionMark(selection) {
       h("span", { class: "status__glyph", "aria-hidden": "true" }),
       h("span", null, "not run"),
     );
-  return h("span", { class: "status", dataset: { status: "skipped" } }, "–");
+  return h("span", { class: "status", dataset: { status: "none" } }, "–");
 }
 
 export function empty({ title, body, actions = [], children = [] }) {
@@ -243,12 +259,14 @@ export function button({
   disabled = false,
   shortcut = null,
   type = "button",
+  fk = null,
 }) {
   return h(
     "button",
     {
       class: `btn ${variant} ${size}`.trim(),
       type,
+      ...(fk ? { "data-fk": fk } : {}),
       ...(title ? { title } : {}),
       ...(disabled ? { disabled: true } : {}),
       onClick,
@@ -259,12 +277,13 @@ export function button({
   );
 }
 
-export function iconButton({ name, label: text, onClick, disabled = false }) {
+export function iconButton({ name, label: text, onClick, disabled = false, fk = null }) {
   return h(
     "button",
     {
       class: "icon-btn",
       type: "button",
+      ...(fk ? { "data-fk": fk } : {}),
       title: text,
       "aria-label": text,
       ...(disabled ? { disabled: true } : {}),
@@ -294,22 +313,24 @@ export function dataTable({ caption, columns, rows, rowProps, onRowClick }) {
     ),
   );
   const body = h("tbody");
+  // One delegated click listener on the body instead of one per row. The row click is a mouse
+  // convenience; keyboard users reach the same action through the button in the first cell, so
+  // rows are not extra tab stops.
+  const rowOf = new Map();
+  if (onRowClick) {
+    body.addEventListener("click", (event) => {
+      if (event.target.closest("button, a, input")) return;
+      const tr = event.target.closest("tr");
+      const row = tr && tr.parentNode === body ? rowOf.get(tr) : null;
+      if (row) onRowClick(row);
+    });
+  }
   rows.forEach((row, index) => {
     const props = rowProps ? rowProps(row, index) : {};
     const tr = h("tr", props);
     if (onRowClick) {
-      tr.tabIndex = 0;
-      tr.style.cursor = "pointer";
-      tr.addEventListener("click", (event) => {
-        if (event.target.closest("button, a, input")) return;
-        onRowClick(row);
-      });
-      tr.addEventListener("keydown", (event) => {
-        if (event.key === "Enter" && !event.target.closest("button, a, input")) {
-          event.preventDefault();
-          onRowClick(row);
-        }
-      });
+      rowOf.set(tr, row);
+      tr.classList.add("is-clickable");
     }
     for (const column of columns) {
       const value = column.cell(row, index);
@@ -354,7 +375,8 @@ export function tabs({ items, active, onSelect, idPrefix = "tab" }) {
       const direction = event.key === "ArrowRight" ? 1 : -1;
       const next = items[(index + direction + items.length) % items.length];
       onSelect(next.id);
-      buttons[(index + direction + items.length) % items.length]?.focus();
+      // onSelect re-renders the screen, so focus the new tab by id rather than the old node.
+      document.getElementById(`${idPrefix}-${next.id}`)?.focus();
     });
     buttons.push(button);
     list.appendChild(button);

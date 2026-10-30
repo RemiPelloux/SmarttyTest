@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "measured": "2026-10-30",
+  "workload": "ts-lib-vitest fixture plus 4,000 generated source files (one import chain); a staged test edit and an untracked file force an isolated pre-commit run; local Linux machine, 3 rounds",
+  "question": "Cost of the hook run and of the next normal analysis, with and without reusing the working tree's index stats in the temporary checkout",
+  "before": {
+    "hookMs": [699, 385, 742],
+    "nextAnalyzeMs": [237, 214, 231],
+    "nextIndexUpdateMs": [179, 171, 174]
+  },
+  "after": {
+    "hookMs": [722, 351, 651],
+    "nextAnalyzeMs": [144, 116, 145],
+    "nextIndexUpdateMs": [95, 85, 93]
+  },
+  "reading": "The next run's index update halves because it no longer re-reads and re-hashes every file after a hook. The hook's own time is dominated by creating the temporary checkout and running the selected tests and does not change measurably at this size."
+}

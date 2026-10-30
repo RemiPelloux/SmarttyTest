@@ -5,12 +5,12 @@
  * read the same `Analysis`, so a number on one screen always matches the rows on another. Nothing
  * is recomputed per request and nothing is invented when data is missing.
  */
-import { readFile, realpath } from "node:fs/promises";
+import { open, realpath } from "node:fs/promises";
 import { join, resolve, sep } from "node:path";
 import type { Analysis, FlakyEntry, SmartTest } from "@smarttest/core";
 import type { ProjectProfile } from "@smarttest/project-detector";
 import type { RunReport, RunSummary } from "@smarttest/report-engine";
-import { readJson, type SafetyMode } from "@smarttest/shared";
+import { mapLimit, readJson, type SafetyMode } from "@smarttest/shared";
 import { type SymbolRecord, unitOf } from "@smarttest/source-parser";
 import type {
   StudioChange,
@@ -174,16 +174,57 @@ function observedIndex(a: Analysis, view: TraceViewLike | undefined): Map<string
   return map;
 }
 
-export async function readProjectFile(root: string, path: string): Promise<string | null> {
+export interface ProjectFileRead {
+  text: string;
+  /** True when the file is larger than `maxBytes` and only its head was read. */
+  truncated: boolean;
+}
+
+/**
+ * Reads a project file that resolves (through symlinks) inside the project, at most `maxBytes`
+ * of it. `realRoot` lets a caller reading many files resolve the root once.
+ */
+export async function readProjectFileHead(
+  root: string,
+  path: string,
+  options: { realRoot?: string; maxBytes?: number } = {},
+): Promise<ProjectFileRead | null> {
   const abs = safeProjectPath(root, path);
   if (!abs) return null;
   try {
-    const [realRoot, realFile] = await Promise.all([realpath(root), realpath(abs)]);
+    const [realRoot, realFile] = await Promise.all([
+      options.realRoot ?? realpath(root),
+      realpath(abs),
+    ]);
     if (!realFile.startsWith(`${realRoot}${sep}`)) return null;
-    return await readFile(realFile, "utf8");
+    const handle = await open(realFile, "r");
+    try {
+      const info = await handle.stat();
+      if (!info.isFile()) return null;
+      const maxBytes = options.maxBytes ?? Number.POSITIVE_INFINITY;
+      if (info.size <= maxBytes) return { text: await handle.readFile("utf8"), truncated: false };
+      const buffer = Buffer.alloc(maxBytes);
+      const { bytesRead } = await handle.read(buffer, 0, maxBytes, 0);
+      // A cut through a multi-byte character decodes to U+FFFD; drop it rather than show it.
+      const text = buffer
+        .subarray(0, bytesRead)
+        .toString("utf8")
+        .replace(/\uFFFD+$/, "");
+      return { text, truncated: true };
+    } finally {
+      await handle.close();
+    }
   } catch {
     return null;
   }
+}
+
+export async function readProjectFile(
+  root: string,
+  path: string,
+  realRoot?: string,
+): Promise<string | null> {
+  return (await readProjectFileHead(root, path, realRoot ? { realRoot } : {}))?.text ?? null;
 }
 
 export async function buildSnapshot(
@@ -198,11 +239,17 @@ export async function buildSnapshot(
   const decision = analysis.decision;
   const changeFiles = filesOfChange(analysis);
   const diffs = new Map<string, LineDiff>();
-  for (const file of changeFiles) {
-    const after = await readProjectFile(analysis.root, file.path);
-    diffs.set(file.path, lineDiff(await analysis.input.readBefore(file.path), after ?? ""));
-    file.addedLines = diffs.get(file.path)?.added ?? null;
-  }
+  const realRoot = await realpath(analysis.root).catch(() => undefined);
+  await mapLimit(changeFiles, 8, async (file) => {
+    const [after, before] = await Promise.all([
+      realRoot === undefined ? null : readProjectFile(analysis.root, file.path, realRoot),
+      // An added file has no base; a renamed one is read from where it used to be.
+      file.type === "added" ? undefined : analysis.input.readBefore(file.previousPath ?? file.path),
+    ]);
+    const diff = lineDiff(before, after ?? "");
+    diffs.set(file.path, diff);
+    file.addedLines = diff.added;
+  });
   const units = changeFiles.reduce((n, f) => n + f.units.length, 0);
   const traces = tracesOf(analysis, view);
   const counts: StudioCounts = {
@@ -292,24 +339,33 @@ export async function buildSnapshot(
   };
 }
 
-/** Last run report, with the numbers the shell needs (cached ≠ fresh, skipped ≠ passed). */
-export async function loadLastRun(storeDir: string): Promise<StudioRun | null> {
-  const { validateReportIntegrity } = await import("@smarttest/report-engine");
-  const report =
+/** The last run report on disk, read once and shared by {@link loadLastRun} and {@link loadCoverage}. */
+export async function readLastRunReport(storeDir: string): Promise<RunReport | null> {
+  return (
     (await readJson<RunReport>(join(storeDir, "reports", "last-run.json"))) ??
     // Core writes runs/latest.json and reports/report.json; the stable "last-run" name is a
     // Studio convenience, not something every writer creates.
-    (await readJson<RunReport>(join(storeDir, "runs", "latest.json")));
+    (await readJson<RunReport>(join(storeDir, "runs", "latest.json"))) ??
+    null
+  );
+}
+
+/** Last run report, with the numbers the shell needs (cached ≠ fresh, skipped ≠ passed). */
+export async function loadLastRun(
+  storeDir: string,
+  preread?: RunReport | null,
+): Promise<StudioRun | null> {
+  const { validateReportIntegrity } = await import("@smarttest/report-engine");
+  const report = preread !== undefined ? preread : await readLastRunReport(storeDir);
   if (!report || report.schemaVersion === undefined) return null;
   return runFromReport(report, "affected", null, validateReportIntegrity(report));
 }
 
 export async function loadCoverage(
   storeDir: string,
+  preread?: RunReport | null,
 ): Promise<{ runAt: string; summary: RunReport["coverage"] } | null> {
-  const report =
-    (await readJson<RunReport>(join(storeDir, "reports", "last-run.json"))) ??
-    (await readJson<RunReport>(join(storeDir, "runs", "latest.json")));
+  const report = preread !== undefined ? preread : await readLastRunReport(storeDir);
   if (!report?.coverage || !report.finishedAt) return null;
   return { runAt: report.finishedAt, summary: report.coverage };
 }
@@ -330,6 +386,8 @@ export function runVerdictOf(
   if (summary.cancelled > 0) return "incomplete";
   if (summary.failed > 0 || summary.timedOut > 0) return "failed";
   if (executionCount < summary.selected) return "incomplete";
+  // A cached result is never a pass (ADR-0009): a run in which no test executed is cached-pass.
+  if (summary.cached > 0 && summary.passed === 0) return "cached-pass";
   return "passed";
 }
 
@@ -453,7 +511,18 @@ export function overviewOf(snapshot: Snapshot, last: LastRunFacts): StudioOvervi
   };
 }
 
+const testsMemo = new WeakMap<Snapshot, { last: LastRunFacts; tests: StudioTests }>();
+
+/** Memoised per snapshot and last-run facts: both are replaced, never mutated, on refresh. */
 export function testsOf(snapshot: Snapshot, last: LastRunFacts): StudioTests {
+  const memo = testsMemo.get(snapshot);
+  if (memo?.last === last) return memo.tests;
+  const tests = buildTests(snapshot, last);
+  testsMemo.set(snapshot, { last, tests });
+  return tests;
+}
+
+function buildTests(snapshot: Snapshot, last: LastRunFacts): StudioTests {
   const rows = new Map<string, StudioTestRow>();
   const executionByFile = new Map<string, StudioRunFile>();
   for (const execution of last.run?.executions ?? [])
@@ -579,13 +648,12 @@ export async function trustOf(
   snapshot: Snapshot,
   last: LastRunFacts,
 ): Promise<StudioTrust> {
-  const [shadow, hooks] = await Promise.all([
+  const [shadow, hooks, benchmarkReport] = await Promise.all([
     st.shadowReport().catch(() => undefined),
     st.hookHistory().catch(() => undefined),
+    readJson<unknown>(join(st.storeDir, "reports", "benchmark.json")),
   ]);
-  const benchmark = benchmarkOf(
-    await readJson<unknown>(join(st.storeDir, "reports", "benchmark.json")),
-  );
+  const benchmark = benchmarkOf(benchmarkReport);
   return {
     schemaVersion: 1,
     updatedAt: new Date().toISOString(),
@@ -661,11 +729,11 @@ export async function sourceOf(
   const index = snapshot.analysis.index.get(path);
   const diff = snapshot.diffs.get(path);
   const changed = snapshot.impact.change.files.find((f) => f.path === path);
-  const protectedUnits = new Set(
+  const unprotectedUnits = new Set(
     snapshot.impact.unprotected.filter((u) => u.file === path).map((u) => u.unit),
   );
-  const text = await readProjectFile(st.root, path);
-  if (text === null) {
+  const file = await readProjectFileHead(st.root, path, { maxBytes });
+  if (file === null) {
     return {
       schemaVersion: 1,
       path,
@@ -679,9 +747,8 @@ export async function sourceOf(
         changed?.type === "deleted" ? "Deleted by the current change." : "File is not readable.",
     };
   }
-  const truncated = text.length > maxBytes;
-  const body = truncated ? text.slice(0, maxBytes) : text;
-  const lines = body.split("\n").map((line, i) => ({ n: i + 1, text: line }));
+  const truncated = file.truncated;
+  const lines = file.text.split("\n").map((line, i) => ({ n: i + 1, text: line }));
   const changedLines = new Set<number>(diff?.added ?? []);
   const changedUnits = new Set(
     snapshot.impact.change.files.filter((f) => f.path === path).flatMap((f) => f.units),
@@ -699,7 +766,8 @@ export async function sourceOf(
   }
   for (const symbol of index?.symbols ?? []) {
     const unit = unitOf(symbol);
-    const range = { startLine: symbol.range.start.line, endLine: symbol.range.end.line };
+    // Symbol ranges are zero-based; source lines (and the viewer) are one-based.
+    const range = { startLine: symbol.range.start.line + 1, endLine: symbol.range.end.line + 1 };
     const key = unit.includes(".") ? unit.slice(unit.indexOf(".") + 1) : unit;
     const observedBy = [
       ...new Set([...(observedByUnit.get(symbol.name) ?? []), ...(observedByUnit.get(key) ?? [])]),
@@ -710,28 +778,12 @@ export async function sourceOf(
       startLine: range.startLine,
       endLine: range.endLine,
       changed: changedUnits.has(unit),
-      unprotected: protectedUnits.has(unit),
+      unprotected: unprotectedUnits.has(unit),
       observedBy: observedBy.sort(),
     });
   }
-  let fresh = 0;
-  let stale = 0;
-  let missing = 0;
-  let collectedAt: number | null = null;
-  for (const test of snapshot.analysis.testFiles) {
-    const trace = snapshot.view?.trace(test);
-    if (!trace) {
-      missing++;
-      continue;
-    }
-    if (!snapshot.view?.isFresh(test)) {
-      stale++;
-      continue;
-    }
-    fresh++;
-    const at = snapshot.view.collectedAt(test);
-    if (at) collectedAt = Math.max(collectedAt ?? 0, Date.parse(at));
-  }
+  // The snapshot's trace counts cover the same tests with the same rules; reuse them.
+  const traces = snapshot.impact.traces;
   return {
     schemaVersion: 1,
     path,
@@ -741,15 +793,14 @@ export async function sourceOf(
     lines,
     changedLines: [...changedLines].sort((a, b) => a - b),
     units,
-    traces:
-      !snapshot.view || snapshot.view.size === 0
-        ? null
-        : {
-            fresh,
-            stale,
-            missing,
-            collectedAt: collectedAt ? new Date(collectedAt).toISOString() : null,
-          },
+    traces: traces.available
+      ? {
+          fresh: traces.fresh,
+          stale: traces.stale,
+          missing: traces.missing,
+          collectedAt: traces.collectedAt,
+        }
+      : null,
     note: truncated
       ? `Showing the first ${Math.round(maxBytes / 1024)} KiB of this file.`
       : diff?.approximate
@@ -758,7 +809,24 @@ export async function sourceOf(
   };
 }
 
+const fileIndexMemo = new WeakMap<Snapshot, { index: StudioFileIndex; paths: Set<string> }>();
+
+/** Whether `path` is in the snapshot's file index, without rebuilding it per request. */
+export function isIndexedFile(snapshot: Snapshot, path: string): boolean {
+  fileIndexOf(snapshot);
+  return fileIndexMemo.get(snapshot)?.paths.has(path) ?? false;
+}
+
+/** Memoised per snapshot: a snapshot is never mutated after it is built. */
 export function fileIndexOf(snapshot: Snapshot): StudioFileIndex {
+  const memo = fileIndexMemo.get(snapshot);
+  if (memo) return memo.index;
+  const index = buildFileIndex(snapshot);
+  fileIndexMemo.set(snapshot, { index, paths: new Set(index.files.map((file) => file.path)) });
+  return index;
+}
+
+function buildFileIndex(snapshot: Snapshot): StudioFileIndex {
   const changed = new Set(snapshot.impact.change.files.map((f) => f.path));
   const files = new Map<string, { path: string; test: boolean; changed: boolean }>();
   for (const path of snapshot.analysis.index.entries().keys())

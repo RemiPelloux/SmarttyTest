@@ -27,6 +27,8 @@ export type RunStreamEvent = StudioRunEvent & { runId: string };
 type Listener = (event: RunStreamEvent) => void;
 
 const MAX_EVENTS = 4_000;
+/** Finished runs kept for `GET /api/runs` and their event logs; older ones are dropped. */
+const MAX_FINISHED_RUNS = 10;
 
 export class RunManager {
   private readonly runs = new Map<string, StudioRun>();
@@ -117,6 +119,7 @@ export class RunManager {
     this.runs.set(id, run);
     this.events.set(id, []);
     this.running = id;
+    this.prune();
     this.controller = new AbortController();
     const completion = this.execute(run, input, this.controller.signal);
     this.completion = completion;
@@ -141,6 +144,18 @@ export class RunManager {
       }),
     ]);
     if (timer) clearTimeout(timer);
+  }
+
+  /** Keeps the active run and the most recent finished ones; maps iterate oldest first. */
+  private prune(): void {
+    let excess = this.runs.size - MAX_FINISHED_RUNS - (this.running ? 1 : 0);
+    for (const id of this.runs.keys()) {
+      if (excess <= 0) break;
+      if (id === this.running) continue;
+      this.runs.delete(id);
+      this.events.delete(id);
+      excess--;
+    }
   }
 
   private update(run: StudioRun, patch: Partial<StudioRun>): void {
@@ -282,6 +297,7 @@ export class RunManager {
     } finally {
       this.running = null;
       this.controller = null;
+      this.prune();
       this.onFinished();
     }
   }

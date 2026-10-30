@@ -2,11 +2,12 @@
  * Overview and Impact screens. Both read the same snapshot as the server, so the strip on the
  * overview and the detail behind a row can never disagree about a count.
  */
-import { runVerdict, scopeLabel } from "./run.js";
+import { onlyCached, runVerdict, scopeLabel } from "./run.js";
 import {
   duration,
   empty,
   eyebrow,
+  filePath,
   h,
   icon,
   num,
@@ -102,16 +103,39 @@ function notice(title, lines, tone = "warn") {
 export function runStatusMark(run) {
   if (!run) return statusMark("skipped", { text: "no run" });
   const verdict = runVerdict(run) ?? "passed";
+  if (verdict === "cached-pass" || (verdict === "passed" && onlyCached(run.summary)))
+    return statusMark("cached-pass", { text: "cached, not run" });
   if (verdict === "passed") return statusMark("passed", { text: "passed" });
   if (verdict === "failed") return statusMark("failed", { text: "failed" });
   if (verdict === "error") return statusMark("infrastructure-error", { text: "infra error" });
   return statusMark("skipped", { text: "incomplete" });
 }
 
+/** Data objects already drawn once: rows animate in on arrival, not on every re-render. */
+const drawn = new WeakSet();
+
+export function firstDraw(data) {
+  if (!data || drawn.has(data)) return false;
+  drawn.add(data);
+  return true;
+}
+
+/** Search text per selection reason, joined once per loaded impact rather than per render. */
+const reasonText = new WeakMap();
+
+function hayOf(reason) {
+  let hay = reasonText.get(reason);
+  if (hay === undefined) {
+    hay = `${reason.message} ${(reason.path ?? []).join(" ")}`;
+    reasonText.set(reason, hay);
+  }
+  return hay;
+}
+
 function reasonTouches(reasons, file, unit) {
   const base = unit.includes(".") ? unit.slice(unit.lastIndexOf(".") + 1) : unit;
   for (const reason of reasons) {
-    const hay = `${reason.message} ${(reason.path ?? []).join(" ")}`;
+    const hay = hayOf(reason);
     if (unit && (hay.includes(unit) || (base.length > 3 && hay.includes(base)))) return true;
     if (hay.includes(file)) return true;
   }
@@ -119,27 +143,32 @@ function reasonTouches(reasons, file, unit) {
 }
 
 function chain(nodes) {
+  const unique = [...new Set(nodes.filter(Boolean))];
   const out = [];
-  const seen = new Set();
-  for (const node of nodes) {
-    if (!node || seen.has(node)) continue;
-    seen.add(node);
-    if (out.length) out.push(h("span", { class: "chain__arrow", "aria-hidden": "true" }, "→"));
+  unique.forEach((node, index) => {
+    if (index) out.push(h("span", { class: "chain__arrow", "aria-hidden": "true" }, "→"));
+    const last = index === unique.length - 1 && unique.length > 1;
     out.push(
-      h(
-        "span",
-        {
-          class: `chain__node${node.endsWith(".test.ts") || node.includes("::") ? " chain__node--test" : ""}`,
-          title: node,
-        },
-        node,
-      ),
+      h("span", { class: `chain__node${last ? " chain__node--test" : ""}`, title: node }, node),
     );
-  }
+  });
   return out;
 }
 
+/** Derived rows per impact object; a reload replaces the object, which drops the cache. */
+const stripCache = new WeakMap();
+const impactTestsCache = new WeakMap();
+
 function stripRows(impact) {
+  let rows = stripCache.get(impact);
+  if (!rows) {
+    rows = buildStripRows(impact);
+    stripCache.set(impact, rows);
+  }
+  return rows;
+}
+
+function buildStripRows(impact) {
   const rows = [];
   const selected = impact.selected ?? [];
   for (const file of impact.change.files ?? []) {
@@ -159,9 +188,7 @@ function stripRows(impact) {
     }
     if (!units.length) {
       const matches = selected.filter((test) =>
-        test.reasons.some((reason) =>
-          `${reason.message} ${(reason.path ?? []).join(" ")}`.includes(file.path),
-        ),
+        test.reasons.some((reason) => hayOf(reason).includes(file.path)),
       );
       for (const test of matches.slice(0, 3))
         rows.push({ file, unit: null, kind: file.kinds[0] ?? "changed", test });
@@ -200,7 +227,7 @@ function impactStrip(ctx) {
         }),
       ),
     );
-
+  const animate = firstDraw(impact);
   return h(
     "div",
     { class: "strip", "aria-label": "Impact strip: changed units and the tests they reach" },
@@ -209,12 +236,12 @@ function impactStrip(ctx) {
       { class: "strip__head", "aria-hidden": "true" },
       h("span", null, "Changed unit"),
       h("span", null, "Path through the graph"),
-      h("span", null, "Test"),
-      h("span", { style: "text-align:right" }, "Selection"),
+      h("span", { class: "strip__head-test" }, "Test"),
+      h("span", { class: "strip__head-state" }, "Selection"),
     ),
     h(
       "div",
-      { class: "strip__body" },
+      { class: "strip__body", "data-scroll": "strip" },
       rows.map((row, index) => {
         const reason = row.test?.reasons[0];
         const pathNodes = reason?.path?.length
@@ -222,13 +249,15 @@ function impactStrip(ctx) {
           : row.test
             ? [row.file.path, row.test.filePath]
             : [row.file.path];
+        const unitName = !row.unit || row.unit === "*" ? "whole file" : row.unit;
         return h(
           "button",
           {
-            class: `strip__row${row.test ? "" : " strip__row--skipped"} row-enter`,
+            class: `strip__row${row.test ? "" : " strip__row--unreached"}${animate ? " row-enter" : ""}`,
             type: "button",
-            vars: { "--i": String(Math.min(index, 18)) },
-            "aria-selected": String(ctx.state.impactFile === row.file.path),
+            "data-fk": `strip:${index}`,
+            ...(animate ? { vars: { "--i": String(Math.min(index, 18)) } } : {}),
+            "aria-current": String(ctx.state.impactFile === row.file.path),
             onClick: () =>
               row.test
                 ? ctx.actions.openImpact(row.file.path, row.test.filePath)
@@ -237,13 +266,13 @@ function impactStrip(ctx) {
           h(
             "span",
             { class: "strip__unit" },
-            h("span", { class: "strip__unit-file" }, row.file.path),
             h(
               "span",
               { class: "strip__unit-name" },
-              h("code", null, row.unit ?? "whole file"),
+              h("code", null, unitName),
               h("span", { class: "strip__kind" }, row.kind),
             ),
+            filePath(row.file.path),
           ),
           h("span", { class: "chain" }, chain(pathNodes.slice(0, 5))),
           h(
@@ -251,7 +280,7 @@ function impactStrip(ctx) {
             { class: "strip__test" },
             row.test
               ? [
-                  h("code", { title: row.test.filePath }, row.test.filePath),
+                  filePath(row.test.filePath),
                   reason?.confidence ? h("span", { class: "badge" }, reason.confidence) : null,
                 ]
               : h("span", { class: "badge" }, row.unprotected ? "no protected unit" : "no path"),
@@ -288,7 +317,11 @@ function findingFor(impact) {
         )
       : h("span", null, "No test file is selected by the graph."),
     unprotected
-      ? h("span", null, ` ${plural(unprotected, "changed unit")} have no protecting test.`)
+      ? h(
+          "span",
+          null,
+          ` ${plural(unprotected, "changed unit")} ${unprotected === 1 ? "has" : "have"} no protecting test.`,
+        )
       : null,
   );
 }
@@ -313,7 +346,7 @@ export function renderOverview(ctx) {
           { class: "detail__body" },
           h(
             "div",
-            { style: "display:flex;justify-content:space-between;gap:12px;align-items:baseline" },
+            { class: "run-head" },
             h(
               "div",
               null,
@@ -353,11 +386,11 @@ export function renderOverview(ctx) {
                 ),
                 h("div", null, h("b", null, num(lastSummary.cached)), h("span", null, "cached")),
               )
-            : h("p", { class: "hint", style: "margin-top:10px" }, "The report has no summary."),
+            : h("p", { class: "hint mt-8" }, "The report has no summary."),
           lastSummary
             ? h(
                 "p",
-                { class: "detail__meta", style: "margin-top:8px" },
+                { class: "detail__meta mt-8" },
                 `${num(lastSummary.skippedBySelection)} not run by selection · ${num(lastSummary.skippedByTests)} skipped inside test files`,
               )
             : null,
@@ -458,7 +491,7 @@ export function renderOverview(ctx) {
       note: `analysed ${relativeTime(overview.updatedAt)} · ${duration(overview.analysis.analysisMs)}`,
       body: h(
         "div",
-        { class: "split" },
+        { class: "split split--even" },
         runPanel,
         panel({
           title: "Evidence",
@@ -467,14 +500,11 @@ export function renderOverview(ctx) {
             "div",
             { class: "detail__body" },
             h(
-              "dl",
-              {
-                class: "facts",
-                style: "grid-template-columns:repeat(2,minmax(0,1fr));border:0;margin:0",
-              },
+              "div",
+              { class: "facts facts--panel" },
               h(
                 "div",
-                { class: "fact", style: "border-left:0;padding-left:0" },
+                { class: "fact" },
                 h("span", { class: "fact__label" }, "Fresh traces"),
                 h("span", { class: "fact__value" }, num(traces.fresh)),
               ),
@@ -486,7 +516,7 @@ export function renderOverview(ctx) {
               ),
               h(
                 "div",
-                { class: "fact", style: "border-left:0;padding-left:0" },
+                { class: "fact" },
                 h("span", { class: "fact__label" }, "Flaky tests"),
                 h("span", { class: "fact__value" }, num(overview.flaky.count)),
               ),
@@ -500,7 +530,7 @@ export function renderOverview(ctx) {
             overview.flaky.worst
               ? h(
                   "p",
-                  { class: "detail__meta", style: "margin-top:10px" },
+                  { class: "detail__meta mt-12" },
                   `Worst flake: ${overview.flaky.worst.testId} · ${pct(overview.flaky.worst.rate * 100, 100)} · ${overview.flaky.worst.recent}`,
                 )
               : null,
@@ -540,6 +570,20 @@ export function renderOverview(ctx) {
 }
 
 function impactTests(impact, filePath) {
+  let byFile = impactTestsCache.get(impact);
+  if (!byFile) {
+    byFile = new Map();
+    impactTestsCache.set(impact, byFile);
+  }
+  let tests = byFile.get(filePath);
+  if (!tests) {
+    tests = buildImpactTests(impact, filePath);
+    byFile.set(filePath, tests);
+  }
+  return tests;
+}
+
+function buildImpactTests(impact, filePath) {
   const direct = impact.selected.filter((test) =>
     test.reasons.some((reason) => reasonTouches([reason], filePath, "")),
   );
@@ -556,21 +600,16 @@ function codePeek(ctx, filePath) {
   if (!source)
     return h(
       "p",
-      { class: "hint", style: "margin-top:10px" },
+      { class: "hint mt-8" },
       sourceLoading(ctx.state, filePath) ? "Reading the file…" : "No code preview for this file.",
     );
   if (!source.exists)
-    return h(
-      "p",
-      { class: "hint", style: "margin-top:10px" },
-      "This file is not on disk — it was deleted or renamed.",
-    );
+    return h("p", { class: "hint mt-8" }, "This file is not on disk — it was deleted or renamed.");
   const changed = new Set(source.changedLines ?? []);
   const first = [...changed].sort((a, b) => a - b)[0] ?? 1;
   const start = Math.max(1, first - 5);
   const lines = source.lines.filter((line) => line.n >= start && line.n < start + 16);
-  if (!lines.length)
-    return h("p", { class: "hint", style: "margin-top:10px" }, "No lines to show.");
+  if (!lines.length) return h("p", { class: "hint mt-8" }, "No lines to show.");
   return h(
     "div",
     { class: "code-peek", "aria-label": `Code around the change in ${filePath}` },
@@ -644,14 +683,13 @@ export function renderImpact(ctx) {
     finding: h(
       "span",
       null,
-      impact.change.description || "No change.",
-      " ",
-      h("strong", null, plural(impact.counts.selected, "test file")),
-      " reach ",
+      impact.change.description ? `${impact.change.description}. ` : "",
       h("strong", null, plural(files.length, "changed file")),
+      files.length === 1 ? " reaches " : " reach ",
+      h("strong", null, plural(impact.counts.selected, "test file")),
       "; ",
       h("strong", null, plural(impact.counts.skipped, "test file")),
-      " do not run.",
+      " not run by selection.",
     ),
     actions: [ctx.actions.refreshButton(), ctx.actions.runButton("affected")],
   });
@@ -674,13 +712,14 @@ export function renderImpact(ctx) {
     h("div", { class: "list__head" }, `Changed files · ${num(files.length)}`),
     h(
       "div",
-      { class: "list__scroll" },
+      { class: "list__scroll", "data-scroll": "impact-files" },
       files.map((changedFile) =>
         h(
           "button",
           {
             class: "list__item",
             type: "button",
+            "data-fk": `impact:${changedFile.path}`,
             "aria-current": String(changedFile.path === selectedPath),
             onClick: () => ctx.actions.selectImpactFile(changedFile.path),
           },
@@ -693,7 +732,7 @@ export function renderImpact(ctx) {
           h(
             "span",
             { class: "list__file" },
-            `${changedFile.type}${changedFile.trivialOnly ? " · whitespace only" : ""}${changedFile.confidence ? ` · ${changedFile.confidence}` : ""}`,
+            `${changedFile.previousPath ? `renamed from ${changedFile.previousPath}` : changedFile.type}${changedFile.trivialOnly ? " · whitespace only" : ""}${changedFile.confidence ? ` · ${changedFile.confidence}` : ""}`,
           ),
         ),
       ),
@@ -714,7 +753,7 @@ export function renderImpact(ctx) {
         h(
           "div",
           { class: "units" },
-          h("p", { class: "fact__label", style: "padding:0 0 4px" }, "Changed units"),
+          h("p", { class: "fact__label units__label" }, "Changed units"),
           file.units.map((unit) =>
             h(
               "div",
@@ -725,7 +764,7 @@ export function renderImpact(ctx) {
                 { class: "unit-row__meta" },
                 impact.unprotected.some((u) => u.file === file.path && u.unit === unit)
                   ? "no protecting test"
-                  : "covered",
+                  : "protected",
               ),
             ),
           ),
@@ -735,7 +774,7 @@ export function renderImpact(ctx) {
       detailBody.appendChild(
         h(
           "p",
-          { class: "hint", style: "margin-bottom:10px" },
+          { class: "hint mb-8" },
           file.trivialOnly
             ? "Only whitespace or formatting changed, so no unit is named."
             : "No named unit was extracted from this diff.",
@@ -755,7 +794,7 @@ export function renderImpact(ctx) {
                 .map((test) =>
                   h(
                     "div",
-                    { style: "margin-top:6px" },
+                    { class: "impact-test" },
                     h(
                       "p",
                       { class: "detail__title" },
@@ -779,11 +818,39 @@ export function renderImpact(ctx) {
     detailBody.appendChild(
       section({
         title: "Code at the change",
-        note: file.addedLines?.length ? `${file.addedLines.length} marked lines` : "no added lines",
+        note: file.addedLines?.length
+          ? plural(file.addedLines.length, "marked line")
+          : "no added lines",
         body: codePeek(ctx, file.path),
       }),
     );
   }
+
+  const notRun = section({
+    title: "Not run, by reason",
+    note: `${num(impact.counts.skipped)} test files`,
+    body: impact.skippedGroups.length
+      ? h(
+          "div",
+          { class: "list" },
+          impact.skippedGroups.map((group) =>
+            h(
+              "div",
+              { class: "list__item list__item--static" },
+              h(
+                "span",
+                { class: "list__name" },
+                h("code", null, group.reason),
+                h("span", { class: "list__count" }, num(group.count)),
+              ),
+            ),
+          ),
+        )
+      : empty({
+          title: "Every discovered test is selected",
+          body: "Nothing was left out by the graph for this change.",
+        }),
+  });
 
   const riskLines = [];
   if (impact.analysis.status !== "complete")
@@ -802,8 +869,8 @@ export function renderImpact(ctx) {
     riskLines.length ? notice("Unresolved or observed risk", riskLines.slice(0, 6), "info") : null,
     h(
       "div",
-      { class: "split split--impact", style: "margin-top:14px" },
-      list,
+      { class: "split split--impact split--spaced" },
+      h("div", { class: "impact-side" }, list, notRun),
       h(
         "div",
         { class: "detail" },
@@ -818,7 +885,7 @@ export function renderImpact(ctx) {
               ? h(
                   "p",
                   { class: "detail__meta" },
-                  `${file.type} · ${file.kinds.join(", ") || "no kind"} · ${file.confidence}`,
+                  `${file.previousPath ? `renamed from ${file.previousPath}` : file.type} · ${file.kinds.join(", ") || "no kind"} · ${file.confidence}`,
                 )
               : null,
           ),
@@ -828,6 +895,7 @@ export function renderImpact(ctx) {
                 {
                   class: "btn btn--small",
                   type: "button",
+                  "data-fk": "impact-open-source",
                   onClick: () => ctx.navigate(`/source?path=${encodeURIComponent(file.path)}`),
                 },
                 h("span", null, "Open source"),
@@ -837,30 +905,5 @@ export function renderImpact(ctx) {
         detailBody,
       ),
     ),
-    section({
-      title: "Not run, by reason",
-      note: `${num(impact.counts.skipped)} test files`,
-      body: impact.skippedGroups.length
-        ? h(
-            "div",
-            { class: "list" },
-            impact.skippedGroups.map((group) =>
-              h(
-                "div",
-                { class: "list__item", style: "cursor:default" },
-                h(
-                  "span",
-                  { class: "list__name" },
-                  h("code", null, group.reason),
-                  h("span", { class: "list__count" }, num(group.count)),
-                ),
-              ),
-            ),
-          )
-        : empty({
-            title: "Every discovered test is selected",
-            body: "Nothing was left out by the graph for this change.",
-          }),
-    }),
   );
 }

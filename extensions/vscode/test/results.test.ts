@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { parseRunJson } from "../src/core/contracts.js";
 import {
   groupFiles,
+  groupHasFailure,
   resultState,
   statusBarRunText,
   statusLabel,
@@ -75,5 +76,22 @@ describe("run results", () => {
     const value = report();
     Object.assign(value.decision, { fallbackApplied: true });
     expect(verdict(value).state).toBe("incomplete");
+  });
+});
+
+describe("results view grouping", () => {
+  it("only expands files that contain a failure", () => {
+    const [base] = groupFiles(report());
+    if (!base) throw new Error("fixture has no file groups");
+    expect(groupHasFailure({ ...base, state: "passed", tests: [] })).toBe(false);
+    expect(groupHasFailure({ ...base, state: "cached-pass", tests: [] })).toBe(false);
+    expect(groupHasFailure({ ...base, state: "failed", tests: [] })).toBe(true);
+    expect(
+      groupHasFailure({
+        ...base,
+        state: "flaky",
+        tests: [{ testId: "t", status: "timed-out", durationMs: 1, attempts: 1 }],
+      }),
+    ).toBe(true);
   });
 });

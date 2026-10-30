@@ -17,7 +17,7 @@ Status words: **done** (shipped and tested), **partial** (shipped with a stated 
 | 0.9.0 Hooks and interfaces | S24–S26    | 116     | 36 done, 80 partial   | —                                     | partly met | `v0.9.0`             |
 | Total                      | 16 sprints | 630     | 451 done, 137 partial | 42                                    |            |                      |
 
-Tests grew from 124 (0.2.0) to 383 repository tests plus 68 extension tests (0.9.0); the regression harness grew from 4 to 9 fixtures, all at 0 missed failures in BALANCED and SAFE mode.
+Tests grew from 124 (0.2.0) to 400 repository tests plus 79 extension tests (0.9.0); the regression harness grew from 4 to 9 fixtures, all at 0 missed failures in BALANCED and SAFE mode.
 
 ## S11–S12 · 0.3.0 Precise graph
 
@@ -136,7 +136,7 @@ Goal: make staged and pushed checks reliable and expose selection evidence in lo
 | Live runner and coverage viewer                                      | 21  | partial: affected/all/file execution, group events, cancellation, aggregate coverage and unit trace annotations; browser coverage collection and line/branch heatmap remain open |
 | VS Code extension                                                    | 21  | partial: CodeLens, hover, impact/run commands, results and trust gates; current-file command runs the affected change set; actual editor-host validation unavailable             |
 
-Validation: `pnpm verify` passes 383 repository tests and 68 extension tests, TypeScript, Biome, package boundaries and generated-planning checks. Nine regression fixtures remain at zero missed failures. The packaged CLI was installed outside this checkout and served Studio assets and authenticated APIs. Its runtime audit reports zero advisories; the VSIX passes archive validation.
+Validation: `pnpm verify` passes 400 repository tests and 79 extension tests, TypeScript, Biome, package boundaries and generated-planning checks. Nine regression fixtures remain at zero missed failures. The packaged CLI was installed outside this checkout and served Studio assets and authenticated APIs. Its runtime audit reports zero advisories; the VSIX passes archive validation.
 
 LeadsIt: all 714 assertions across 101 test files pass with 0.9.0 (4.78 s in this run). The staged hook reports 314 passed and 400 cached, zero failures, in 3.67 s including isolation. Its 12-commit benchmark reports 53.59 s full, 7.18 s project-gated, 34.38 s SmartTest, zero missed failures and zero cache violations. That is 36% faster than full runs and 379% slower than the project-gated baseline. These are local observations with a changing history/cache; they do not establish a release-to-release speed improvement.
 
@@ -145,6 +145,15 @@ The OpenPro-style fixture preserves typecheck, build and PID/wait semantics thro
 The LeadsIt dry run exposed replacement-string interpretation of shell `$'` sequences during an existing-hook upgrade. The installer now inserts the modified text through a callback; a regression test preserves all shell dollar sequences. The applied upgrade changes only the SmartTest invocation. A real adoption commit then exposed lost executable permissions during atomic replacement; atomic writes now preserve existing permissions, with an upgrade/uninstall regression test. The hook was restored before the final adoption commit.
 
 Studio security checks cover token, Host, Origin, request methods, content type, source traversal and symlink boundaries, CSP and SSE shutdown. Missing benchmark values stay unavailable; incomplete runs cannot be labelled passed. Retained browser evidence covers five screens, both themes and 1440/768/390 widths without document overflow. The overview inspector has zero failures and three warnings; seven keyboard checks pass. These checks are not a complete WCAG 2.2 AA or all-screen design signoff. See the [Studio critique](../../packages/studio/review/CRITIQUE.md).
+
+Post-release audit (same tag, 2026-10-30): a performance and UX review before publication fixed N+1 work and repeated computation in hooks, Studio and the VS Code extension, and fixed Studio defects found only in a real browser.
+
+- **Hooks.** The isolated checkout overwrote the index's file stats with its fresh mtimes, so the hook and the next normal run each re-read and re-hashed every source file. The checkout now reuses the working tree's stats for identical content. On a 4,000-file fixture, the next run's index update fell from about 175 ms to about 90 ms; the hook's own time is dominated by the checkout and the tests and did not change measurably ([measurement](../../benchmarks/releases/0.9.0/hook-index-reuse.json)). "Before" reads are memoised and fetched eight at a time, checks are bounded by CPU count, and a regression test covers the index stats.
+- **Explain.** `explain <file> --units` explains every unit from one graph build. The extension uses it, so it makes one CLI call per file instead of one per symbol.
+- **Studio browser fixes.** About 1,800 CSP errors from inline styles broke layout; Back/Forward did not work; re-renders lost focus and scroll; unit line numbers were off by one. All are fixed.
+- **Studio honesty.** Trust and hook figures without data read as unmeasured, and an all-cached run has the verdict `cached-pass`. The overview inspector reports zero failures and zero warnings at 1440/768/390.
+- **VS Code.** Analyses are cached until the graph changes; a file watcher replaces the 10-second expiry; concurrent requests for a file share one analysis.
+- **Tests.** Tests now resolve workspace packages from source rather than `dist/`.
 
 Gate: partly met. Features and limitations above are shipped explicitly as alpha; accessibility, complete keyboard/visual review, extension-host validation and remaining interface capabilities carry into 1.0.0. Source highlights indicate observed unit execution, not measured line coverage. Per-file results arrive at run completion; group/phase events stream during execution.
 

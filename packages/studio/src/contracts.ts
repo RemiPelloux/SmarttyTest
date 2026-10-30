@@ -191,7 +191,8 @@ export interface StudioRunFile {
 export type StudioRunState = "queued" | "analysing" | "running" | "done" | "failed" | "cancelled";
 
 /** Never call a run passed when a report failed integrity, was cancelled, or did not finish. */
-export type StudioRunVerdict = "passed" | "failed" | "error" | "incomplete";
+/** `cached-pass`: nothing failed and every selected test was served from cache, none ran (ADR-0009). */
+export type StudioRunVerdict = "passed" | "cached-pass" | "failed" | "error" | "incomplete";
 
 export interface StudioRun {
   id: string;
@@ -324,6 +325,7 @@ export interface StudioTrust {
 export interface StudioSourceUnit {
   name: string;
   kind: string;
+  /** One-based, inclusive, like `StudioSource.lines[].n`. */
   startLine: number;
   endLine: number;
   changed: boolean;

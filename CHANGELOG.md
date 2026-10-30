@@ -10,6 +10,15 @@ All notable changes are documented here. Releases are managed with [Changesets](
 - `hook install --pre-push`, `run --hook`, affected-project `hook.checks`, duration estimates and `hook.budgetMs`. Hook history distinguishes successful checked trees, explicit bypasses and commits without a recorded check.
 - `smarttest studio [--port n] [--open]`: local overview, impact paths, test explorer, live runs, source annotations and trust evidence. The server binds to loopback and requires a session token; mutation routes require same-origin JSON POST requests.
 - Local VS Code extension with CodeLens, hover explanations, impact and run commands, results tree and status bar. Workspace Trust disables execution in Restricted Mode. `pnpm extension:pack` builds its VSIX.
+- `smarttest explain <file> --units A,B.method`: the tests protecting each named unit, from one analysis. The `explain` JSON schema gains an optional `units` array.
+
+### Performance
+
+- Hooks: the temporary checkout reuses the working tree's index stats for files whose content is identical, so neither the hook nor the next normal run re-reads and re-hashes every source file. On a 4,000-file fixture the next run's index update drops from about 175 ms to about 90 ms ([measurement](benchmarks/releases/0.9.0/hook-index-reuse.json)).
+- "Before" content is read once per run and fetched eight files at a time; semantic diff, traces and Studio no longer start one `git show` per changed file each.
+- Hook checks run at most one per CPU core instead of all at once; grouping changed files by project is linear.
+- Studio: rendering is batched per animation frame during runs; result de-duplication, search, the file index, test rows and trace counts are computed once instead of per event, keystroke or request; the line diff uses Myers' algorithm; changed files are read eight at a time and large files only up to the display limit; the last-run report is parsed once; run history keeps the last ten runs.
+- VS Code: one `explain --units` call per file instead of one process per symbol (older CLIs fall back to per-symbol calls); analyses are cached until the graph changes rather than per keystroke; concurrent requests for a file share one analysis; saves are debounced into one refresh; the 10-second snapshot expiry is replaced by a file watcher; the results tree builds test nodes on demand.
 
 ### Fixed
 
@@ -17,6 +26,12 @@ All notable changes are documented here. Releases are managed with [Changesets](
 - Hook replacement preserves compound shell commands and package scripts with other work. Background replacements keep shell PID/wait semantics; uninstall restores the original steps.
 - Git hook environment variables are scoped out of isolated test and check subprocesses without changing the parent environment. Cancellation terminates descendant processes.
 - Pre-push hooks use the actual remote destination supplied by Git, fall back conservatively for new or unknown destinations, and reject pushed commits other than checked-out HEAD.
+- Hook paths stay repository-relative when `diff.relative` is configured.
+- Studio, found in a real browser: inline styles blocked by the CSP (broken toolbar, search and Evidence layout) are now classes; Back/Forward navigation works; re-renders keep focus and scroll; unit line numbers are no longer one off; Escape in a filter clears it, then leaves the field.
+- Studio honesty: a run in which every selected test came from cache has the verdict `cached-pass`, never passed; unmeasured benchmark and hook figures read as unmeasured instead of 0; "selected" no longer uses the pass colour. Text sizes, contrast, focus rings and phone touch targets were raised; Overview, Impact and Source layouts were tightened (see the [Studio critique](packages/studio/review/CRITIQUE.md)).
+- Studio: renamed files are diffed against their previous path instead of showing as entirely added; search fields keep focus while typing; malformed and oversized request bodies return 400 and 413 instead of 500; file responses settle when the client disconnects; the `removed` line count is correct.
+- VS Code: test results are listed in sorted order; "Refresh Analysis" reports a failure instead of claiming success; the refresh delay setting applies per folder and to every save; a second "Run Affected Tests" for the same folder waits for the first.
+- Tests resolve workspace packages from their TypeScript sources instead of a possibly stale `dist/`.
 
 ### Validation limits
 

@@ -48,7 +48,10 @@ export const COMMANDS: Record<string, { summary: string; usage: string; flags?: 
   },
   explain: {
     summary: "Explain why a test was selected or skipped, or which tests protect a file",
-    usage: "smarttest explain <test | file | file#Symbol> [--fresh] [--json]",
+    usage: "smarttest explain <test | file | file#Symbol> [--units A,B.method] [--fresh] [--json]",
+    flags: [
+      "--units A,B  for a source file: also list the tests protecting each named unit (one analysis)",
+    ],
   },
   "validate-selection": {
     summary: "Compare the selection against a full reference run",

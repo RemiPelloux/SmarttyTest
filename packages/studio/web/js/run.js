@@ -30,10 +30,33 @@ export function runVerdict(run) {
   if (run.executions.length < run.summary.selected) return "incomplete";
   if (run.summary.infrastructureErrors) return "error";
   if (run.summary.failed || run.summary.timedOut) return "failed";
+  if (onlyCached(run.summary)) return "cached-pass";
   return "passed";
 }
 
-function finishedMessage(verdict) {
+/**
+ * One file's mark in the drawer. A file whose tests were all served from cache is "cached, not
+ * run"; a file in which nothing passed and nothing was cached ran no test and is never "passed".
+ */
+export function runFileStatus(result) {
+  if (result.failed || result.status === "failed") return "failed";
+  if (result.status === "timed-out") return "timed-out";
+  if (result.error || result.status === "infrastructure-error") return "infrastructure-error";
+  if (result.tests > 0 && result.cached === result.tests) return "cached-pass";
+  if (!result.passed && !result.cached) return "skipped";
+  return "passed";
+}
+
+/** True when a run "passed" only because every executed test was served from cache. */
+export function onlyCached(summary) {
+  return Boolean(summary && summary.cached > 0 && !summary.passed && !summary.failed);
+}
+
+function finishedMessage(verdict, summary) {
+  if (verdict === "cached-pass" || (verdict === "passed" && onlyCached(summary)))
+    return "No test ran: every selected test was served from cache";
+  if (verdict === "passed" && summary?.cached)
+    return `Run passed · ${num(summary.cached)} cached, not run`;
   if (verdict === "passed") return "Run passed";
   if (verdict === "failed") return "Run finished with failures";
   if (verdict === "error") return "Run hit infrastructure errors";
@@ -79,7 +102,7 @@ export function renderRun(ctx) {
         ? run.error.message
         : run.state === "cancelled"
           ? "Run cancelled"
-          : finishedMessage(verdict));
+          : finishedMessage(verdict, state.runSummary ?? run.summary));
 
   const children = [
     h(
@@ -104,12 +127,13 @@ export function renderRun(ctx) {
       iconButton({
         name: "close",
         label: "Close run panel",
+        fk: "run-close",
         onClick: () => ctx.actions.closeRun(),
       }),
     ),
   ];
 
-  const body = h("div", { class: "drawer__body" });
+  const body = h("div", { class: "drawer__body", "data-scroll": `run:${run.id}` });
   children.push(body);
 
   body.appendChild(
@@ -129,8 +153,8 @@ export function renderRun(ctx) {
     body.appendChild(
       h(
         "p",
-        { class: "drawer__meta", style: "margin-bottom:10px" },
-        `${plural(selectedCount, "test file")} selected · ${plural(skippedCount, "not run")}`,
+        { class: "drawer__meta mb-8" },
+        `${plural(selectedCount, "test file")} selected · ${num(skippedCount)} not run by selection`,
         selection ? ` · selection ${duration(selection.analysisMs)}` : "",
         selection ? ` · ${selection.analysisStatus}` : "",
       ),
@@ -161,45 +185,36 @@ export function renderRun(ctx) {
 
   const results = state.runResults ?? [];
   if (results.length) {
-    body.appendChild(h("p", { class: "drawer__meta", style: "margin:12px 0 4px" }, "Files"));
+    body.appendChild(
+      h("p", { class: "drawer__meta drawer__section" }, `Files · ${num(results.length)}`),
+    );
     body.appendChild(
       h(
         "div",
         { class: "run-files" },
         results.map((result) => {
-          const status = result.failed
-            ? "failed"
-            : result.status === "timed-out"
-              ? "timed-out"
-              : result.error
-                ? "infrastructure-error"
-                : result.cached === result.tests
-                  ? "cached-pass"
-                  : "passed";
+          const status = runFileStatus(result);
           return h(
             "div",
             { class: "run-file" },
             h(
-              "span",
-              { style: "padding-top:1px" },
-              statusMark(status, { text: status.replace("infrastructure-error", "infra error") }),
-            ),
-            h(
               "div",
-              { style: "min-width:0" },
+              { class: "run-file__body" },
               h("div", { class: "run-file__path" }, result.file),
               h(
                 "div",
-                { class: "run-file__meta" },
+                { class: "run-file__line" },
+                statusMark(status),
                 [
                   plural(result.tests, "test"),
                   `${num(result.passed)} passed`,
                   result.failed ? `${num(result.failed)} failed` : null,
                   result.cached ? `${num(result.cached)} cached` : null,
+                  result.skipped ? `${num(result.skipped)} skipped` : null,
                   duration(result.durationMs),
                 ]
                   .filter(Boolean)
-                  .join(" · "),
+                  .map((part) => h("span", { class: "run-file__meta" }, part)),
               ),
               result.failures?.length
                 ? h(
@@ -223,7 +238,7 @@ export function renderRun(ctx) {
     body.appendChild(
       h(
         "div",
-        { class: "notice", style: "margin-top:12px" },
+        { class: "notice mt-12" },
         icon("warning", 14),
         h(
           "div",
@@ -242,7 +257,7 @@ export function renderRun(ctx) {
       h(
         "div",
         { class: "run-summary", "aria-label": "Run summary" },
-        h("div", null, h("b", null, num(summary.executed)), h("span", null, "files run")),
+        h("div", null, h("b", null, num(summary.executed)), h("span", null, "files reported")),
         h("div", null, h("b", null, num(summary.passed)), h("span", null, "tests passed")),
         h("div", null, h("b", null, num(summary.cached)), h("span", null, "tests cached")),
         h(
@@ -256,23 +271,19 @@ export function renderRun(ctx) {
     body.appendChild(
       h(
         "p",
-        { class: "drawer__meta", style: "margin-top:8px" },
+        { class: "drawer__meta mt-8" },
         `${plural(summary.totalTests, "test")} discovered · ${summary.skippedBySelection} not run by selection · ${duration(summary.durationMs)}`,
       ),
     );
     if (summary.cached)
       body.appendChild(
-        h(
-          "p",
-          { class: "drawer__meta", style: "margin-top:4px" },
-          "Cached results were not executed in this run.",
-        ),
+        h("p", { class: "drawer__meta mt-4" }, "Cached results were not executed in this run."),
       );
     if (summary.skippedByTests)
       body.appendChild(
         h(
           "p",
-          { class: "drawer__meta", style: "margin-top:4px" },
+          { class: "drawer__meta mt-4" },
           `${plural(summary.skippedByTests, "test")} skipped inside the test files — skipped, not passed.`,
         ),
       );
@@ -282,7 +293,7 @@ export function renderRun(ctx) {
     body.appendChild(
       h(
         "div",
-        { class: "notice", style: "margin-top:12px" },
+        { class: "notice mt-12" },
         icon("warning", 14),
         h(
           "div",
@@ -301,7 +312,12 @@ export function renderRun(ctx) {
     foot.appendChild(
       h(
         "button",
-        { class: "btn btn--small", type: "button", onClick: () => ctx.actions.cancelRun() },
+        {
+          class: "btn btn--small",
+          type: "button",
+          "data-fk": "run-cancel",
+          onClick: () => ctx.actions.cancelRun(),
+        },
         icon("stop", 12),
         h("span", null, "Cancel"),
       ),
@@ -317,7 +333,7 @@ export function renderRun(ctx) {
     foot.appendChild(
       h(
         "div",
-        { style: "display:flex;gap:6px" },
+        { class: "drawer__actions" },
         run.scope === "affected" || run.scope === "all"
           ? h(
               "button",
