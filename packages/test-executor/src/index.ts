@@ -27,6 +27,8 @@ export interface ExecutionEvent {
   group: Group;
   attempt?: number;
   files?: string[];
+  /** On `group-end`: the group's file results, so callers can show them before the run ends. */
+  results?: FileResult[];
 }
 
 export interface ExecuteOptions {
@@ -217,7 +219,11 @@ export async function executeGroups(
       )
     )
       failedGroup = true;
-    options.onEvent?.({ type: "group-end", group });
+    options.onEvent?.({
+      type: "group-end",
+      group,
+      results: group.files.flatMap((f) => results.get(f) ?? []),
+    });
   };
   const exclusive = new Set(options.exclusive ?? []);
   const shared = groups.filter((g) => !exclusive.has(g.adapter));

@@ -43,7 +43,8 @@ const available = existsSync(cli) && existsSync(fixturePath);
 async function call(args: string[], cwd = fixturePath, timeoutMs = 60_000) {
   const result = await runCli({
     executable: process.execPath,
-    args: [cli, ...args],
+    leadingArgs: [cli],
+    args,
     cwd,
     signal: new AbortController().signal,
     timeoutMs,

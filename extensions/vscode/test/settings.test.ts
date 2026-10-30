@@ -1,5 +1,6 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { readSettings, SETTING_DEFAULTS } from "../src/core/settings.js";
+import { readSettings, SETTING_BOUNDS, SETTING_DEFAULTS } from "../src/core/settings.js";
 
 function reader(values: Record<string, unknown>) {
   return (key: string): unknown => values[key];
@@ -54,5 +55,22 @@ describe("settings", () => {
     expect(
       readSettings(reader({ executablePath: "  /bin/smarttest " })).settings.executablePath,
     ).toBe("/bin/smarttest");
+  });
+
+  it("declares the same numeric bounds in package.json as it enforces", () => {
+    const manifest = JSON.parse(
+      readFileSync(new URL("../package.json", import.meta.url), "utf8"),
+    ) as {
+      contributes: {
+        configuration: { properties: Record<string, { minimum?: number; maximum?: number }> };
+      };
+    };
+    const properties = manifest.contributes.configuration.properties;
+    for (const [key, bounds] of Object.entries(SETTING_BOUNDS))
+      expect([
+        key,
+        properties[`smarttest.${key}`]?.minimum,
+        properties[`smarttest.${key}`]?.maximum,
+      ]).toEqual([key, bounds.minimum, bounds.maximum]);
   });
 });

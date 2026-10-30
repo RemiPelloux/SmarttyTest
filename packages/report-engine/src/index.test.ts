@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  overallStatus,
   type RunReport,
   summarize,
   TOOL,
@@ -86,6 +87,21 @@ describe("report engine", () => {
     expect(r.summary.passed).toBe(1);
     expect(r.summary.skippedBySelection).toBe(1);
     expect(validateReportIntegrity(r)).toEqual([]);
+  });
+
+  it("counts a file whose runner never started, which has no test records", () => {
+    const r = report();
+    r.executions.push({
+      file: "b.test.ts",
+      adapter: "vitest",
+      status: "infrastructure-error",
+      durationMs: 0,
+      tests: [],
+      error: "Vitest is not installed",
+    });
+    r.summary = summarize(r.decision, r.executions, 5);
+    expect(r.summary.infrastructureErrors).toBe(1);
+    expect(overallStatus(r)).toBe("error");
   });
 
   it("detects integrity violations", () => {

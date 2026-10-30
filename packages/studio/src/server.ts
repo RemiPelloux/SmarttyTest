@@ -98,14 +98,16 @@ const EMPTY_LAST: LastRunFacts = {
   flaky: [],
 };
 
+function sameSource(a: ChangeSource | null, b: ChangeSource | null): boolean {
+  return JSON.stringify(a) === JSON.stringify(b);
+}
+
 class Studio {
   readonly runs: RunManager;
   private snapshot: Snapshot | null = null;
-  private inflight: Promise<Snapshot> | null = null;
+  private inflight: { source: ChangeSource | null; promise: Promise<Snapshot> } | null = null;
   private last: LastRunFacts = EMPTY_LAST;
   private coverage: Snapshot["coverage"] = null;
-  /** Run state has been read at least once; `coverage` stays null in projects without coverage. */
-  private runStateLoaded = false;
   private source: ChangeSource | null = null;
   private readonly clients = new Set<ServerResponse>();
   private heartbeat: NodeJS.Timeout | null = null;
@@ -114,9 +116,11 @@ class Studio {
 
   constructor(readonly st: SmartTest) {
     this.runs = new RunManager(st, () => {
-      void this.loadRunState().then(() =>
-        this.broadcast({ type: "lastRun", at: new Date().toISOString() }),
-      );
+      // The run may have written coverage and traces: rebuild the snapshot that shows them.
+      void this.loadRunState()
+        .then(() => this.broadcast({ type: "lastRun", at: new Date().toISOString() }))
+        .then(() => this.refresh())
+        .catch((error) => this.broadcastError(error));
     });
     this.runs.listen((event) => this.broadcast(event));
   }
@@ -128,7 +132,6 @@ class Studio {
   boundPort = 0;
 
   async init(watch: boolean): Promise<void> {
-    await this.loadRunState();
     await this.refresh();
     if (watch && !this.closing) this.startWatching();
   }
@@ -143,7 +146,6 @@ class Studio {
       loadLastRun(this.st.storeDir, report),
       loadCoverage(this.st.storeDir, report),
     ]);
-    this.runStateLoaded = true;
     this.last = {
       run,
       cache: {
@@ -173,15 +175,25 @@ class Studio {
     return this.refresh();
   }
 
-  /** Re-analyses the change. Concurrent callers share one analysis. */
+  /**
+   * Re-analyses the change. Concurrent callers for the same source share one analysis; a caller
+   * that changes the source waits for the analysis in flight, then analyses the new source.
+   */
   async refresh(source?: ChangeSource | null): Promise<Snapshot> {
     if (source !== undefined) this.source = source;
-    if (this.inflight) return this.inflight;
+    while (this.inflight) {
+      const pending = this.inflight;
+      if (sameSource(pending.source, this.source)) return pending.promise;
+      await pending.promise.catch(() => undefined);
+      if (this.inflight === pending) this.inflight = null;
+    }
+    const wanted = this.source;
     const run = (async () => {
       const started = Date.now();
-      const analysis: Analysis = await this.st.analyze(this.source ? { source: this.source } : {});
+      const analysis: Analysis = await this.st.analyze(wanted ? { source: wanted } : {});
       const view = await this.st.traceView(analysis.input, analysis.index);
-      if (!this.runStateLoaded) await this.loadRunState();
+      // Runs started outside Studio (terminal, commit hook) change the last run and coverage.
+      await this.loadRunState();
       const snapshot = await buildSnapshot(this.st, view, this.coverage, analysis);
       this.snapshot = snapshot;
       this.broadcast({
@@ -193,11 +205,12 @@ class Studio {
       });
       return snapshot;
     })();
-    this.inflight = run;
+    const entry = { source: wanted, promise: run };
+    this.inflight = entry;
     try {
       return await run;
     } finally {
-      this.inflight = null;
+      if (this.inflight === entry) this.inflight = null;
     }
   }
 
@@ -623,7 +636,8 @@ function apiRoutes(studio: Studio): ApiRoute[] {
       pattern: /^\/api\/reports\/([^/]+)$/,
       methods: ["GET"],
       handler: async (_req, res, url) => {
-        const name = decodeURIComponent(url.pathname.slice("/api/reports/".length));
+        // Report names are a fixed allowlist with no characters to decode.
+        const name = url.pathname.slice("/api/reports/".length);
         if (!REPORT_FILES.has(name))
           throw new SmartTestError(`${name} is not a Studio-served report`, {
             code: "ST_STUDIO_FILE",

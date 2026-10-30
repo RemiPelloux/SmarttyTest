@@ -107,7 +107,10 @@ async function cmdHookRun(ctx: Ctx): Promise<number> {
   const st = await ctx.open();
   const ac = new AbortController();
   const cancel = () => ac.abort();
-  process.once("SIGINT", cancel);
+  // Git, an editor or a terminal closing can end a hook with any of these; the run must still
+  // stop its tests and remove its temporary checkout.
+  const signals = ["SIGINT", "SIGTERM", "SIGHUP"] as const;
+  for (const s of signals) process.once(s, cancel);
   const mode = modeOf(flags);
   const timeoutMs = intFlag(flags.timeout, "timeout");
   const workers = intFlag(flags.workers, "workers");
@@ -144,7 +147,10 @@ async function cmdHookRun(ctx: Ctx): Promise<number> {
       });
     else if (result.skipped)
       ctx.out(`${stage}: bypass recorded (SMARTTEST_SKIP=1); tests and checks were not run.`);
+    else if (result.nothingPushed)
+      ctx.out(`${stage}: nothing pushed (only remote refs deleted); no tests or checks to run.`);
     else {
+      for (const w of result.warnings) ctx.out(w);
       for (const c of result.checks) {
         ctx.out(
           `${c.name}${c.project ? ` (${c.project})` : ""}: ${c.status} · ${formatDuration(c.durationMs)}`,
@@ -176,7 +182,7 @@ async function cmdHookRun(ctx: Ctx): Promise<number> {
         ? ExitCode.TestFailure
         : ExitCode.Success;
   } finally {
-    process.off("SIGINT", cancel);
+    for (const s of signals) process.off(s, cancel);
   }
 }
 

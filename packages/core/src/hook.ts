@@ -3,9 +3,21 @@
  * project checks for the affected projects, hook records and the status of the hook setup.
  */
 import { existsSync } from "node:fs";
-import { lstat, mkdir, mkdtemp, rm, rmdir, symlink } from "node:fs/promises";
+import {
+  copyFile,
+  lstat,
+  mkdir,
+  mkdtemp,
+  readdir,
+  readFile,
+  realpath,
+  rm,
+  stat,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import { availableParallelism, tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { basename, dirname, isAbsolute, join, relative, sep } from "node:path";
 import {
   mapLimit,
   matchGlob,
@@ -168,34 +180,160 @@ export interface Isolation {
   /** Project root inside the temporary checkout. */
   root: string;
   note: string;
+  /** What the checkout could not isolate (shown with the result, never silently ignored). */
+  warnings: string[];
   cleanup(): Promise<void>;
 }
 
-/** Repository-relative paths deleted from the index (renames remove their previous name). */
-async function stagedRemovals(repoRoot: string): Promise<string[]> {
-  // Use the hook's environment: it may point GIT_INDEX_FILE at the index being committed.
-  const r = await git(repoRoot, ["diff", "--cached", "--name-status", "-z", "-M"]);
-  if (r.code !== 0) throw failure("could not read the staged changes", r.stderr);
-  const parts = r.stdout.split("\0").filter((p) => p !== "");
-  const remove: string[] = [];
-  for (let i = 0; i < parts.length; ) {
-    const code = (parts[i++] as string)[0];
-    if (code === "R" || code === "C") {
-      const previous = parts[i++] as string;
-      i++; // current path
-      if (code === "R") remove.push(previous);
-    } else {
-      const path = parts[i++] as string;
-      if (code === "D") remove.push(path);
-    }
+/** True when the process that created a temporary checkout has gone (killed, crashed). */
+async function ownerGone(tmp: string): Promise<boolean> {
+  const pid = Number.parseInt(
+    (await readFile(join(tmp, "owner"), "utf8").catch(() => "")).trim(),
+    10,
+  );
+  if (!pid) {
+    // Written by an older version (no owner file): only an old checkout counts as abandoned.
+    const s = await stat(tmp).catch(() => undefined);
+    return !!s && Date.now() - s.mtimeMs > 60 * 60_000;
   }
-  return [...new Set(remove)];
+  try {
+    process.kill(pid, 0);
+    return false;
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code === "ESRCH";
+  }
 }
 
 /**
- * A temporary checkout holding exactly the content under test: HEAD plus the staged changes
- * (`staged`), or HEAD alone (`push`). Nothing in the user's working tree or index is touched;
- * no stash is used. Binary files, modes, symlinks and renames are preserved by Git itself.
+ * Removes temporary checkouts left by a hook run that was killed before it could clean up
+ * (SIGKILL, power loss). Checkouts of a run that is still alive are kept.
+ */
+export async function pruneStaleCheckouts(repoRoot: string): Promise<void> {
+  const env = cleanGitEnv();
+  await git(repoRoot, ["worktree", "prune"], env).catch(() => undefined);
+  const list = await git(repoRoot, ["worktree", "list", "--porcelain"], env).catch(() => undefined);
+  if (list?.code !== 0) return;
+  let removed = false;
+  for (const line of list.stdout.split("\n")) {
+    if (!line.startsWith("worktree ")) continue;
+    const wt = line.slice("worktree ".length);
+    const tmp = dirname(wt);
+    if (basename(wt) !== "repo" || !basename(tmp).startsWith("smarttest-hook-")) continue;
+    if (!(await ownerGone(tmp))) continue;
+    await git(repoRoot, ["worktree", "remove", "--force", wt], env).catch(() => undefined);
+    await rm(tmp, { recursive: true, force: true }).catch(() => undefined);
+    removed = true;
+  }
+  if (removed) await git(repoRoot, ["worktree", "prune"], env).catch(() => undefined);
+}
+
+const toSlash = (p: string) => p.replace(/\\/g, "/");
+
+/**
+ * Mirrors an installed `node_modules` directory into the checkout. Each entry links to the
+ * installed one, except entries that resolve inside the repository (workspace packages, also
+ * inside `@scope` and `.bin`): those point at the same path in the checkout, so importing a
+ * workspace package loads the content under test, never the working tree's unstaged edits.
+ * Returns what could not be isolated, as warnings.
+ */
+async function linkNodeModules(
+  src: string,
+  dest: string,
+  repoReal: string,
+  wt: string,
+  ignored: () => Promise<ReadonlySet<string>>,
+  projectRoot: string,
+): Promise<string[]> {
+  const warnings: string[] = [];
+  const shown = (entry: string) => toSlash(relative(projectRoot, entry));
+  const packages: string[] = [];
+  const dirType = process.platform === "win32" ? "junction" : "dir";
+  /** Repository-relative path of a resolved entry, unless it is installed content. */
+  const inRepo = (real: string): string | undefined => {
+    const rel = relative(repoReal, real);
+    if (!rel || rel.startsWith("..") || isAbsolute(rel)) return undefined;
+    // node_modules/.pnpm and hoisted copies are installed packages, not content under test.
+    if (rel.split(sep).includes("node_modules")) return undefined;
+    return rel;
+  };
+  const link = async (target: string, to: string, real: string | undefined) => {
+    const dir = process.platform === "win32" && !!real && (await stat(real)).isDirectory();
+    try {
+      await symlink(target, to, dir ? dirType : "file");
+    } catch (error) {
+      // Windows without symlink rights: a file (a .bin shim) can still be copied.
+      if (dir || process.platform !== "win32") throw error;
+      await copyFile(target, to);
+    }
+  };
+  const mirror = async (from: string, to: string, top: boolean): Promise<void> => {
+    await mkdir(to, { recursive: true });
+    const entries = await readdir(from, { withFileTypes: true });
+    await mapLimit(entries, 32, async (e) => {
+      const entry = join(from, e.name);
+      // A scope (`@org`) or `.bin` directory holds links of its own.
+      if (top && e.isDirectory() && (e.name.startsWith("@") || e.name === ".bin"))
+        return mirror(entry, join(to, e.name), false);
+      const real = await realpath(entry).catch(() => undefined);
+      const rel = real ? inRepo(real) : undefined;
+      if (!rel) return link(entry, join(to, e.name), real);
+      const checkout = join(wt, rel);
+      if (!(await lstat(checkout).catch(() => undefined))) {
+        // Not part of the content under test (untracked, or deleted by the change).
+        warnings.push(
+          `Isolation incomplete: ${shown(entry)} resolves to ${toSlash(rel)}, which is not in the content under test; the working tree's copy was used`,
+        );
+        return link(entry, join(to, e.name), real);
+      }
+      packages.push(rel);
+      return link(checkout, join(to, e.name), real);
+    });
+  };
+  await mirror(src, dest, true);
+  // pnpm hoists dependencies into node_modules/.pnpm/node_modules, which is linked as a whole.
+  const hoisted = join(src, ".pnpm", "node_modules");
+  const scan = async (dir: string, top: boolean): Promise<void> => {
+    for (const e of await readdir(dir, { withFileTypes: true }).catch(() => [])) {
+      const entry = join(dir, e.name);
+      if (top && e.isDirectory() && e.name.startsWith("@")) await scan(entry, false);
+      else {
+        const real = await realpath(entry).catch(() => undefined);
+        const rel = real ? inRepo(real) : undefined;
+        if (rel)
+          warnings.push(
+            `Isolation incomplete: ${shown(entry)} resolves to the working tree's ${toSlash(rel)}; unstaged edits there can affect this run`,
+          );
+      }
+    }
+  };
+  if (existsSync(hoisted)) await scan(hoisted, true);
+  // A linked workspace package's untracked build output (dist/) is not in the checkout. Link it
+  // from the working tree so imports resolve, and say it may not match the source under test.
+  const built: string[] = [];
+  for (const pkg of new Set(packages)) {
+    const prefix = `${toSlash(pkg)}/`;
+    for (const path of await ignored()) {
+      const rest = path.startsWith(prefix) ? path.slice(prefix.length).replace(/\/$/, "") : "";
+      if (!rest || rest.includes("/") || rest === "node_modules") continue;
+      const to = join(wt, pkg, rest);
+      if (await lstat(to).catch(() => undefined)) continue;
+      const from = join(repoReal, pkg, rest);
+      await link(from, to, await realpath(from).catch(() => undefined));
+      built.push(`${prefix}${rest}`);
+    }
+  }
+  if (built.length)
+    warnings.push(
+      `Linked untracked build output from the working tree (it may not match the content under test): ${built.join(", ")}`,
+    );
+  return warnings;
+}
+
+/**
+ * A temporary checkout holding exactly the content under test: the staged tree (`staged`) or
+ * HEAD (`push`). Nothing in the user's working tree or index is touched; no stash is used.
+ * Binary files, modes, symlinks and renames are preserved by Git itself. The checkout's own
+ * index matches its files, so `git diff --cached` there shows the staged change.
  *
  * A repository without commits has no HEAD to check out: the staged content is materialised from
  * the index with `git checkout-index` instead (there is no Git metadata in that temporary tree).
@@ -209,7 +347,10 @@ export async function isolate(options: {
   nodeModulesDirs: readonly string[];
   aside: { unstaged: string[]; untracked: string[]; staged: string[] };
 }): Promise<Isolation> {
+  await pruneStaleCheckouts(options.repoRoot);
   const tmp = await mkdtemp(join(tmpdir(), "smarttest-hook-"));
+  // Lets a later run recognise this checkout as abandoned if this process is killed.
+  await writeFile(join(tmp, "owner"), `${process.pid}\n`);
   const wt = join(tmp, "repo");
   const root = options.prefix ? join(wt, options.prefix) : wt;
   const clean = cleanGitEnv();
@@ -233,53 +374,33 @@ export async function isolate(options: {
     const head = (
       await git(options.repoRoot, ["rev-parse", "--verify", "-q", "HEAD"], clean)
     ).stdout.trim();
-    if (options.kind === "push") {
-      if (!head)
-        throw new SmartTestError("There is no commit to push yet", {
-          code: "ST_HOOK_NO_COMMIT",
-          category: "usage",
-          hint: "Make the first commit, then run the pre-push hook again.",
-        });
-      const add = await git(
-        options.repoRoot,
-        ["worktree", "add", "--detach", "-q", wt, "HEAD"],
-        clean,
-      );
-      if (add.code !== 0) throw failure("could not create a temporary checkout", add.stderr);
-      worktree = true;
-    } else if (head) {
-      const add = await git(
-        options.repoRoot,
-        ["worktree", "add", "--detach", "-q", wt, "HEAD"],
-        clean,
-      );
-      if (add.code !== 0) throw failure("could not create a temporary checkout", add.stderr);
-      worktree = true;
-      // Apply exactly the index on top of HEAD. `--all` avoids passing one argument per staged
-      // file (which hits E2BIG on very large commits). checkout-index preserves modes, symlinks
-      // and binary content; paths deleted from the index are removed from the checkout.
-      const removed = await stagedRemovals(options.repoRoot);
-      // Remove old paths before overlaying the index: a former file may now be a
-      // directory, or a directory's last tracked child may be replaced by a file.
-      for (const path of removed) {
-        await rm(join(wt, path), { recursive: true, force: true });
-        for (let parent = dirname(join(wt, path)); parent !== wt; parent = dirname(parent)) {
-          try {
-            await rmdir(parent);
-          } catch (error) {
-            const code = (error as NodeJS.ErrnoException).code;
-            if (code === "ENOTEMPTY" || code === "EEXIST") break;
-            if (code !== "ENOENT") throw error;
-          }
-        }
+    if (options.kind === "push" && !head)
+      throw new SmartTestError("There is no commit to push yet", {
+        code: "ST_HOOK_NO_COMMIT",
+        category: "usage",
+        hint: "Make the first commit, then run the pre-push hook again.",
+      });
+    if (head) {
+      // The tree under test. For a commit, the hook's index (it may be GIT_INDEX_FILE).
+      let tree = "HEAD";
+      if (options.kind === "staged") {
+        const written = await git(options.repoRoot, ["write-tree"]);
+        if (written.code !== 0) throw failure("could not read the staged content", written.stderr);
+        tree = written.stdout.trim();
       }
-      const co = await git(options.repoRoot, [
-        "checkout-index",
-        "--all",
-        "--force",
-        `--prefix=${wt.replace(/\\/g, "/")}/`,
-      ]);
-      if (co.code !== 0) throw failure("could not check out the staged content", co.stderr);
+      // --no-checkout: no files are written twice and Git runs no post-checkout hook.
+      const add = await git(
+        options.repoRoot,
+        ["worktree", "add", "--no-checkout", "--detach", "-q", wt, "HEAD"],
+        clean,
+      );
+      if (add.code !== 0) throw failure("could not create a temporary checkout", add.stderr);
+      worktree = true;
+      const read = await git(wt, ["read-tree", tree], clean);
+      if (read.code !== 0) throw failure("could not prepare the temporary checkout", read.stderr);
+      // -u records the files' stats, so the checkout's index reports no unstaged change.
+      const co = await git(wt, ["checkout-index", "--all", "--force", "-u"], clean);
+      if (co.code !== 0) throw failure("could not check out the content under test", co.stderr);
     } else {
       // Unborn HEAD: there is no commit to check out. The index is the content under test.
       await mkdir(wt, { recursive: true });
@@ -293,6 +414,17 @@ export async function isolate(options: {
     }
     await mkdir(root, { recursive: true });
 
+    const warnings: string[] = [];
+    const repoReal = await realpath(options.repoRoot);
+    let ignoredPaths: Promise<Set<string>> | undefined;
+    const ignored = () => {
+      ignoredPaths ??= git(
+        options.repoRoot,
+        ["ls-files", "--others", "--ignored", "--exclude-standard", "--directory", "-z"],
+        clean,
+      ).then((r) => new Set(names(r.stdout)));
+      return ignoredPaths;
+    };
     for (const d of options.nodeModulesDirs) {
       const src = join(options.projectRoot, d, "node_modules");
       const dest = join(root, d, "node_modules");
@@ -300,8 +432,11 @@ export async function isolate(options: {
         existsSync(src) &&
         !(await lstat(dest).catch(() => undefined)) &&
         existsSync(join(root, d))
-      )
-        await symlink(src, dest, process.platform === "win32" ? "junction" : "dir");
+      ) {
+        warnings.push(
+          ...(await linkNodeModules(src, dest, repoReal, wt, ignored, options.projectRoot)),
+        );
+      }
     }
 
     const parts: string[] = [];
@@ -313,6 +448,7 @@ export async function isolate(options: {
     return {
       root,
       note: `Tested ${what} in a temporary checkout; set aside: ${parts.join(", ") || "nothing"}`,
+      warnings: [...new Set(warnings)],
       cleanup,
     };
   } catch (error) {
@@ -350,6 +486,15 @@ export interface ChangedFile {
   deleted?: boolean;
 }
 
+/** A project directory as written in a config (`./packages/app/`) in its canonical form. */
+export function normalizeProject(dir: string): string {
+  const p = dir
+    .replace(/\\/g, "/")
+    .replace(/^(\.\/)+/, "")
+    .replace(/\/+$/, "");
+  return p === "." ? "" : p;
+}
+
 /** The deepest project directory containing a file ("" for the root). */
 export function projectOf(file: string, projects: readonly string[]): string {
   let best = "";
@@ -359,15 +504,39 @@ export function projectOf(file: string, projects: readonly string[]): string {
 
 const quote = (s: string) => `'${s.replace(/'/g, "'\\''")}'`;
 
+/**
+ * Checks of this stage naming a project SmartTest does not know: such a check would never run,
+ * so it is reported instead of silently dropped.
+ */
+export function unknownCheckProjects(
+  checks: readonly HookCheck[],
+  stage: "pre-commit" | "pre-push",
+  projects: readonly string[],
+): string[] {
+  const known = new Set(projects.map(normalizeProject));
+  const out: string[] = [];
+  for (const c of checks) {
+    const s = c.stage ?? "pre-commit";
+    if (s !== "both" && s !== stage) continue;
+    for (const p of c.projects ?? [])
+      if (!known.has(normalizeProject(p)))
+        out.push(
+          `Check "${c.name}" names project "${p}", which is not a SmartTest project or workspace; it never runs there (known: ${[...known].map((k) => k || '""').join(", ")})`,
+        );
+  }
+  return out;
+}
+
 export function planChecks(
   checks: readonly HookCheck[],
   stage: "pre-commit" | "pre-push",
   changed: readonly ChangedFile[],
   projects: readonly string[],
 ): { name: string; project: string; command: string }[] {
+  const dirs = projects.map(normalizeProject);
   const byProject = new Map<string, ChangedFile[]>();
   for (const f of changed) {
-    const p = projectOf(f.path, projects);
+    const p = projectOf(f.path, dirs);
     const files = byProject.get(p);
     if (files) files.push(f);
     else byProject.set(p, [f]);
@@ -376,8 +545,9 @@ export function planChecks(
   for (const c of checks) {
     const s = c.stage ?? "pre-commit";
     if (s !== "both" && s !== stage) continue;
+    const only = c.projects?.map(normalizeProject);
     for (const [project, files] of byProject) {
-      if (c.projects && !c.projects.includes(project)) continue;
+      if (only && !only.includes(project)) continue;
       const local = files
         .filter((f) => !f.deleted)
         .map((f) => (project ? f.path.slice(project.length + 1) : f.path))
@@ -389,7 +559,8 @@ export function planChecks(
       out.push({
         name: c.name,
         project,
-        command: c.run.replaceAll("{files}", local.map(quote).join(" ")),
+        // `./` keeps a file named like an option (`-rf`, `--fix`) from being read as one.
+        command: c.run.replaceAll("{files}", local.map((f) => quote(`./${f}`)).join(" ")),
       });
     }
   }
@@ -440,6 +611,8 @@ export interface HookRecord {
   passed: boolean;
   /** Tree of the staged content (pre-commit) or the pushed commit (pre-push). */
   tree?: string;
+  /** A push that only deleted remote refs: there was no content to test. */
+  nothingPushed?: boolean;
 }
 
 export interface HookRecords {
@@ -501,6 +674,10 @@ export async function commitsWithoutHook(
 
 export const median = (xs: readonly number[]) =>
   xs.length ? ([...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)] as number) : 0;
+
+/** A pre-push that only deletes remote refs sends no content. */
+export const onlyDeletions = (refs: readonly PushRef[]) =>
+  refs.length > 0 && refs.every((r) => !r.localSha || /^0+$/.test(r.localSha));
 
 /** Number of SmartTest invocations written for a hook stage (duplicate blocks are a finding). */
 export function hookInvocations(text: string, stage: "pre-commit" | "pre-push"): number {

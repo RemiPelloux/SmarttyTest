@@ -110,6 +110,8 @@ import {
   isolate,
   loadHookRecords,
   median,
+  normalizeProject,
+  onlyDeletions,
   type PushRef,
   planChecks,
   projectPaths,
@@ -118,6 +120,7 @@ import {
   saveHookRecords,
   setAside,
   treeOf,
+  unknownCheckProjects,
 } from "./hook.js";
 import { ParsePool, parallelParsingAvailable } from "./parse-pool.js";
 import {
@@ -260,8 +263,12 @@ export interface HookEstimate {
 export interface HookOutcome {
   stage: "pre-commit" | "pre-push";
   skipped: boolean;
+  /** The push only deleted remote refs: nothing was tested and nothing needed to be. */
+  nothingPushed?: boolean;
   outcome?: RunOutcome;
   checks: CheckResult[];
+  /** Hook configuration problems (a check that can never run), shown with the result. */
+  warnings: string[];
   durationMs: number;
 }
 
@@ -940,7 +947,7 @@ export class SmartTest {
             ...options,
             input,
             isolate: false,
-            notes: [...(options.notes ?? []), iso.note],
+            notes: [...(options.notes ?? []), iso.note, ...iso.warnings],
           });
         } finally {
           // Hook checks run in this checkout; removing it before they finish would be a race.
@@ -980,7 +987,7 @@ export class SmartTest {
     if (process.env.SMARTTEST_SKIP === "1") {
       records.bypasses.push({ at: new Date().toISOString(), stage, reason: "SMARTTEST_SKIP=1" });
       await saveHookRecords(this.storeDir, records);
-      return { stage, skipped: true, checks: [], durationMs: 0 };
+      return { stage, skipped: true, checks: [], warnings: [], durationMs: 0 };
     }
     let remoteShas: string[] | undefined;
     if (stage === "pre-push") {
@@ -993,6 +1000,21 @@ export class SmartTest {
           hint: "Run `git push` normally: the hook receives the refs on stdin.",
         });
       await assertPushIsHead(this.root, refs);
+      if (onlyDeletions(refs)) {
+        // Deleting a branch pushes no content; comparing with an empty tree would run (and could
+        // fail on) the whole history's tests for a push that sends nothing.
+        const durationMs = Math.round(performance.now() - t0);
+        records.runs.push({
+          at: new Date().toISOString(),
+          stage,
+          durationMs,
+          selected: 0,
+          passed: true,
+          nothingPushed: true,
+        });
+        await saveHookRecords(this.storeDir, records);
+        return { stage, skipped: false, nothingPushed: true, checks: [], warnings: [], durationMs };
+      }
       if (refs.length || options.refs !== undefined)
         remoteShas = refs.filter((ref) => !/^0+$/.test(ref.localSha)).map((ref) => ref.remoteSha);
     }
@@ -1006,6 +1028,9 @@ export class SmartTest {
     // The config under test (the staged one inside a temporary checkout), never the dirty copy.
     let active = this.config;
     let checksPromise: Promise<CheckResult[]> = Promise.resolve([]);
+    const warnings: string[] = [];
+    // Workspace packages are projects too: a check scoped to one must find it.
+    const workspaces = (await this.profile()).workspaces.map((w) => w.dir);
     const outcome = await this.run({
       ...options,
       source,
@@ -1020,13 +1045,17 @@ export class SmartTest {
       },
       onAnalysis: (a) => {
         const projects = [
-          ...new Set([
-            "",
-            ...Object.keys(active.projects),
-            ...active.runners.map((r) => r.dir ?? ""),
-            ...a.runnerRoots.map((r) => r.dir ?? ""),
-          ]),
+          ...new Set(
+            [
+              "",
+              ...Object.keys(active.projects),
+              ...workspaces,
+              ...active.runners.map((r) => r.dir ?? ""),
+              ...a.runnerRoots.map((r) => r.dir ?? ""),
+            ].map(normalizeProject),
+          ),
         ];
+        warnings.push(...unknownCheckProjects(active.hook.checks, stage, projects));
         const changed = a.input.changeSet.changes.map((c) => ({
           path: c.path,
           deleted: c.type === "deleted",
@@ -1068,7 +1097,7 @@ export class SmartTest {
       ...(tree ? { tree } : {}),
     });
     await saveHookRecords(this.storeDir, records);
-    return { stage, skipped: false, outcome, checks, durationMs };
+    return { stage, skipped: false, outcome, checks, warnings, durationMs };
   }
 
   /** `smarttest hook status` details: recent hook durations, bypasses, commits made without it. */
@@ -2500,8 +2529,23 @@ export class SmartTest {
     if ((await this.provider()) === "git") {
       const history = await this.hookHistory();
       const stages: HookStage[] = ["pre-commit", "pre-push"];
-      const plans = await Promise.all(stages.map((stage) => this.hookInstallPlan({ stage })));
+      const plans = await Promise.all(
+        stages.map((stage) =>
+          this.hookInstallPlan({ stage }).catch((error: unknown) => {
+            // A hook SmartTest refuses to edit (outside the repository, not a shell script).
+            if (!(error instanceof SmartTestError)) throw error;
+            out.push({
+              severity: "warn",
+              check: "hook",
+              message: `${stage}: ${error.message}`,
+              ...(error.hint ? { hint: error.hint } : {}),
+            });
+            return undefined;
+          }),
+        ),
+      );
       for (const plan of plans) {
+        if (!plan) continue;
         if (!plan.installed) {
           out.push({
             severity: "info",
@@ -2533,7 +2577,7 @@ export class SmartTest {
             hint: "Re-install with `smarttest hook install --replace` to comment them out.",
           });
       }
-      if (plans.some((p) => p.installed) && !history.installedLocally)
+      if (plans.some((p) => p?.installed) && !history.installedLocally)
         out.push({
           // The installed hook deliberately does not block commits when SmartTest is absent
           // (a teammate's fresh clone), so this is a warning rather than a doctor failure.

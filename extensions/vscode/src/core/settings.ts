@@ -39,6 +39,24 @@ export const SETTING_DEFAULTS: ExtensionSettings = {
 
 type Reader = (key: string) => unknown;
 
+type NumericSetting =
+  | "refreshDelayMs"
+  | "maxConcurrentExplain"
+  | "maxUnitsPerFile"
+  | "analysisTimeoutMs"
+  | "runTimeoutMs";
+
+/** Accepted ranges; `package.json` declares the same `minimum`/`maximum`. */
+export const SETTING_BOUNDS: {
+  readonly [K in NumericSetting]: { readonly minimum: number; readonly maximum: number };
+} = {
+  refreshDelayMs: { minimum: 0, maximum: 60_000 },
+  maxConcurrentExplain: { minimum: 1, maximum: 8 },
+  maxUnitsPerFile: { minimum: 1, maximum: 2_000 },
+  analysisTimeoutMs: { minimum: 1_000, maximum: 3_600_000 },
+  runTimeoutMs: { minimum: 1_000, maximum: 86_400_000 },
+};
+
 const CONFIG_KEYS: { readonly [K in keyof ExtensionSettings]: string } = {
   executablePath: "executablePath",
   mode: "mode",
@@ -85,13 +103,8 @@ function booleanSetting(read: Reader, key: keyof ExtensionSettings, problems: st
   return value;
 }
 
-function integerSetting(
-  read: Reader,
-  key: keyof ExtensionSettings,
-  minimum: number,
-  maximum: number,
-  problems: string[],
-): number {
+function integerSetting(read: Reader, key: NumericSetting, problems: string[]): number {
+  const { minimum, maximum } = SETTING_BOUNDS[key];
   const value = read(CONFIG_KEYS[key]);
   const fallback = SETTING_DEFAULTS[key] as number;
   if (value === undefined) return fallback;
@@ -130,14 +143,14 @@ export function readSettings(read: Reader): {
       mode: resolvedMode,
       changeSource: resolvedChangeSource,
       baseRef: stringSetting(read, "baseRef", problems, 256),
-      refreshDelayMs: integerSetting(read, "refreshDelayMs", 0, 60_000, problems),
+      refreshDelayMs: integerSetting(read, "refreshDelayMs", problems),
       codeLensEnabled: booleanSetting(read, "codeLensEnabled", problems),
       hoverEnabled: booleanSetting(read, "hoverEnabled", problems),
       statusBarEnabled: booleanSetting(read, "statusBarEnabled", problems),
-      maxConcurrentExplain: integerSetting(read, "maxConcurrentExplain", 1, 8, problems),
-      maxUnitsPerFile: integerSetting(read, "maxUnitsPerFile", 1, 2_000, problems),
-      analysisTimeoutMs: integerSetting(read, "analysisTimeoutMs", 1_000, 3_600_000, problems),
-      runTimeoutMs: integerSetting(read, "runTimeoutMs", 1_000, 86_400_000, problems),
+      maxConcurrentExplain: integerSetting(read, "maxConcurrentExplain", problems),
+      maxUnitsPerFile: integerSetting(read, "maxUnitsPerFile", problems),
+      analysisTimeoutMs: integerSetting(read, "analysisTimeoutMs", problems),
+      runTimeoutMs: integerSetting(read, "runTimeoutMs", problems),
     },
     problems,
   };

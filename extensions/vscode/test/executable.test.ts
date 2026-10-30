@@ -2,7 +2,7 @@ import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:f
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { resolveExecutable } from "../src/cli/executable.js";
+import { launchOptions, resolveExecutable } from "../src/cli/executable.js";
 
 const temporary: string[] = [];
 
@@ -91,5 +91,97 @@ describe("executable discovery", () => {
         platform: process.platform,
       }),
     ).toBeUndefined();
+  });
+
+  // Windows lookups run on any OS: the platform is a parameter and only `.cmd`
+  // names and package manifests are read.
+  describe("on Windows", () => {
+    function shimWithPackage(root: string, bin: unknown = { smarttest: "dist/bin.js" }): string {
+      fakeBinary(join(root, "node_modules", ".bin", "smarttest.cmd"));
+      fakeBinary(join(root, "node_modules", "smarttest", "dist", "bin.js"));
+      writeFileSync(
+        join(root, "node_modules", "smarttest", "package.json"),
+        JSON.stringify({ name: "smarttest", bin }),
+      );
+      return join(root, "node_modules", "smarttest", "dist", "bin.js");
+    }
+
+    it("runs the package's JS entry through node instead of the .cmd shim", () => {
+      const root = temp();
+      const entry = shimWithPackage(root);
+      fakeBinary(join(root, "nodejs", "node.exe"));
+      const found = resolveExecutable({
+        configuredPath: "",
+        workspaceDir: root,
+        pathEnv: join(root, "nodejs"),
+        platform: "win32",
+      });
+      expect(found).toEqual({
+        executable: join(root, "nodejs", "node.exe"),
+        source: "workspace",
+        leadingArgs: [entry],
+      });
+      expect(
+        launchOptions(found ?? { executable: "", source: "path" }, ["scan", "--json"]),
+      ).toEqual({
+        executable: join(root, "nodejs", "node.exe"),
+        leadingArgs: [entry],
+        args: ["scan", "--json"],
+      });
+    });
+
+    it("falls back to the editor's runtime as Node when no node.exe is found", () => {
+      const root = temp();
+      const entry = shimWithPackage(root, "dist/bin.js");
+      const found = resolveExecutable({
+        configuredPath: "",
+        workspaceDir: root,
+        pathEnv: "",
+        platform: "win32",
+        execPath: "/editor/Code.exe",
+      });
+      expect(found).toEqual({
+        executable: "/editor/Code.exe",
+        source: "workspace",
+        leadingArgs: [entry],
+        env: { ELECTRON_RUN_AS_NODE: "1" },
+      });
+      expect(
+        launchOptions(found ?? { executable: "", source: "path" }, []).env?.ELECTRON_RUN_AS_NODE,
+      ).toBe("1");
+    });
+
+    it("starts a shim without a readable package through cmd.exe", () => {
+      const root = temp();
+      fakeBinary(join(root, "node_modules", ".bin", "smarttest.cmd"));
+      const found = resolveExecutable({
+        configuredPath: "",
+        workspaceDir: root,
+        pathEnv: "",
+        platform: "win32",
+      });
+      expect(found).toEqual({
+        executable: join(root, "node_modules", ".bin", "smarttest.cmd"),
+        source: "workspace",
+        shell: true,
+      });
+    });
+
+    it("runs a configured JS entry through node", () => {
+      const root = temp();
+      fakeBinary(join(root, "tools", "bin.js"));
+      expect(
+        resolveExecutable({
+          configuredPath: "tools/bin.js",
+          workspaceDir: root,
+          pathEnv: "",
+          platform: "win32",
+          execPath: "/editor/Code.exe",
+        }),
+      ).toMatchObject({
+        executable: "/editor/Code.exe",
+        leadingArgs: [join(root, "tools", "bin.js")],
+      });
+    });
   });
 });

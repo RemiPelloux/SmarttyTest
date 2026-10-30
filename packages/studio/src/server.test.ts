@@ -360,7 +360,28 @@ describe("read models", () => {
     expect(run?.state).toBe("done");
     expect(run?.summary).not.toBeNull();
     expect(Array.isArray(run?.executions)).toBe(true);
+
+    // Results stream when their runner group ends, before the run's summary.
+    const events = ((await api(`/api/runs/${runId}`)).json as { events: { type: string }[] })
+      .events;
+    const firstResult = events.findIndex((event) => event.type === "result");
+    expect(firstResult).toBeGreaterThan(0);
+    expect(events[firstResult - 1]).toMatchObject({ type: "group", phase: "end" });
+    expect(firstResult).toBeLessThan(events.findIndex((event) => event.type === "summary"));
   }, 60_000);
+
+  it("analyses the latest source when two refreshes overlap", async () => {
+    const post = (source: unknown) =>
+      api("/api/refresh", { method: "POST", body: { source }, headers: { origin: origin() } });
+    const [staged, uncommitted] = await Promise.all([
+      post({ kind: "staged" }),
+      new Promise((resolve) => setTimeout(resolve, 20)).then(() => post({ kind: "uncommitted" })),
+    ]);
+    const describe = (json: unknown) => (json as { description: string }).description;
+    expect(describe(staged.json)).not.toBe(describe(uncommitted.json));
+    expect(describe(uncommitted.json)).not.toMatch(/staged/);
+    await post(null);
+  });
 
   it("re-analyses through POST /api/refresh and keeps the counts", async () => {
     const { res, json } = await api("/api/refresh", {

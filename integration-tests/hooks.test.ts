@@ -1,5 +1,5 @@
-import { spawnSync } from "node:child_process";
-import { statSync } from "node:fs";
+import { spawn, spawnSync } from "node:child_process";
+import { existsSync, statSync } from "node:fs";
 import {
   chmod,
   copyFile,
@@ -16,7 +16,7 @@ import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { SmartTest } from "@smarttest/core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { edit, git, materialize } from "./helpers.js";
+import { edit, FIXTURES, git, materialize } from "./helpers.js";
 
 const stringsTest = "test/strings.test.ts";
 
@@ -481,6 +481,7 @@ async function installRealHook(dir: string, stage: "pre-commit" | "pre-push"): P
 try {
   const st = await SmartTest.open({ root: process.cwd() });
   const r = await st.runHook(${JSON.stringify(stage)}, { cache: false });
+  if (r.skipped || r.nothingPushed) process.exit(0);
   if (r.checks.some((c) => c.status === "failed")) process.exit(1);
   process.exit(r.outcome?.exitCode ?? 1);
 } catch (error) {
@@ -630,4 +631,229 @@ it("does not inherit the pre-commit Git environment", () => {
     // The hook executed the staged test that inspects its environment.
     expect(records.runs.at(-1)?.selected).toBeGreaterThan(0);
   }, 120_000);
+});
+
+/**
+ * A pnpm-style workspace whose app imports `@demo/core-lib` through a real node_modules
+ * directory (`node_modules/@demo/core-lib -> ../../packages/core-lib`), with no alias.
+ */
+async function linkedWorkspace(): Promise<string> {
+  const dir = await materialize("pnpm-monorepo");
+  const installed = join(FIXTURES, "pnpm-monorepo", "node_modules");
+  await rm(join(dir, "node_modules"));
+  await mkdir(join(dir, "node_modules/@demo"), { recursive: true });
+  for (const entry of ["vitest", ".bin"])
+    await symlink(join(installed, entry), join(dir, "node_modules", entry));
+  await symlink("../../packages/core-lib", join(dir, "node_modules/@demo/core-lib"));
+  await writeFile(
+    join(dir, "vitest.config.ts"),
+    'import { defineConfig } from "vitest/config";\nexport default defineConfig({ test: { include: ["packages/*/test/**/*.test.ts"] } });\n',
+  );
+  await edit(dir, "packages/core-lib/package.json", "./dist/index.js", "./src/index.ts");
+  // Only the app's test reaches core-lib, through the workspace link.
+  await rm(join(dir, "packages/core-lib/test/price.test.ts"));
+  await writeFile(join(dir, ".gitignore"), "node_modules\n.smarttest/\n");
+  git(dir, "init", "-q", "-b", "main");
+  await commitAll(dir, "initial");
+  return dir;
+}
+
+describe("the temporary checkout is the content under test", () => {
+  it("resolves workspace packages to the staged content, not the working tree", async () => {
+    const dir = await linkedWorkspace();
+    const price = "packages/core-lib/src/price.ts";
+    const original = await readFile(join(dir, price), "utf8");
+    await edit(dir, price, "VAT = 0.2", "VAT = 0.5");
+    git(dir, "add", price);
+    // The unstaged revert would make the app's test pass if it leaked into the run.
+    await writeFile(join(dir, price), original);
+
+    const result = await (await SmartTest.open({ root: dir })).runHook("pre-commit", {
+      cache: false,
+    });
+    expect(result.outcome?.report.decision.selectedTests.map((t) => t.filePath)).toContain(
+      "packages/app/test/checkout.test.ts",
+    );
+    expect(result.outcome?.exitCode).not.toBe(0);
+    expect(result.outcome?.report.summary.failed).toBeGreaterThan(0);
+  }, 120_000);
+
+  it("gives the checkout an index matching the staged tree", async () => {
+    const dir = await materialize("ts-lib-vitest", { git: true });
+    await writeConfig(dir, [
+      {
+        name: "index",
+        run: "git diff --cached --name-only | grep -qx notes.md && git diff --quiet",
+      },
+    ]);
+    await commitAll(dir, "config");
+    await writeFile(join(dir, "notes.md"), "staged\n");
+    git(dir, "add", "notes.md");
+    await writeFile(join(dir, "notes.md"), "unstaged\n");
+
+    const result = await (await SmartTest.open({ root: dir })).runHook("pre-commit", {
+      cache: false,
+    });
+    expect(result.outcome?.report.warnings.join("\n")).toContain("temporary checkout");
+    expect(result.checks.map((c) => [c.name, c.status, c.output])).toEqual([
+      ["index", "passed", undefined],
+    ]);
+  }, 120_000);
+
+  it("does not run the user's post-checkout hook", async () => {
+    const dir = await materialize("ts-lib-vitest", { git: true });
+    const marker = join(await mkdtemp(join(tmpdir(), "st-post-checkout-")), "ran");
+    await writeFile(join(dir, ".git/hooks/post-checkout"), `#!/bin/sh\npwd >> "${marker}"\n`, {
+      mode: 0o755,
+    });
+    await edit(dir, stringsTest, 'toBe("Ada")', 'toBe("Adah")');
+    git(dir, "add", stringsTest);
+    await writeFile(join(dir, "notes.md"), "force isolation\n");
+
+    const result = await (await SmartTest.open({ root: dir })).runHook("pre-commit", {
+      cache: false,
+    });
+    expect(result.outcome?.report.summary.failed).toBeGreaterThan(0);
+    expect(await readFile(marker, "utf8").catch(() => "")).toBe("");
+  }, 120_000);
+
+  it("removes checkouts abandoned by a killed run, and keeps a live run's", async () => {
+    const dir = await materialize("ts-lib-vitest", { git: true });
+    const fake = async (pid: number) => {
+      const tmp = await mkdtemp(join(tmpdir(), "smarttest-hook-"));
+      git(dir, "worktree", "add", "-q", "--detach", join(tmp, "repo"), "HEAD");
+      await writeFile(join(tmp, "owner"), `${pid}\n`);
+      return tmp;
+    };
+    const dead = spawnSync(process.execPath, ["-e", ""]).pid as number;
+    const stale = await fake(dead);
+    const live = await fake(process.pid);
+    // Registered, but its directory is already gone.
+    const gone = await fake(dead);
+    await rm(gone, { recursive: true, force: true });
+
+    await writeFile(join(dir, "notes.md"), "staged\n");
+    git(dir, "add", "notes.md");
+    await writeFile(join(dir, "notes.md"), "unstaged\n");
+    await (await SmartTest.open({ root: dir })).runHook("pre-commit", { cache: false });
+
+    const list = git(dir, "worktree", "list", "--porcelain");
+    expect(list).not.toContain(stale);
+    expect(list).not.toContain(gone);
+    expect(list).toContain(live);
+    expect(existsSync(stale)).toBe(false);
+    git(dir, "worktree", "remove", "--force", join(live, "repo"));
+  }, 120_000);
+});
+
+describe("project checks in a workspace", () => {
+  it("runs a check scoped to a workspace package and reports an unknown project", async () => {
+    const dir = await materialize("pnpm-monorepo", { git: true });
+    await writeFile(
+      join(dir, "smarttest.config.json"),
+      `${JSON.stringify({
+        hook: {
+          checks: [
+            { name: "app", run: "test -f package.json && pwd", projects: ["./packages/app/"] },
+            { name: "typo", run: "true", projects: ["packages/ap"] },
+          ],
+        },
+      })}\n`,
+    );
+    await commitAll(dir, "config");
+    await edit(dir, "packages/app/src/banner.ts", "today", "only today");
+    git(dir, "add", "-A");
+
+    const result = await (await SmartTest.open({ root: dir })).runHook("pre-commit", {
+      cache: false,
+    });
+    expect(result.checks.map((c) => [c.name, c.project, c.status])).toEqual([
+      ["app", "packages/app", "passed"],
+    ]);
+    expect(result.warnings.join("\n")).toContain('"packages/ap"');
+  }, 120_000);
+});
+
+describe("a push that only deletes refs", () => {
+  it("runs no tests, exits 0 and records it", async () => {
+    const dir = await materialize("ts-lib-vitest", { git: true });
+    await edit(dir, stringsTest, 'toBe("Ada")', 'toBe("Adah")');
+    await commitAll(dir, "broken");
+    const st = await SmartTest.open({ root: dir });
+    const result = await st.runHook("pre-push", {
+      cache: false,
+      refs: [
+        {
+          localRef: "(delete)",
+          localSha: "0".repeat(40),
+          remoteRef: "refs/heads/feature",
+          remoteSha: git(dir, "rev-parse", "HEAD").trim(),
+        },
+      ],
+    });
+    expect(result.nothingPushed).toBe(true);
+    expect(result.outcome).toBeUndefined();
+    const records = JSON.parse(await readFile(join(dir, ".smarttest/state/hooks.json"), "utf8"));
+    expect(records.runs.at(-1)).toMatchObject({ selected: 0, nothingPushed: true });
+  }, 120_000);
+
+  it("lets a real `git push --delete` through although the history has a failing test", async () => {
+    const dir = await materialize("ts-lib-vitest", { git: true });
+    const remote = join(await mkdtemp(join(tmpdir(), "st-remote-")), "remote.git");
+    git(dir, "init", "--bare", "-q", remote);
+    git(dir, "remote", "add", "origin", remote);
+    await edit(dir, stringsTest, 'toBe("Ada")', 'toBe("Adah")');
+    await commitAll(dir, "broken");
+    git(dir, "push", "-q", "origin", "HEAD:refs/heads/feature");
+    await installRealHook(dir, "pre-push");
+
+    const r = spawnSync("git", ["push", "origin", "--delete", "feature"], {
+      cwd: dir,
+      encoding: "utf8",
+    });
+    expect(r.status, r.stderr).toBe(0);
+    expect(
+      spawnSync("git", ["--git-dir", remote, "rev-parse", "--verify", "refs/heads/feature"]).status,
+    ).not.toBe(0);
+  }, 120_000);
+});
+
+describe("a hook run that is terminated", () => {
+  const bin = resolve(import.meta.dirname, "../packages/cli/dist/bin.js");
+
+  it.each(["SIGTERM", "SIGHUP"] as const)(
+    "removes its temporary checkout on %s",
+    async (signal) => {
+      const dir = await materialize("ts-lib-vitest", { git: true });
+      await writeFile(
+        join(dir, "test/slow.test.ts"),
+        'import { it } from "vitest";\nit("waits", () => new Promise((r) => setTimeout(r, 60_000)), 90_000);\n',
+      );
+      git(dir, "add", "test/slow.test.ts");
+      await writeFile(join(dir, "notes.md"), "force isolation\n");
+
+      const child = spawn(process.execPath, [bin, "run", "--staged", "--hook", "--no-cache"], {
+        cwd: dir,
+        stdio: "ignore",
+      });
+      const exited = new Promise<number | null>((done) => child.on("exit", (code) => done(code)));
+      const deadline = Date.now() + 60_000;
+      while (git(dir, "worktree", "list").trim().split("\n").length < 2) {
+        if (Date.now() > deadline) throw new Error("the hook never created its checkout");
+        await new Promise((r) => setTimeout(r, 100));
+      }
+      const checkout = git(dir, "worktree", "list", "--porcelain")
+        .split("\n")
+        .filter((l) => l.startsWith("worktree "))
+        .map((l) => l.slice("worktree ".length))
+        .find((p) => p.includes("smarttest-hook-")) as string;
+      // Let the runner start, then end the hook the way a closing terminal or CI would.
+      await new Promise((r) => setTimeout(r, 1_500));
+      child.kill(signal);
+      expect(await exited).not.toBe(0);
+      expect(git(dir, "worktree", "list").trim().split("\n")).toHaveLength(1);
+      expect(existsSync(checkout)).toBe(false);
+    },
+    120_000,
+  );
 });

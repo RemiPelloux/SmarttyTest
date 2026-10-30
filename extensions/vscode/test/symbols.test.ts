@@ -120,4 +120,45 @@ describe("symbol matching", () => {
     expect(bindingAtPosition(bindings, 1, 0)?.unit.id).toBe("src/a.ts#run");
     expect(bindingAtPosition(bindings, 40, 0)).toBeUndefined();
   });
+
+  it("does not bind a unit to a local function or an object-literal method of the same name", () => {
+    const at = (start: number, end: number) => ({
+      start: { line: start, character: 0 },
+      end: { line: end, character: 1 },
+    });
+    const nested: DocumentSymbolNode[] = [
+      {
+        name: "outer",
+        kind: "function",
+        range: at(0, 5),
+        children: [{ name: "helper", kind: "function", range: at(1, 3) }],
+      },
+      {
+        name: "api",
+        kind: "constant",
+        range: at(6, 8),
+        children: [{ name: "get", kind: "method", range: at(7, 7) }],
+      },
+      { name: "helper", kind: "function", range: at(10, 12) },
+      { name: "get", kind: "function", range: at(14, 16) },
+    ];
+    const bindings = matchUnitsToSymbols(
+      [
+        { id: "src/a.ts#helper", qualifiedName: "helper", kind: "function" },
+        { id: "src/a.ts#get", qualifiedName: "get", kind: "function" },
+      ],
+      nested,
+    );
+    expect(bindings.map((binding) => [binding.unit.id, binding.range.start.line])).toEqual([
+      ["src/a.ts#helper", 10],
+      ["src/a.ts#get", 14],
+    ]);
+    // A local function alone gets no lens: no top-level declaration, no claim.
+    expect(
+      matchUnitsToSymbols(
+        [{ id: "src/a.ts#helper", qualifiedName: "helper", kind: "function" }],
+        nested.slice(0, 1),
+      ),
+    ).toEqual([]);
+  });
 });

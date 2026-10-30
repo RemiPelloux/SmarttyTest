@@ -4,11 +4,14 @@
  * problem that the user must see.
  */
 import { spawn } from "node:child_process";
-import { parseCliError } from "../core/contracts.js";
+import { hasRunReport, parseCliError } from "../core/contracts.js";
 import { CancelledError, SmartTestExtensionError } from "../core/errors.js";
 
 export interface CliRunOptions {
   readonly executable: string;
+  /** Placed before `args`: the CLI's JS entry when Node runs it. Not part of the command. */
+  readonly leadingArgs?: readonly string[];
+  /** The smarttest command and its options; `args[0]` names the command. */
   readonly args: readonly string[];
   readonly cwd: string;
   readonly signal: AbortSignal;
@@ -16,6 +19,13 @@ export interface CliRunOptions {
   readonly env?: NodeJS.ProcessEnv;
   /** Hard cap so a runaway runner cannot exhaust the extension host. */
   readonly maxOutputBytes?: number;
+  /**
+   * Windows batch shim (`smarttest.cmd`) with no JS entry to run directly: start
+   * it through cmd.exe, with every argument quoted and unsafe ones refused.
+   */
+  readonly shell?: boolean;
+  /** Time between SIGTERM and SIGKILL. */
+  readonly killGraceMs?: number;
 }
 
 export interface CliResult {
@@ -68,19 +78,52 @@ function failureFrom(result: CliResult, args: readonly string[]): SmartTestExten
   );
 }
 
+/**
+ * One cmd.exe command line for a batch shim. Node no longer starts `.cmd` files
+ * without a shell (CVE-2024-27980), and cmd.exe expands `%`, `^`, `&`, `|`, `<`,
+ * `>` and `!` even inside quotes, so an argument containing one is refused rather
+ * than escaped.
+ */
+export function windowsShellCommand(executable: string, args: readonly string[]): string {
+  const unsafe = /["%^&|<>!\r\n]/;
+  for (const value of [executable, ...args])
+    if (unsafe.test(value))
+      throw new SmartTestExtensionError(
+        `Cannot pass ${JSON.stringify(value)} to ${executable} through cmd.exe safely.`,
+        {
+          code: "ST_EXT_UNSAFE_ARGUMENT",
+          category: "configuration",
+          hint: "Set `smarttest.executablePath` to the CLI's JavaScript entry (for example node_modules/smarttest/dist/bin.js) so no shell is needed.",
+        },
+      );
+  return [executable, ...args].map((value) => `"${value}"`).join(" ");
+}
+
 export async function runCli(options: CliRunOptions): Promise<CliResult> {
   options.signal.throwIfAborted();
   const maxOutput = options.maxOutputBytes ?? DEFAULT_MAX_OUTPUT;
+  const killGraceMs = options.killGraceMs ?? KILL_GRACE_MS;
+  // Its own process group on POSIX, so a kill also reaches the test runners it started.
+  const group = process.platform !== "win32";
   return await new Promise<CliResult>((resolve, reject) => {
     let child: ReturnType<typeof spawn>;
     try {
-      child = spawn(options.executable, [...options.args], {
+      const spawnOptions = {
         cwd: options.cwd,
         env: options.env ?? process.env,
-        stdio: ["ignore", "pipe", "pipe"],
+        stdio: ["ignore", "pipe", "pipe"] as ["ignore", "pipe", "pipe"],
         windowsHide: true,
-      });
+        detached: group,
+      };
+      const argv = [...(options.leadingArgs ?? []), ...options.args];
+      child = options.shell
+        ? spawn(windowsShellCommand(options.executable, argv), { ...spawnOptions, shell: true })
+        : spawn(options.executable, argv, spawnOptions);
     } catch (error) {
+      if (error instanceof SmartTestExtensionError) {
+        reject(error);
+        return;
+      }
       reject(
         new SmartTestExtensionError(
           `Could not start smarttest at ${options.executable}: ${
@@ -104,12 +147,38 @@ export async function runCli(options: CliRunOptions): Promise<CliResult> {
     let outputOverflow = false;
     let killTimer: ReturnType<typeof setTimeout> | undefined;
 
+    // `child.killed` only says a signal was sent; whether the process exited is
+    // read from its exit code and signal.
+    const exited = (): boolean => child.exitCode !== null || child.signalCode !== null;
+    const signalChild = (signal: NodeJS.Signals): void => {
+      if (group && child.pid !== undefined) {
+        try {
+          process.kill(-child.pid, signal);
+          return;
+        } catch {
+          // The group is gone or was never created; signal the child itself.
+        }
+      }
+      if (process.platform === "win32" && child.pid !== undefined && !exited()) {
+        // Windows has no process groups and `kill` ends only cmd.exe or node:
+        // end the whole tree, test runners included.
+        const killer = spawn("taskkill", ["/pid", String(child.pid), "/T", "/F"], {
+          stdio: "ignore",
+          windowsHide: true,
+        });
+        killer.on("error", () => child.kill(signal));
+        return;
+      }
+      child.kill(signal);
+    };
     const kill = (): void => {
-      if (child.killed) return;
-      child.kill("SIGTERM");
+      // An exited CLI is only signalled again when runners it started may remain.
+      if (killTimer !== undefined || (exited() && !group)) return;
+      signalChild("SIGTERM");
       killTimer = setTimeout(() => {
-        if (!child.killed) child.kill("SIGKILL");
-      }, KILL_GRACE_MS);
+        // The CLI may have exited while a runner it started still holds stdout open.
+        signalChild("SIGKILL");
+      }, killGraceMs);
       killTimer.unref?.();
     };
 
@@ -205,8 +274,14 @@ export async function runCli(options: CliRunOptions): Promise<CliResult> {
         }
         const exitCode = code ?? (signal ? 1 : 0);
         const result = { stdout, stderr, exitCode };
-        // 1 is "tests failed" for `run` and stays a valid JSON report.
-        if (exitCode !== 0 && exitCode !== 1) {
+        // 1 is "tests failed" for `run` and stays a valid JSON report. A run that
+        // exits 4 (infrastructure) or 70 (integrity) still writes its report, and
+        // that report is what the user must see; the envelope is the fallback.
+        if (
+          exitCode !== 0 &&
+          exitCode !== 1 &&
+          !(options.args[0] === "run" && hasRunReport(stdout))
+        ) {
           reject(failureFrom(result, options.args));
           return;
         }

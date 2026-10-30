@@ -6,6 +6,7 @@ import {
   groupFiles,
   groupHasFailure,
   type ResultState,
+  type RunContext,
   type RunVerdict,
   statusIcon,
   statusLabel,
@@ -63,13 +64,24 @@ export class SmartTestResultsProvider implements vscode.TreeDataProvider<Node>, 
   #report: RunReport | undefined;
   #groups: readonly FileResultGroup[] = [];
   #integrityIssues: readonly string[] = [];
+  #exitCode: number | undefined;
   #projectDir: string | undefined;
+  #stale = false;
 
-  setReport(result: RunResult, projectDir: string): void {
+  setReport(result: RunResult, projectDir: string, exitCode?: number): void {
     this.#report = result.report;
     this.#groups = groupFiles(result.report);
     this.#integrityIssues = result.integrityIssues;
+    this.#exitCode = exitCode;
     this.#projectDir = projectDir;
+    this.#stale = false;
+    this.#onDidChangeTreeData.fire(undefined);
+  }
+
+  /** Files in `projectDir` changed after the run: keep the results, say they are out of date. */
+  markStale(projectDir: string): void {
+    if (!this.#report || this.#stale || this.#projectDir !== projectDir) return;
+    this.#stale = true;
     this.#onDidChangeTreeData.fire(undefined);
   }
 
@@ -78,7 +90,16 @@ export class SmartTestResultsProvider implements vscode.TreeDataProvider<Node>, 
     this.#groups = [];
     this.#projectDir = undefined;
     this.#integrityIssues = [];
+    this.#exitCode = undefined;
+    this.#stale = false;
     this.#onDidChangeTreeData.fire(undefined);
+  }
+
+  #context(): RunContext {
+    return {
+      integrityIssues: this.#integrityIssues,
+      ...(this.#exitCode === undefined ? {} : { exitCode: this.#exitCode }),
+    };
   }
 
   getTreeItem(element: Node): vscode.TreeItem {
@@ -152,8 +173,14 @@ export class SmartTestResultsProvider implements vscode.TreeDataProvider<Node>, 
     if (!this.#report) return [];
     if (!element) {
       const nodes: Node[] = [
-        { kind: "summary", verdict: verdict(this.#report), report: this.#report },
+        { kind: "summary", verdict: verdict(this.#report, this.#context()), report: this.#report },
       ];
+      if (this.#stale)
+        nodes.push({
+          kind: "info",
+          label: "Out of date",
+          description: "files changed after this run; run the affected tests again",
+        });
       if (this.#integrityIssues.length > 0)
         nodes.push({
           kind: "info",

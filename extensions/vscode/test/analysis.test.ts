@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { analyzeFile, buildFileIndex, fileWarnings } from "../src/core/analysis.js";
 import type { GraphDump, ScanResult, SourceExplain } from "../src/core/contracts.js";
+import { SmartTestExtensionError } from "../src/core/errors.js";
 
 const graph: GraphDump = {
   nodes: [
@@ -92,7 +93,7 @@ describe("file analysis", () => {
     ]);
   });
 
-  it("falls back to one explain per unit when the batch call fails", async () => {
+  it("falls back to one explain per unit when the CLI rejects --units", async () => {
     let perUnit = 0;
     const result = await analyzeFile({
       file: "src/a.ts",
@@ -106,12 +107,42 @@ describe("file analysis", () => {
         return source(unit.id, ["test/a.test.ts"]);
       },
       explainUnits: async () => {
-        throw new Error("Unknown option '--units'");
+        throw new SmartTestExtensionError("Unknown option '--units'", {
+          code: "ST_USAGE",
+          category: "usage",
+          cliCode: "ST_USAGE",
+        });
       },
     });
     expect(perUnit).toBe(3);
     expect(result.explainFailures).toBe(0);
     expect(result.protections.every((p) => p.state === "protected")).toBe(true);
+  });
+
+  it("marks every unit unknown when the batch call fails for another reason", async () => {
+    let perUnit = 0;
+    const result = await analyzeFile({
+      file: "src/a.ts",
+      graph,
+      scan: scan(),
+      maxUnits: 10,
+      concurrency: 2,
+      signal,
+      explain: async (unit) => {
+        perUnit++;
+        return source(unit.id, ["test/a.test.ts"]);
+      },
+      explainUnits: async () => {
+        throw new SmartTestExtensionError("smarttest explain did not finish within 1000 ms.", {
+          code: "ST_EXT_TIMEOUT",
+          category: "infrastructure",
+        });
+      },
+    });
+    expect(perUnit).toBe(0);
+    expect(result.explainFailures).toBe(3);
+    expect(result.protections.every((p) => p.state === "unknown")).toBe(true);
+    expect(result.protections[0]?.reason).toContain("did not finish");
   });
 
   it("a single failed explain makes only that symbol unknown", async () => {

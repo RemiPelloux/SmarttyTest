@@ -124,14 +124,17 @@ function collect(
     // SmartTest qualifies members with their declaring class; containers are
     // part of the name so a method in a namespace still matches if it exists.
     out.push({ qualifiedName: chain.join("."), range: symbol.range });
-    if (!symbol.children?.length) continue;
-    collect(symbol.children, isContainer(symbol.kind) ? chain : parents, out);
+    // Only containers are descended into. A function's local helpers and an
+    // object literal's methods are not graph units; collecting them under their
+    // parent's name would bind `helper` or `get` to the wrong declaration.
+    if (symbol.children?.length && isContainer(symbol.kind)) collect(symbol.children, chain, out);
   }
 }
 
 /**
- * Matches units to the first document symbol with the same qualified name.
- * Overloads share a name; the first declaration is used (one lens, not N).
+ * Matches units to the first document symbol with the same qualified name,
+ * reached only through containers (classes, namespaces, modules). Overloads
+ * share a name; the first declaration is used (one lens, not N).
  */
 export function matchUnitsToSymbols(
   units: readonly GraphUnit[],

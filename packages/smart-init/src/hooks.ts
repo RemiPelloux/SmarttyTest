@@ -5,9 +5,10 @@
  * restores those steps.
  */
 import { execFileSync } from "node:child_process";
-import { join } from "node:path";
+import { existsSync, realpathSync } from "node:fs";
+import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 import type { ExistingTestCommand } from "@smarttest/project-detector";
-import { exists, readJson, readText } from "@smarttest/shared";
+import { exists, readJson, readText, SmartTestError } from "@smarttest/shared";
 import type { FilePlan } from "./index.js";
 
 export type HookManager = "husky" | "lefthook" | "simple-git-hooks" | "git";
@@ -21,7 +22,7 @@ export const HOOK_COMMANDS: Record<HookStage, string> = {
 };
 export const HOOK_COMMAND = HOOK_COMMANDS["pre-commit"];
 /** Any SmartTest command written by any version of `hook install`. */
-const ANY_SMARTTEST = /npx --no-install smarttest run[^&|;\n]*/;
+const ANY_SMARTTEST = /npx --no-install smarttest run[^&|;)\n]*/;
 const START = "# >>> smarttest >>>";
 const END = "# <<< smarttest <<<";
 const REPLACED = ": # smarttest-replaced: ";
@@ -32,10 +33,12 @@ const LEFTHOOK_MARK = "# smarttest";
 
 export interface HookTarget {
   manager: HookManager;
-  /** Project-relative file that holds the hook. */
+  /** Project-relative file that holds the hook (`../.git/hooks/…` for a project in a subdirectory). */
   file: string;
   evidence: string;
   stage: HookStage;
+  /** A `core.hooksPath` outside the repository: SmartTest refuses to write there. */
+  outside?: string;
 }
 
 export interface HookPlan extends HookTarget {
@@ -58,13 +61,86 @@ function hookSection(text: string | undefined, stage: HookStage): string | undef
   return lines.slice(start, end).join("\n");
 }
 
-const isInstalled = (text: string | undefined, stage: HookStage) =>
-  !!text &&
-  (text.includes(START) ||
-    (stage === "pre-commit"
-      ? /smarttest\s+run\b[^\n]*--staged/
-      : /smarttest\s+run\b[^\n]*--push/
-    ).test(text));
+/** True when the hook runs SmartTest; commented-out lines do not count. */
+const isInstalled = (text: string | undefined, stage: HookStage) => {
+  if (!text) return false;
+  const lines = text.split("\n");
+  if (lines.some((l) => l.trim() === START)) return true;
+  const command =
+    stage === "pre-commit" ? /smarttest\s+run\b[^\n]*--staged/ : /smarttest\s+run\b[^\n]*--push/;
+  return lines.some((l) => !l.trim().startsWith("#") && command.test(l));
+};
+
+/** Output of a Git command run in the project, or undefined when it fails. */
+function gitOut(root: string, args: string[]): string | undefined {
+  try {
+    return execFileSync("git", args, { cwd: root, stdio: ["ignore", "pipe", "ignore"] })
+      .toString()
+      .trim();
+  } catch {
+    return undefined;
+  }
+}
+
+/** A path made real through its closest existing ancestor (the hook file may not exist yet). */
+function realish(path: string): string {
+  let dir = path;
+  const rest: string[] = [];
+  while (!existsSync(dir) && dirname(dir) !== dir) {
+    rest.unshift(basename(dir));
+    dir = dirname(dir);
+  }
+  return join(realpathSync(dir), ...rest);
+}
+
+const inside = (parent: string, child: string) => {
+  const rel = relative(parent, child);
+  return !rel.startsWith("..") && !isAbsolute(rel);
+};
+
+/**
+ * The plain Git hook file for a stage, as Git itself resolves it: relative `core.hooksPath` is
+ * relative to the top-level, and a linked worktree shares the main repository's hooks. Husky's
+ * own `core.hooksPath` is left to the husky target.
+ */
+function gitHookTarget(root: string, stage: HookStage): HookTarget {
+  const fallback: HookTarget = {
+    manager: "git",
+    file: `.git/hooks/${stage}`,
+    evidence: "Git hooks directory .git/hooks",
+    stage,
+  };
+  const top = gitOut(root, ["rev-parse", "--show-toplevel"]);
+  if (!top) return fallback;
+  const hooksPath = gitOut(root, ["config", "--get", "core.hooksPath"]);
+  const custom = !!hooksPath && !hooksPath.includes(".husky");
+  let abs: string | undefined;
+  if (custom) {
+    const out = gitOut(root, ["rev-parse", "--git-path", `hooks/${stage}`]);
+    if (out) abs = resolve(root, out);
+  } else {
+    const common = gitOut(root, ["rev-parse", "--path-format=absolute", "--git-common-dir"]);
+    if (common) abs = join(common, "hooks", stage);
+  }
+  if (!abs) return fallback;
+  abs = realish(abs);
+  const file = relative(realpathSync(root), abs).replace(/\\/g, "/");
+  const shown = relative(realpathSync(top), dirname(abs)).replace(/\\/g, "/");
+  return {
+    manager: "git",
+    file,
+    evidence: custom ? `core.hooksPath ${hooksPath}` : `Git hooks directory ${shown}`,
+    stage,
+    ...(custom && !inside(realpathSync(top), abs) ? { outside: abs } : {}),
+  };
+}
+
+/** The project directory relative to the top-level of the worktree ("" at the top-level). */
+const projectPrefix = (root: string) =>
+  (gitOut(root, ["rev-parse", "--show-prefix"]) ?? "").replace(/\/$/, "");
+
+/** Shells the SmartTest block can be inserted into (`#!/bin/sh`, `#!/usr/bin/env bash -e`, …). */
+const SHELL_SHEBANG = /^#!\s*(?:\S*\/)?(?:env\s+(?:-\S+\s+)*)?(?:\S*\/)?(?:ba|da|z|k|mk|a)?sh\b/;
 
 /** Finds which hook manager the project uses (or plain Git hooks). */
 export async function detectHookTarget(
@@ -104,40 +180,76 @@ export async function detectHookTarget(
       evidence: "simple-git-hooks in package.json",
       stage,
     });
-  let hooksDir = ".git/hooks";
-  try {
-    const p = execFileSync("git", ["config", "--get", "core.hooksPath"], {
-      cwd: root,
-      stdio: ["ignore", "pipe", "ignore"],
-    })
-      .toString()
-      .trim();
-    if (p && !p.includes(".husky")) hooksDir = p.replace(/\/$/, "");
-  } catch {
-    /* not set */
-  }
-  candidates.push({
-    manager: "git",
-    file: `${hooksDir}/${stage}`,
-    evidence: `Git hooks directory ${hooksDir}`,
-    stage,
-  });
+  candidates.push(gitHookTarget(root, stage));
   return candidates.find((c) => c.manager === prefer) ?? (candidates[0] as HookTarget);
 }
 
-const block = (stage: HookStage) =>
-  [
+const shellQuote = (s: string) => `'${s.replace(/'/g, "'\\''")}'`;
+
+/** Pre-push refs read once by the block, then given back to the rest of the user's script. */
+const REFS = "smarttest_refs";
+const PIPE_REFS = `printf '%s\\n' "$${REFS}" | `;
+
+/**
+ * The SmartTest block. Git runs hooks at the top-level of the worktree, so a project in a
+ * subdirectory is entered first (in a subshell: the rest of the script keeps its directory).
+ * A pre-push hook's refs arrive on stdin; the block reads them once, passes them to SmartTest and
+ * restores them for the user's own steps (a `while read local_ref …` guard still sees them).
+ */
+const block = (stage: HookStage, prefix = "") => {
+  const push = stage === "pre-push";
+  const command = `${push ? PIPE_REFS : ""}${HOOK_COMMANDS[stage]}`;
+  return [
     START,
-    stage === "pre-commit"
-      ? "# Runs only the tests the staged change can affect (https://github.com/RemiPelloux/SmarttyTest)."
-      : "# Runs only the tests the pushed commits can affect (https://github.com/RemiPelloux/SmarttyTest).",
-    "if [ -x node_modules/.bin/smarttest ]; then",
-    `  ${HOOK_COMMANDS[stage]} || exit 1`,
+    push
+      ? "# Runs only the tests the pushed commits can affect (https://github.com/RemiPelloux/SmarttyTest)."
+      : "# Runs only the tests the staged change can affect (https://github.com/RemiPelloux/SmarttyTest).",
+    ...(push ? [`${REFS}=`, `[ -t 0 ] || ${REFS}=$(cat)`] : []),
+    ...(prefix
+      ? [
+          `if [ -x ${shellQuote(`${prefix}/node_modules/.bin/smarttest`)} ]; then`,
+          `  (cd ${shellQuote(prefix)} && ${command}) || exit 1`,
+        ]
+      : ["if [ -x node_modules/.bin/smarttest ]; then", `  ${command} || exit 1`]),
     "else",
     '  echo "smarttest is not installed (npm install); affected tests were not run" >&2',
     "fi",
+    // A here-document keeps this POSIX sh; it must start in the first column.
+    ...(push
+      ? [`if [ -n "$${REFS}" ]; then`, "exec <<SMARTTEST_REFS", `$${REFS}`, "SMARTTEST_REFS", "fi"]
+      : []),
     END,
   ].join("\n");
+};
+
+/** Replaces the first marked block with a fresh one (an upgrade from an older install). */
+function replaceBlock(text: string, fresh: string): string {
+  const lines = text.split("\n");
+  const start = lines.findIndex((l) => l.trim() === START);
+  const end = lines.findIndex((l, i) => i > start && l.trim() === END);
+  if (start < 0 || end < 0) return text;
+  lines.splice(start, end - start + 1, fresh);
+  return lines.join("\n");
+}
+
+/** simple-git-hooks: SmartTest first, then the existing command (with the pre-push refs). */
+function composeSimple(stage: HookStage, existing: string | undefined): string {
+  if (!existing) return HOOK_COMMANDS[stage];
+  if (stage === "pre-commit") return `${HOOK_COMMANDS[stage]} && ${existing}`;
+  return `${REFS}=$(cat); ${PIPE_REFS}${HOOK_COMMANDS[stage]} && ${PIPE_REFS}{ ${existing}; }`;
+}
+
+const SIMPLE_PUSH =
+  /^smarttest_refs=\$\(cat\); printf '%s\\n' "\$smarttest_refs" \| npx --no-install smarttest run[^&|;)\n]*&& printf '%s\\n' "\$smarttest_refs" \| \{ ([\s\S]*); \}$/;
+
+/** The user's own command in a simple-git-hooks value, without SmartTest's part. */
+function simpleExisting(value: string): string | undefined {
+  const wrapped = SIMPLE_PUSH.exec(value);
+  if (wrapped) return wrapped[1];
+  const cmd = ANY_SMARTTEST.exec(value)?.[0]?.trim();
+  if (!cmd) return value;
+  return value.replace(`${cmd} && `, "").replace(cmd, "").trim() || undefined;
+}
 
 /** Lines of a test command, including backslash-continued lines. */
 function commandLines(lines: string[], start: number): number[] {
@@ -166,6 +278,7 @@ function installScript(
   replace: boolean,
   stage: HookStage,
   addBlock = true,
+  prefix = "",
 ): string {
   const lines = (text ?? "#!/bin/sh\n").split("\n");
   if (replace)
@@ -183,7 +296,7 @@ function installScript(
   let at = 0;
   if (lines[0]?.startsWith("#!")) at = 1;
   while (at < lines.length && /husky\.sh/.test(lines[at] ?? "")) at++;
-  if (addBlock) lines.splice(at, 0, block(stage));
+  if (addBlock) lines.splice(at, 0, block(stage, prefix));
   const out = lines.join("\n");
   return out.endsWith("\n") ? out : `${out}\n`;
 }
@@ -222,6 +335,8 @@ function installLefthook(text: string | undefined, stage: HookStage): string {
   const entry = (indent: string) => [
     `${indent}smarttest: ${LEFTHOOK_MARK}`,
     `${indent}  run: ${HOOK_COMMANDS[stage]}`,
+    // lefthook gives a command stdin only when asked: pre-push refs arrive there.
+    ...(stage === "pre-push" ? [`${indent}  use_stdin: true`] : []),
   ];
   const lines = (text ?? "").split("\n");
   const pc = lines.findIndex((l) => new RegExp(`^${stage}:\\s*(#.*)?$`).test(l));
@@ -256,8 +371,35 @@ function uninstallLefthook(text: string, stage: HookStage): string {
   )
     i++;
   if (!(lines[i] ?? "").trimEnd().endsWith(`smarttest: ${LEFTHOOK_MARK}`)) return text;
-  lines.splice(i, ANY_SMARTTEST.test(lines[i + 1] ?? "") ? 2 : 1);
+  lines.splice(i, 1 + lefthookChildren(lines, i));
   return lines.join("\n");
+}
+
+const indentOf = (l: string) => l.match(/^\s*/)?.[0].length ?? 0;
+
+/** Number of lines nested under the lefthook entry at `at` (`run:`, `use_stdin:` …). */
+function lefthookChildren(lines: string[], at: number): number {
+  let n = 0;
+  const indent = indentOf(lines[at] ?? "");
+  while ((lines[at + n + 1] ?? "").trim() && indentOf(lines[at + n + 1] ?? "") > indent) n++;
+  return n;
+}
+
+/** Adds `use_stdin: true` to a pre-push entry installed before SmartTest wrote it. */
+function lefthookStdin(text: string): string {
+  const lines = text.split("\n");
+  const section = lines.findIndex((l) => /^pre-push:\s*(#.*)?$/.test(l));
+  if (section < 0) return text;
+  for (let i = section + 1; i < lines.length && /^(\s|$)/.test(lines[i] ?? ""); i++) {
+    if (!(lines[i] ?? "").trimEnd().endsWith(`smarttest: ${LEFTHOOK_MARK}`)) continue;
+    const children = lines.slice(i + 1, i + 1 + lefthookChildren(lines, i));
+    if (children.some((l) => /^\s*use_stdin:/.test(l))) return text;
+    const indent =
+      (children[0] ?? "").match(/^\s*/)?.[0] ?? `${(lines[i] ?? "").match(/^\s*/)?.[0]}  `;
+    lines.splice(i + 1 + children.length, 0, `${indent}use_stdin: true`);
+    return lines.join("\n");
+  }
+  return text;
 }
 
 export async function planHookInstall(
@@ -271,8 +413,20 @@ export async function planHookInstall(
 ): Promise<HookPlan> {
   const stage = options.stage ?? "pre-commit";
   const target = await detectHookTarget(root, options.manager, stage);
+  if (target.outside)
+    throw new SmartTestError(
+      `core.hooksPath points outside the repository (${target.outside}); SmartTest will not write there`,
+      {
+        code: "ST_HOOK_PATH_OUTSIDE_REPO",
+        category: "usage",
+        hint: "Hooks shared by several repositories are not edited per project. Add `npx --no-install smarttest run --staged --hook` (or `--push`) to that hook yourself, or use a hooks directory inside the repository.",
+      },
+    );
   const current = await readText(join(root, target.file));
   const section = target.manager === "lefthook" ? hookSection(current, stage) : current;
+  const script = target.manager === "husky" || target.manager === "git";
+  // Git runs hooks at the top-level of the worktree; the block enters the project first.
+  const prefix = script ? projectPrefix(root) : "";
   const steps = (options.testCommands ?? []).filter(
     (c) =>
       c.source === target.file &&
@@ -300,20 +454,27 @@ export async function planHookInstall(
     if (target.manager === "simple-git-hooks" && current) {
       const pkg = JSON.parse(current) as Record<string, unknown>;
       const hooks = pkg["simple-git-hooks"] as Record<string, string>;
-      const command = ANY_SMARTTEST.exec(hooks[stage] ?? "")?.[0]?.trim();
-      if (command && command !== HOOK_COMMANDS[stage]) {
-        hooks[stage] = (hooks[stage] as string).replace(command, HOOK_COMMANDS[stage]);
+      const value = hooks[stage] ?? "";
+      const wanted = composeSimple(stage, simpleExisting(value));
+      if (wanted !== value) {
+        hooks[stage] = wanted;
         upgrade = `${JSON.stringify(pkg, null, /^\{\n(\s+)/.exec(current)?.[1] ?? "  ")}\n`;
       }
+    } else if (script && current?.split("\n").some((l) => l.trim() === START)) {
+      // A marked block is rewritten whole: older blocks consumed pre-push stdin or did not
+      // enter a project in a subdirectory.
+      const fresh = replaceBlock(current, block(stage, prefix));
+      if (fresh !== current) upgrade = fresh;
     } else if (old && old !== HOOK_COMMANDS[stage] && current) {
       upgrade = current.replace(section as string, () =>
         (section as string).replace(old, HOOK_COMMANDS[stage]),
       );
     }
-    const replaceExisting =
-      options.replace &&
-      safeListed.length > 0 &&
-      (target.manager === "husky" || target.manager === "git");
+    if (target.manager === "lefthook" && stage === "pre-push") {
+      const withStdin = lefthookStdin(upgrade ?? current ?? "");
+      if (withStdin !== (upgrade ?? current)) upgrade = withStdin;
+    }
+    const replaceExisting = options.replace && safeListed.length > 0 && script;
     if (replaceExisting)
       upgrade = installScript(upgrade ?? current, replaceable, true, stage, false);
     return {
@@ -333,6 +494,16 @@ export async function planHookInstall(
       ),
     };
   }
+  const shebang = current?.split("\n", 1)[0] ?? "";
+  if (script && shebang.startsWith("#!") && !SHELL_SHEBANG.test(shebang))
+    throw new SmartTestError(
+      `${target.file} is not a shell script (${shebang}); inserting the SmartTest block would break it`,
+      {
+        code: "ST_HOOK_NOT_SHELL",
+        category: "usage",
+        hint: "Call `npx --no-install smarttest run --staged --hook` (or `--push`) from that hook yourself and fail the hook when it exits non-zero.",
+      },
+    );
   let after: string;
   let replaced = options.replace ? safeListed : [];
   if (target.manager === "lefthook") {
@@ -347,7 +518,7 @@ export async function planHookInstall(
     const pkg = JSON.parse(pkgText) as Record<string, unknown>;
     const hooks = (pkg["simple-git-hooks"] as Record<string, string> | undefined) ?? {};
     const existing = hooks[stage];
-    hooks[stage] = existing ? `${HOOK_COMMANDS[stage]} && ${existing}` : HOOK_COMMANDS[stage];
+    hooks[stage] = composeSimple(stage, existing);
     pkg["simple-git-hooks"] = hooks;
     const indent = /^\{\n(\s+)/.exec(pkgText)?.[1] ?? "  ";
     after = `${JSON.stringify(pkg, null, indent)}\n`;
@@ -356,7 +527,14 @@ export async function planHookInstall(
       notes.push(`the existing ${stage} command still runs: ${existing}`);
     replaced = [];
   } else {
-    after = installScript(current, options.replace ? replaceable : [], !!options.replace, stage);
+    after = installScript(
+      current,
+      options.replace ? replaceable : [],
+      !!options.replace,
+      stage,
+      true,
+      prefix,
+    );
   }
   return {
     ...base,
@@ -367,7 +545,7 @@ export async function planHookInstall(
       ...(current !== undefined ? { before: current } : {}),
       after,
       risk: "medium",
-      ...(target.manager === "husky" || target.manager === "git" ? { mode: 0o755 } : {}),
+      ...(script ? { mode: 0o755 } : {}),
     },
     replaced,
     remaining: listed.filter((r) => !replaced.some((x) => x.line === r.line)),
@@ -405,9 +583,8 @@ export async function planHookUninstall(
       const pkg = JSON.parse(text) as Record<string, unknown>;
       const hooks = pkg["simple-git-hooks"] as Record<string, string> | undefined;
       const v = hooks?.[t.stage];
-      const cmd = v ? ANY_SMARTTEST.exec(v)?.[0]?.trim() : undefined;
-      if (hooks && v && cmd) {
-        const rest = v.replace(`${cmd} && `, "").replace(cmd, "").trim();
+      if (hooks && v && ANY_SMARTTEST.test(v)) {
+        const rest = simpleExisting(v);
         if (rest) hooks[t.stage] = rest;
         else delete hooks[t.stage];
         const indent = /^\{\n(\s+)/.exec(text)?.[1] ?? "  ";

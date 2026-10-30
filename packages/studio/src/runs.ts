@@ -8,7 +8,7 @@ import { type SafetyMode, SmartTestError } from "@smarttest/shared";
 import type { ExecutionEvent } from "@smarttest/test-executor";
 import type { ChangeSource } from "@smarttest/vcs-core";
 import type { StudioRun, StudioRunEvent } from "./contracts.js";
-import { runFromReport, runVerdictOf } from "./snapshot.js";
+import { runFileOf, runFromReport, runVerdictOf } from "./snapshot.js";
 
 export interface RunInput {
   scope: "affected" | "all" | "file";
@@ -34,6 +34,8 @@ export class RunManager {
   private readonly runs = new Map<string, StudioRun>();
   private readonly events = new Map<string, StudioRunEvent[]>();
   private readonly listeners = new Set<Listener>();
+  /** Files whose result was already sent from a `group-end` event, per run. */
+  private readonly streamed = new Map<string, Set<string>>();
   private controller: AbortController | null = null;
   private running: string | null = null;
   private completion: Promise<void> | null = null;
@@ -171,6 +173,7 @@ export class RunManager {
   }
 
   private async execute(run: StudioRun, input: RunInput, signal: AbortSignal): Promise<void> {
+    this.streamed.set(run.id, new Set());
     const phase = (state: StudioRun["state"], message: string) => {
       this.update(run, { state });
       this.emit(run, { type: "phase", at: new Date().toISOString(), phase: state, message });
@@ -230,26 +233,30 @@ export class RunManager {
         },
         onEvent: (event: ExecutionEvent) => this.onExecutionEvent(run, event),
       });
-      this.update(run, { state: "done", finishedAt: new Date().toISOString() });
+      this.update(run, { finishedAt: new Date().toISOString() });
       const finished = runFromReport(
         outcome.report,
         input.scope,
         input.file ?? null,
         outcome.integrityIssues,
       );
+      const cancelled = signal.aborted || (finished.summary?.cancelled ?? 0) > 0;
       this.update(run, {
         ...finished,
         // The run was opened under Studio's own id; the report generates its own. Keep the id the
         // client already holds so `GET /api/runs/:id` and the final event stay addressable.
         id: run.id,
-        state: "done",
+        state: cancelled ? "cancelled" : "done",
         startedAt: run.startedAt,
         scope: input.scope,
         scopeFile: input.file ?? null,
         command: run.command,
       });
+      // Cached files never reach a runner: they, and anything not streamed, are sent here.
+      const streamed = this.streamed.get(run.id);
       for (const execution of finished.executions)
-        this.emit(run, { type: "result", at: new Date().toISOString(), execution });
+        if (!streamed?.has(execution.file))
+          this.emit(run, { type: "result", at: new Date().toISOString(), execution });
       if (finished.summary) {
         const status = runVerdictOf(
           finished.summary,
@@ -263,6 +270,13 @@ export class RunManager {
           status,
         });
       }
+      if (cancelled)
+        this.emit(run, {
+          type: "phase",
+          at: new Date().toISOString(),
+          phase: "cancelled",
+          message: "Run cancelled",
+        });
       this.emit(run, { type: "done", at: new Date().toISOString(), run: { ...run } });
     } catch (error) {
       const aborted = signal.aborted;
@@ -295,6 +309,7 @@ export class RunManager {
         this.emit(run, { type: "done", at: new Date().toISOString(), run: { ...run } });
       }
     } finally {
+      this.streamed.delete(run.id);
       this.running = null;
       this.controller = null;
       this.prune();
@@ -314,6 +329,11 @@ export class RunManager {
         files: event.files ?? event.group.files,
         phase: event.type === "group-start" ? "start" : "end",
       });
+      // Results stream per runner group: one runner process reports all of its files at once.
+      for (const execution of event.results ?? []) {
+        this.streamed.get(run.id)?.add(execution.file);
+        this.emit(run, { type: "result", at, execution: runFileOf(execution) });
+      }
       return;
     }
     if (event.type === "retry")

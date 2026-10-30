@@ -862,3 +862,21 @@ export function parseCliError(stdout: string): CliErrorEnvelope | undefined {
     return undefined;
   }
 }
+
+/**
+ * True when stdout carries a `run` report. The CLI writes one even when it exits
+ * 4 (infrastructure) or 70 (integrity check failed); the report, not the exit
+ * code, says what ran.
+ */
+export function hasRunReport(stdout: string): boolean {
+  const text = stdout.replace(/^﻿/, "").trim();
+  if (!text) return false;
+  try {
+    const parsed: unknown = JSON.parse(text);
+    if (typeof parsed !== "object" || parsed === null) return false;
+    const record = parsed as Record<string, unknown>;
+    return record.command === "run" && typeof record.report === "object" && record.report !== null;
+  } catch {
+    return false;
+  }
+}

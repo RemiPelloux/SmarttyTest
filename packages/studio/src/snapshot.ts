@@ -388,6 +388,8 @@ export function runVerdictOf(
   if (executionCount < summary.selected) return "incomplete";
   // A cached result is never a pass (ADR-0009): a run in which no test executed is cached-pass.
   if (summary.cached > 0 && summary.passed === 0) return "cached-pass";
+  // Nothing selected, or every test skipped inside its file: no test passed, so nothing did.
+  if (summary.passed === 0) return "no-tests";
   return "passed";
 }
 
@@ -592,7 +594,8 @@ function buildTests(snapshot: Snapshot, last: LastRunFacts): StudioTests {
   }
   const all = [...rows.values()].sort(
     (x, y) =>
-      (x.result?.failed ? 1 : 0) - (y.result?.failed ? 1 : 0) ||
+      // Failing files first: they are what the explorer is opened for.
+      (y.result?.failed ? 1 : 0) - (x.result?.failed ? 1 : 0) ||
       x.filePath.localeCompare(y.filePath),
   );
   return {

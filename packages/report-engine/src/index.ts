@@ -72,13 +72,24 @@ export interface RunReport {
   warnings: string[];
 }
 
+const FILE_LEVEL = new Set<TestStatus>([
+  "failed",
+  "timed-out",
+  "cancelled",
+  "infrastructure-error",
+]);
+
 export function summarize(
   decision: ImpactDecision,
   executions: readonly FileExecution[],
   durationMs: number,
 ): RunSummary {
   const tests = executions.flatMap((e) => e.tests);
-  const count = (s: TestStatus) => tests.filter((t) => t.status === s).length;
+  // A file whose runner never started (missing runner, cancelled before its group) has no test
+  // records: its own status counts once, so it can never disappear into a pass.
+  const empty = executions.filter((e) => e.tests.length === 0 && FILE_LEVEL.has(e.status));
+  const count = (s: TestStatus) =>
+    tests.filter((t) => t.status === s).length + empty.filter((e) => e.status === s).length;
   return {
     totalTests: decision.selectedTests.length + decision.skippedTests.length,
     selected: decision.selectedTests.length,

@@ -48,10 +48,13 @@ describe("run verdict", () => {
     expect(runVerdictOf(summary({ timedOut: 1 }), 2)).toBe("failed");
   });
 
-  it("treats a report with no selected files and no failures as passed, not cached", () => {
+  it("never calls a run in which no test passed passed", () => {
+    // Nothing selected.
     expect(
       runVerdictOf(summary({ selected: 0, executed: 0, passed: 0, skippedBySelection: 4 }), 0),
-    ).toBe("passed");
+    ).toBe("no-tests");
+    // Every test skipped inside its file.
+    expect(runVerdictOf(summary({ passed: 0, skippedByTests: 4 }), 2)).toBe("no-tests");
   });
 
   it("never calls a run in which every test came from cache passed (ADR-0009)", () => {

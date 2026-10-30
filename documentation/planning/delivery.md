@@ -17,7 +17,7 @@ Status words: **done** (shipped and tested), **partial** (shipped with a stated 
 | 0.9.0 Hooks and interfaces | S24–S26    | 116     | 36 done, 80 partial   | —                                     | partly met | `v0.9.0`             |
 | Total                      | 16 sprints | 630     | 451 done, 137 partial | 42                                    |            |                      |
 
-Tests grew from 124 (0.2.0) to 400 repository tests plus 79 extension tests (0.9.0); the regression harness grew from 4 to 9 fixtures, all at 0 missed failures in BALANCED and SAFE mode.
+Tests grew from 124 (0.2.0) to 431 repository tests plus 114 extension tests (0.9.0); the regression harness grew from 4 to 9 fixtures, all at 0 missed failures in BALANCED and SAFE mode.
 
 ## S11–S12 · 0.3.0 Precise graph
 
@@ -136,7 +136,7 @@ Goal: make staged and pushed checks reliable and expose selection evidence in lo
 | Live runner and coverage viewer                                      | 21  | partial: affected/all/file execution, group events, cancellation, aggregate coverage and unit trace annotations; browser coverage collection and line/branch heatmap remain open |
 | VS Code extension                                                    | 21  | partial: CodeLens, hover, impact/run commands, results and trust gates; current-file command runs the affected change set; actual editor-host validation unavailable             |
 
-Validation: `pnpm verify` passes 400 repository tests and 79 extension tests, TypeScript, Biome, package boundaries and generated-planning checks. Nine regression fixtures remain at zero missed failures. The packaged CLI was installed outside this checkout and served Studio assets and authenticated APIs. Its runtime audit reports zero advisories; the VSIX passes archive validation.
+Validation: `pnpm verify` passes 431 repository tests and 114 extension tests, TypeScript, Biome, package boundaries and generated-planning checks. Nine regression fixtures remain at zero missed failures. The packaged CLI was installed outside this checkout and served Studio assets and authenticated APIs. Its runtime audit reports zero advisories; the VSIX passes archive validation.
 
 LeadsIt: all 714 assertions across 101 test files pass with 0.9.0 (4.78 s in this run). The staged hook reports 314 passed and 400 cached, zero failures, in 3.67 s including isolation. Its 12-commit benchmark reports 53.59 s full, 7.18 s project-gated, 34.38 s SmartTest, zero missed failures and zero cache violations. That is 36% faster than full runs and 379% slower than the project-gated baseline. These are local observations with a changing history/cache; they do not establish a release-to-release speed improvement.
 
@@ -155,7 +155,14 @@ Post-release audit (same tag, 2026-10-30): a performance and UX review before pu
 - **VS Code.** Analyses are cached until the graph changes; a file watcher replaces the 10-second expiry; concurrent requests for a file share one analysis.
 - **Tests.** Tests now resolve workspace packages from source rather than `dist/`.
 
-Gate: partly met. Features and limitations above are shipped explicitly as alpha; accessibility, complete keyboard/visual review, extension-host validation and remaining interface capabilities carry into 1.0.0. Source highlights indicate observed unit execution, not measured line coverage. Per-file results arrive at run completion; group/phase events stream during execution.
+Feature review (same tag, 2026-10-30): a correctness review of every 0.9.0 feature, each defect reproduced before it was fixed and covered by a test that fails without the fix.
+
+- **Core.** A file whose runner never started (missing Vitest) has no test records and was summed as a pass with exit 0; it now counts as an infrastructure error (exit 4).
+- **Hooks.** Unstaged edits leaked into the staged run through workspace packages linked in `node_modules`, which could pass a commit whose staged content fails; the checkout now gets its own `node_modules` that points workspace packages at the staged copies. `hook install --pre-push` consumed the refs on stdin, which disabled the user's own pre-push guards; the refs are now handed back. Hooks were written where Git never runs them (project in a subdirectory, linked worktrees, absolute `core.hooksPath`). Other fixes: checks scoped to workspace packages were silently skipped; the user's `post-checkout` hook ran on every commit; Git inside the checkout saw HEAD as the index; delete-only pushes ran the whole history; SIGTERM/SIGHUP left the checkout behind; lefthook's pre-push entry got no stdin; non-shell hooks were broken by install; file names starting with `-` reached checks as options.
+- **Studio.** A run in which no test passed (nothing selected, every test skipped) was "passed"; it is now `no-tests`. Results stream per runner group. Overlapping refreshes analysed the wrong source. Runs from the terminal or a hook were never picked up. A cancelled run was shown as finished, and the run drawer could stay "Running" after the event stream reconnected.
+- **VS Code.** The run verdict now reads file and test statuses, so a run whose runner never started is no longer shown as passed. Runs exiting 4 or 70 keep their report, and the forced kill of a stuck CLI actually happens. Windows `.cmd` shims could not start, and "Run for this file" turned an explain error into "no path". A stale run verdict stayed in the status bar, CodeLens could bind to a nested function of the same name, and deactivation left processes running.
+
+Gate: partly met. Features and limitations above are shipped explicitly as alpha; accessibility, complete keyboard/visual review, extension-host validation and remaining interface capabilities carry into 1.0.0. Source highlights indicate observed unit execution, not measured line coverage. Per-file results stream as each runner group finishes; cached results arrive with the summary.
 
 ## Carried into 1.0.0
 

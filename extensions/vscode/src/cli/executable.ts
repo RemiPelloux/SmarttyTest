@@ -2,10 +2,15 @@
  * Finds the local `smarttest` executable. No download, no `npx`, no network:
  * a configured path, then `<folder>/node_modules/.bin` and its ancestors, then
  * PATH. The extension never installs anything on the user's behalf.
+ *
+ * On Windows the `.bin` entry is a `smarttest.cmd` batch shim, which `spawn`
+ * refuses without a shell. The shim's package entry is run through Node
+ * instead, the way the shim itself would; only when that entry cannot be found
+ * is the shim started through cmd.exe.
  */
-import { accessSync, constants, statSync } from "node:fs";
+import { accessSync, constants, readFileSync, statSync } from "node:fs";
 import { homedir } from "node:os";
-import { delimiter, dirname, isAbsolute, join, resolve } from "node:path";
+import { basename, delimiter, dirname, isAbsolute, join, resolve } from "node:path";
 
 export interface ExecutableLookup {
   readonly configuredPath: string;
@@ -13,11 +18,39 @@ export interface ExecutableLookup {
   readonly pathEnv?: string | undefined;
   readonly platform?: NodeJS.Platform;
   readonly homeDir?: string;
+  /** The extension host's runtime, the last resort for running a JS entry. */
+  readonly execPath?: string;
 }
 
 export interface ExecutableResolution {
   readonly executable: string;
   readonly source: "setting" | "workspace" | "path";
+  /** Arguments before the CLI's own: the JS entry when the CLI is started through Node. */
+  readonly leadingArgs?: readonly string[];
+  /** Extra environment, set when the editor's own runtime runs the JS entry. */
+  readonly env?: Readonly<Record<string, string>>;
+  /** A Windows batch shim whose JS entry was not found: started through cmd.exe. */
+  readonly shell?: boolean;
+}
+
+/** The `runCli` fields for one call with `args`. */
+export function launchOptions(
+  resolution: ExecutableResolution,
+  args: readonly string[],
+): {
+  readonly executable: string;
+  readonly leadingArgs?: readonly string[];
+  readonly args: readonly string[];
+  readonly env?: NodeJS.ProcessEnv;
+  readonly shell?: boolean;
+} {
+  return {
+    executable: resolution.executable,
+    ...(resolution.leadingArgs ? { leadingArgs: resolution.leadingArgs } : {}),
+    args,
+    ...(resolution.env ? { env: { ...process.env, ...resolution.env } } : {}),
+    ...(resolution.shell ? { shell: true } : {}),
+  };
 }
 
 function expandHome(value: string, homeDir: string): string {
@@ -55,11 +88,75 @@ function workspaceCandidates(workspaceDir: string, platform: NodeJS.Platform): s
   return candidates;
 }
 
-function pathCandidates(pathEnv: string, platform: NodeJS.Platform): string[] {
+function pathCandidatesFor(
+  pathEnv: string,
+  platform: NodeJS.Platform,
+  names: readonly string[],
+): string[] {
   const separators = platform === "win32" ? [";"] : [":"];
   const parts = pathEnv.split(separators[0] ?? delimiter).filter(Boolean);
-  const names = binaryNames(platform);
   return parts.flatMap((part) => names.map((name) => join(part, name)));
+}
+
+function pathCandidates(pathEnv: string, platform: NodeJS.Platform): string[] {
+  return pathCandidatesFor(pathEnv, platform, binaryNames(platform));
+}
+
+/** The `smarttest` bin entry of the package next to a batch shim, if it exists. */
+function packageEntry(shim: string): string | undefined {
+  const dir = dirname(shim);
+  const packageDir =
+    basename(dir) === ".bin"
+      ? join(dir, "..", "smarttest")
+      : join(dir, "node_modules", "smarttest");
+  try {
+    const manifest = JSON.parse(readFileSync(join(packageDir, "package.json"), "utf8")) as {
+      bin?: unknown;
+    };
+    const bin =
+      typeof manifest.bin === "string"
+        ? manifest.bin
+        : typeof manifest.bin === "object" && manifest.bin !== null
+          ? (manifest.bin as Record<string, unknown>).smarttest
+          : undefined;
+    if (typeof bin !== "string") return undefined;
+    const entry = resolve(packageDir, bin);
+    return statSync(entry).isFile() ? entry : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** Runs a JS entry with `node.exe` next to the shim, then on PATH, then the host runtime. */
+function nodeLaunch(
+  entry: string,
+  near: string,
+  source: ExecutableResolution["source"],
+  lookup: ExecutableLookup,
+): ExecutableResolution {
+  const node = [
+    join(near, "node.exe"),
+    ...pathCandidatesFor(lookup.pathEnv ?? process.env.PATH ?? "", "win32", ["node.exe"]),
+  ].find((candidate) => isExecutableFile(candidate, "win32"));
+  if (node) return { executable: node, source, leadingArgs: [entry] };
+  return {
+    executable: lookup.execPath ?? process.execPath,
+    source,
+    leadingArgs: [entry],
+    env: { ELECTRON_RUN_AS_NODE: "1" },
+  };
+}
+
+function windowsLaunch(
+  found: string,
+  source: ExecutableResolution["source"],
+  lookup: ExecutableLookup,
+): ExecutableResolution {
+  if (/\.[cm]?js$/i.test(found)) return nodeLaunch(found, dirname(found), source, lookup);
+  if (!/\.(cmd|bat)$/i.test(found)) return { executable: found, source };
+  const entry = packageEntry(found);
+  if (entry) return nodeLaunch(entry, dirname(found), source, lookup);
+  return { executable: found, source, shell: true };
 }
 
 /**
@@ -68,6 +165,15 @@ function pathCandidates(pathEnv: string, platform: NodeJS.Platform): string[] {
  */
 export function resolveExecutable(lookup: ExecutableLookup): ExecutableResolution | undefined {
   const platform = lookup.platform ?? process.platform;
+  const found = findExecutable(lookup, platform);
+  if (!found || platform !== "win32") return found;
+  return windowsLaunch(found.executable, found.source, lookup);
+}
+
+function findExecutable(
+  lookup: ExecutableLookup,
+  platform: NodeJS.Platform,
+): ExecutableResolution | undefined {
   const configured = lookup.configuredPath.trim();
   if (configured) {
     const home = lookup.homeDir ?? homedir();

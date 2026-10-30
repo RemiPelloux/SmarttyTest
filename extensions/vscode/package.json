@@ -157,7 +157,7 @@
           "type": "number",
           "default": 350,
           "minimum": 0,
-          "maximum": 5000,
+          "maximum": 60000,
           "scope": "resource",
           "description": "Debounce before refreshing after a save. A newer save cancels the pending analysis."
         },
@@ -199,6 +199,7 @@
           "type": "number",
           "default": 120000,
           "minimum": 1000,
+          "maximum": 3600000,
           "scope": "resource",
           "description": "Timeout for scan/impact/explain/graph commands."
         },
@@ -206,6 +207,7 @@
           "type": "number",
           "default": 900000,
           "minimum": 1000,
+          "maximum": 86400000,
           "scope": "resource",
           "description": "Timeout for a test run started from the extension."
         }

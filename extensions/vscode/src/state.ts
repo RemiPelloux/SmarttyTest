@@ -11,7 +11,7 @@ import {
   graphArgs,
   scanArgs,
 } from "./cli/commands.js";
-import { type ExecutableResolution, resolveExecutable } from "./cli/executable.js";
+import { type ExecutableResolution, launchOptions, resolveExecutable } from "./cli/executable.js";
 import { type CliResult, runCli } from "./cli/runner.js";
 import { analyzeFile, buildFileIndex, type FileAnalysis, type FileIndex } from "./core/analysis.js";
 import type { GraphDump, ScanResult, SourceExplain } from "./core/contracts.js";
@@ -26,7 +26,7 @@ interface ProjectSnapshot {
   readonly graph: GraphDump;
   readonly scan: ScanResult;
   readonly index: FileIndex;
-  readonly executable: string;
+  readonly launcher: ExecutableResolution;
   readonly generation: number;
 }
 
@@ -65,6 +65,8 @@ export interface ResolvedFolder {
   readonly folder: vscode.WorkspaceFolder;
   readonly settings: ExtensionSettings;
   readonly executable: string;
+  /** How to start it; spread `launchOptions(launcher, args)` into `runCli`. */
+  readonly launcher: ExecutableResolution;
 }
 
 export class ExtensionState implements vscode.Disposable {
@@ -72,6 +74,7 @@ export class ExtensionState implements vscode.Disposable {
   readonly #folders = new Map<string, FolderState>();
   readonly #disposables: vscode.Disposable[] = [];
   #trusted: boolean;
+  #disposed = false;
 
   constructor(output: vscode.OutputChannel) {
     this.#output = output;
@@ -140,7 +143,7 @@ export class ExtensionState implements vscode.Disposable {
           hint: "Install smarttest in the workspace (npx smarttest init) or set `smarttest.executablePath`.",
         },
       );
-    return { folder, settings, executable: resolution.executable };
+    return { folder, settings, executable: resolution.executable, launcher: resolution };
   }
 
   async snapshot(folder: vscode.WorkspaceFolder, signal: AbortSignal): Promise<ProjectSnapshot> {
@@ -167,15 +170,13 @@ export class ExtensionState implements vscode.Disposable {
     try {
       const [scanResult, graphResult] = await Promise.all([
         runCli({
-          executable: resolved.executable,
-          args: scanArgs(),
+          ...launchOptions(resolved.launcher, scanArgs()),
           cwd: folder.uri.fsPath,
           signal: controller.signal,
           timeoutMs: resolved.settings.analysisTimeoutMs,
         }),
         runCli({
-          executable: resolved.executable,
-          args: graphArgs(),
+          ...launchOptions(resolved.launcher, graphArgs()),
           cwd: folder.uri.fsPath,
           signal: controller.signal,
           timeoutMs: resolved.settings.analysisTimeoutMs,
@@ -190,7 +191,7 @@ export class ExtensionState implements vscode.Disposable {
         graph,
         scan,
         index: buildFileIndex(graph, scan),
-        executable: resolved.executable,
+        launcher: resolved.launcher,
         generation: state.generation,
       };
       state.snapshot = snapshot;
@@ -209,7 +210,7 @@ export class ExtensionState implements vscode.Disposable {
     document: vscode.TextDocument,
     signal: AbortSignal,
   ): Promise<FileAnalysis | undefined> {
-    if (!this.#trusted) return undefined;
+    if (!this.#trusted || this.#disposed) return undefined;
     if (document.uri.scheme !== "file") return undefined;
     const folder = this.folderFor(document.uri);
     if (!folder) return undefined;
@@ -256,10 +257,12 @@ export class ExtensionState implements vscode.Disposable {
               state.explainLimit.run(async () => {
                 try {
                   const result = await runCli({
-                    executable: snapshot.executable,
-                    args: explainUnitsArgs(
-                      projectPath,
-                      units.map((u) => u.qualifiedName),
+                    ...launchOptions(
+                      snapshot.launcher,
+                      explainUnitsArgs(
+                        projectPath,
+                        units.map((u) => u.qualifiedName),
+                      ),
                     ),
                     cwd: folder.uri.fsPath,
                     signal: explainSignal,
@@ -276,8 +279,10 @@ export class ExtensionState implements vscode.Disposable {
       explain: (unit, explainSignal) =>
         state.explainLimit.run(async () => {
           const result = await runCli({
-            executable: snapshot.executable,
-            args: explainArgs(explainTarget(projectPath, unit.qualifiedName)),
+            ...launchOptions(
+              snapshot.launcher,
+              explainArgs(explainTarget(projectPath, unit.qualifiedName)),
+            ),
             cwd: folder.uri.fsPath,
             signal: explainSignal,
             timeoutMs: resolved.settings.analysisTimeoutMs,
@@ -293,12 +298,9 @@ export class ExtensionState implements vscode.Disposable {
 
   invalidateFolder(folder: vscode.WorkspaceFolder): void {
     const state = this.#folderState(folder);
-    state.loadingController?.abort();
-    state.loadingController = undefined;
+    abortFolder(state);
     state.snapshot = undefined;
-    state.loading = undefined;
     state.analyses.clear();
-    state.inflight.clear();
     state.generation += 1;
   }
 
@@ -313,12 +315,9 @@ export class ExtensionState implements vscode.Disposable {
 
   invalidateAll(): void {
     for (const state of this.#folders.values()) {
-      state.loadingController?.abort();
-      state.loadingController = undefined;
+      abortFolder(state);
       state.snapshot = undefined;
-      state.loading = undefined;
       state.analyses.clear();
-      state.inflight.clear();
       state.executable = undefined;
       state.noBatchExplain = false;
       state.generation += 1;
@@ -347,7 +346,12 @@ export class ExtensionState implements vscode.Disposable {
 
   #pruneFolders(): void {
     const live = new Set(vscode.workspace.workspaceFolders?.map((f) => f.uri.toString()) ?? []);
-    for (const key of this.#folders.keys()) if (!live.has(key)) this.#folders.delete(key);
+    for (const [key, state] of this.#folders) {
+      if (live.has(key)) continue;
+      // A removed folder's scan, graph and explain processes must not keep running.
+      abortFolder(state);
+      this.#folders.delete(key);
+    }
   }
 
   #logCli(command: string, result: CliResult): void {
@@ -355,10 +359,21 @@ export class ExtensionState implements vscode.Disposable {
       this.#output.appendLine(`[${command}] stderr: ${result.stderr.trim()}`);
   }
 
+  /** Kills every snapshot load and analysis still running; later requests start nothing. */
   dispose(): void {
-    for (const disposable of this.#disposables) disposable.dispose();
+    this.#disposed = true;
+    for (const disposable of this.#disposables.splice(0)) disposable.dispose();
+    for (const state of this.#folders.values()) abortFolder(state);
     this.#folders.clear();
   }
+}
+
+/** Kills the folder's snapshot load and every in-flight analysis. */
+function abortFolder(state: FolderState): void {
+  state.loadingController?.abort();
+  state.loadingController = undefined;
+  state.loading = undefined;
+  state.inflight.clear();
 }
 
 function abortable<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {

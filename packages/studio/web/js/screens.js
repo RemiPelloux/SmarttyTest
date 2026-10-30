@@ -102,9 +102,10 @@ function notice(title, lines, tone = "warn") {
 
 export function runStatusMark(run) {
   if (!run) return statusMark("skipped", { text: "no run" });
-  const verdict = runVerdict(run) ?? "passed";
+  const verdict = runVerdict(run) ?? "incomplete";
   if (verdict === "cached-pass" || (verdict === "passed" && onlyCached(run.summary)))
     return statusMark("cached-pass", { text: "cached, not run" });
+  if (verdict === "no-tests") return statusMark("skipped", { text: "no test ran" });
   if (verdict === "passed") return statusMark("passed", { text: "passed" });
   if (verdict === "failed") return statusMark("failed", { text: "failed" });
   if (verdict === "error") return statusMark("infrastructure-error", { text: "infra error" });

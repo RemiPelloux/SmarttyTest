@@ -31,6 +31,7 @@ export function runVerdict(run) {
   if (run.summary.infrastructureErrors) return "error";
   if (run.summary.failed || run.summary.timedOut) return "failed";
   if (onlyCached(run.summary)) return "cached-pass";
+  if (!run.summary.passed) return "no-tests";
   return "passed";
 }
 
@@ -41,6 +42,7 @@ export function runVerdict(run) {
 export function runFileStatus(result) {
   if (result.failed || result.status === "failed") return "failed";
   if (result.status === "timed-out") return "timed-out";
+  if (result.status === "cancelled") return "cancelled";
   if (result.error || result.status === "infrastructure-error") return "infrastructure-error";
   if (result.tests > 0 && result.cached === result.tests) return "cached-pass";
   if (!result.passed && !result.cached) return "skipped";
@@ -55,6 +57,10 @@ export function onlyCached(summary) {
 function finishedMessage(verdict, summary) {
   if (verdict === "cached-pass" || (verdict === "passed" && onlyCached(summary)))
     return "No test ran: every selected test was served from cache";
+  if (verdict === "no-tests")
+    return summary?.selected
+      ? "No test passed: every selected test was skipped"
+      : "Nothing to run: the change selects no test";
   if (verdict === "passed" && summary?.cached)
     return `Run passed · ${num(summary.cached)} cached, not run`;
   if (verdict === "passed") return "Run passed";

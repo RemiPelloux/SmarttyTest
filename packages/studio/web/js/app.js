@@ -312,6 +312,8 @@ function connectStream() {
           error.code = response.status === 401 ? "ST_STUDIO_TOKEN" : `HTTP_${response.status}`;
           throw error;
         }
+        // Events sent while the stream was down are lost: catch up on an active run.
+        if (state.run && isRunActive(state.run)) void resyncRun(state.run.id);
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
         let buffer = "";
@@ -621,6 +623,25 @@ async function refresh() {
   } finally {
     state.refreshing = false;
     render();
+  }
+}
+
+/** Replays a run's recorded events; duplicates are ignored, so it is safe after any reconnect. */
+async function resyncRun(id) {
+  try {
+    const one = await api(`/api/runs/${encodeURIComponent(id)}`);
+    if (!state.run || state.run.id !== id) return;
+    const hadError = Boolean(state.run.error);
+    for (const event of one.events ?? []) {
+      if (event.type === "error" && hadError) continue;
+      applyRunEvent(event);
+    }
+    // The run finished but its `done` event was pruned from the record.
+    if (isRunActive(state.run) && !isRunActive(one.run))
+      applyRunEvent({ type: "done", run: one.run });
+    scheduleRender();
+  } catch {
+    /* the next reconnect tries again */
   }
 }
 
