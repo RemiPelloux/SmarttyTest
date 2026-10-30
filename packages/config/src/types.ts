@@ -48,6 +48,25 @@ export interface GeneratedPolicy {
   from?: string[];
 }
 
+/** A project check run by the hook in each affected project (lint, type-check, build…). */
+export interface HookCheckConfig {
+  name: string;
+  /** Shell command run in the project directory; `{files}` becomes the changed files there. */
+  run: string;
+  /** Only these project directories ("" for the root). Default: every affected project. */
+  projects?: string[];
+  /** Glob, relative to the project, that filters `{files}`. */
+  files?: string;
+  /** Which hook runs it (default "pre-commit"). */
+  stage?: "pre-commit" | "pre-push" | "both";
+}
+
+export interface HookConfig {
+  checks?: HookCheckConfig[];
+  /** Expected hook duration; above it the hook explains what makes it slow (default 60000). */
+  budgetMs?: number;
+}
+
 /** Conventions of one sub-project (a directory), overriding the top-level settings inside it. */
 export interface ProjectConfig {
   tests?: {
@@ -95,6 +114,8 @@ export interface SmartTestConfig {
   cache?: boolean;
   /** Runner groups run at the same time: a number, or "auto" (default) from the CPU count. */
   parallelGroups?: number | "auto";
+  /** Commit-hook behaviour (`smarttest run --hook`). */
+  hook?: HookConfig;
   timeoutMs?: number;
   workers?: number;
   reports?: { formats?: ReportFormat[]; outputDir?: string };
@@ -125,6 +146,7 @@ export interface ResolvedConfig {
   projects: Record<string, ProjectConfig>;
   cache: boolean;
   parallelGroups: number | "auto";
+  hook: { checks: HookCheckConfig[]; budgetMs: number };
   timeoutMs: number;
   workers?: number;
   reports: { formats: ReportFormat[]; outputDir: string };

@@ -1,0 +1,1448 @@
+{
+  "url": "http://127.0.0.1:4319/#token=aE6RyJV50rgUDm-lguNONWvI4mlNbJ-GyEiAEMvUuuY",
+  "at": "2026-10-30T13:27:41.089Z",
+  "allow": [],
+  "viewports": [
+    {
+      "width": 1440,
+      "height": 900,
+      "load": "load",
+      "screens": 2,
+      "filled": [0.77, 0.61],
+      "motion": {
+        "elements": 153,
+        "css": 153,
+        "transitions": 0,
+        "scripted": 0,
+        "videos": 0,
+        "playingVideos": 0
+      },
+      "metrics": {
+        "viewport": {
+          "w": 1440,
+          "h": 900
+        },
+        "page": {
+          "height": 1501,
+          "screens": 1.7,
+          "words": 1495,
+          "img": 1,
+          "video": 0,
+          "canvas": 0,
+          "svg": 12,
+          "sections": 4,
+          "horizontalOverflow": 0,
+          "overflowCulprits": [],
+          "uiFragments": 0,
+          "uiAbuse": false,
+          "realPictures": 0,
+          "videoCount": 0,
+          "uiPictures": 0,
+          "pictureSamples": [],
+          "blendText": 0,
+          "sideScrollers": 0,
+          "brokenImages": [],
+          "emoji": [],
+          "videosNoPoster": 0
+        },
+        "hero": {
+          "text": "Overview",
+          "words": 1,
+          "chars": 8,
+          "lines": 1,
+          "size": 26,
+          "vw": 1.8,
+          "font": "ui-sans-serif",
+          "weight": 700,
+          "tracking": -0.02,
+          "leading": 1.15,
+          "top": 42,
+          "tag": "h1",
+          "kind": "heading",
+          "align": "left",
+          "position": "left"
+        },
+        "h1": {
+          "text": "Overview",
+          "words": 1,
+          "lines": 1,
+          "size": 26,
+          "font": "ui-sans-serif"
+        },
+        "headings": [],
+        "headingSummary": {
+          "count": 0,
+          "maxLines": 0,
+          "over2Lines": 0,
+          "statements": 0,
+          "centered": 0,
+          "medianWords": null,
+          "mixedFontHeadings": 0
+        },
+        "type": {
+          "families": [
+            {
+              "family": "ui-monospace",
+              "share": 0.98,
+              "mono": true
+            },
+            {
+              "family": "ui-sans-serif",
+              "share": 0.02,
+              "mono": false
+            }
+          ],
+          "familyCount": 2,
+          "sizes": [12, 13, 14, 22, 26],
+          "sizeCount": 5,
+          "notLoaded": [],
+          "body": {
+            "font": "ui-sans-serif",
+            "size": 13,
+            "leading": 1.45,
+            "weight": 400,
+            "tracking": 0,
+            "contrast": 15.2
+          },
+          "measureChars": 125,
+          "max": {
+            "size": 26,
+            "vw": 1.8,
+            "font": "ui-sans-serif",
+            "text": "Overview"
+          },
+          "monoShare": 0.98,
+          "monoProseShare": 0.74,
+          "monoFamilies": ["ui-monospace"],
+          "monoSamples": ["smarttest-monorepo", "/", "git", "/", "balanced mode", "Refresh"],
+          "microLabels": 0,
+          "microLabelShare": 0,
+          "microSamples": [],
+          "upperShare": 0,
+          "centerShare": 0,
+          "smallText": 541
+        },
+        "eyebrows": [],
+        "numbered": [],
+        "color": {
+          "bodyBg": "#070b18",
+          "bodyBgHsl": {
+            "h": 226,
+            "s": 0.55,
+            "l": 0.06
+          },
+          "dark": true,
+          "sectionBgs": [
+            {
+              "color": "#111a38",
+              "top": 426,
+              "hsl": {
+                "h": 226,
+                "s": 0.53,
+                "l": 0.14
+              }
+            }
+          ],
+          "textColors": [
+            {
+              "color": "#e8ecf8",
+              "share": 0.47
+            },
+            {
+              "color": "#8c97bd",
+              "share": 0.42
+            },
+            {
+              "color": "#fbbf24",
+              "share": 0.06
+            },
+            {
+              "color": "#34d399",
+              "share": 0.05
+            },
+            {
+              "color": "#6d78a2",
+              "share": 0.01
+            }
+          ],
+          "button": {
+            "bg": "#111a38",
+            "hsl": {
+              "h": 226,
+              "s": 0.53,
+              "l": 0.14
+            },
+            "fg": "#e8ecf8"
+          },
+          "lowContrast": []
+        },
+        "buttons": {
+          "count": 1,
+          "inHero": 1,
+          "radius": 4,
+          "height": 38,
+          "withShadow": 0,
+          "withGradient": 0,
+          "mono": 0,
+          "upper": 0,
+          "heroLabels": ["Skip to content"]
+        },
+        "surfaces": {
+          "shadowStatic": 0,
+          "shadowOverlay": 0,
+          "shadowSamples": [],
+          "gradients": 0,
+          "scrims": 0,
+          "gradientSamples": [],
+          "gradientText": 0,
+          "hairlines": 151,
+          "hairlineSamples": [
+            "aside.rail 56px",
+            "div.facts 1320px",
+            "div.strip__head 1318px",
+            "button.strip__row.row-enter 1318px",
+            "button.strip__row.row-enter 1318px"
+          ],
+          "outlinedBoxes": 5,
+          "dashed": 0,
+          "blurred": 0,
+          "roundedBoxes": 4,
+          "boxRadius": 8,
+          "squareMedia": 0,
+          "roundedMedia": 0,
+          "mediaRadius": 0,
+          "textShadow": 0,
+          "cardRows": []
+        },
+        "heroMedia": [],
+        "nav": {
+          "links": 0,
+          "fixed": true,
+          "height": 900,
+          "floatingPill": false,
+          "blur": false
+        },
+        "fontsLoaded": []
+      },
+      "layout": {
+        "viewport": {
+          "w": 1440,
+          "h": 900
+        },
+        "pageH": 1501,
+        "margins": {
+          "left": 8,
+          "right": 33
+        },
+        "sections": [
+          {
+            "sel": "div.strip",
+            "tag": "div",
+            "top": 426,
+            "height": 368,
+            "words": 45,
+            "media": 0,
+            "middle": 0,
+            "heading": null,
+            "left": 89,
+            "right": 33,
+            "textLeft": 103,
+            "textRight": 49,
+            "fullBleed": false,
+            "footer": false,
+            "hero": true,
+            "continues": false,
+            "pinned": false
+          },
+          {
+            "sel": "section.section",
+            "tag": "section",
+            "top": 815,
+            "height": 250,
+            "words": 49,
+            "media": 0,
+            "middle": 259,
+            "heading": {
+              "text": "Result and evidence",
+              "size": 13,
+              "tag": "h2"
+            },
+            "left": 88,
+            "right": 32,
+            "textLeft": 88,
+            "textRight": 32,
+            "fullBleed": false,
+            "footer": false,
+            "hero": false,
+            "continues": false,
+            "pinned": false
+          },
+          {
+            "sel": "section.section",
+            "tag": "section",
+            "top": 1084,
+            "height": 357,
+            "words": 59,
+            "media": 0,
+            "middle": 0,
+            "heading": {
+              "text": "First selected tests",
+              "size": 13,
+              "tag": "h2"
+            },
+            "left": 88,
+            "right": 32,
+            "textLeft": 88,
+            "textRight": 32,
+            "fullBleed": false,
+            "footer": true,
+            "hero": false,
+            "continues": false,
+            "pinned": false
+          }
+        ],
+        "gaps": [],
+        "h1s": [
+          {
+            "text": "Overview",
+            "size": 26,
+            "top": 42,
+            "firstScreen": true
+          }
+        ],
+        "edgeText": [],
+        "edges": [
+          {
+            "x": 88,
+            "n": 1
+          }
+        ],
+        "leftBlocks": 1,
+        "bodySize": 12,
+        "stage": false,
+        "explains": false,
+        "slivers": [],
+        "voidShare": 0.07,
+        "voidBox": {
+          "x": 960,
+          "y": 240,
+          "w": 480,
+          "h": 180
+        }
+      },
+      "app": {
+        "viewport": {
+          "w": 1440,
+          "h": 900
+        },
+        "dark": true,
+        "ground": "#070b18",
+        "sidebar": {
+          "w": 56,
+          "tag": "aside",
+          "links": 8,
+          "share": 0.04
+        },
+        "topbar": null,
+        "canvas": {
+          "left": 33,
+          "right": 33
+        },
+        "hero": {
+          "text": "Overview",
+          "words": 1,
+          "chars": 8,
+          "lines": 1,
+          "size": 26,
+          "vw": 1.8,
+          "font": "ui-sans-serif",
+          "weight": 700,
+          "tracking": -0.02,
+          "leading": 1.15,
+          "top": 42,
+          "tag": "h1",
+          "kind": "heading",
+          "align": "left",
+          "position": "left"
+        },
+        "charts": 2,
+        "layout": {
+          "panels": 6,
+          "firstScreen": 5,
+          "ragged": [
+            {
+              "diff": 61,
+              "top": 842
+            }
+          ],
+          "voids": [
+            {
+              "gap": 42,
+              "at": 1021,
+              "panel": "Last run"
+            }
+          ]
+        },
+        "tiles": 0,
+        "panels": {
+          "count": 7,
+          "radii": [[8, 4], [0, 3]],
+          "heavyBorders": 0,
+          "borderSamples": [],
+          "heavyShadows": 0,
+          "softShadows": 0,
+          "shadowSamples": [],
+          "glass": 0
+        },
+        "chips": {
+          "count": 0,
+          "hues": 0,
+          "samples": []
+        },
+        "numbers": {
+          "cells": 0,
+          "leftAligned": 0,
+          "figures": 2,
+          "tabularShare": 1,
+          "kpiMax": 22
+        },
+        "rows": null,
+        "chartHues": 0,
+        "placeholders": [],
+        "type": {
+          "under13": 0.96,
+          "tiny": 0,
+          "tinySamples": [],
+          "sizes": [12, 13, 14, 22, 26]
+        },
+        "title": {
+          "text": "Overview",
+          "size": 26,
+          "top": 42
+        },
+        "colourShare": 0.028
+      },
+      "consoleErrors": []
+    },
+    {
+      "width": 768,
+      "height": 1024,
+      "load": "load",
+      "screens": 12,
+      "filled": [0.7, 0.93, 0.92, 0.95, 0.91, 0.92, 0.93, 0.93, 0.95, 0.91, 0.93, 0.95],
+      "motion": {
+        "elements": 155,
+        "css": 155,
+        "transitions": 0,
+        "scripted": 0,
+        "videos": 0,
+        "playingVideos": 0
+      },
+      "metrics": {
+        "viewport": {
+          "w": 768,
+          "h": 1024
+        },
+        "page": {
+          "height": 15314,
+          "screens": 15,
+          "words": 1492,
+          "img": 1,
+          "video": 0,
+          "canvas": 0,
+          "svg": 12,
+          "sections": 4,
+          "horizontalOverflow": 0,
+          "overflowCulprits": [],
+          "uiFragments": 0,
+          "uiAbuse": false,
+          "realPictures": 0,
+          "videoCount": 0,
+          "uiPictures": 0,
+          "pictureSamples": [],
+          "blendText": 0,
+          "sideScrollers": 0,
+          "brokenImages": [],
+          "emoji": [],
+          "videosNoPoster": 0
+        },
+        "hero": {
+          "text": "Overview",
+          "words": 1,
+          "chars": 8,
+          "lines": 1,
+          "size": 22,
+          "vw": 2.9,
+          "font": "ui-sans-serif",
+          "weight": 700,
+          "tracking": -0.02,
+          "leading": 1.15,
+          "top": 36,
+          "tag": "h1",
+          "kind": "heading",
+          "align": "left",
+          "position": "left"
+        },
+        "h1": {
+          "text": "Overview",
+          "words": 1,
+          "lines": 1,
+          "size": 22,
+          "font": "ui-sans-serif"
+        },
+        "headings": [],
+        "headingSummary": {
+          "count": 0,
+          "maxLines": 0,
+          "over2Lines": 0,
+          "statements": 0,
+          "centered": 0,
+          "medianWords": null,
+          "mixedFontHeadings": 0
+        },
+        "type": {
+          "families": [
+            {
+              "family": "ui-monospace",
+              "share": 0.98,
+              "mono": true
+            },
+            {
+              "family": "ui-sans-serif",
+              "share": 0.02,
+              "mono": false
+            }
+          ],
+          "familyCount": 2,
+          "sizes": [11, 12, 13, 14, 19, 22],
+          "sizeCount": 6,
+          "notLoaded": [],
+          "body": {
+            "font": "ui-sans-serif",
+            "size": 13,
+            "leading": 1.45,
+            "weight": 400,
+            "tracking": 0,
+            "contrast": 15.2
+          },
+          "measureChars": 106,
+          "max": {
+            "size": 22,
+            "vw": 2.9,
+            "font": "ui-sans-serif",
+            "text": "Overview"
+          },
+          "monoShare": 0.98,
+          "monoProseShare": 0.74,
+          "monoFamilies": ["ui-monospace"],
+          "monoSamples": ["Overview", "Impact", "Tests", "Trust", "Source", "smarttest-monorepo"],
+          "microLabels": 0,
+          "microLabelShare": 0,
+          "microSamples": [],
+          "upperShare": 0,
+          "centerShare": 0,
+          "smallText": 539
+        },
+        "eyebrows": [],
+        "numbered": [],
+        "color": {
+          "bodyBg": "#070b18",
+          "bodyBgHsl": {
+            "h": 226,
+            "s": 0.55,
+            "l": 0.06
+          },
+          "dark": true,
+          "sectionBgs": [
+            {
+              "color": "#111a38",
+              "top": 551,
+              "hsl": {
+                "h": 226,
+                "s": 0.53,
+                "l": 0.14
+              }
+            }
+          ],
+          "textColors": [
+            {
+              "color": "#e8ecf8",
+              "share": 0.47
+            },
+            {
+              "color": "#8c97bd",
+              "share": 0.42
+            },
+            {
+              "color": "#fbbf24",
+              "share": 0.06
+            },
+            {
+              "color": "#34d399",
+              "share": 0.05
+            },
+            {
+              "color": "#6d78a2",
+              "share": 0.01
+            }
+          ],
+          "button": {
+            "bg": "#111a38",
+            "hsl": {
+              "h": 226,
+              "s": 0.53,
+              "l": 0.14
+            },
+            "fg": "#e8ecf8"
+          },
+          "lowContrast": []
+        },
+        "buttons": {
+          "count": 1,
+          "inHero": 1,
+          "radius": 4,
+          "height": 38,
+          "withShadow": 0,
+          "withGradient": 0,
+          "mono": 0,
+          "upper": 0,
+          "heroLabels": ["Skip to content"]
+        },
+        "surfaces": {
+          "shadowStatic": 0,
+          "shadowOverlay": 0,
+          "shadowSamples": [],
+          "gradients": 0,
+          "scrims": 0,
+          "gradientSamples": [],
+          "gradientText": 0,
+          "hairlines": 153,
+          "hairlineSamples": [
+            "aside.rail 768px",
+            "div.facts 736px",
+            "div.fact 368px",
+            "div.fact 368px",
+            "button.strip__row.row-enter 734px"
+          ],
+          "outlinedBoxes": 5,
+          "dashed": 0,
+          "blurred": 0,
+          "roundedBoxes": 4,
+          "boxRadius": 8,
+          "squareMedia": 0,
+          "roundedMedia": 0,
+          "mediaRadius": 0,
+          "textShadow": 0,
+          "cardRows": []
+        },
+        "heroMedia": [],
+        "nav": {
+          "links": 0,
+          "fixed": true,
+          "height": 57,
+          "floatingPill": false,
+          "blur": false
+        },
+        "fontsLoaded": []
+      },
+      "layout": {
+        "viewport": {
+          "w": 768,
+          "h": 1024
+        },
+        "pageH": 15314,
+        "margins": {
+          "left": 17,
+          "right": 17
+        },
+        "sections": [
+          {
+            "sel": "header.title-row",
+            "tag": "header",
+            "top": 16,
+            "height": 122,
+            "words": 29,
+            "media": 0,
+            "middle": 0,
+            "heading": {
+              "text": "Overview",
+              "size": 22,
+              "tag": "h1"
+            },
+            "left": 16,
+            "right": 16,
+            "textLeft": 16,
+            "textRight": 129,
+            "fullBleed": false,
+            "footer": false,
+            "hero": true,
+            "continues": false,
+            "pinned": false
+          },
+          {
+            "sel": "div.facts",
+            "tag": "div",
+            "top": 150,
+            "height": 178,
+            "words": 35,
+            "media": 0,
+            "middle": 215,
+            "heading": null,
+            "left": 16,
+            "right": 119,
+            "textLeft": 16,
+            "textRight": 119,
+            "fullBleed": false,
+            "footer": false,
+            "hero": true,
+            "continues": false,
+            "pinned": false
+          },
+          {
+            "sel": "div.notice",
+            "tag": "div",
+            "top": 340,
+            "height": 125,
+            "words": 43,
+            "media": 0,
+            "middle": 0,
+            "heading": null,
+            "left": 51,
+            "right": 47,
+            "textLeft": 51,
+            "textRight": 47,
+            "fullBleed": false,
+            "footer": false,
+            "hero": true,
+            "continues": false,
+            "pinned": false
+          },
+          {
+            "sel": "div.strip",
+            "tag": "div",
+            "top": 551,
+            "height": 13802,
+            "words": 840,
+            "media": 0,
+            "middle": 0,
+            "heading": null,
+            "left": 17,
+            "right": 17,
+            "textLeft": 30,
+            "textRight": 31,
+            "fullBleed": false,
+            "footer": false,
+            "hero": false,
+            "continues": false,
+            "pinned": false
+          },
+          {
+            "sel": "section.section",
+            "tag": "section",
+            "top": 14373,
+            "height": 486,
+            "words": 49,
+            "media": 0,
+            "middle": 60,
+            "heading": {
+              "text": "Result and evidence",
+              "size": 13,
+              "tag": "h2"
+            },
+            "left": 16,
+            "right": 16,
+            "textLeft": 16,
+            "textRight": 16,
+            "fullBleed": false,
+            "footer": false,
+            "hero": false,
+            "continues": false,
+            "pinned": false
+          },
+          {
+            "sel": "section.section",
+            "tag": "section",
+            "top": 14879,
+            "height": 357,
+            "words": 59,
+            "media": 0,
+            "middle": 0,
+            "heading": {
+              "text": "First selected tests",
+              "size": 13,
+              "tag": "h2"
+            },
+            "left": 16,
+            "right": 16,
+            "textLeft": 16,
+            "textRight": 16,
+            "fullBleed": false,
+            "footer": true,
+            "hero": false,
+            "continues": false,
+            "pinned": false
+          }
+        ],
+        "gaps": [],
+        "h1s": [
+          {
+            "text": "Overview",
+            "size": 22,
+            "top": 36,
+            "firstScreen": true
+          }
+        ],
+        "edgeText": [],
+        "edges": [
+          {
+            "x": 16,
+            "n": 1
+          }
+        ],
+        "leftBlocks": 1,
+        "bodySize": 12,
+        "stage": false,
+        "explains": false,
+        "slivers": [],
+        "voidShare": 0,
+        "voidBox": null
+      },
+      "app": {
+        "viewport": {
+          "w": 768,
+          "h": 1024
+        },
+        "dark": true,
+        "ground": "#070b18",
+        "sidebar": null,
+        "topbar": null,
+        "canvas": {
+          "left": 17,
+          "right": 17
+        },
+        "hero": {
+          "text": "Overview",
+          "words": 1,
+          "chars": 8,
+          "lines": 1,
+          "size": 22,
+          "vw": 2.9,
+          "font": "ui-sans-serif",
+          "weight": 700,
+          "tracking": -0.02,
+          "leading": 1.15,
+          "top": 36,
+          "tag": "h1",
+          "kind": "heading",
+          "align": "left",
+          "position": "left"
+        },
+        "charts": 142,
+        "layout": {
+          "panels": 6,
+          "firstScreen": 3,
+          "ragged": [],
+          "voids": [
+            {
+              "gap": 42,
+              "at": 14579,
+              "panel": "Last run"
+            }
+          ]
+        },
+        "tiles": 0,
+        "panels": {
+          "count": 149,
+          "radii": [[0, 145], [8, 4]],
+          "heavyBorders": 0,
+          "borderSamples": [],
+          "heavyShadows": 0,
+          "softShadows": 0,
+          "shadowSamples": [],
+          "glass": 0
+        },
+        "chips": {
+          "count": 0,
+          "hues": 0,
+          "samples": []
+        },
+        "numbers": {
+          "cells": 0,
+          "leftAligned": 0,
+          "figures": 2,
+          "tabularShare": 1,
+          "kpiMax": 19
+        },
+        "rows": null,
+        "chartHues": 0,
+        "placeholders": [],
+        "type": {
+          "under13": 0.96,
+          "tiny": 0,
+          "tinySamples": [],
+          "sizes": [11, 12, 13, 14, 19, 22]
+        },
+        "title": {
+          "text": "Overview",
+          "size": 22,
+          "top": 36
+        },
+        "colourShare": 0.015
+      },
+      "consoleErrors": []
+    },
+    {
+      "width": 390,
+      "height": 844,
+      "load": "load",
+      "screens": 12,
+      "filled": [0.47, 0.91, 0.91, 0.91, 0.91, 0.91, 0.91, 0.91, 0.91, 0.91, 0.91, 0.92],
+      "motion": {
+        "elements": 154,
+        "css": 154,
+        "transitions": 0,
+        "scripted": 0,
+        "videos": 0,
+        "playingVideos": 0
+      },
+      "metrics": {
+        "viewport": {
+          "w": 390,
+          "h": 844
+        },
+        "page": {
+          "height": 15682,
+          "screens": 18.6,
+          "words": 1352,
+          "img": 1,
+          "video": 0,
+          "canvas": 0,
+          "svg": 12,
+          "sections": 4,
+          "horizontalOverflow": 0,
+          "overflowCulprits": [],
+          "uiFragments": 0,
+          "uiAbuse": false,
+          "realPictures": 0,
+          "videoCount": 0,
+          "uiPictures": 0,
+          "pictureSamples": [],
+          "blendText": 0,
+          "sideScrollers": 0,
+          "brokenImages": [],
+          "emoji": [],
+          "videosNoPoster": 0
+        },
+        "hero": {
+          "text": "Overview",
+          "words": 1,
+          "chars": 8,
+          "lines": 1,
+          "size": 22,
+          "vw": 5.6,
+          "font": "ui-sans-serif",
+          "weight": 700,
+          "tracking": -0.02,
+          "leading": 1.15,
+          "top": 36,
+          "tag": "h1",
+          "kind": "heading",
+          "align": "left",
+          "position": "left"
+        },
+        "h1": {
+          "text": "Overview",
+          "words": 1,
+          "lines": 1,
+          "size": 22,
+          "font": "ui-sans-serif"
+        },
+        "headings": [
+          {
+            "text": "Overview",
+            "words": 1,
+            "chars": 8,
+            "lines": 1,
+            "size": 22,
+            "vw": 5.6,
+            "font": "ui-sans-serif",
+            "weight": 700,
+            "tracking": -0.023,
+            "leading": 1.15,
+            "upper": false,
+            "italic": false,
+            "mono": false,
+            "align": "left",
+            "position": "center",
+            "widthRatio": 0.92,
+            "top": 36,
+            "tag": "h1",
+            "kind": "heading"
+          }
+        ],
+        "headingSummary": {
+          "count": 1,
+          "maxLines": 1,
+          "over2Lines": 0,
+          "statements": 0,
+          "centered": 0,
+          "medianWords": null,
+          "mixedFontHeadings": 0
+        },
+        "type": {
+          "families": [
+            {
+              "family": "ui-monospace",
+              "share": 0.97,
+              "mono": true
+            },
+            {
+              "family": "ui-sans-serif",
+              "share": 0.03,
+              "mono": false
+            }
+          ],
+          "familyCount": 2,
+          "sizes": [11, 12, 13, 14, 19, 22],
+          "sizeCount": 6,
+          "notLoaded": [],
+          "body": {
+            "font": "ui-sans-serif",
+            "size": 13,
+            "leading": 1.45,
+            "weight": 400,
+            "tracking": 0,
+            "contrast": 15.2
+          },
+          "measureChars": 49,
+          "max": {
+            "size": 22,
+            "vw": 5.6,
+            "font": "ui-sans-serif",
+            "text": "Overview"
+          },
+          "monoShare": 0.97,
+          "monoProseShare": 0.95,
+          "monoFamilies": ["ui-monospace"],
+          "monoSamples": ["Overview", "Impact", "Tests", "Trust", "Source", "smarttest-monorepo"],
+          "microLabels": 0,
+          "microLabelShare": 0,
+          "microSamples": [],
+          "upperShare": 0,
+          "centerShare": 0,
+          "smallText": 539
+        },
+        "eyebrows": [],
+        "numbered": [],
+        "color": {
+          "bodyBg": "#070b18",
+          "bodyBgHsl": {
+            "h": 226,
+            "s": 0.55,
+            "l": 0.06
+          },
+          "dark": true,
+          "sectionBgs": [
+            {
+              "color": "#111a38",
+              "top": 804,
+              "hsl": {
+                "h": 226,
+                "s": 0.53,
+                "l": 0.14
+              }
+            },
+            {
+              "color": "#070b18",
+              "top": 14852,
+              "hsl": {
+                "h": 226,
+                "s": 0.55,
+                "l": 0.06
+              }
+            }
+          ],
+          "textColors": [
+            {
+              "color": "#8c97bd",
+              "share": 0.53
+            },
+            {
+              "color": "#e8ecf8",
+              "share": 0.32
+            },
+            {
+              "color": "#fbbf24",
+              "share": 0.07
+            },
+            {
+              "color": "#34d399",
+              "share": 0.06
+            },
+            {
+              "color": "#6d78a2",
+              "share": 0.01
+            }
+          ],
+          "button": {
+            "bg": "#111a38",
+            "hsl": {
+              "h": 226,
+              "s": 0.53,
+              "l": 0.14
+            },
+            "fg": "#e8ecf8"
+          },
+          "lowContrast": []
+        },
+        "buttons": {
+          "count": 1,
+          "inHero": 1,
+          "radius": 4,
+          "height": 38,
+          "withShadow": 0,
+          "withGradient": 0,
+          "mono": 0,
+          "upper": 0,
+          "heroLabels": ["Skip to content"]
+        },
+        "surfaces": {
+          "shadowStatic": 0,
+          "shadowOverlay": 0,
+          "shadowSamples": [],
+          "gradients": 0,
+          "scrims": 0,
+          "gradientSamples": [],
+          "gradientText": 0,
+          "hairlines": 155,
+          "hairlineSamples": [
+            "aside.rail 390px",
+            "div.facts 358px",
+            "div.fact 358px",
+            "div.fact 358px",
+            "div.fact 358px"
+          ],
+          "outlinedBoxes": 5,
+          "dashed": 0,
+          "blurred": 0,
+          "roundedBoxes": 4,
+          "boxRadius": 8,
+          "squareMedia": 0,
+          "roundedMedia": 0,
+          "mediaRadius": 0,
+          "textShadow": 0,
+          "cardRows": []
+        },
+        "heroMedia": [],
+        "nav": {
+          "links": 0,
+          "fixed": true,
+          "height": 57,
+          "floatingPill": false,
+          "blur": false
+        },
+        "fontsLoaded": []
+      },
+      "layout": {
+        "viewport": {
+          "w": 390,
+          "h": 844
+        },
+        "pageH": 15682,
+        "margins": {
+          "left": 16,
+          "right": 17
+        },
+        "sections": [
+          {
+            "sel": "header.title-row",
+            "tag": "header",
+            "top": 16,
+            "height": 142,
+            "words": 29,
+            "media": 0,
+            "middle": 0,
+            "heading": {
+              "text": "Overview",
+              "size": 22,
+              "tag": "h1"
+            },
+            "left": 16,
+            "right": 16,
+            "textLeft": 16,
+            "textRight": 36,
+            "fullBleed": false,
+            "footer": false,
+            "hero": true,
+            "continues": false,
+            "pinned": false
+          },
+          {
+            "sel": "div.facts",
+            "tag": "div",
+            "top": 170,
+            "height": 354,
+            "words": 35,
+            "media": 0,
+            "middle": 0,
+            "heading": null,
+            "left": 16,
+            "right": 122,
+            "textLeft": 16,
+            "textRight": 122,
+            "fullBleed": false,
+            "footer": false,
+            "hero": true,
+            "continues": false,
+            "pinned": false
+          },
+          {
+            "sel": "div.notice",
+            "tag": "div",
+            "top": 537,
+            "height": 162,
+            "words": 43,
+            "media": 0,
+            "middle": 0,
+            "heading": null,
+            "left": 44,
+            "right": 51,
+            "textLeft": 44,
+            "textRight": 51,
+            "fullBleed": false,
+            "footer": false,
+            "hero": false,
+            "continues": false,
+            "pinned": false
+          },
+          {
+            "sel": "div.strip",
+            "tag": "div",
+            "top": 804,
+            "height": 13763,
+            "words": 700,
+            "media": 0,
+            "middle": 0,
+            "heading": null,
+            "left": 17,
+            "right": 17,
+            "textLeft": 30,
+            "textRight": 31,
+            "fullBleed": false,
+            "footer": false,
+            "hero": false,
+            "continues": false,
+            "pinned": false
+          },
+          {
+            "sel": "section.section",
+            "tag": "section",
+            "top": 14587,
+            "height": 622,
+            "words": 49,
+            "media": 0,
+            "middle": 0,
+            "heading": {
+              "text": "Result and evidence",
+              "size": 13,
+              "tag": "h2"
+            },
+            "left": 16,
+            "right": 16,
+            "textLeft": 16,
+            "textRight": 16,
+            "fullBleed": false,
+            "footer": false,
+            "hero": false,
+            "continues": false,
+            "pinned": false
+          },
+          {
+            "sel": "section.section",
+            "tag": "section",
+            "top": 15229,
+            "height": 375,
+            "words": 59,
+            "media": 0,
+            "middle": 0,
+            "heading": {
+              "text": "First selected tests",
+              "size": 13,
+              "tag": "h2"
+            },
+            "left": 16,
+            "right": 17,
+            "textLeft": 16,
+            "textRight": 20,
+            "fullBleed": false,
+            "footer": true,
+            "hero": false,
+            "continues": false,
+            "pinned": false
+          }
+        ],
+        "gaps": [],
+        "h1s": [
+          {
+            "text": "Overview",
+            "size": 22,
+            "top": 36,
+            "firstScreen": true
+          }
+        ],
+        "edgeText": [],
+        "edges": [
+          {
+            "x": 16,
+            "n": 1
+          }
+        ],
+        "leftBlocks": 1,
+        "bodySize": 12,
+        "stage": false,
+        "explains": false,
+        "slivers": [],
+        "voidShare": 0,
+        "voidBox": null
+      },
+      "app": {
+        "viewport": {
+          "w": 390,
+          "h": 844
+        },
+        "dark": true,
+        "ground": "#070b18",
+        "sidebar": null,
+        "topbar": null,
+        "canvas": {
+          "left": 16,
+          "right": 17
+        },
+        "hero": {
+          "text": "Overview",
+          "words": 1,
+          "chars": 8,
+          "lines": 1,
+          "size": 22,
+          "vw": 5.6,
+          "font": "ui-sans-serif",
+          "weight": 700,
+          "tracking": -0.02,
+          "leading": 1.15,
+          "top": 36,
+          "tag": "h1",
+          "kind": "heading",
+          "align": "left",
+          "position": "left"
+        },
+        "charts": 142,
+        "layout": {
+          "panels": 7,
+          "firstScreen": 3,
+          "ragged": [],
+          "voids": [
+            {
+              "gap": 42,
+              "at": 14793,
+              "panel": "Last run"
+            }
+          ]
+        },
+        "tiles": 0,
+        "panels": {
+          "count": 151,
+          "radii": [[0, 147], [8, 4]],
+          "heavyBorders": 0,
+          "borderSamples": [],
+          "heavyShadows": 0,
+          "softShadows": 0,
+          "shadowSamples": [],
+          "glass": 0
+        },
+        "chips": {
+          "count": 0,
+          "hues": 0,
+          "samples": []
+        },
+        "numbers": {
+          "cells": 0,
+          "leftAligned": 0,
+          "figures": 2,
+          "tabularShare": 1,
+          "kpiMax": 19
+        },
+        "rows": null,
+        "chartHues": 0,
+        "placeholders": [],
+        "type": {
+          "under13": 0.96,
+          "tiny": 0,
+          "tinySamples": [],
+          "sizes": [11, 12, 13, 14, 19, 22]
+        },
+        "title": {
+          "text": "Overview",
+          "size": 22,
+          "top": 36
+        },
+        "colourShare": 0.002
+      },
+      "consoleErrors": []
+    }
+  ],
+  "findings": [
+    {
+      "level": "WARN",
+      "id": "tiny-text",
+      "width": 1440,
+      "message": "96% of the text is under 13px.",
+      "fix": "Data and labels read at 13–14px; keep 11–12px for sublines and axis ticks.",
+      "alsoAt": [768, 390]
+    },
+    {
+      "level": "WARN",
+      "id": "ragged-row",
+      "width": 1440,
+      "message": "1 pair(s) of cards in one row end at different heights (by 61px).",
+      "fix": "Cards that share a row share a bottom edge: balance them by their content (the same number of rows, a block of similar height beside it), or stack them. In testing, ragged rows were marked down every time."
+    },
+    {
+      "level": "WARN",
+      "id": "panel-void",
+      "width": 1440,
+      "message": "1 card(s) hold a blank band inside: 42px in \"Last run\".",
+      "fix": "A card stretches to its neighbour only when it has content to fill. Keep a legend or a note directly under its chart (only an action or a total may sit at a stretched card's foot), let a short card keep its own height (align-items: start), and let a filtered block shrink to its rows."
+    }
+  ],
+  "images": [
+    {
+      "viewport": "desktop",
+      "width": 1440,
+      "fold": "/home/tkmremi/orca/projects/SmarttyTest/packages/studio/review/inspector-overview/desktop-fold.jpg",
+      "pages": [
+        "/home/tkmremi/orca/projects/SmarttyTest/packages/studio/review/inspector-overview/desktop-page-01.jpg"
+      ],
+      "film": []
+    },
+    {
+      "viewport": "tablet",
+      "width": 768,
+      "fold": "/home/tkmremi/orca/projects/SmarttyTest/packages/studio/review/inspector-overview/tablet-fold.jpg",
+      "pages": [
+        "/home/tkmremi/orca/projects/SmarttyTest/packages/studio/review/inspector-overview/tablet-page-01.jpg",
+        "/home/tkmremi/orca/projects/SmarttyTest/packages/studio/review/inspector-overview/tablet-page-02.jpg"
+      ],
+      "film": []
+    },
+    {
+      "viewport": "mobile",
+      "width": 390,
+      "fold": "/home/tkmremi/orca/projects/SmarttyTest/packages/studio/review/inspector-overview/mobile-fold.jpg",
+      "pages": [
+        "/home/tkmremi/orca/projects/SmarttyTest/packages/studio/review/inspector-overview/mobile-page-01.jpg",
+        "/home/tkmremi/orca/projects/SmarttyTest/packages/studio/review/inspector-overview/mobile-page-02.jpg"
+      ],
+      "film": []
+    }
+  ]
+}

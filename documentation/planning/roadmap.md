@@ -6,9 +6,9 @@ The dependency graph is the product. Most of this roadmap makes it more precise 
 
 Planning is in story points. One sprint is about 40 points. Each version has an exit gate; a version ships when the gate is met, not on a date.
 
-## Where 0.8.0 stands
+## Where 0.9.0 stands
 
-- Released: 0.3.0 to 0.8.0 on top of the [foundation backlog](foundation/README.md). Sprint-by-sprint results, partial items and what moved: [delivery log](delivery.md).
+- Released: 0.3.0 to 0.9.0 on top of the [foundation backlog](foundation/README.md). Sprint-by-sprint results, partial items and what moved: [delivery log](delivery.md).
 - Graph today: files, top-level symbols and class members; imports, re-exports, barrels, workspace packages, CommonJS, inheritance; environment keys, Prisma models, translation keys, assets, snapshots, manual mocks, Wasp operations, Next.js routes and the URLs end-to-end specs visit; runtime traces as observed evidence. Unresolved relationships are uncertainty and select the test.
 - Runners: Jest, Vitest, `node --test`, Playwright, Cypress. Version control: Git, Subversion, Mercurial, native snapshots.
 - Real-world checks: LeadsIt (706 tests) and four public repositories set up with `init --yes`, 0 missed failures in every replay.
@@ -18,7 +18,7 @@ Planning is in story points. One sprint is about 40 points. Each version has an 
 
 | Who                                                                                                               | Usable from           | What is missing before that                                                                                                  |
 | ----------------------------------------------------------------------------------------------------------------- | --------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| A team that installs the tarball (like LeadsIt)                                                                   | now, 0.8.0            | Nothing for Linux; install is `npm install -D <tarball>`                                                                     |
+| A team that installs the tarball (like LeadsIt)                                                                   | now, 0.9.0            | Nothing for Linux; install is `npm install -D <tarball>`                                                                     |
 | Anyone, with `npm install -D smarttest`                                                                           | the first npm release | The package name and licence decision (ADR-0007). Publication can happen as soon as it is decided, without waiting for 1.0.0 |
 | Teams whose daily contact is the commit hook                                                                      | 0.9.0, sprint S24     | Staged-content runs, pre-push mode, project checks, time budget                                                              |
 | People who prefer a UI to the CLI                                                                                 | 0.9.0, S25–S26        | SmartTest Studio and the VS Code extension                                                                                   |
@@ -26,21 +26,21 @@ Planning is in story points. One sprint is about 40 points. Each version has an 
 
 ## Overview
 
-| Version | Theme                | Points | Gate                                                                                                                              |
-| ------- | -------------------- | ------ | --------------------------------------------------------------------------------------------------------------------------------- |
-| 0.3.0   | Precise graph        | 83     | Released (13 pts moved to 0.8.0): member-level selection, CommonJS symbols, graph queries                                         |
-| 0.4.0   | Complete graph       | 84     | Released (8 pts moved to 0.7.0): env, asset, Wasp, Prisma, translation, mock and snapshot edges                                   |
-| 0.5.0   | Runtime evidence     | 71     | Released: traces, hybrid selection, Shadow Mode; reduction target not reached on LeadsIt                                          |
-| 0.6.0   | Adoption             | 66     | Released: hooks, `smarttest ci`, per-project conventions, five repositories at 0 misses; npm publish blocked                      |
-| 0.7.0   | Adaptation and E2E   | 84     | Released: sync, watch, migrate, Playwright and Cypress, Next.js routes; TypeScript 7 not available                                |
-| 0.8.0   | Speed                | 105    | Released: result cache, parallel groups, shards, flaky history, SVN and Mercurial; 30% target not reached                         |
-| 0.9.0   | Hooks and interfaces | 116    | Next: commit hooks (S24), then SmartTest Studio and VS Code (S25–S26)                                                             |
-| 1.0.0   | Stable               | 52     | Frozen contracts, published benchmarks, security review                                                                           |
-|         | Remaining            | 168    | About 4–5 sprints (0.9.0 and 1.0.0); 0.3.0 to 0.8.0 delivered 472 of 514 points, 57 of them partial ([delivery log](delivery.md)) |
+| Version | Theme                | Points                | Gate                                                                                                         |
+| ------- | -------------------- | --------------------- | ------------------------------------------------------------------------------------------------------------ |
+| 0.3.0   | Precise graph        | 83                    | Released (13 pts moved to 0.8.0): member-level selection, CommonJS symbols, graph queries                    |
+| 0.4.0   | Complete graph       | 84                    | Released (8 pts moved to 0.7.0): env, asset, Wasp, Prisma, translation, mock and snapshot edges              |
+| 0.5.0   | Runtime evidence     | 71                    | Released: traces, hybrid selection, Shadow Mode; reduction target not reached on LeadsIt                     |
+| 0.6.0   | Adoption             | 66                    | Released: hooks, `smarttest ci`, per-project conventions, five repositories at 0 misses; npm publish blocked |
+| 0.7.0   | Adaptation and E2E   | 84                    | Released: sync, watch, migrate, Playwright and Cypress, Next.js routes; TypeScript 7 not available           |
+| 0.8.0   | Speed                | 105                   | Released: result cache, parallel groups, shards, flaky history, SVN and Mercurial; 30% target not reached    |
+| 0.9.0   | Hooks and interfaces | 116                   | Implemented: commit hooks, local Studio and VS Code; validation limits in the delivery log                   |
+| 1.0.0   | Stable               | 52                    | Frozen contracts, published benchmarks, security review                                                      |
+|         | Remaining            | 52 plus carried gates | Stable contracts, performance and remaining validation ([delivery log](delivery.md))                         |
 
 ## Graph model
 
-| Layer          | 0.2.0                                              | 0.8.0 (now)                                                                                                                                  | 1.0.0                                                                |
+| Layer          | 0.2.0                                              | 0.9.0 (now)                                                                                                                                  | 1.0.0                                                                |
 | -------------- | -------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
 | Nodes          | files, top-level symbols, tests                    | plus methods and accessors, env keys, Prisma models, translation keys, routes, assets, snapshots, manual mocks                               | same, plus fixtures as first-class nodes                             |
 | Code edges     | imports, re-exports, barrels, top-level references | plus member access through local inference, inheritance and `super`, CommonJS symbols, fluent `this`, Wasp operations, constructor injection | plus edge-provider plugins (SDK 1.0); type-checked calls after 1.0.0 |
@@ -155,27 +155,27 @@ Run less (graph), then run what remains faster.
 
 **Gate:** not met. On LeadsIt's last 12 commits, SmartTest's time went from 47.2 s (groups one after another, no cache) to 43.4 s (8% less), with 0 cache-integrity violations and 0 missed failures. Parallel groups help on the commits that run several projects; on single-project commits nothing changes. The result cache never hits when replaying history, because every commit changes the inputs of the tests it selects; it pays off on repeated runs of the same state (re-running after a fix elsewhere, CI retries, switching back to a branch), where a second run of an unchanged selection takes milliseconds.
 
-## 0.9.0: Commit hooks and interfaces (116 pts), next
+## 0.9.0: Commit hooks and interfaces (116 pts), shipped with partial gates
 
 Three sprints: S24 makes the commit hooks a first-class SmartTest experience; S25 and S26 build SmartTest Studio and the VS Code extension.
 
-### S24: Commit hooks (40 pts), next sprint
+### S24: Commit hooks (40 pts), implemented
 
-The pre-commit and pre-push hooks are where most developers meet SmartTest. Today `smarttest hook install` adds `smarttest run --staged` to an existing hook. This sprint makes the hook correct for partially staged work, fast enough to never be bypassed, and clear when it blocks a commit.
+Pre-commit and pre-push hooks run the hook profile. Staged-content isolation, affected-project checks, duration estimates and history are implemented. Real Git hook fixtures cover partially staged content, alternate indexes, rejected pushes and new remote destinations. Measurements and remaining validation are recorded in the [delivery log](delivery.md).
 
-| Story                                                                                                                                                                                                                                                                                                                              | Pts |
-| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --- |
-| **Staged-content runs**: `run --staged` tests exactly what will be committed. Partially staged files and unstaged edits are set aside (a temporary checkout of the index, never a stash that can lose work) and the result says so; today tests run against the working tree                                                       | 8   |
-| **`smarttest hook install --pre-push`**: compares with the upstream branch's merge-base (or `origin/<default>` when there is no upstream), replaces `vitest related` / full-suite steps the same way `--replace` does for pre-commit                                                                                               | 5   |
-| **Hook profile**: hooks run with fail-fast order, `--bail`, the result cache and parallel runner groups by default; output fits one screen (changed files, selected count, failures with their first error lines, total time, "why" command)                                                                                       | 5   |
-| **Project checks for affected projects**: a `hook.checks` list (lint, type-check, build…) run only for the sub-projects the change touches, in parallel with the tests, with staged-file arguments where the tool accepts them (ESLint, Prettier)                                                                                  | 8   |
-| **Time budget and honesty**: `hook.budgetMs`; when the estimate (recorded durations) exceeds it, the hook says which tests make it slow and offers `--shard`-free options (run in pre-push instead, trace to narrow); it never skips silently. A bypass (`--no-verify`, `SMARTTEST_SKIP=1`) is recorded and shown by `hook status` | 5   |
-| **`smarttest hook status` and `doctor`**: hook duration over the last runs (median, slowest), steps that still run whole suites, steps that duplicate SmartTest, missing installs on teammates' machines (hook present, `node_modules/.bin/smarttest` missing)                                                                     | 5   |
-| **Validation**: LeadsIt's husky hook and a pre-push setup like OpenPro's (`vitest related` + type-check + build) migrated with `hook install --replace` and measured with `benchmark`: hook time before and after, 0 missed failures                                                                                               | 4   |
+| Story                                                                                                                                                                                                                                                                                                                                                                                | Pts |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --- |
+| **Staged-content runs**: `run --staged` tests exactly what will be committed. Partially staged files and unstaged edits are set aside (a temporary checkout of the index, never a stash that can lose work) and the result says so                                                                                                                                                   | 8   |
+| **`smarttest hook install --pre-push`**: compares with the actual pushed destination; manual `--push` uses the upstream or origin, and unknown destinations use the empty tree, replaces `vitest related` / full-suite steps the same way `--replace` does for pre-commit                                                                                                            | 5   |
+| **Hook profile**: hooks run with fail-fast order, `--bail`, the result cache and parallel runner groups by default; output fits one screen (changed files, selected count, failures with their first error lines, total time, "why" command)                                                                                                                                         | 5   |
+| **Project checks for affected projects**: a `hook.checks` list (lint, type-check, build…) run only for the sub-projects the change touches, in parallel with the tests, with staged-file arguments where the tool accepts them (ESLint, Prettier)                                                                                                                                    | 8   |
+| **Time budget and honesty**: `hook.budgetMs`; when the estimate (recorded durations) exceeds it, the hook says which tests make it slow and offers `--shard`-free options (run in pre-push instead, trace to narrow); it never skips silently. `SMARTTEST_SKIP=1` is recorded; commits without a successful tree record are reported as unchecked, not proven `--no-verify` bypasses | 5   |
+| **`smarttest hook status` and `doctor`**: hook duration over the last runs (median, slowest), steps that still run whole suites, steps that duplicate SmartTest, missing installs on teammates' machines (hook present, `node_modules/.bin/smarttest` missing)                                                                                                                       | 5   |
+| **Validation**: LeadsIt's husky hook and a pre-push setup like OpenPro's (`vitest related` + type-check + build) migrated with `hook install --replace` and measured with `benchmark`: hook time before and after, 0 missed failures                                                                                                                                                 | 4   |
 
 **Gate:** a commit with partially staged files is tested on its staged content; hook time on LeadsIt and on a pre-push setup like OpenPro's is measured before and after with 0 missed failures; no step is skipped without being reported.
 
-### S25–S26: SmartTest Studio and the VS Code extension (76 pts)
+### S25–S26: SmartTest Studio and the VS Code extension (76 pts), implemented with validation limits
 
 SmartTest Studio and the VS Code extension: everything the CLI shows, without the CLI. Studio runs locally (`smarttest studio`), uses the same engine as the CLI through `@smarttest/core`, and follows the [design system](../design/design-system.md) of the HTML report and the documentation site. Nothing leaves the machine.
 
@@ -192,7 +192,7 @@ Studio must be a well-designed product, not a dashboard template. It is built wi
 
 **Gate:** run, explain, inspect impact and read coverage without the CLI; the design skill's linter and inspector pass with 0 failures at 1440, 768 and 390 pixels, and the screenshot critique is recorded; WCAG 2.2 AA in both themes and full keyboard use; local security review of Studio passed.
 
-## 1.0.0: Stable (52 pts, plus items carried from 0.6.0 to 0.8.0)
+## 1.0.0: Stable (52 pts, plus items carried from 0.6.0 to 0.9.0)
 
 | Story                                                                                                                                                                         | Pts |
 | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --- |
@@ -203,6 +203,8 @@ Studio must be a well-designed product, not a dashboard template. It is built wi
 | Security review: file writes, process execution, Studio                                                                                                                       | 8   |
 | Documentation complete                                                                                                                                                        | 5   |
 | Carried: publish on npm (needs ADR-0007), `pnpm verify` on macOS and Windows, Cypress adapter checked against a real install                                                  | —   |
+
+Carried from 0.9.0: VS Code Extension Development Host validation, complete WCAG 2.2 AA and keyboard review, full-screen design signoff in both themes, and repeatable before/after hook measurements on the real OpenPro-scale workload. Studio has path-based impact inspection and unit trace annotations; graph filtering/export, line/branch coverage and browser coverage collection remain open. The extension's file command currently runs the whole affected change set and identifies the file's intersection; true file-scoped selection remains open.
 
 TypeScript 7 stays a watch item: the analyzer moves when TypeScript 7 offers a parser API usable from Node.
 

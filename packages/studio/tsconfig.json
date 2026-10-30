@@ -1,0 +1,41 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "dist"
+  },
+  "include": ["src"],
+  "exclude": ["src/**/*.test.ts"],
+  "references": [
+    {
+      "path": "../config"
+    },
+    {
+      "path": "../core"
+    },
+    {
+      "path": "../impact-engine"
+    },
+    {
+      "path": "../project-detector"
+    },
+    {
+      "path": "../report-engine"
+    },
+    {
+      "path": "../shared"
+    },
+    {
+      "path": "../source-parser"
+    },
+    {
+      "path": "../test-discovery"
+    },
+    {
+      "path": "../vcs-core"
+    },
+    {
+      "path": "../test-executor"
+    }
+  ]
+}

@@ -1,0 +1,234 @@
+{
+  "name": "smarttest-vscode",
+  "displayName": "SmartTest",
+  "description": "See which tests protect each function, run the tests a change affects, and read the reasons without leaving VS Code. Uses your local smarttest executable; nothing leaves the machine.",
+  "version": "0.9.0",
+  "publisher": "smarttest",
+  "license": "Apache-2.0",
+  "private": true,
+  "engines": {
+    "vscode": "^1.85.0",
+    "node": ">=20"
+  },
+  "categories": [
+    "Testing",
+    "Other"
+  ],
+  "keywords": [
+    "smarttest",
+    "testing",
+    "affected tests",
+    "test selection",
+    "typescript",
+    "javascript"
+  ],
+  "extensionKind": [
+    "workspace"
+  ],
+  "main": "./dist/extension.cjs",
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": "limited",
+      "description": "SmartTest runs a local executable and reads project files. In Restricted Mode every SmartTest feature is disabled: no analysis, no CodeLens, no test runs."
+    },
+    "virtualWorkspaces": {
+      "supported": false,
+      "description": "SmartTest runs a local executable against files on disk."
+    }
+  },
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "smarttest.showImpact",
+        "title": "Show Impact of Current Change",
+        "category": "SmartTest"
+      },
+      {
+        "command": "smarttest.refresh",
+        "title": "Refresh Analysis",
+        "category": "SmartTest"
+      },
+      {
+        "command": "smarttest.runAffected",
+        "title": "Run Affected Tests",
+        "category": "SmartTest"
+      },
+      {
+        "command": "smarttest.runAffectedForFile",
+        "title": "Run Affected Tests for This File",
+        "category": "SmartTest"
+      },
+      {
+        "command": "smarttest.explainCurrentSymbol",
+        "title": "Explain Protection at Cursor",
+        "category": "SmartTest"
+      },
+      {
+        "command": "smarttest.openOutput",
+        "title": "Show Output",
+        "category": "SmartTest"
+      },
+      {
+        "command": "smarttest.showRestrictedMode",
+        "title": "Why Is SmartTest Disabled?",
+        "category": "SmartTest"
+      }
+    ],
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "smarttest.runAffectedForFile",
+          "when": "editorLangId =~ /^(typescript|javascript|typescriptreact|javascriptreact)$/"
+        },
+        {
+          "command": "smarttest.explainCurrentSymbol",
+          "when": "editorLangId =~ /^(typescript|javascript|typescriptreact|javascriptreact)$/"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "smarttest.refresh",
+          "when": "view == smarttest.results",
+          "group": "navigation@1"
+        },
+        {
+          "command": "smarttest.runAffected",
+          "when": "view == smarttest.results",
+          "group": "navigation@2"
+        }
+      ]
+    },
+    "views": {
+      "explorer": [
+        {
+          "id": "smarttest.results",
+          "name": "SmartTest",
+          "when": "workspaceFolderCount > 0"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "smarttest.results",
+        "contents": "No SmartTest analysis yet.\n[Show impact of current change](command:smarttest.showImpact)\n[Run affected tests](command:smarttest.runAffected)\nSmartTest uses the local executable and never sends data anywhere."
+      }
+    ],
+    "configuration": {
+      "title": "SmartTest",
+      "properties": {
+        "smarttest.executablePath": {
+          "type": "string",
+          "default": "",
+          "scope": "resource",
+          "markdownDescription": "Path to the local `smarttest` executable. Empty means: search the workspace's `node_modules/.bin` (walking up from the workspace folder), then `PATH`. SmartTest never installs or downloads anything."
+        },
+        "smarttest.mode": {
+          "type": "string",
+          "enum": [
+            "fast",
+            "balanced",
+            "safe"
+          ],
+          "default": "balanced",
+          "scope": "resource",
+          "description": "Safety mode passed to smarttest. Rules can only make it stricter."
+        },
+        "smarttest.changeSource": {
+          "type": "string",
+          "enum": [
+            "uncommitted",
+            "staged",
+            "base"
+          ],
+          "default": "uncommitted",
+          "scope": "resource",
+          "markdownDescription": "Which change to analyse. `base` compares the working tree with the merge-base of `smarttest.baseRef` (see `--base` in the CLI)."
+        },
+        "smarttest.baseRef": {
+          "type": "string",
+          "default": "",
+          "scope": "resource",
+          "description": "Base ref used when smarttest.changeSource is `base` (for example `origin/main`). Required in that mode."
+        },
+        "smarttest.refreshDelayMs": {
+          "type": "number",
+          "default": 350,
+          "minimum": 0,
+          "maximum": 5000,
+          "scope": "resource",
+          "description": "Debounce before refreshing after a save. A newer save cancels the pending analysis."
+        },
+        "smarttest.codeLens.enabled": {
+          "type": "boolean",
+          "default": true,
+          "scope": "resource",
+          "description": "Show \"protected by N tests\" above functions and methods."
+        },
+        "smarttest.hover.enabled": {
+          "type": "boolean",
+          "default": true,
+          "scope": "resource",
+          "description": "Show protection explanations on hover."
+        },
+        "smarttest.statusBar.enabled": {
+          "type": "boolean",
+          "default": true,
+          "scope": "resource",
+          "description": "Show the SmartTest status bar item."
+        },
+        "smarttest.maxConcurrentExplain": {
+          "type": "number",
+          "default": 2,
+          "minimum": 1,
+          "maximum": 8,
+          "scope": "resource",
+          "description": "Parallel `smarttest explain` processes used to compute per-symbol protection."
+        },
+        "smarttest.maxUnitsPerFile": {
+          "type": "number",
+          "default": 150,
+          "minimum": 1,
+          "maximum": 2000,
+          "scope": "resource",
+          "description": "Safety cap on analysed symbols per file. Above it, protection is reported as unknown instead of partially analysed."
+        },
+        "smarttest.analysisTimeoutMs": {
+          "type": "number",
+          "default": 120000,
+          "minimum": 1000,
+          "scope": "resource",
+          "description": "Timeout for scan/impact/explain/graph commands."
+        },
+        "smarttest.runTimeoutMs": {
+          "type": "number",
+          "default": 900000,
+          "minimum": 1000,
+          "scope": "resource",
+          "description": "Timeout for a test run started from the extension."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "typecheck": "node scripts/tool.mjs tsc -p tsconfig.json",
+    "test": "node scripts/tool.mjs vitest run --config vitest.config.ts",
+    "test:watch": "node scripts/tool.mjs vitest --config vitest.config.ts",
+    "package": "node scripts/build.mjs && node scripts/package.mjs",
+    "package:check": "node scripts/package.mjs --check",
+    "verify": "node scripts/tool.mjs tsc -p tsconfig.json && node scripts/tool.mjs vitest run --config vitest.config.ts && node scripts/build.mjs && node scripts/package.mjs --check --require-build",
+    "vscode:prepublish": "node scripts/build.mjs",
+    "clean": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\""
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "@types/vscode": "^1.85.0",
+    "esbuild": "^0.28.2",
+    "typescript": "^6.0.3",
+    "vitest": "^5.0.5"
+  },
+  "type": "module"
+}

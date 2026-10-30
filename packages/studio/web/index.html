@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="dark light" />
+    <meta name="theme-color" content="#070b18" />
+    <title>SmartTest Studio</title>
+    <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="./app.css" />
+    <script type="module" src="./js/app.js"></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to content</a>
+    <div id="app" class="boot">
+      <p class="boot__text">
+        Starting Studio from the SmartTest analysis of this project. If this message stays, the
+        browser could not run <code>js/app.js</code>.
+      </p>
+    </div>
+    <noscript>
+      <p class="boot__text">
+        Studio needs JavaScript. It runs only on this machine and reads no page from the network.
+      </p>
+    </noscript>
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  </body>
+</html>

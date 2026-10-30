@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <img alt="Status: alpha 0.8.0" src="https://img.shields.io/badge/status-alpha%200.8.0-FBBF24?style=flat-square&amp;labelColor=0E1530">
+  <img alt="Status: alpha 0.9.0" src="https://img.shields.io/badge/status-alpha%200.9.0-FBBF24?style=flat-square&amp;labelColor=0E1530">
   <a href="LICENSE"><img alt="License: Apache-2.0" src="https://img.shields.io/badge/license-Apache--2.0-8B5CF6?style=flat-square&amp;labelColor=0E1530"></a>
   <img alt="Node 22.12 or newer" src="https://img.shields.io/badge/node-22.12%2B-34D399?style=flat-square&amp;labelColor=0E1530">
   <img alt="Runners: Jest, Vitest, node:test, Playwright, Cypress" src="https://img.shields.io/badge/runners-Jest%20%7C%20Vitest%20%7C%20node%3Atest%20%7C%20Playwright%20%7C%20Cypress-22D3EE?style=flat-square&amp;labelColor=0E1530">
@@ -15,7 +15,7 @@ SmartTest runs only the tests a change can affect. It builds a dependency graph 
 
 Documentation site: [remipelloux.github.io/SmarttyTest](https://remipelloux.github.io/SmarttyTest/). It has a live example of the selection on the first screen.
 
-Status: 0.8.0 alpha. It runs in the pre-commit hook of [LeadsIt](documentation/case-studies/leadsit.md). It is not on npm yet (the package name is still being decided, [ADR-0007](documentation/architecture/adr/0007-name-license-distribution.md)). Next is 0.9.0: first a sprint on commit hooks (tests on exactly the staged content, pre-push mode, checks for the affected projects only), then SmartTest Studio (a local web app) and a VS Code extension ([roadmap to 1.0.0](documentation/planning/roadmap.md), [what each version delivered](documentation/planning/delivery.md)).
+Status: 0.9.0 alpha. It runs in the pre-commit hook of [LeadsIt](documentation/case-studies/leadsit.md). This release adds staged-content isolation, pre-push hooks, checks for affected projects, [SmartTest Studio](documentation/guides/studio.md) and a [VS Code extension](extensions/vscode/README.md). It is not on npm yet (the package name is still being decided, [ADR-0007](documentation/architecture/adr/0007-name-license-distribution.md)). Remaining release gates and validation limits are recorded in the [roadmap](documentation/planning/roadmap.md) and [delivery log](documentation/planning/delivery.md).
 
 ## Usage
 
@@ -26,7 +26,9 @@ npx smarttest init --yes          # write it (re-running changes nothing; `init 
 npx smarttest run                 # tests affected by uncommitted changes
 npx smarttest run --staged        # tests affected by staged changes (pre-commit hook)
 npx smarttest run --base main     # tests affected by the current branch
-npx smarttest hook install        # run affected tests in the pre-commit hook (husky, lefthook, …)
+npx smarttest hook install        # install the pre-commit profile (husky, lefthook, …)
+npx smarttest hook install --pre-push # check committed changes before a push
+npx smarttest studio --open       # local interface for impact, tests and selection evidence
 npx smarttest ci                  # affected tests in any CI, base picked automatically
 npx smarttest watch               # rerun affected tests on every save
 npx smarttest run --all           # every test, through the same pipeline
@@ -36,7 +38,7 @@ npx smarttest trace               # record which code each test runs; later sele
 npx smarttest benchmark           # replay recent commits: full run vs SmartTest, with misses checked
 ```
 
-Until the package is published, build it from this repository (see [Development](#development)) and install the tarball: `pnpm release:pack`, then `npm install -D <path>/smarttest-0.8.0.tgz`.
+Until the package is published, build it from this repository (see [Development](#development)) and install the tarball: `pnpm release:pack`, then `npm install -D <path>/smarttest-0.9.0.tgz`.
 
 ## How it works
 
@@ -83,7 +85,7 @@ Four public repositories (commander.js, path-to-regexp, ufo, defu) set up with `
 
 SmartTest saved 63% of the full-run time. It was 6% slower than the previous hook over these commits: on single-project commits the hook runs one small suite, and SmartTest's analysis time counts in full. On the 12 most recent commits, with `--traces`, it also found 0 missed failures. Details and caveats: [case study](documentation/case-studies/leadsit.md).
 
-## Features in 0.8.0
+## Features in 0.9.0
 
 | Area      | What it does                                                                                                                                                              | Commands                                                        |
 | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------- |
@@ -96,6 +98,8 @@ SmartTest saved 63% of the full-run time. It was 6% slower than the previous hoo
 | Evidence  | Reasons per test, runtime traces, unprotected changes, comparison with a full run, Shadow Mode, history replay                                                            | `explain`, `trace`, `validate-selection`, `shadow`, `benchmark` |
 | Generator | Missing test files as `it.todo` scaffolds; never overwrites                                                                                                               | `generate`                                                      |
 | Reports   | HTML, JSON, JUnit, Markdown; coverage labelled full or selected                                                                                                           | `report`, `coverage`                                            |
+| Hooks     | Tests the index or committed content in a temporary checkout; affected-project checks, duration estimates and bypass records                                              | `run --staged --hook`, `run --push --hook`, `hook status`       |
+| Interface | Local Studio: impact paths, test explorer, live runs, source and coverage evidence; VS Code CodeLens and hover explanations                                               | `studio`, VS Code commands                                      |
 | Speed     | Validated result cache (reported as cached), fail-fast order, parallel runner groups, duration-balanced shards, flaky-test history                                        | `run --shard`, `run --bail`, `shard`, `flaky`                   |
 
 What SmartTest does not do: it never reports a skipped test as passed, never treats an unresolvable import as unrelated, never presents partial coverage as project coverage, and never overwrites a file without an explicit `--yes`. A report that breaks one of these rules fails its own integrity check (exit 70).
@@ -119,11 +123,11 @@ The 2,000-module repository has 4,000 files (one test per module), and a change 
 
 The same pages are published at [remipelloux.github.io/SmarttyTest](https://remipelloux.github.io/SmarttyTest/) (built by `pnpm site:build`, published to the `gh-pages` branch by `pnpm site:publish`).
 
-- [Getting started](documentation/guides/getting-started.md), [CI](documentation/guides/ci.md)
+- [Getting started](documentation/guides/getting-started.md), [commit and push hooks](documentation/guides/commit-hooks.md), [Studio](documentation/guides/studio.md), [VS Code](extensions/vscode/README.md), [CI](documentation/guides/ci.md)
 - [How selection works](documentation/concepts/how-selection-works.md), [runtime evidence](documentation/concepts/runtime-evidence.md), [running less, faster](documentation/concepts/speed.md), [safety model](documentation/concepts/safety-model.md), [change tracking](documentation/concepts/change-tracking.md), [rules](documentation/concepts/rules.md)
 - [CLI reference](documentation/reference/cli.md), [configuration](documentation/reference/configuration.md)
 - [Architecture](documentation/architecture/overview.md), [decision records](documentation/architecture/adr/README.md)
-- [Roadmap to 1.0.0](documentation/planning/roadmap.md) (next: SmartTest Studio and VS Code in 0.9.0), [delivery log](documentation/planning/delivery.md), [changelog](CHANGELOG.md), [case study: LeadsIt](documentation/case-studies/leadsit.md), [external repositories](documentation/case-studies/external-repositories.md), [specification](documentation/product/PRD.md)
+- [Roadmap to 1.0.0](documentation/planning/roadmap.md) (next: stable contracts and validation in 1.0.0), [delivery log](documentation/planning/delivery.md), [changelog](CHANGELOG.md), [case study: LeadsIt](documentation/case-studies/leadsit.md), [external repositories](documentation/case-studies/external-repositories.md), [specification](documentation/product/PRD.md)
 
 ## Development
 
@@ -134,11 +138,12 @@ pnpm hooks:install     # pre-push runs `pnpm verify`; this repository has no hos
 pnpm verify            # lint, package boundaries, typecheck, tests, planning consistency
 pnpm build             # compile all packages
 pnpm release:pack      # self-contained `smarttest` tarball in packages/cli/.publish
+pnpm extension:pack   # VS Code extension as a local VSIX
 pnpm site:serve        # documentation site on http://localhost:4173
 node benchmarks/run.mjs
 ```
 
-Packages live in `packages/` (31 workspace packages, mapped in `scripts/packages.manifest.json`). Fixture projects used by the integration tests and the regression harness live in `fixtures/projects/`. See [CONTRIBUTING.md](CONTRIBUTING.md) and, for coding agents, [AGENTS.md](AGENTS.md).
+Packages live in `packages/` (32 engine/CLI/Studio packages, mapped in `scripts/packages.manifest.json`). Fixture projects used by the integration tests and the regression harness live in `fixtures/projects/`. See [CONTRIBUTING.md](CONTRIBUTING.md) and, for coding agents, [AGENTS.md](AGENTS.md).
 
 ## License
 

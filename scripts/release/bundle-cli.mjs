@@ -66,6 +66,9 @@ await build({
   logLevel: "warning",
 });
 
+// Studio is loaded on demand; keep its browser assets alongside the bundled server chunk.
+await cp(join(root, "packages/studio/web"), join(out, "dist/web"), { recursive: true });
+
 // Public types: the config schema + defineConfig + main.
 let types = await readFile(join(root, "packages/config/src/types.ts"), "utf8");
 types = types.replace(

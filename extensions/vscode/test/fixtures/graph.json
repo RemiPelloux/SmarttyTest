@@ -1,0 +1,257 @@
+{
+  "schemaVersion": 1,
+  "nodes": [
+    {
+      "id": "src/core/Cache.ts",
+      "kind": "file",
+      "label": "src/core/Cache.ts",
+      "filePath": "src/core/Cache.ts"
+    },
+    {
+      "id": "src/core/Cache.ts#Cache",
+      "kind": "class",
+      "label": "Cache",
+      "filePath": "src/core/Cache.ts"
+    },
+    {
+      "id": "src/core/Cache.ts#Cache.items",
+      "kind": "module",
+      "label": "Cache.items",
+      "filePath": "src/core/Cache.ts"
+    },
+    {
+      "id": "src/core/Cache.ts#Cache.get",
+      "kind": "method",
+      "label": "Cache.get",
+      "filePath": "src/core/Cache.ts"
+    },
+    {
+      "id": "src/core/Cache.ts#Cache.set",
+      "kind": "method",
+      "label": "Cache.set",
+      "filePath": "src/core/Cache.ts"
+    },
+    {
+      "id": "src/core/Cache.ts#Cache.size",
+      "kind": "method",
+      "label": "Cache.size",
+      "filePath": "src/core/Cache.ts"
+    },
+    {
+      "id": "src/core/Labeler.ts",
+      "kind": "file",
+      "label": "src/core/Labeler.ts",
+      "filePath": "src/core/Labeler.ts"
+    },
+    {
+      "id": "src/core/Labeler.ts#Labeler",
+      "kind": "class",
+      "label": "Labeler",
+      "filePath": "src/core/Labeler.ts"
+    },
+    {
+      "id": "src/core/Labeler.ts#Labeler.cache",
+      "kind": "module",
+      "label": "Labeler.cache",
+      "filePath": "src/core/Labeler.ts"
+    },
+    {
+      "id": "src/core/Labeler.ts#Labeler.label",
+      "kind": "method",
+      "label": "Labeler.label",
+      "filePath": "src/core/Labeler.ts"
+    },
+    {
+      "id": "src/index.ts",
+      "kind": "file",
+      "label": "src/index.ts",
+      "filePath": "src/index.ts"
+    },
+    {
+      "id": "src/util/index.ts",
+      "kind": "file",
+      "label": "src/util/index.ts",
+      "filePath": "src/util/index.ts"
+    },
+    {
+      "id": "src/util/numbers.ts",
+      "kind": "file",
+      "label": "src/util/numbers.ts",
+      "filePath": "src/util/numbers.ts"
+    },
+    {
+      "id": "src/util/numbers.ts#clamp",
+      "kind": "function",
+      "label": "clamp",
+      "filePath": "src/util/numbers.ts"
+    },
+    {
+      "id": "src/util/strings.ts",
+      "kind": "file",
+      "label": "src/util/strings.ts",
+      "filePath": "src/util/strings.ts"
+    },
+    {
+      "id": "src/util/strings.ts#capitalize",
+      "kind": "function",
+      "label": "capitalize",
+      "filePath": "src/util/strings.ts"
+    },
+    {
+      "id": "src/util/strings.ts#kebab",
+      "kind": "function",
+      "label": "kebab",
+      "filePath": "src/util/strings.ts"
+    },
+    {
+      "id": "test/cache.test.ts",
+      "kind": "test-suite",
+      "label": "test/cache.test.ts",
+      "filePath": "test/cache.test.ts"
+    },
+    {
+      "id": "test/labeler.test.ts",
+      "kind": "test-suite",
+      "label": "test/labeler.test.ts",
+      "filePath": "test/labeler.test.ts"
+    },
+    {
+      "id": "test/numbers.test.ts",
+      "kind": "test-suite",
+      "label": "test/numbers.test.ts",
+      "filePath": "test/numbers.test.ts"
+    },
+    {
+      "id": "test/strings.test.ts",
+      "kind": "test-suite",
+      "label": "test/strings.test.ts",
+      "filePath": "test/strings.test.ts"
+    },
+    {
+      "id": "vitest.config.ts",
+      "kind": "file",
+      "label": "vitest.config.ts",
+      "filePath": "vitest.config.ts"
+    },
+    {
+      "id": "vitest.config.ts#default",
+      "kind": "module",
+      "label": "default",
+      "filePath": "vitest.config.ts"
+    }
+  ],
+  "edges": [
+    {
+      "from": "src/core/Cache.ts#Cache.get",
+      "to": "src/core/Cache.ts#Cache.items",
+      "kind": "REFERENCES",
+      "provenance": "static",
+      "confidence": "high"
+    },
+    {
+      "from": "src/core/Cache.ts#Cache.set",
+      "to": "src/core/Cache.ts#Cache.items",
+      "kind": "REFERENCES",
+      "provenance": "static",
+      "confidence": "high"
+    },
+    {
+      "from": "src/core/Cache.ts#Cache.size",
+      "to": "src/core/Cache.ts#Cache.items",
+      "kind": "REFERENCES",
+      "provenance": "static",
+      "confidence": "high"
+    },
+    {
+      "from": "src/core/Cache.ts#Cache.set",
+      "to": "src/core/Cache.ts#Cache",
+      "kind": "REFERENCES",
+      "provenance": "static",
+      "confidence": "high"
+    },
+    {
+      "from": "src/core/Labeler.ts#Labeler.cache",
+      "to": "src/core/Cache.ts#Cache.@init",
+      "kind": "REFERENCES",
+      "provenance": "static",
+      "confidence": "high"
+    },
+    {
+      "from": "test/cache.test.ts",
+      "to": "src/core/Cache.ts#Cache.@init",
+      "kind": "TESTS",
+      "provenance": "static",
+      "confidence": "high"
+    },
+    {
+      "from": "src/core/Labeler.ts#Labeler.label",
+      "to": "src/util/strings.ts#capitalize",
+      "kind": "REFERENCES",
+      "provenance": "static",
+      "confidence": "high"
+    },
+    {
+      "from": "test/strings.test.ts",
+      "to": "src/util/strings.ts#capitalize",
+      "kind": "TESTS",
+      "provenance": "static",
+      "confidence": "high"
+    },
+    {
+      "from": "src/core/Labeler.ts#Labeler.label",
+      "to": "src/core/Cache.ts#Cache.get",
+      "kind": "REFERENCES",
+      "provenance": "static",
+      "confidence": "high"
+    },
+    {
+      "from": "src/core/Labeler.ts#Labeler.label",
+      "to": "src/core/Cache.ts#Cache.set",
+      "kind": "REFERENCES",
+      "provenance": "static",
+      "confidence": "high"
+    },
+    {
+      "from": "test/cache.test.ts",
+      "to": "src/core/Cache.ts#Cache.set",
+      "kind": "TESTS",
+      "provenance": "static",
+      "confidence": "high"
+    },
+    {
+      "from": "src/core/Labeler.ts#Labeler.label",
+      "to": "src/core/Labeler.ts#Labeler.cache",
+      "kind": "REFERENCES",
+      "provenance": "static",
+      "confidence": "high"
+    },
+    {
+      "from": "test/labeler.test.ts",
+      "to": "src/core/Labeler.ts#Labeler.@init",
+      "kind": "TESTS",
+      "provenance": "static",
+      "confidence": "high"
+    },
+    {
+      "from": "test/labeler.test.ts",
+      "to": "src/core/Labeler.ts#Labeler.label",
+      "kind": "TESTS",
+      "provenance": "static",
+      "confidence": "high"
+    },
+    {
+      "from": "test/numbers.test.ts",
+      "to": "src/util/numbers.ts#clamp",
+      "kind": "TESTS",
+      "provenance": "static",
+      "confidence": "high"
+    },
+    {
+      "from": "test/strings.test.ts",
+      "to": "src/util/strings.ts#kebab",
+      "kind": "TESTS",
+      "provenance": "static",
+      "confidence": "high"
+    }
+  ]
+}

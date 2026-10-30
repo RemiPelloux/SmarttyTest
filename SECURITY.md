@@ -22,6 +22,15 @@ We aim to acknowledge reports within **3 business days** and to agree a disclosu
 - Command injection through config, test names, paths or VCS data
 - Script injection in HTML reports from untrusted repository content
 - Supply-chain issues in published packages
+- Studio authentication, cross-origin requests, report access and project source containment
+
+## Local execution and Studio
+
+Project configuration, hook checks and tests execute code with the current user's permissions. Use SmartTest only in repositories you trust; temporary checkout isolation preserves Git state but is not a process sandbox. The VS Code extension refuses execution in an untrusted workspace.
+
+Studio binds to loopback, checks Host and Origin, requires an unpredictable session token and restricts mutations to JSON POST requests. It serves bundled assets under a restrictive Content Security Policy. Source reads check real paths against the project root, including symlink replacements since the last analysis; this is not protection against a local process racing filesystem renames. Report downloads use an explicit filename allowlist. Do not expose the port through a public tunnel or share the printed token URL.
+
+The 0.9.0 tests cover these API boundaries, path traversal, symlinks, cancellation and shutdown. A broader security review remains a 1.0.0 release gate.
 
 ## Our commitments
 

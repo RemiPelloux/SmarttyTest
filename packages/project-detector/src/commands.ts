@@ -13,6 +13,8 @@ export interface ExistingTestCommand {
   dir?: string;
   /** Paths the command explicitly skips (converted to project-relative globs). */
   ignores: string[];
+  /** False when replacing this invocation would remove non-test work in its package script. */
+  replaceable?: boolean;
 }
 
 const HOOK_FILES = [
@@ -22,6 +24,8 @@ const HOOK_FILES = [
   ".git/hooks/pre-push",
   "lefthook.yml",
   ".lefthook.yml",
+  "lefthook.yaml",
+  ".lefthook.yaml",
   ".pre-commit-config.yaml",
 ];
 
@@ -64,6 +68,7 @@ async function scanScript(
   root: string,
   source: string,
   text: string,
+  scripts: Record<string, string> = {},
 ): Promise<ExistingTestCommand[]> {
   const out: ExistingTestCommand[] = [];
   let cwdDir: string | undefined;
@@ -79,7 +84,11 @@ async function scanScript(
   }
   for (const { text: l, line } of lines) {
     // Comments and messages mention runners without running them.
-    if (/^\s*(?::\s*)?(?:#|echo\b|printf\b|-\s*name:|name:)/.test(l) || /\|\s*grep\b/.test(l))
+    if (
+      l.includes("# smarttest-replaced:") ||
+      /^\s*(?::\s*)?(?:#|echo\b|printf\b|-\s*name:|name:)/.test(l) ||
+      /\|\s*grep\b/.test(l)
+    )
       continue;
     const cd = /^\s*cd\s+["']?([^"'\s;&]+)/.exec(l);
     if (cd) {
@@ -89,7 +98,20 @@ async function scanScript(
           ? undefined
           : target.replace(/\/$/, "");
     }
-    const parsed = parseLine(l, cwdDir);
+    let parsed = parseLine(l, cwdDir);
+    // `npm test`, `npm run test:unit`, `pnpm test`, `yarn test` calling a test script.
+    const run =
+      /\b(?:npm|pnpm|yarn|bun)\s+(?:run\s+|run-script\s+)?(test(?::[\w:-]+)?|[\w:-]+)\b/.exec(l);
+    if (!parsed && run && !cwdDir) {
+      const script = scripts[run[1] as string];
+      const viaScript = script ? parseLine(script, undefined) : undefined;
+      if (viaScript && !/playwright|cypress/.test(script as string))
+        parsed = {
+          ...viaScript,
+          command: l.trim(),
+          replaceable: !/[;&|`\n]/.test(script as string),
+        };
+    }
     if (parsed) out.push({ source, line, ...parsed });
   }
   void root;
@@ -102,9 +124,12 @@ export async function detectTestCommands(
   projectDirs: readonly string[],
 ): Promise<ExistingTestCommand[]> {
   const out: ExistingTestCommand[] = [];
+  const scripts =
+    (await readJson<{ scripts?: Record<string, string> }>(join(root, "package.json")))?.scripts ??
+    {};
   for (const f of HOOK_FILES) {
     const text = await readText(join(root, f));
-    if (text) out.push(...(await scanScript(root, f, text)));
+    if (text) out.push(...(await scanScript(root, f, text, scripts)));
   }
   try {
     for (const f of await readdir(join(root, ".github", "workflows"))) {

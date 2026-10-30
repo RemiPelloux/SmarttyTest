@@ -53,7 +53,8 @@ describe("hook install / uninstall", () => {
     ];
     const plan = await planHookInstall(dir, { replace: true, testCommands: commands });
     expect(plan.manager).toBe("husky");
-    expect(plan.replaced.map((r) => r.line)).toEqual([4, 6]);
+    expect(plan.replaced.map((r) => r.line)).toEqual([6]);
+    expect(plan.remaining.map((r) => r.line)).toEqual([4]); // compound shell step needs review
     await apply(dir, plan.file, plan.plan.after);
     const installed = await readFile(join(dir, plan.file), "utf8");
     expect(installed.split("\n").slice(0, 3)).toEqual([
@@ -75,7 +76,7 @@ describe("hook install / uninstall", () => {
     const plan = await planHookInstall(dir);
     expect(plan.manager).toBe("lefthook");
     expect(plan.plan.after).toContain(
-      "    smarttest: # smarttest\n      run: npx --no-install smarttest run --staged --non-interactive\n    lint:",
+      "    smarttest: # smarttest\n      run: npx --no-install smarttest run --staged --hook\n    lint:",
     );
     await apply(dir, plan.file, plan.plan.after);
     const [undo] = await planHookUninstall(dir, "lefthook");
@@ -88,7 +89,7 @@ describe("hook install / uninstall", () => {
     const plan = await planHookInstall(dir);
     expect(plan.manager).toBe("simple-git-hooks");
     expect(JSON.parse(plan.plan.after ?? "{}")["simple-git-hooks"]["pre-commit"]).toBe(
-      "npx --no-install smarttest run --staged --non-interactive && npx lint-staged",
+      "npx --no-install smarttest run --staged --hook && npx lint-staged",
     );
     await apply(dir, "package.json", plan.plan.after);
     const [undo] = await planHookUninstall(dir, "simple-git-hooks");

@@ -1,7 +1,7 @@
 {
   "$comment": "Source of truth for the v1.0.0 package map. Edit, then run `pnpm scaffold:package --all` (idempotent: never overwrites existing src/ files).",
   "scope": "@smarttest",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "packages": [
     {
       "name": "shared",
@@ -237,11 +237,28 @@
       "description": "Application core: orchestrates engines behind a stable API used by the CLI and (later) Studio."
     },
     {
+      "name": "studio",
+      "epic": "STU",
+      "deps": [
+        "config",
+        "core",
+        "impact-engine",
+        "project-detector",
+        "report-engine",
+        "shared",
+        "source-parser",
+        "test-discovery",
+        "vcs-core",
+        "test-executor"
+      ],
+      "description": "Local web interface for impact, test execution and selection evidence."
+    },
+    {
       "name": "cli",
       "publishName": "smarttest",
       "bin": "smarttest",
       "epic": "CLI",
-      "deps": ["shared", "config", "core", "smart-init"],
+      "deps": ["shared", "config", "core", "smart-init", "studio"],
       "description": "The smarttest command-line interface."
     }
   ]

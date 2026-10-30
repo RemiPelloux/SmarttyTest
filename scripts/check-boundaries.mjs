@@ -44,7 +44,10 @@ for (const pkg of manifest.packages) {
       if (spec.startsWith(".")) continue;
       const bare = spec.startsWith("node:") ? spec.slice(5) : spec;
       if (spec.startsWith("node:") || BUILTINS.has(bare.split("/")[0])) {
-        if (NETWORK.has(bare.split("/")[0]))
+        if (
+          NETWORK.has(bare.split("/")[0]) &&
+          !(pkg.name === "studio" && ["http", "net"].includes(bare.split("/")[0]))
+        )
           errors.push(`${rel}: network module "${spec}" is not allowed (local-first, ADR-0004)`);
         continue;
       }
@@ -52,7 +55,10 @@ for (const pkg of manifest.packages) {
         ? spec.split("/").slice(0, 2).join("/")
         : spec.split("/")[0];
       if (nameToPkg.has(pkgName)) {
-        if (/(^|\/)(ai-|studio|cloud)/.test(pkgName))
+        if (
+          /(^|\/)(ai-|studio|cloud)/.test(pkgName) &&
+          !(pkg.name === "cli" && pkgName === `${scope}/studio`)
+        )
           errors.push(`${rel}: must not depend on ${pkgName} (ADR-0004)`);
         if (!allowed.has(pkgName) && !(isTest && allowedDev.has(pkgName)))
           errors.push(

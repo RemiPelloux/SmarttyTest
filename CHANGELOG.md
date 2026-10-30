@@ -2,7 +2,25 @@
 
 All notable changes are documented here. Releases are managed with [Changesets](https://github.com/changesets/changesets). The project follows [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.9.0] — hooks and interfaces
+
+### Added
+
+- Exact staged-content runs and committed-content push runs in temporary checkouts. The user's index and working files stay intact; binary files, symlinks, renames and alternate Git indexes are supported.
+- `hook install --pre-push`, `run --hook`, affected-project `hook.checks`, duration estimates and `hook.budgetMs`. Hook history distinguishes successful checked trees, explicit bypasses and commits without a recorded check.
+- `smarttest studio [--port n] [--open]`: local overview, impact paths, test explorer, live runs, source annotations and trust evidence. The server binds to loopback and requires a session token; mutation routes require same-origin JSON POST requests.
+- Local VS Code extension with CodeLens, hover explanations, impact and run commands, results tree and status bar. Workspace Trust disables execution in Restricted Mode. `pnpm extension:pack` builds its VSIX.
+
+### Fixed
+
+- Atomic writes retain existing file permissions, including executable hooks. Existing-hook upgrades preserve literal shell dollar sequences.
+- Hook replacement preserves compound shell commands and package scripts with other work. Background replacements keep shell PID/wait semantics; uninstall restores the original steps.
+- Git hook environment variables are scoped out of isolated test and check subprocesses without changing the parent environment. Cancellation terminates descendant processes.
+- Pre-push hooks use the actual remote destination supplied by Git, fall back conservatively for new or unknown destinations, and reject pushed commits other than checked-out HEAD.
+
+### Validation limits
+
+- VS Code host interaction remains unverified on this machine; CLI integration, extension logic, typechecking and VSIX packaging are checked locally. macOS and Windows validation and npm publication remain open. See the [delivery log](documentation/planning/delivery.md) for measured gates and carried work.
 
 ### Documentation
 

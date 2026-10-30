@@ -2,6 +2,9 @@
 
 Guides
 - [Getting started](guides/getting-started.md)
+- [Commit and push hooks](guides/commit-hooks.md)
+- [Studio](guides/studio.md)
+- [VS Code extension](../extensions/vscode/README.md)
 - [Running in CI](guides/ci.md)
 
 Concepts
@@ -25,7 +28,7 @@ Architecture and design
 Product and planning
 - [Specification (PRD)](product/PRD.md)
 - [Roadmap to 1.0.0](planning/roadmap.md)
-- [Delivery log (0.3.0 to 0.8.0)](planning/delivery.md)
+- [Delivery log (0.3.0 to 0.9.0)](planning/delivery.md)
 - [Foundation backlog](planning/foundation/README.md)
 - [Case study: LeadsIt](case-studies/leadsit.md)
 - [External repositories](case-studies/external-repositories.md)

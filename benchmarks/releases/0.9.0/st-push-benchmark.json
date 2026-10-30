@@ -1,0 +1,54 @@
+{
+  "schemaVersion": 1,
+  "command": "benchmark",
+  "totals": {
+    "commits": 2,
+    "fullMs": 771.249662,
+    "projectGatedMs": 770.839172,
+    "smarttestMs": 751.4636600000001,
+    "savedVsFullPct": 3,
+    "savedVsGatedPct": 3,
+    "selectedTests": 4,
+    "totalTests": 8,
+    "missed": 0,
+    "preexisting": 0,
+    "cachedTests": 0,
+    "cacheViolations": 0
+  },
+  "commits": [
+    {
+      "sha": "ebd61f1c6082fece9ecb8e15b025f09eaaa35652",
+      "subject": "edit Ada",
+      "changedFiles": 1,
+      "totalTests": 4,
+      "selectedTests": 2,
+      "fallback": false,
+      "analysisStatus": "partial",
+      "fullMs": 377.77958599999994,
+      "projectGatedMs": 377.40311099999997,
+      "projectGatedTests": 4,
+      "smarttestMs": 395.3367790000001,
+      "analysisMs": 87.75116400000002,
+      "failingInFull": [],
+      "missed": [],
+      "preexisting": []
+    },
+    {
+      "sha": "03318d8a27cf8058fdd9e3e879a270e903a122bf",
+      "subject": "edit Ada Lovelace",
+      "changedFiles": 1,
+      "totalTests": 4,
+      "selectedTests": 2,
+      "fallback": false,
+      "analysisStatus": "partial",
+      "fullMs": 393.47007600000006,
+      "projectGatedMs": 393.436061,
+      "projectGatedTests": 4,
+      "smarttestMs": 356.126881,
+      "analysisMs": 44.297898000000146,
+      "failingInFull": [],
+      "missed": [],
+      "preexisting": []
+    }
+  ]
+}

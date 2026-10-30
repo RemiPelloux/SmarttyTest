@@ -1,0 +1,104 @@
+{
+  "schemaVersion": 1,
+  "command": "scan",
+  "profile": {
+    "root": "/workspace/fixture",
+    "name": "fixture-ts-lib-vitest",
+    "runtime": {
+      "os": "linux",
+      "arch": "x64",
+      "node": "26.12.1",
+      "nodeSupported": true,
+      "cpus": 16,
+      "totalMemoryMb": 31587,
+      "freeMemoryMb": 16052,
+      "rootWritable": true,
+      "recommendedWorkers": 15
+    },
+    "packageManager": {
+      "name": "unknown",
+      "value": "unknown",
+      "evidence": []
+    },
+    "workspaces": [],
+    "frameworks": [
+      {
+        "value": "Node.js",
+        "evidence": ["no specific framework detected — treated as a generic Node.js project"]
+      }
+    ],
+    "runners": [
+      {
+        "adapter": "vitest",
+        "dir": "",
+        "configFile": "vitest.config.ts",
+        "evidence": [
+          "config vitest.config.ts",
+          "package.json depends on vitest",
+          "script \"test\": vitest run"
+        ]
+      }
+    ],
+    "tests": {
+      "layout": "mirror",
+      "testFiles": 4,
+      "colocatedRatio": 0,
+      "testDirs": ["test"],
+      "setupFiles": [],
+      "fixtureDirs": [],
+      "mockDirs": []
+    },
+    "projectTests": [],
+    "layout": {
+      "sourceRoots": ["src"],
+      "aliases": {
+        "@lib/*": ["src/*"]
+      },
+      "generatedDirs": [],
+      "typescript": true,
+      "tsconfigFiles": ["tsconfig.json"],
+      "moduleType": "esm"
+    },
+    "vcs": {
+      "provider": "git",
+      "root": "/workspace/fixture",
+      "nested": [],
+      "unsupported": []
+    },
+    "coverage": [],
+    "ci": [],
+    "testCommands": [
+      {
+        "source": "package.json#scripts.test",
+        "line": 0,
+        "adapter": "vitest",
+        "command": "vitest run",
+        "ignores": []
+      }
+    ],
+    "warnings": []
+  },
+  "vcs": "git",
+  "index": {
+    "files": 11,
+    "symbols": 12,
+    "imports": 17,
+    "unresolved": 0,
+    "dynamic": 0,
+    "parsed": 0,
+    "reused": 11,
+    "durationMs": 0.565905000000015
+  },
+  "graph": {
+    "files": 11,
+    "edges": 16,
+    "memberEdges": 7,
+    "uncertainFiles": 0
+  },
+  "tests": {
+    "total": 4,
+    "unassigned": []
+  },
+  "unresolved": [],
+  "dynamic": []
+}

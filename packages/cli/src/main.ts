@@ -57,14 +57,18 @@ function sourceOf(flags: Flags): ChangeSource | undefined {
   const picked = [
     flags.base !== undefined,
     !!flags.staged,
+    !!flags.push,
     !!flags.uncommitted,
     !!flags["since-snapshot"] || flags.snapshot !== undefined,
   ].filter(Boolean).length;
   if (picked > 1)
-    throw new SmartTestError("Use only one of --base, --staged, --uncommitted, --since-snapshot", {
-      code: "ST_USAGE",
-      category: "usage",
-    });
+    throw new SmartTestError(
+      "Use only one of --base, --staged, --push, --uncommitted, --since-snapshot",
+      {
+        code: "ST_USAGE",
+        category: "usage",
+      },
+    );
   if (flags.base !== undefined) {
     if (flags["base-mode"] && !["merge-base", "direct"].includes(flags["base-mode"]))
       throw new SmartTestError("--base-mode must be merge-base or direct", {
@@ -79,6 +83,7 @@ function sourceOf(flags: Flags): ChangeSource | undefined {
     };
   }
   if (flags.staged) return { kind: "staged" };
+  if (flags.push) return { kind: "push" };
   if (flags.uncommitted) return { kind: "uncommitted" };
   if (flags["since-snapshot"] || flags.snapshot !== undefined)
     return { kind: "snapshot", ...(flags.snapshot ? { id: flags.snapshot } : {}) };
@@ -89,6 +94,92 @@ const rel = (ctx: Ctx, p: string) => relative(ctx.root, p) || ".";
 
 // ── run / impact / explain / validate ─────────────────────────────────────────────────────
 
+async function cmdHookRun(ctx: Ctx): Promise<number> {
+  const { flags } = ctx;
+  const source = sourceOf(flags);
+  if (flags.all || flags.shard || (source && source.kind !== "staged" && source.kind !== "push"))
+    throw new SmartTestError("--hook requires --staged or --push and a complete selection", {
+      code: "ST_USAGE",
+      category: "usage",
+      hint: "Use smarttest run --staged --hook or smarttest run --push --hook.",
+    });
+  const stage = source?.kind === "push" ? "pre-push" : "pre-commit";
+  const st = await ctx.open();
+  const ac = new AbortController();
+  const cancel = () => ac.abort();
+  process.once("SIGINT", cancel);
+  const mode = modeOf(flags);
+  const timeoutMs = intFlag(flags.timeout, "timeout");
+  const workers = intFlag(flags.workers, "workers");
+  try {
+    const result = await st.runHook(stage, {
+      ...(mode ? { mode } : {}),
+      ...(flags["no-cache"] ? { cache: false } : {}),
+      ...(timeoutMs !== undefined ? { timeoutMs } : {}),
+      ...(workers !== undefined ? { workers } : {}),
+      signal: ac.signal,
+      onAnalysis: (a) => {
+        if (!flags.quiet)
+          ctx.out(
+            `${stage}: ${a.input.changeSet.changes.length} changed files · ${a.decision.selectedTests.length} selected · ${a.decision.skippedTests.length} skipped (not run)`,
+          );
+      },
+      onEstimate: (e) => {
+        if (e.estimateMs <= e.budgetMs || flags.quiet) return;
+        ctx.out(
+          `Estimated ${formatDuration(e.estimateMs)} exceeds the ${formatDuration(e.budgetMs)} budget${e.unknown ? `; ${e.unknown} files have no duration yet` : ""}.`,
+        );
+        for (const f of e.slowest.slice(0, 3)) ctx.out(`  ${f.file}: ${formatDuration(f.ms)}`);
+        ctx.out("Consider pre-push checks or `smarttest trace --stale` to refine selection.");
+      },
+    });
+    const out = result.outcome;
+    const failedCheck = result.checks.some((c) => c.status === "failed");
+    if (flags.json)
+      ctx.json("run", {
+        hook: { ...result, outcome: undefined },
+        ...(out
+          ? { report: out.report, reports: out.written, integrityIssues: out.integrityIssues }
+          : {}),
+      });
+    else if (result.skipped)
+      ctx.out(`${stage}: bypass recorded (SMARTTEST_SKIP=1); tests and checks were not run.`);
+    else {
+      for (const c of result.checks) {
+        ctx.out(
+          `${c.name}${c.project ? ` (${c.project})` : ""}: ${c.status} · ${formatDuration(c.durationMs)}`,
+        );
+        if (c.output)
+          for (const l of c.output.split("\n").slice(0, 4)) ctx.out(`  ${l.slice(0, 180)}`);
+      }
+      if (out) {
+        for (const e of out.report.executions
+          .filter((e) => !["passed", "cached-pass", "skipped", "flaky"].includes(e.status))
+          .slice(0, 4)) {
+          ctx.out(`${e.file}: ${e.status}`);
+          for (const test of e.tests.filter((t) => t.error).slice(0, 2))
+            ctx.out(`  ${test.error?.message.split("\n")[0]?.slice(0, 180)}`);
+        }
+        const s = out.report.summary;
+        ctx.out(
+          `${s.passed} passed · ${s.failed + s.timedOut} failed · ${s.cached ?? 0} cached (not run) · ${s.skippedBySelection} skipped (not run) · ${formatDuration(result.durationMs)}`,
+        );
+        for (const w of out.report.warnings.slice(0, 4)) ctx.out(w);
+        ctx.out("Why: smarttest explain <test>");
+      }
+    }
+    if (result.skipped) return ExitCode.Success;
+    if (out?.integrityIssues.length) return ExitCode.Internal;
+    return out && out.exitCode !== ExitCode.Success
+      ? out.exitCode
+      : failedCheck
+        ? ExitCode.TestFailure
+        : ExitCode.Success;
+  } finally {
+    process.off("SIGINT", cancel);
+  }
+}
+
 async function cmdRun(ctx: Ctx): Promise<number> {
   const { t, flags } = ctx;
   if (flags.affected && flags.all)
@@ -96,6 +187,7 @@ async function cmdRun(ctx: Ctx): Promise<number> {
       code: "ST_USAGE",
       category: "usage",
     });
+  if (flags.hook) return cmdHookRun(ctx);
   const st = await ctx.open();
   const ac = new AbortController();
   const onSigint = () => {
@@ -953,9 +1045,15 @@ async function cmdHook(ctx: Ctx): Promise<number> {
     const plan = await st.hookInstallPlan({
       ...(manager ? { manager } : {}),
       ...(flags.replace ? { replace: true } : {}),
+      stage: flags["pre-push"] ? "pre-push" : "pre-commit",
     });
     if (sub === "status") {
-      if (flags.json) ctx.json("hook", { status: plan });
+      const history = await st.hookHistory();
+      const other = await st.hookInstallPlan({
+        ...(manager ? { manager } : {}),
+        stage: flags["pre-push"] ? "pre-commit" : "pre-push",
+      });
+      if (flags.json) ctx.json("hook", { status: plan, other, history });
       else {
         ctx.out(
           `${t.bold("Git hook")} · ${plan.manager} · ${plan.file} ${t.dim(`(${plan.evidence})`)}`,
@@ -965,11 +1063,27 @@ async function cmdHook(ctx: Ctx): Promise<number> {
         );
         for (const r of plan.remaining)
           ctx.out(`  ${t.yellow("▲")} line ${r.line} runs a whole suite: ${t.dim(r.command)}`);
-        if (!plan.installed) ctx.out(t.dim("  Install: smarttest hook install [--replace]"));
+        ctx.out(
+          `  ${other.stage}: ${other.installed ? "installed" : "not installed"} (${other.file})`,
+        );
+        ctx.out(
+          `  ${history.runs} recorded runs · median ${formatDuration(history.medianMs)} · slowest ${formatDuration(history.slowestMs)} · ${history.failures} recent failures`,
+        );
+        if ((plan.installed || other.installed) && !history.installedLocally)
+          ctx.out("  SmartTest executable missing: install the project's dependencies.");
+        for (const b of history.bypasses) ctx.out(`  Bypass ${b.at}: ${b.stage} ${b.reason}`);
+        for (const c of history.withoutHook.without.slice(0, 5))
+          ctx.out(`  No matching successful hook record: ${c.sha} ${c.subject}`);
+        if (!plan.installed)
+          ctx.out(
+            t.dim(
+              `  Install: smarttest hook install${flags["pre-push"] ? " --pre-push" : ""} [--replace]`,
+            ),
+          );
       }
       return ExitCode.Success;
     }
-    if (plan.installed) {
+    if (plan.installed && plan.plan.action === "skip") {
       if (flags.json) ctx.json("hook", { plan, applied: [] });
       else ctx.out(`${t.green("✓")} SmartTest already runs in ${plan.file}.`);
       return ExitCode.Success;
@@ -1009,7 +1123,7 @@ async function cmdHook(ctx: Ctx): Promise<number> {
     return ExitCode.Success;
   }
   if (sub === "uninstall") {
-    const files = await st.hookUninstallPlan(manager);
+    const files = await st.hookUninstallPlan(manager, flags["pre-push"] ? ["pre-push"] : undefined);
     if (!files.length) {
       if (flags.json) ctx.json("hook", { removed: [] });
       else ctx.out("No SmartTest block found in any hook.");
@@ -1603,10 +1717,40 @@ async function rootMenu(ctx: Ctx): Promise<number> {
   }
 }
 
+async function cmdStudio(ctx: Ctx): Promise<number> {
+  const port = intFlag(ctx.flags.port, "port");
+  if (port !== undefined && (port < 0 || port > 65535))
+    throw new SmartTestError("--port must be between 0 and 65535", {
+      code: "ST_USAGE",
+      category: "usage",
+    });
+  const { startStudio } = await import("@smarttest/studio");
+  const server = await startStudio({
+    root: ctx.root,
+    ...(ctx.flags.config ? { configPath: ctx.flags.config } : {}),
+    ...(port !== undefined ? { port } : {}),
+  });
+  if (ctx.flags.json) ctx.json("studio", { url: server.url });
+  else ctx.out(`SmartTest Studio: ${server.url}\nLocal session. Press Ctrl+C to stop.`);
+  if (ctx.flags.open) openFile(server.url);
+  await new Promise<void>((resolve) => {
+    const stop = () => {
+      process.off("SIGINT", stop);
+      process.off("SIGTERM", stop);
+      void server.close().finally(resolve);
+    };
+    process.once("SIGINT", stop);
+    process.once("SIGTERM", stop);
+  });
+  return ExitCode.Success;
+}
+
 // ── dispatcher ────────────────────────────────────────────────────────────────────────────
 
 const HANDLERS: Record<string, (ctx: Ctx) => Promise<number>> = {
   run: cmdRun,
+  studio: cmdStudio,
+  open: cmdStudio,
   impact: cmdImpact,
   explain: cmdExplain,
   "validate-selection": cmdValidate,
@@ -1636,8 +1780,6 @@ const HANDLERS: Record<string, (ctx: Ctx) => Promise<number>> = {
 const LATER: Record<string, string> = {
   ai: "AI features are planned after 1.0.0. SmartTest never requires them.",
   autopilot: "Autopilot is planned after 1.0.0.",
-  studio: "Studio is planned for 0.9.0. For now: `smarttest report --open`.",
-  open: "Studio is planned for 0.9.0. For now: `smarttest report --open`.",
 };
 
 export async function main(
@@ -1669,6 +1811,7 @@ export async function main(
     }
     const interactive =
       !flags["non-interactive"] &&
+      !flags.hook &&
       !!(io.stdin ?? process.stdin).isTTY &&
       !!io.stdout.isTTY &&
       !process.env.CI;

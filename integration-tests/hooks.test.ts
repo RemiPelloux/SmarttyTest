@@ -1,0 +1,608 @@
+import { spawnSync } from "node:child_process";
+import {
+  chmod,
+  copyFile,
+  mkdir,
+  mkdtemp,
+  readFile,
+  rename,
+  rm,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
+import { SmartTest } from "@smarttest/core";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { edit, git, materialize } from "./helpers.js";
+
+const stringsTest = "test/strings.test.ts";
+
+/** A repository with no commit yet (the index is the only content). */
+async function init(dir: string): Promise<void> {
+  await writeFile(join(dir, ".gitignore"), "node_modules\n.smarttest/\n");
+  git(dir, "init", "-q", "-b", "main");
+}
+
+async function commitAll(dir: string, message: string): Promise<void> {
+  git(dir, "add", "-A");
+  git(dir, "commit", "-q", "-m", message);
+}
+
+async function writeConfig(dir: string, checks: { name: string; run: string; stage?: string }[]) {
+  await writeFile(
+    join(dir, "smarttest.config.json"),
+    `${JSON.stringify({ hook: { checks } }, null, 2)}\n`,
+  );
+}
+
+// The suite also runs inside this repository's own pre-push hook. Each fixture starts
+// as an ordinary shell; Git supplies fresh hook variables to the real-hook children.
+beforeEach(() => {
+  for (const key of [
+    "GIT_PREFIX",
+    "GIT_DIR",
+    "GIT_WORK_TREE",
+    "GIT_INDEX_FILE",
+    "GIT_OBJECT_DIRECTORY",
+    "GIT_EXEC_PATH",
+  ])
+    vi.stubEnv(key, undefined);
+});
+
+const originalSkip = process.env.SMARTTEST_SKIP;
+afterEach(() => {
+  vi.unstubAllEnvs();
+  if (originalSkip === undefined) delete process.env.SMARTTEST_SKIP;
+  else process.env.SMARTTEST_SKIP = originalSkip;
+});
+
+describe("commit hooks run the staged content", () => {
+  it("fails for a staged broken test even when the working tree fixed it", async () => {
+    const dir = await materialize("ts-lib-vitest", { git: true });
+    const original = await readFile(join(dir, stringsTest), "utf8");
+    await edit(dir, stringsTest, 'toBe("Ada")', 'toBe("Adah")');
+    git(dir, "add", stringsTest);
+    await writeFile(join(dir, stringsTest), original);
+    const indexBefore = git(dir, "diff", "--cached", "--binary");
+    const statusBefore = git(dir, "status", "--porcelain");
+
+    const st = await SmartTest.open({ root: dir });
+    const result = await st.runHook("pre-commit", { cache: false });
+
+    expect(result.skipped).toBe(false);
+    expect(result.outcome?.exitCode).not.toBe(0);
+    expect(result.outcome?.report.summary.failed).toBeGreaterThan(0);
+    // The hook did not stash, reset or otherwise touch the real index and working tree.
+    expect(git(dir, "diff", "--cached", "--binary")).toBe(indexBefore);
+    expect(git(dir, "status", "--porcelain")).toBe(statusBefore);
+    expect(git(dir, "worktree", "list").trim().split("\n")).toHaveLength(1);
+  }, 120_000);
+
+  it("passes for a staged fix even when the working tree reintroduced the failure", async () => {
+    const dir = await materialize("ts-lib-vitest", { git: true });
+    await edit(dir, stringsTest, 'toBe("Ada")', 'toBe("Adah")');
+    await commitAll(dir, "broken test committed");
+
+    const broken = await readFile(join(dir, stringsTest), "utf8");
+    await writeFile(join(dir, stringsTest), broken.replace('toBe("Adah")', 'toBe("Ada")'));
+    git(dir, "add", stringsTest);
+    await writeFile(join(dir, stringsTest), broken);
+
+    const result = await (await SmartTest.open({ root: dir })).runHook("pre-commit", {
+      cache: false,
+    });
+    expect(result.outcome?.exitCode).toBe(0);
+    expect(result.outcome?.report.summary.failed).toBe(0);
+  }, 120_000);
+
+  it("uses the staged config, not the dirty working-tree copy", async () => {
+    const dir = await materialize("ts-lib-vitest", { git: true });
+    await writeConfig(dir, [{ name: "head", run: "true" }]);
+    await commitAll(dir, "config");
+
+    // Staged config fails the project check; the working-tree copy would pass.
+    await writeConfig(dir, [{ name: "staged", run: "exit 1" }]);
+    git(dir, "add", "smarttest.config.json");
+    await writeConfig(dir, [{ name: "dirty", run: "true" }]);
+
+    const result = await (await SmartTest.open({ root: dir })).runHook("pre-commit", {
+      cache: false,
+    });
+    expect(result.outcome?.exitCode).toBe(0);
+    expect(result.checks.map((c) => c.name)).toEqual(["staged"]);
+    expect(result.checks[0]?.status).toBe("failed");
+  }, 120_000);
+
+  it("runs project checks in the isolated tree even when no tests are selected", async () => {
+    const dir = await materialize("ts-lib-vitest", { git: true });
+    await writeConfig(dir, [{ name: "staged notes", run: "grep -q NOTES_MARKER notes.md" }]);
+    await commitAll(dir, "config");
+
+    await writeFile(join(dir, "notes.md"), "NOTES_MARKER\n");
+    git(dir, "add", "notes.md");
+    await rm(join(dir, "notes.md"));
+
+    const result = await (await SmartTest.open({ root: dir })).runHook("pre-commit", {
+      cache: false,
+    });
+    expect(result.outcome?.report.decision.selectedTests).toHaveLength(0);
+    expect(result.outcome?.exitCode).toBe(0);
+    expect(result.checks).toEqual([
+      expect.objectContaining({ name: "staged notes", project: "", status: "passed" }),
+    ]);
+  }, 120_000);
+
+  it("preserves modes, symlinks, binary content and renames from the index", async () => {
+    const dir = await materialize("ts-lib-vitest", { git: true });
+    await writeFile(join(dir, "src/util/legacy.ts"), "export const legacy = 1;\n");
+    await commitAll(dir, "legacy file");
+
+    await writeConfig(dir, [
+      {
+        name: "index shape",
+        run: [
+          "test -x bin/run.sh",
+          "test -L link-to-strings",
+          "test -f src/util/current.ts",
+          "test ! -e src/util/legacy.ts",
+          'node -e \'const b=require("node:fs").readFileSync("asset.bin");process.exit(b.length===4&&b[3]===255?0:1)\'',
+        ].join(" && "),
+      },
+    ]);
+    git(dir, "add", "smarttest.config.json");
+    await commitAll(dir, "checks");
+
+    // Stage: an executable, a symlink, a binary and a rename.
+    await mkdir(join(dir, "bin"), { recursive: true });
+    await writeFile(join(dir, "bin/run.sh"), "#!/bin/sh\necho staged\n");
+    await chmod(join(dir, "bin/run.sh"), 0o755);
+    await symlink("src/util/strings.ts", join(dir, "link-to-strings"));
+    await writeFile(join(dir, "asset.bin"), Buffer.from([0, 1, 2, 255]));
+    await rename(join(dir, "src/util/legacy.ts"), join(dir, "src/util/current.ts"));
+    git(dir, "add", "-A");
+
+    // Then disturb every one of them in the working tree.
+    await chmod(join(dir, "bin/run.sh"), 0o644);
+    await rm(join(dir, "link-to-strings"));
+    await writeFile(join(dir, "link-to-strings"), "not a link\n");
+    await writeFile(join(dir, "asset.bin"), Buffer.from([9, 9, 9, 9]));
+    await rename(join(dir, "src/util/current.ts"), join(dir, "src/util/legacy.ts"));
+
+    const result = await (await SmartTest.open({ root: dir })).runHook("pre-commit", {
+      cache: false,
+    });
+    expect(result.checks.map((c) => [c.name, c.status])).toEqual([["index shape", "passed"]]);
+  }, 120_000);
+
+  it("materializes file/directory replacements before overlaying the index", async () => {
+    const dir = await materialize("ts-lib-vitest", { git: true });
+    await writeFile(join(dir, "shape"), "same content\n");
+    await mkdir(join(dir, "other/deep"), { recursive: true });
+    await writeFile(join(dir, "other/deep/child"), "other content\n");
+    await commitAll(dir, "old shapes");
+    await rm(join(dir, "shape"));
+    await mkdir(join(dir, "shape"));
+    await writeFile(join(dir, "shape/child"), "same content\n");
+    await rm(join(dir, "other"), { recursive: true });
+    await writeFile(join(dir, "other"), "other content\n");
+    await writeConfig(dir, [{ name: "shapes", run: "test -f shape/child && test -f other" }]);
+    git(dir, "add", "-A");
+    await writeFile(join(dir, "dirty.md"), "force isolation\n");
+    const before = git(dir, "diff", "--cached", "--binary");
+    const result = await (await SmartTest.open({ root: dir })).runHook("pre-commit", {
+      cache: false,
+    });
+    expect(result.outcome?.exitCode).toBe(0);
+    expect(result.checks.map((c) => c.status)).toEqual(["passed"]);
+    expect(git(dir, "diff", "--cached", "--binary")).toBe(before);
+    expect(git(dir, "worktree", "list").trim().split("\n")).toHaveLength(1);
+  }, 120_000);
+
+  it("isolates staged content when the repository has no commits yet", async () => {
+    const dir = await materialize("ts-lib-vitest");
+    await init(dir);
+    expect(spawnSync("git", ["rev-parse", "--verify", "HEAD"], { cwd: dir }).status).not.toBe(0);
+    await writeConfig(dir, [{ name: "unborn", run: "grep -q UNBORN_MARKER notes.md" }]);
+    await writeFile(join(dir, "notes.md"), "UNBORN_MARKER\n");
+    git(dir, "add", "-A");
+    await rm(join(dir, "notes.md"));
+
+    const result = await (await SmartTest.open({ root: dir })).runHook("pre-commit", {
+      cache: false,
+    });
+    expect(result.outcome?.exitCode).toBe(0);
+    expect(result.checks.map((c) => c.status)).toEqual(["passed"]);
+    expect(git(dir, "status", "--porcelain", "notes.md")).toBe("AD notes.md\n");
+  }, 120_000);
+});
+
+describe("pre-push runs the commits being pushed", () => {
+  it("compares against the whole unpushed history, not only the previous commit", async () => {
+    const dir = await materialize("ts-lib-vitest", { git: true });
+    // The failure is in an earlier unpushed commit; the last commit only touches notes.
+    await edit(dir, stringsTest, 'toBe("Ada")', 'toBe("Adah")');
+    await commitAll(dir, "broken earlier");
+    await writeFile(join(dir, "notes.md"), "unrelated\n");
+    await commitAll(dir, "later, unrelated");
+
+    const result = await (await SmartTest.open({ root: dir })).runHook("pre-push", {
+      cache: false,
+    });
+    expect(result.outcome?.report.decision.selectedTests.map((t) => t.filePath)).toContain(
+      stringsTest,
+    );
+    expect(result.outcome?.exitCode).not.toBe(0);
+    expect(result.outcome?.report.summary.failed).toBeGreaterThan(0);
+  }, 120_000);
+
+  it("fails on a committed failure even when the working tree fixed it", async () => {
+    const dir = await materialize("ts-lib-vitest", { git: true });
+    await edit(dir, stringsTest, 'toBe("Ada")', 'toBe("Adah")');
+    await commitAll(dir, "broken");
+    await writeFile(
+      join(dir, stringsTest),
+      (await readFile(join(dir, stringsTest), "utf8")).replace('toBe("Adah")', 'toBe("Ada")'),
+    );
+
+    const result = await (await SmartTest.open({ root: dir })).runHook("pre-push", {
+      cache: false,
+    });
+    expect(result.outcome?.exitCode).not.toBe(0);
+    expect(result.outcome?.report.summary.failed).toBeGreaterThan(0);
+  }, 120_000);
+
+  it("passes for committed fixes even when the working tree is dirty and broken", async () => {
+    const dir = await materialize("ts-lib-vitest", { git: true });
+    await edit(dir, stringsTest, 'toBe("Ada")', 'toBe("Adah")');
+    await commitAll(dir, "broken");
+    await writeFile(
+      join(dir, stringsTest),
+      (await readFile(join(dir, stringsTest), "utf8")).replace('toBe("Adah")', 'toBe("Ada")'),
+    );
+    await commitAll(dir, "fix");
+    await edit(dir, stringsTest, 'toBe("Ada")', 'toBe("Adah")');
+
+    const result = await (await SmartTest.open({ root: dir })).runHook("pre-push", {
+      cache: false,
+    });
+    expect(result.outcome?.exitCode).toBe(0);
+    expect(result.outcome?.report.summary.failed).toBe(0);
+  }, 120_000);
+});
+
+describe("hook records", () => {
+  it("records a bypass without running tests or checks", async () => {
+    const dir = await materialize("ts-lib-vitest", { git: true });
+    await writeConfig(dir, [{ name: "always fails", run: "exit 1" }]);
+    await commitAll(dir, "config");
+    process.env.SMARTTEST_SKIP = "1";
+
+    const st = await SmartTest.open({ root: dir });
+    const result = await st.runHook("pre-commit", { cache: false });
+    expect(result.skipped).toBe(true);
+    expect(result.checks).toEqual([]);
+    const history = await st.hookHistory();
+    expect(history.bypasses.at(-1)?.reason).toBe("SMARTTEST_SKIP=1");
+  }, 120_000);
+});
+
+describe("hook setup findings", () => {
+  const hookBlock = (stage: "pre-commit" | "pre-push") =>
+    [
+      "# >>> smarttest >>>",
+      "if [ -x node_modules/.bin/smarttest ]; then",
+      `  smarttest run ${stage === "pre-commit" ? "--staged" : "--push"} --hook || exit 1`,
+      "fi",
+      "# <<< smarttest <<<",
+      "",
+    ].join("\n");
+
+  it("plans install for either stage and uninstalls stages independently", async () => {
+    const dir = await materialize("ts-lib-vitest", { git: true });
+    const st = await SmartTest.open({ root: dir });
+    const pre = await st.hookInstallPlan({ stage: "pre-commit", replace: true });
+    const push = await st.hookInstallPlan({ stage: "pre-push", replace: true });
+    expect(pre.stage).toBe("pre-commit");
+    expect(push.stage).toBe("pre-push");
+    expect(push.plan.after).toContain("smarttest run --push --hook");
+
+    await mkdir(join(dir, ".git/hooks"), { recursive: true });
+    await writeFile(join(dir, ".git/hooks/pre-commit"), hookBlock("pre-commit"), { mode: 0o755 });
+    await writeFile(join(dir, ".git/hooks/pre-push"), hookBlock("pre-push"), { mode: 0o755 });
+
+    const onlyPush = await st.hookUninstallPlan(undefined, ["pre-push"]);
+    expect(onlyPush.map((p) => p.path)).toEqual([".git/hooks/pre-push"]);
+    const both = await st.hookUninstallPlan();
+    expect(new Set(both.map((p) => p.path))).toEqual(
+      new Set([".git/hooks/pre-commit", ".git/hooks/pre-push"]),
+    );
+  }, 120_000);
+
+  it("doctor reports both stages and leftover whole-suite steps", async () => {
+    const dir = await materialize("ts-lib-vitest", { git: true });
+    await mkdir(join(dir, ".git/hooks"), { recursive: true });
+    await writeFile(
+      join(dir, ".git/hooks/pre-commit"),
+      `${hookBlock("pre-commit")}${hookBlock("pre-commit")}npx vitest run\n`,
+      { mode: 0o755 },
+    );
+    const st = await SmartTest.open({ root: dir });
+    const hook = (await st.doctor()).filter((f) => f.check === "hook");
+    const text = hook.map((f) => f.message).join("\n");
+    expect(text).toContain("pre-commit hook installed");
+    expect(text).toContain("pre-push hook not installed");
+    expect(text).toContain("runs SmartTest 2 times");
+    expect(text).toContain("whole-suite step");
+    expect(
+      hook.every(
+        (f) => f.severity !== "error" || f.message.includes("node_modules/.bin/smarttest"),
+      ),
+    ).toBe(true);
+  }, 120_000);
+});
+
+describe("configuration inside the checkout", () => {
+  it("follows a staged switch from smarttest.config.ts to JSON", async () => {
+    const dir = await materialize("ts-lib-vitest", { git: true });
+    const tsConfig = 'export default { hook: { checks: [{ name: "head", run: "true" }] } };\n';
+    await writeFile(join(dir, "smarttest.config.ts"), tsConfig);
+    await commitAll(dir, "TypeScript config");
+
+    // Stage: delete the .ts config and add a JSON config whose check fails.
+    await rm(join(dir, "smarttest.config.ts"));
+    await writeConfig(dir, [{ name: "staged json", run: "exit 1" }]);
+    git(dir, "add", "-A");
+    // The dirty working-tree .ts config would pass if it were the one loaded.
+    await writeFile(join(dir, "smarttest.config.ts"), tsConfig);
+
+    const result = await (await SmartTest.open({ root: dir })).runHook("pre-commit", {
+      cache: false,
+    });
+    expect(result.outcome?.exitCode).toBe(0);
+    expect(result.checks.map((c) => [c.name, c.status])).toEqual([["staged json", "failed"]]);
+  }, 120_000);
+
+  it("does not load a staged-deleted config from the working tree", async () => {
+    const dir = await materialize("ts-lib-vitest", { git: true });
+    const failing =
+      'export default { hook: { checks: [{ name: "head fails", run: "exit 1" }] } };\n';
+    await writeFile(join(dir, "smarttest.config.ts"), failing);
+    await commitAll(dir, "failing config");
+
+    git(dir, "rm", "-q", "smarttest.config.ts");
+    await writeFile(join(dir, "smarttest.config.ts"), failing);
+
+    const result = await (await SmartTest.open({ root: dir })).runHook("pre-commit", {
+      cache: false,
+    });
+    expect(result.outcome?.exitCode).toBe(0);
+    expect(result.checks).toEqual([]);
+  }, 120_000);
+});
+
+describe("pre-push refs", () => {
+  const ref = (localSha: string) => ({
+    localRef: "refs/heads/other",
+    localSha,
+    remoteRef: "refs/heads/other",
+    remoteSha: "0000000000000000000000000000000000000000",
+  });
+
+  it.each(["known", "unknown", "multiple"])(
+    "uses %s remote bases instead of upstream",
+    async (kind) => {
+      const dir = await materialize("ts-lib-vitest", { git: true });
+      const base = git(dir, "rev-parse", "HEAD").trim();
+      await edit(dir, stringsTest, 'toBe("Ada")', 'toBe("Adah")');
+      await commitAll(dir, "broken");
+      const head = git(dir, "rev-parse", "HEAD").trim();
+      git(dir, "branch", "upstream");
+      git(dir, "branch", "--set-upstream-to=upstream", "main");
+      const refs =
+        kind === "multiple"
+          ? [
+              { ...ref(head), remoteSha: head },
+              { ...ref(head), remoteRef: "refs/heads/second", remoteSha: base },
+            ]
+          : [{ ...ref(head), remoteSha: kind === "known" ? base : "1".repeat(40) }];
+      const result = await (await SmartTest.open({ root: dir })).runHook("pre-push", {
+        cache: false,
+        refs,
+      });
+      expect(result.outcome?.report.decision.selectedTests.map((t) => t.filePath)).toContain(
+        stringsTest,
+      );
+      expect(result.outcome?.report.summary.failed).toBeGreaterThan(0);
+    },
+    120_000,
+  );
+
+  it("refuses to pass when the push sends a commit other than HEAD", async () => {
+    const dir = await materialize("ts-lib-vitest", { git: true });
+    await writeFile(join(dir, "notes.md"), "later\n");
+    await commitAll(dir, "later");
+    const old = git(dir, "rev-parse", "HEAD^").trim();
+
+    const st = await SmartTest.open({ root: dir });
+    await expect(st.runHook("pre-push", { cache: false, refs: [ref(old)] })).rejects.toMatchObject({
+      code: "ST_HOOK_PUSH_REF_UNSUPPORTED",
+      category: "usage",
+    });
+    expect((await st.hookHistory()).runs).toBe(0);
+  }, 120_000);
+
+  it("runs when every pushed ref points at HEAD", async () => {
+    const dir = await materialize("ts-lib-vitest", { git: true });
+    const head = git(dir, "rev-parse", "HEAD").trim();
+    const result = await (await SmartTest.open({ root: dir })).runHook("pre-push", {
+      cache: false,
+      refs: [ref(head)],
+    });
+    expect(result.outcome?.exitCode).toBe(0);
+  }, 120_000);
+});
+
+const core = pathToFileURL(resolve(import.meta.dirname, "../packages/core/dist/index.js")).href;
+
+/** Installs a shell hook that runs the compiled core API, exactly as the CLI hook does. */
+async function installRealHook(dir: string, stage: "pre-commit" | "pre-push"): Promise<void> {
+  const wrapperDir = await mkdtemp(join(tmpdir(), "st-hook-"));
+  const wrapper = join(wrapperDir, "hook.mjs");
+  await writeFile(
+    wrapper,
+    `const { SmartTest } = await import(${JSON.stringify(core)});
+try {
+  const st = await SmartTest.open({ root: process.cwd() });
+  const r = await st.runHook(${JSON.stringify(stage)}, { cache: false });
+  if (r.checks.some((c) => c.status === "failed")) process.exit(1);
+  process.exit(r.outcome?.exitCode ?? 1);
+} catch (error) {
+  console.error(error?.code ?? error?.message ?? String(error));
+  process.exit(1);
+}
+`,
+  );
+  await mkdir(join(dir, ".git/hooks"), { recursive: true });
+  await writeFile(
+    join(dir, `.git/hooks/${stage}`),
+    `#!/bin/sh\nexec node ${JSON.stringify(wrapper)} "$@"\n`,
+    { mode: 0o755 },
+  );
+  git(dir, "config", "core.hooksPath", join(dir, ".git/hooks"));
+}
+
+describe("a real pre-push hook", () => {
+  async function setup(): Promise<{ dir: string; remote: string }> {
+    const dir = await materialize("ts-lib-vitest", { git: true });
+    const remote = join(await mkdtemp(join(tmpdir(), "st-remote-")), "remote.git");
+    git(dir, "init", "--bare", "-q", remote);
+    git(dir, "remote", "add", "origin", remote);
+    await installRealHook(dir, "pre-push");
+    return { dir, remote };
+  }
+
+  const push = (dir: string, ...refspec: string[]) =>
+    spawnSync("git", ["push", "origin", ...refspec], {
+      cwd: dir,
+      encoding: "utf8",
+      env: process.env,
+    });
+
+  it("runs the hook and accepts a push of HEAD", async () => {
+    const { dir, remote } = await setup();
+    const result = push(dir, "main");
+    expect(result.status, result.stderr).toBe(0);
+    expect(git(remote, "rev-parse", "main").trim()).toBe(git(dir, "rev-parse", "HEAD").trim());
+    expect((await (await SmartTest.open({ root: dir })).hookHistory()).runs).toBe(1);
+  }, 120_000);
+
+  it.each([false, true])(
+    "checks a new target despite upstream equalling HEAD (isolated=%s)",
+    async (isolated) => {
+      const { dir, remote } = await setup();
+      await edit(dir, stringsTest, 'toBe("Ada")', 'toBe("Adah")');
+      git(dir, "add", "-A");
+      git(dir, "-c", "core.hooksPath=/dev/null", "commit", "-m", "bypassed broken test");
+      git(dir, "-c", "core.hooksPath=/dev/null", "push", "-u", "origin", "main");
+      expect(git(dir, "rev-parse", "@{upstream}").trim()).toBe(
+        git(dir, "rev-parse", "HEAD").trim(),
+      );
+      if (isolated) await edit(dir, stringsTest, 'toBe("Adah")', 'toBe("Ada")');
+      const result = push(dir, "HEAD:refs/heads/new-target");
+      expect(result.status, result.stderr).not.toBe(0);
+      expect(
+        spawnSync("git", ["--git-dir", remote, "rev-parse", "--verify", "refs/heads/new-target"])
+          .status,
+      ).not.toBe(0);
+      const records = JSON.parse(await readFile(join(dir, ".smarttest/state/hooks.json"), "utf8"));
+      expect(records.runs.at(-1).selected).toBeGreaterThan(0);
+      expect(records.runs.at(-1).passed).toBe(false);
+    },
+    120_000,
+  );
+
+  it("runs the committed content and rejects a failing push", async () => {
+    const { dir, remote } = await setup();
+    expect(push(dir, "main").status).toBe(0);
+    await edit(dir, stringsTest, 'toBe("Ada")', 'toBe("Adah")');
+    await commitAll(dir, "broken");
+    const failed = push(dir, "main");
+    expect(failed.status).not.toBe(0);
+    // The remote was not updated: the hook tested the commit and refused it.
+    expect(git(remote, "rev-parse", "main").trim()).not.toBe(git(dir, "rev-parse", "HEAD").trim());
+  }, 120_000);
+
+  it("rejects a push that sends a non-HEAD ref without testing anything", async () => {
+    const { dir, remote } = await setup();
+    expect(push(dir, "main").status).toBe(0);
+    await writeFile(join(dir, "notes.md"), "later\n");
+    await commitAll(dir, "later");
+    const old = git(dir, "rev-parse", "HEAD^").trim();
+    git(dir, "branch", "other", old);
+
+    const result = push(dir, `other:refs/heads/other`);
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("ST_HOOK_PUSH_REF_UNSUPPORTED");
+    expect(
+      spawnSync("git", ["--git-dir", remote, "rev-parse", "--verify", "refs/heads/other"]).status,
+    ).not.toBe(0);
+    // The rejected ref was never tested.
+    expect((await (await SmartTest.open({ root: dir })).hookHistory()).runs).toBe(1);
+  }, 120_000);
+});
+
+describe("a real pre-commit hook with an alternate index", () => {
+  it("strips the hook's Git env from the isolated engine and its tests", async () => {
+    const dir = await materialize("ts-lib-vitest", { git: true });
+    await installRealHook(dir, "pre-commit");
+
+    // Git is told to commit from an absolute alternate index. The hook inherits it.
+    const alt = join(await mkdtemp(join(tmpdir(), "st-alt-index-")), "index");
+    await copyFile(join(dir, ".git/index"), alt);
+    const env = {
+      ...process.env,
+      GIT_INDEX_FILE: alt,
+      SMARTTEST_TEST_ALT_INDEX: alt,
+    };
+    const testFile = "test/hook-env.test.ts";
+    await writeFile(
+      join(dir, testFile),
+      `import { execFileSync } from "node:child_process";
+import { expect, it } from "vitest";
+
+it("does not inherit the pre-commit Git environment", () => {
+  expect(process.env.GIT_INDEX_FILE).toBeUndefined();
+  expect(process.env.GIT_DIR).toBeUndefined();
+  expect(process.env.GIT_WORK_TREE).toBeUndefined();
+  const top = execFileSync("git", ["rev-parse", "--show-toplevel"], { encoding: "utf8" }).trim();
+  expect(top).toContain("smarttest-hook-");
+  const index = execFileSync("git", ["rev-parse", "--git-path", "index"], {
+    encoding: "utf8",
+  }).trim();
+  expect(index).not.toBe(process.env.SMARTTEST_TEST_ALT_INDEX);
+});
+`,
+    );
+    const added = spawnSync("git", ["add", testFile], { cwd: dir, encoding: "utf8", env });
+    expect(added.status, added.stderr).toBe(0);
+    // An unstaged edit forces the hook to use a temporary checkout.
+    await writeFile(join(dir, "notes.md"), "dirty\n");
+
+    const commit = spawnSync("git", ["commit", "-m", "hook env"], {
+      cwd: dir,
+      encoding: "utf8",
+      env,
+    });
+    expect(commit.status, commit.stderr).toBe(0);
+    expect(git(dir, "log", "-1", "--format=%s").trim()).toBe("hook env");
+    expect((await (await SmartTest.open({ root: dir })).hookHistory()).runs).toBe(1);
+    const records = JSON.parse(
+      await readFile(join(dir, ".smarttest/state/hooks.json"), "utf8"),
+    ) as { runs: { selected: number; passed: boolean }[] };
+    expect(records.runs.at(-1)?.passed).toBe(true);
+    // The hook executed the staged test that inspects its environment.
+    expect(records.runs.at(-1)?.selected).toBeGreaterThan(0);
+  }, 120_000);
+});

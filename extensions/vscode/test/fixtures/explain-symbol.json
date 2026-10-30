@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "command": "explain",
+  "kind": "source",
+  "target": "src/core/Labeler.ts#Labeler.label",
+  "description": "git · HEAD…working tree",
+  "tests": [
+    {
+      "test": "test/labeler.test.ts",
+      "path": ["src/core/Labeler.ts#Labeler.label", "test/labeler.test.ts"]
+    }
+  ],
+  "uncertainty": [],
+  "rules": [],
+  "risk": "low"
+}

@@ -21,6 +21,8 @@ export type ChangeSource =
       target?: string;
     }
   | { kind: "staged" }
+  /** Committed push content. Hook callers supply actual remote SHAs; otherwise use upstream. */
+  | { kind: "push"; remoteShas?: readonly string[] }
   | { kind: "uncommitted" }
   | { kind: "snapshot"; id?: string };
 
@@ -44,6 +46,10 @@ export function describeSource(source: ChangeSource): string {
       return `${source.direct ? source.ref : `merge-base(${source.ref})`}…${source.target ?? "working tree"}`;
     case "staged":
       return "HEAD…index (staged)";
+    case "push":
+      return source.remoteShas
+        ? "remote push targets…HEAD (push)"
+        : "merge-base(upstream)…HEAD (push)";
     case "uncommitted":
       return "HEAD…working tree";
     case "snapshot":

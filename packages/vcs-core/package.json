@@ -1,6 +1,6 @@
 {
   "name": "@smarttest/vcs-core",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "description": "Version-control adapter contract and normalized ChangeSet utilities.",
   "license": "Apache-2.0",
   "type": "module",

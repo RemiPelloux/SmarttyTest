@@ -59,6 +59,8 @@ export default defineConfig({
 | `parallelGroups`         | `number \| "auto"`                                              | `"auto"`                            | Runner groups run at the same time; `auto` is `min(groups, CPUs / 4, 4)`; Playwright and Cypress always run alone                                                                                                                        |
 | `storeDir`               | `string`                                                        | `".smarttest"`                      | Local state. Git-ignored by init                                                                                                                                                                                                         |
 
+`hook.checks` is an array of `{ name, run, projects?, files?, stage? }`. Commands run in affected project directories; `{files}` becomes quoted changed paths. `stage` is `pre-commit` (default), `pre-push` or `both`. `hook.budgetMs` defaults to `60000`; exceeding the estimate warns and still runs the full selection. See [commit and push hooks](../guides/commit-hooks.md).
+
 Unknown keys produce warnings instead of being silently accepted.
 
 ## Per-project conventions

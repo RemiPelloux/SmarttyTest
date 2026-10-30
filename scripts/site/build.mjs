@@ -45,6 +45,9 @@ const NAV = [
     [
       ["Overview", "docs/index.html"],
       ["Getting started", "docs/guides/getting-started.html"],
+      ["Commit and push hooks", "docs/guides/commit-hooks.html"],
+      ["Studio", "docs/guides/studio.html"],
+      ["VS Code", "docs/guides/vscode.html"],
       ["Running in CI", "docs/guides/ci.html"],
     ],
   ],

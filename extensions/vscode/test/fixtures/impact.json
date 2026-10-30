@@ -1,0 +1,106 @@
+{
+  "schemaVersion": 1,
+  "command": "impact",
+  "description": "git · HEAD…working tree",
+  "changeSet": {
+    "provider": "git",
+    "changes": [
+      {
+        "type": "modified",
+        "path": "src/core/Labeler.ts"
+      }
+    ],
+    "completeness": "complete",
+    "warnings": [],
+    "baseRevision": "HEAD",
+    "targetRevision": "working-tree"
+  },
+  "decision": {
+    "selectedTests": [
+      {
+        "testId": "test/labeler.test.ts",
+        "filePath": "test/labeler.test.ts",
+        "reasons": [
+          {
+            "kind": "transitive-dependency",
+            "message": "Transitively depends on src/core/Labeler.ts (2 hops)",
+            "path": ["src/core/Labeler.ts", "src/index.ts", "test/labeler.test.ts"],
+            "confidence": "high"
+          }
+        ]
+      },
+      {
+        "testId": "test/strings.test.ts",
+        "filePath": "test/strings.test.ts",
+        "reasons": [
+          {
+            "kind": "transitive-dependency",
+            "message": "Transitively depends on src/core/Labeler.ts (2 hops)",
+            "path": ["src/core/Labeler.ts", "src/index.ts", "test/strings.test.ts"],
+            "confidence": "high"
+          }
+        ]
+      }
+    ],
+    "skippedTests": [
+      {
+        "testId": "test/cache.test.ts",
+        "filePath": "test/cache.test.ts",
+        "reasons": [
+          "No static dependency path from changed code",
+          "No mandatory trigger matched",
+          "No rule requires it"
+        ],
+        "confidence": "Limited to the analysed dependency model (0 file(s) with unresolved imports in its dependencies)"
+      },
+      {
+        "testId": "test/numbers.test.ts",
+        "filePath": "test/numbers.test.ts",
+        "reasons": [
+          "No static dependency path from changed code",
+          "No mandatory trigger matched",
+          "No rule requires it"
+        ],
+        "confidence": "Limited to the analysed dependency model (0 file(s) with unresolved imports in its dependencies)"
+      }
+    ],
+    "affectedFiles": [
+      "src/core/Labeler.ts",
+      "src/index.ts",
+      "test/labeler.test.ts",
+      "test/strings.test.ts"
+    ],
+    "affectedSymbols": [
+      "src/core/Labeler.ts#Labeler",
+      "src/core/Labeler.ts#Labeler.@init",
+      "src/core/Labeler.ts#Labeler.cache",
+      "src/core/Labeler.ts#Labeler.label"
+    ],
+    "analysisStatus": "partial",
+    "safetyMode": "balanced",
+    "requestedMode": "balanced",
+    "reasons": [],
+    "warnings": [],
+    "fallbackApplied": false,
+    "details": {
+      "triggers": [],
+      "seeds": [
+        {
+          "file": "src/core/Labeler.ts",
+          "units": ["*"],
+          "signature": true
+        }
+      ],
+      "trivialSkipped": [],
+      "ignored": [],
+      "uncertainty": []
+    }
+  },
+  "timings": {
+    "change detection": 45.531777000000005,
+    "index update": 70.65811100000002,
+    "graph build": 1.1301910000000248,
+    "semantic diff": 5.483947000000001,
+    "impact analysis": 1.6098539999999844
+  }
+}

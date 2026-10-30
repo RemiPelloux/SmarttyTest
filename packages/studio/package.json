@@ -1,0 +1,41 @@
+{
+  "name": "@smarttest/studio",
+  "version": "0.9.0",
+  "description": "Local web interface for impact, test execution and selection evidence.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "private": true,
+  "exports": {
+    ".": {
+      "@smarttest/source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "typecheck": "tsc -b --noEmit false"
+  },
+  "dependencies": {
+    "@smarttest/config": "workspace:*",
+    "@smarttest/core": "workspace:*",
+    "@smarttest/impact-engine": "workspace:*",
+    "@smarttest/project-detector": "workspace:*",
+    "@smarttest/report-engine": "workspace:*",
+    "@smarttest/shared": "workspace:*",
+    "@smarttest/source-parser": "workspace:*",
+    "@smarttest/test-discovery": "workspace:*",
+    "@smarttest/vcs-core": "workspace:*",
+    "@smarttest/test-executor": "workspace:*"
+  },
+  "smarttest": {
+    "epic": "STU",
+    "release": "1.0.0"
+  }
+}

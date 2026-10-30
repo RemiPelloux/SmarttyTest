@@ -34,7 +34,10 @@ export const COMMANDS: Record<string, { summary: string; usage: string; flags?: 
       "--all  full suite through the same pipeline",
       "--base <ref>  compare with merge-base(<ref>, HEAD)",
       "--base-mode direct  compare with <ref> directly",
-      "--staged / --uncommitted  local Git changes",
+      "--staged  test the Git index; dirty files are set aside in a temporary checkout",
+      "--push  test committed changes since the upstream merge-base",
+      "--hook  fail-fast hook profile with affected-project checks and duration records",
+      "--uncommitted  local Git working-tree changes",
       "--since-snapshot  compare with the latest native snapshot",
       "--coverage  collect coverage (scope: selected or full)",
       "--retries n  retry failures; a pass after retry is reported as flaky",
@@ -74,6 +77,14 @@ export const COMMANDS: Record<string, { summary: string; usage: string; flags?: 
     summary: "Tests that pass and fail without code changes, from the recorded runs",
     usage: "smarttest flaky [--min-rate 0.05] [--json]",
   },
+  studio: {
+    summary: "Open the local interface for impact, tests and selection evidence",
+    usage: "smarttest studio [--port n] [--open]",
+    flags: [
+      "--port n  preferred loopback port (default: 4173; available port if occupied)",
+      "--open  open the session URL in your browser",
+    ],
+  },
   watch: {
     summary: "Rerun the tests affected by each save",
     usage: "smarttest watch [--mode m]",
@@ -104,11 +115,12 @@ export const COMMANDS: Record<string, { summary: string; usage: string; flags?: 
   },
   hook: {
     summary:
-      "Install SmartTest in the pre-commit hook (husky, lefthook, simple-git-hooks or .git/hooks)",
+      "Install SmartTest in pre-commit or pre-push (husky, lefthook, simple-git-hooks or .git/hooks)",
     usage:
       "smarttest hook install | uninstall | status [--replace] [--manager m] [--dry-run] [--yes]",
     flags: [
-      "--replace  comment out the hook's full-suite test steps (uninstall restores them)",
+      "--pre-push  install/status/uninstall the pre-push hook (default install: pre-commit)",
+      "--replace  comment out existing related/full-suite test steps (uninstall restores them)",
       "--manager m  husky, lefthook, simple-git-hooks or git (default: detected)",
     ],
   },

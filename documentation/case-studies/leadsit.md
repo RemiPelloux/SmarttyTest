@@ -99,7 +99,13 @@ A wider run, `smarttest benchmark --commits 200 --sample 40` (40 commits spread 
 | 0.7.0   | `sync`, `watch`, `migrate`; Playwright and Cypress adapters (LeadsIt has no end-to-end suite in its hook)                                                  | 706/706 through SmartTest                                                                                                                                                                                                |
 | 0.8.0   | Runner groups (Jest, Vitest, two `node --test` projects) run in parallel; validated result cache                                                           | full suite 7.7 s → 5.2 s; a repeated run of the same state 4.1 s → 1.2 s (93 of 100 files from the cache, labelled "cached, not run"); 12-commit replay 47.2 s → 43.4 s, 0 missed failures, 0 cache-integrity violations |
 
-LeadsIt vendors each release in `tools/smarttest/` (currently `smarttest-0.8.0.tgz`) until the package is on npm.
+## Update: 0.9.0
+
+LeadsIt vendors `tools/smarttest/smarttest-0.9.0.tgz`. `hook install --dry-run` previews the upgrade and `hook install --yes` changes the existing invocation to `run --staged --hook`. Pelloux, i18n and TypeScript checks remain intact. Adoption caught and fixed a shell-text replacement bug in SmartTest before applying the hook.
+
+The packaged CLI passes 714 assertions across 101 files in 4.78 s. The final adoption commit [`f21d47c1`](https://github.com/RemiPelloux/LeadsIt/commit/f21d47c1) also runs the executable Git hook: 714 passed, zero cached, in 5.3 s; the dirty `apify` submodule remains unstaged and untouched. A staged hook run takes 3.67 s including isolation: 314 passed, 400 cached, zero failed. Cached assertions were not executed in that run.
+
+The 12-commit replay records 53.59 s full, 7.18 s project-gated and 34.38 s SmartTest, with zero missed failures and zero cache violations. SmartTest saves 36% against full runs but is 379% slower than project-gated execution on this window. It selects 526 of 1,204 test-file runs. History, cache and machine load differ from older measurements; this is not a controlled version comparison. The [raw benchmark](../../benchmarks/releases/0.9.0/leadsit-090-benchmark.json) retains the per-commit results.
 
 ## Caveats
 

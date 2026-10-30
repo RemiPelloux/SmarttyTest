@@ -31,7 +31,9 @@
 | `smarttest report`                                              | Re-render reports from the last run                                                                                     |
 | `smarttest uninstall`                                           | Remove SmartTest config, scripts and local state. Tests are kept                                                        |
 
-Reserved for later versions ([roadmap](../planning/roadmap.md)): `studio` / `open` (0.9.0), `ai …` and `autopilot` (after 1.0.0). They exit with `ST_NOT_AVAILABLE`.
+`smarttest studio [--port n] [--open]` starts the local Studio interface. `smarttest open` is an alias. The server binds to loopback and prints a session URL; Ctrl-C stops it. See [Studio](../guides/studio.md).
+
+Reserved for later versions ([roadmap](../planning/roadmap.md)): `ai …` and `autopilot` (after 1.0.0). They exit with `ST_NOT_AVAILABLE`.
 
 ## Global flags
 
@@ -57,7 +59,8 @@ Reserved for later versions ([roadmap](../planning/roadmap.md)): `studio` / `ope
 | `--base <ref>`                         | merge-base(`<ref>`, HEAD) → working tree                                                               |
 | `--base-mode direct`                   | `<ref>` → working tree, without the merge-base                                                         |
 | `--base <a> --target <b>`              | revision `a` → revision `b` (untracked files ignored), e.g. one commit or a PR range                   |
-| `--staged`                             | HEAD → index                                                                                           |
+| `--staged`                             | HEAD → index; runs execute the staged content in isolation when necessary                              |
+| `--push`                               | upstream merge-base → HEAD; runs execute committed content                                             |
 | `--uncommitted`                        | HEAD → working tree, including untracked files                                                         |
 | `--since-snapshot` / `--snapshot <id>` | latest (or given) native snapshot → working tree (hybrid mode works with Git too)                      |
 
@@ -76,6 +79,8 @@ Reserved for later versions ([roadmap](../planning/roadmap.md)): `studio` / `ope
 | `--no-cache`     | Run tests even when a validated cached pass exists                            |
 | `--shard <i/n>`  | Run shard i of n, balanced by recorded durations                              |
 | `--bail`         | Stop starting runner groups after one has a failure                           |
+
+`--hook` enables the commit-hook profile with affected-project checks, fail-fast execution, compact output and duration records. It accepts `--staged` or `--push` and rejects sharding. See [commit and push hooks](../guides/commit-hooks.md).
 
 Ctrl-C cancels the runner cleanly and reports `cancelled`.
 
@@ -97,6 +102,8 @@ When sub-projects lay out their tests differently (LeadsIt has colocated `*.serv
 ## `hook`
 
 `smarttest hook status` shows the hook manager, whether SmartTest runs in the hook, and the steps that still run whole suites. `smarttest hook install` adds the marked block (`# >>> smarttest >>>` … `# <<< smarttest <<<`) to `.husky/pre-commit`, a `smarttest` command under `pre-commit` in `lefthook.yml`, the `simple-git-hooks` entry in `package.json`, or `.git/hooks/pre-commit` (respecting `core.hooksPath`). `--replace` comments out the existing full-suite test steps with a `: # smarttest-replaced:` prefix so the script stays valid. `--manager <husky|lefthook|simple-git-hooks|git>` overrides detection; `--dry-run` previews, `--yes` skips the confirmation. `smarttest hook uninstall` removes the block and restores replaced steps. When `node_modules/.bin/smarttest` is missing, the hook prints a notice instead of blocking the commit.
+
+`--pre-push` targets pre-push for install, status and uninstall. Installation upgrades older SmartTest commands to `--hook`. Status also reports durations, bypasses, commits without matching successful records and missing local installs. Plain uninstall removes both stages; `uninstall --pre-push` removes only pre-push. See [commit and push hooks](../guides/commit-hooks.md).
 
 ## `ci`
 

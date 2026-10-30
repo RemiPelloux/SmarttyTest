@@ -38,6 +38,7 @@ const TOP_KEYS: Record<string, string[] | null> = {
   retries: null,
   adaptive: null,
   cache: null,
+  hook: ["checks", "budgetMs"],
   parallelGroups: null,
   projects: null,
   timeoutMs: null,
@@ -90,6 +91,52 @@ export function validateConfig(raw: unknown): { errors: ConfigIssue[]; warnings:
   }
   if (c.adaptive !== undefined && typeof c.adaptive !== "boolean")
     err("adaptive", "must be a boolean");
+  if (c.cache !== undefined && typeof c.cache !== "boolean") err("cache", "must be a boolean");
+  if (
+    c.parallelGroups !== undefined &&
+    c.parallelGroups !== "auto" &&
+    !(
+      typeof c.parallelGroups === "number" &&
+      Number.isInteger(c.parallelGroups) &&
+      c.parallelGroups >= 1
+    )
+  )
+    err("parallelGroups", 'must be a positive integer or "auto"');
+  if (c.hook !== undefined) {
+    if (!isObj(c.hook)) err("hook", "must be an object");
+    else {
+      const h = c.hook as Record<string, unknown>;
+      if (h.budgetMs !== undefined && !(typeof h.budgetMs === "number" && h.budgetMs > 0))
+        err("hook.budgetMs", "must be a positive number");
+      if (h.checks !== undefined) {
+        if (!Array.isArray(h.checks)) err("hook.checks", "must be an array");
+        else
+          h.checks.forEach((k, i) => {
+            if (!isObj(k) || typeof k.name !== "string" || typeof k.run !== "string")
+              err(
+                `hook.checks[${i}]`,
+                "must be { name: string, run: string, projects?, files?, stage? }",
+              );
+            else {
+              if (!k.name.trim()) err(`hook.checks[${i}].name`, "must not be empty");
+              if (!k.run.trim()) err(`hook.checks[${i}].run`, "must not be empty");
+              if (
+                k.projects !== undefined &&
+                (!Array.isArray(k.projects) || k.projects.some((p) => typeof p !== "string"))
+              )
+                err(`hook.checks[${i}].projects`, "must be an array of project directories");
+              if (k.files !== undefined && typeof k.files !== "string")
+                err(`hook.checks[${i}].files`, "must be a glob string");
+              if (
+                k.stage !== undefined &&
+                !["pre-commit", "pre-push", "both"].includes(k.stage as string)
+              )
+                err(`hook.checks[${i}].stage`, "must be pre-commit, pre-push or both");
+            }
+          });
+      }
+    }
+  }
   if (c.projects !== undefined) {
     if (!isObj(c.projects)) err("projects", "must be an object keyed by directory");
     else

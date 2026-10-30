@@ -1,6 +1,6 @@
 {
   "name": "@smarttest/report-engine",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "description": "JSON, HTML, JUnit and Markdown reports with integrity checks.",
   "license": "Apache-2.0",
   "type": "module",

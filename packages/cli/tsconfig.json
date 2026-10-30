@@ -18,6 +18,9 @@
     },
     {
       "path": "../smart-init"
+    },
+    {
+      "path": "../studio"
     }
   ]
 }

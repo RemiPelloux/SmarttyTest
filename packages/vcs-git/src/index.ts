@@ -31,8 +31,11 @@ export class GitAdapter implements VersionControlAdapter, ChangeProvider {
 
   constructor(private readonly projectRoot: string) {}
 
-  private async git(args: string[], allowFail = false): Promise<string> {
-    const res = await runProcess("git", [...GIT_CONFIG, ...args], { cwd: this.projectRoot });
+  private async git(args: string[], allowFail = false, input?: string): Promise<string> {
+    const res = await runProcess("git", [...GIT_CONFIG, ...args], {
+      cwd: this.projectRoot,
+      ...(input !== undefined ? { input } : {}),
+    });
     if (res.code !== 0 && !allowFail) {
       throw new SmartTestError(
         `git ${args.join(" ")} failed: ${res.stderr.trim() || `exit ${res.code}`}`,
@@ -206,6 +209,12 @@ export class GitAdapter implements VersionControlAdapter, ChangeProvider {
         changeSet = await this.diff([beforeRev], true, beforeRev);
         changeSet.targetRevision = "working-tree";
       }
+    } else if (source.kind === "push") {
+      const { base, note } = await this.pushBase(source.remoteShas);
+      beforeRev = base;
+      changeSet = await this.diff([base, "HEAD"], false, base);
+      changeSet.targetRevision = "HEAD";
+      if (note) changeSet.warnings.push(note);
     } else if (source.kind === "staged") {
       beforeRev = "HEAD";
       changeSet = await this.diff([], false, "HEAD", true);
@@ -225,6 +234,62 @@ export class GitAdapter implements VersionControlAdapter, ChangeProvider {
       return res.code === 0 ? res.stdout : undefined;
     };
     return { changeSet: scoped, readBefore, description: `git · ${describeSource(source)}` };
+  }
+
+  /**
+   * The hash of an empty tree in this repository's object format (SHA-1 or SHA-256).
+   * Used as a conservative base when no upstream can be determined: every commit then counts.
+   */
+  private async emptyTree(): Promise<string> {
+    const tree = (await this.git(["hash-object", "-t", "tree", "--stdin"], false, "")).trim();
+    if (!tree)
+      throw new SmartTestError("Could not compute the empty tree hash", {
+        code: "ST_GIT_FAILED",
+        category: "infrastructure",
+        hint: "Make sure the repository is healthy and Git can write objects.",
+      });
+    return tree;
+  }
+
+  /**
+   * Base of a push: the merge-base with the branch's upstream, else with `origin/HEAD`,
+   * `origin/main` or `origin/master`. When there is no remote branch at all, an empty tree is
+   * used so every commit since the first is included — the previous commit would silently miss
+   * every earlier unpushed commit.
+   */
+  async pushBase(remoteShas?: readonly string[]): Promise<{ base: string; note?: string }> {
+    if (remoteShas !== undefined) {
+      // Multiple destinations can have different histories. Comparing the whole tree is a
+      // conservative superset and avoids losing changes by choosing only one destination.
+      if (
+        remoteShas.length === 1 &&
+        /^[0-9a-f]{40,64}$/i.test(remoteShas[0] ?? "") &&
+        !/^0+$/.test(remoteShas[0] ?? "")
+      ) {
+        const sha = remoteShas[0] as string;
+        const mb = (await this.git(["merge-base", sha, "HEAD"], true)).trim();
+        if (mb) return { base: mb };
+      }
+      return {
+        base: await this.emptyTree(),
+        note: "New, unknown or multiple push targets: comparing with the whole history (empty tree)",
+      };
+    }
+    const candidates = ["@{upstream}", "origin/HEAD", "origin/main", "origin/master"];
+    for (const ref of candidates) {
+      if (!(await this.git(["rev-parse", "--verify", "-q", `${ref}^{commit}`], true)).trim())
+        continue;
+      const mb = (await this.git(["merge-base", ref, "HEAD"], true)).trim();
+      if (mb)
+        return {
+          base: mb,
+          ...(ref === "@{upstream}" ? {} : { note: `No upstream branch: compared with ${ref}` }),
+        };
+    }
+    return {
+      base: await this.emptyTree(),
+      note: "No upstream or origin branch: comparing with the whole history (empty tree)",
+    };
   }
 
   async head(): Promise<string | undefined> {

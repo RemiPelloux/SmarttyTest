@@ -2,7 +2,7 @@
 
 > SmartTest is an intelligent layer **on top of** existing test runners. It works out what changed, what depends on it and which tests protect it, then lets Jest, Vitest, `node --test`, Playwright or Cypress do the running.
 
-This document describes the architecture as of 0.8.0, which is the 1.0.0 architecture minus Studio (0.9.0). The full long-term architecture (AI, Studio, Cloud) is in [PRD §4](../product/PRD.md#4-system-architecture). Decisions are recorded in [ADRs](adr/README.md).
+This document describes the architecture as of 0.9.0, including the local Studio server and the VS Code CLI client. The full long-term architecture (AI and Cloud) is in [PRD §4](../product/PRD.md#4-system-architecture). Decisions are recorded in [ADRs](adr/README.md).
 
 ## Layers
 
@@ -10,7 +10,8 @@ This document describes the architecture as of 0.8.0, which is the 1.0.0 archite
 flowchart TB
   subgraph Surface["Surfaces"]
     CLI["smarttest CLI<br/><small>packages/cli</small>"]
-    Studio["Studio (0.9.0)"]:::later
+    Studio["Local Studio<br/><small>packages/studio</small>"]
+    Editor["VS Code extension<br/><small>extensions/vscode</small>"]
   end
 
   CORE["Application core<br/><small>packages/core</small>"]
@@ -60,18 +61,19 @@ flowchart TB
   STORE[("Local intelligence store<br/>.smarttest/")]
 
   CLI --> CORE
-  Studio -.-> CORE
+  CLI --> Studio
+  Studio --> CORE
+  Editor --> CLI
   CORE --> Project & Change & Code & Decide & Test & REP
   Code --> STORE
   Change --> STORE
   Test --> STORE
   REP --> STORE
-  classDef later stroke-dasharray: 4 4,opacity:0.6
 ```
 
 **Rules of the road**
 
-1. **Dependencies point inwards.** `shared` → contracts → engines → `core` → `cli`. The manifest (`scripts/packages.manifest.json`) is the source of truth and the scaffolder rejects cycles.
+1. **Dependencies point inwards.** `shared` → contracts → engines → `core` → `studio` → `cli`. The manifest (`scripts/packages.manifest.json`) is the source of truth and the scaffolder rejects cycles.
 2. **The core is deterministic and local.** Nothing in `core` or below may make network calls or depend on `ai-*` packages ([ADR-0004](adr/0004-deterministic-core-ai-optional.md)).
 3. **Adapters declare capabilities.** Anything not declared counts as unsupported and is never emulated ([ADR-0005](adr/0005-capability-declared-adapters.md)).
 4. **Uncertainty is data.** Unresolved imports, dynamic patterns and partial change sets are stored and passed along. They never get dropped.
@@ -140,8 +142,15 @@ sequenceDiagram
 | `@smarttest/coverage-engine`                     | Coverage ingestion with scope                                      | REP  |
 | `@smarttest/test-generator`                      | Layouts, templates, scaffolds, sync                                | GEN  |
 | `@smarttest/report-engine`                       | JSON / HTML / JUnit / Markdown + integrity                         | REP  |
-| `@smarttest/core`                                | Orchestration API used by CLI (and later Studio)                   | FND  |
+| `@smarttest/core`                                | Orchestration API used by CLI and Studio                           | FND  |
+| `@smarttest/studio`                              | Loopback HTTP API, session security, run stream and web interface  | UI   |
 | `smarttest`                                      | The CLI (`bin: smarttest`)                                         | CLI  |
+
+## Interface and hook boundaries
+
+Studio binds to loopback and serves its packaged assets without a CDN. A session token, host checks and origin checks protect its API; state changes require POST. It delegates analysis and execution to `core` and stores reports in the same `.smarttest/` directory as the CLI. Only Studio may import `node:http` and `node:net`; network imports remain forbidden in the engine packages. The VS Code extension calls the installed local CLI in a trusted workspace.
+
+Commit and push profiles share the core API. When the working tree differs from the content under test, core creates a temporary checkout, materialises the staged index or committed HEAD and links installed dependencies. Checks and tests use that checkout; reports and history use the original store. The user's index and working files are not stashed or rewritten. Push hooks validate Git's input refs and reject non-HEAD content that the profile cannot test.
 
 ## Local intelligence store
 
@@ -154,6 +163,7 @@ sequenceDiagram
 │   ├── traces.json            observed execution per test file (smarttest trace)
 │   ├── history.json           last results per test (fail-fast order, smarttest flaky)
 │   ├── timings.json           typical analysis time and last full run (adaptive policy)
+│   ├── hooks.json             checked trees, durations, checks and explicit bypasses
 │   ├── snapshots/             snapshot manifests (hashes; content optional)
 │   ├── blobs/                 deduplicated gzip content (when snapshots.storeContent)
 │   └── init-journal.json      what init changed → rollback

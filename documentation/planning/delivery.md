@@ -1,4 +1,4 @@
-# Delivery log: 0.3.0 to 0.8.0
+# Delivery log: 0.3.0 to 0.9.0
 
 What was actually delivered against the [roadmap](roadmap.md), sprint by sprint. The foundation sprints S0 to S10 (0.1.0 and 0.2.0) are in the [foundation backlog](foundation/sprints.md). Planning is in story points; one sprint is about 40 points. There are no dates: a sprint is a unit of work, and a version ships when its gate is met or the gap is written down.
 
@@ -6,17 +6,18 @@ Status words: **done** (shipped and tested), **partial** (shipped with a stated 
 
 ## Summary
 
-| Version                  | Sprints    | Planned | Delivered            | Moved / not done                      | Gate       | Tag                  |
-| ------------------------ | ---------- | ------- | -------------------- | ------------------------------------- | ---------- | -------------------- |
-| 0.3.0 Precise graph      | S11–S12    | 96      | 83                   | 13 moved to 0.8.0                     | met        | `v0.3.0` (`f85c053`) |
-| 0.4.0 Complete graph     | S13–S14    | 92      | 84                   | 8 moved to 0.7.0                      | met        | `v0.4.0` (`ee220dc`) |
-| 0.5.0 Runtime evidence   | S15–S16    | 71      | 58 done, 13 partial  | —                                     | partly met | `v0.5.0` (`03ee658`) |
-| 0.6.0 Adoption           | S17–S18    | 66      | 35 done, 31 partial  | Next.js fixture moved to 0.7.0        | partly met | `v0.6.0` (`328b330`) |
-| 0.7.0 Adaptation and E2E | S19–S20    | 84      | 76                   | 8 not done (TypeScript 7)             | met        | `v0.7.0` (`ec5d3a9`) |
-| 0.8.0 Speed              | S21–S23    | 105     | 79 done, 13 partial  | 13 not done (type-checker resolution) | not met    | `v0.8.0` (`a5d958f`) |
-| Total                    | 13 sprints | 514     | 415 done, 57 partial | 42                                    |            |                      |
+| Version                    | Sprints    | Planned | Delivered             | Moved / not done                      | Gate       | Tag                  |
+| -------------------------- | ---------- | ------- | --------------------- | ------------------------------------- | ---------- | -------------------- |
+| 0.3.0 Precise graph        | S11–S12    | 96      | 83                    | 13 moved to 0.8.0                     | met        | `v0.3.0` (`f85c053`) |
+| 0.4.0 Complete graph       | S13–S14    | 92      | 84                    | 8 moved to 0.7.0                      | met        | `v0.4.0` (`ee220dc`) |
+| 0.5.0 Runtime evidence     | S15–S16    | 71      | 58 done, 13 partial   | —                                     | partly met | `v0.5.0` (`03ee658`) |
+| 0.6.0 Adoption             | S17–S18    | 66      | 35 done, 31 partial   | Next.js fixture moved to 0.7.0        | partly met | `v0.6.0` (`328b330`) |
+| 0.7.0 Adaptation and E2E   | S19–S20    | 84      | 76                    | 8 not done (TypeScript 7)             | met        | `v0.7.0` (`ec5d3a9`) |
+| 0.8.0 Speed                | S21–S23    | 105     | 79 done, 13 partial   | 13 not done (type-checker resolution) | not met    | `v0.8.0` (`a5d958f`) |
+| 0.9.0 Hooks and interfaces | S24–S26    | 116     | 36 done, 80 partial   | —                                     | partly met | `v0.9.0`             |
+| Total                      | 16 sprints | 630     | 451 done, 137 partial | 42                                    |            |                      |
 
-Tests grew from 124 (0.2.0) to 272 (0.8.0); the regression harness grew from 4 to 9 fixtures, all at 0 missed failures in BALANCED and SAFE mode.
+Tests grew from 124 (0.2.0) to 383 repository tests plus 68 extension tests (0.9.0); the regression harness grew from 4 to 9 fixtures, all at 0 missed failures in BALANCED and SAFE mode.
 
 ## S11–S12 · 0.3.0 Precise graph
 
@@ -120,10 +121,40 @@ Goal: run what remains faster.
 
 Gate: not met. LeadsIt's 12-commit replay went from 47.2 s to 43.4 s (8% less, target 30%), 0 cache-integrity violations. A repeated run of an unchanged state on LeadsIt takes 1.2 s instead of 4.1 s (93 of 100 test files from the cache).
 
-## Carried into 0.9.0 and 1.0.0
+## S24–S26 · 0.9.0 Hooks and interfaces
+
+Goal: make staged and pushed checks reliable and expose selection evidence in local interfaces.
+
+| Story                                                                | Pts | Status                                                                                                                                                                           |
+| -------------------------------------------------------------------- | --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Exact staged-content runs                                            | 8   | done: temporary checkout, alternate indexes, binary/symlink/rename and file/directory transition fixtures                                                                        |
+| Pre-push installation and actual destination comparison              | 5   | done: new/unknown destinations select conservatively; unsupported non-HEAD pushes are rejected                                                                                   |
+| Hook defaults, affected-project checks, estimates, budget and status | 23  | done: checks and tests run concurrently; explicit bypass records and unchecked-commit findings                                                                                   |
+| Real-project hook measurements                                       | 4   | partial: LeadsIt adopted and replayed; small OpenPro-style fixture measured, large-workload comparison still open                                                                |
+| Studio overview and test explorer                                    | 21  | partial: local server, filtering, source and test actions shipped; complete accessibility/design gate open                                                                       |
+| Impact map                                                           | 13  | partial: selection paths, reasons and confidence shipped; graph filtering/export remain open                                                                                     |
+| Live runner and coverage viewer                                      | 21  | partial: affected/all/file execution, group events, cancellation, aggregate coverage and unit trace annotations; browser coverage collection and line/branch heatmap remain open |
+| VS Code extension                                                    | 21  | partial: CodeLens, hover, impact/run commands, results and trust gates; current-file command runs the affected change set; actual editor-host validation unavailable             |
+
+Validation: `pnpm verify` passes 383 repository tests and 68 extension tests, TypeScript, Biome, package boundaries and generated-planning checks. Nine regression fixtures remain at zero missed failures. The packaged CLI was installed outside this checkout and served Studio assets and authenticated APIs. Its runtime audit reports zero advisories; the VSIX passes archive validation.
+
+LeadsIt: all 714 assertions across 101 test files pass with 0.9.0 (4.78 s in this run). The staged hook reports 314 passed and 400 cached, zero failures, in 3.67 s including isolation. Its 12-commit benchmark reports 53.59 s full, 7.18 s project-gated, 34.38 s SmartTest, zero missed failures and zero cache violations. That is 36% faster than full runs and 379% slower than the project-gated baseline. These are local observations with a changing history/cache; they do not establish a release-to-release speed improvement.
+
+The OpenPro-style fixture preserves typecheck, build and PID/wait semantics through `hook install --replace`. Hook duration was 1.88 s before and 2.70 s after; the two-commit benchmark found zero misses and zero cache violations. With no remote base, the new hook checks the complete committed tree conservatively. This small fixture does not represent OpenPro's full workload.
+
+The LeadsIt dry run exposed replacement-string interpretation of shell `$'` sequences during an existing-hook upgrade. The installer now inserts the modified text through a callback; a regression test preserves all shell dollar sequences. The applied upgrade changes only the SmartTest invocation. A real adoption commit then exposed lost executable permissions during atomic replacement; atomic writes now preserve existing permissions, with an upgrade/uninstall regression test. The hook was restored before the final adoption commit.
+
+Studio security checks cover token, Host, Origin, request methods, content type, source traversal and symlink boundaries, CSP and SSE shutdown. Missing benchmark values stay unavailable; incomplete runs cannot be labelled passed. Retained browser evidence covers five screens, both themes and 1440/768/390 widths without document overflow. The overview inspector has zero failures and three warnings; seven keyboard checks pass. These checks are not a complete WCAG 2.2 AA or all-screen design signoff. See the [Studio critique](../../packages/studio/review/CRITIQUE.md).
+
+Gate: partly met. Features and limitations above are shipped explicitly as alpha; accessibility, complete keyboard/visual review, extension-host validation and remaining interface capabilities carry into 1.0.0. Source highlights indicate observed unit execution, not measured line coverage. Per-file results arrive at run completion; group/phase events stream during execution.
+
+## Carried into 1.0.0
 
 | Item                                                                                                    | From         | Now in                      |
 | ------------------------------------------------------------------------------------------------------- | ------------ | --------------------------- |
+| Complete Studio accessibility/design/keyboard checks and remaining interface capabilities               | 0.9.0        | 1.0.0                       |
+| VS Code host validation and true current-file run scope                                                 | 0.9.0        | 1.0.0                       |
+| Repeatable before/after hook benchmark on the full OpenPro-scale workload                               | 0.9.0        | 1.0.0                       |
 | Publish on npm                                                                                          | 0.6.0        | 1.0.0 (blocked on ADR-0007) |
 | Validate on macOS and Windows                                                                           | 0.6.0        | 1.0.0                       |
 | Cold start under one second at 2,000 modules; persist the graph to disk                                 | 0.6.0, 0.8.0 | 1.0.0 performance story     |

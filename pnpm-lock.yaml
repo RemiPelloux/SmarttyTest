@@ -200,6 +200,24 @@ importers:
         specifier: ^5.0.5
         version: 5.0.5(@types/node@24.19.2)(@vitest/coverage-v8@5.0.5)(vite@8.3.5(@types/node@24.19.2)(esbuild@0.28.2)(yaml@2.9.1))
 
+  extensions/vscode:
+    devDependencies:
+      '@types/node':
+        specifier: ^24.0.0
+        version: 24.19.2
+      '@types/vscode':
+        specifier: ^1.85.0
+        version: 1.144.0
+      esbuild:
+        specifier: ^0.28.2
+        version: 0.28.2
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
+      vitest:
+        specifier: ^5.0.5
+        version: 5.0.5(@types/node@24.19.2)(@vitest/coverage-v8@5.0.5)(vite@8.3.5(@types/node@24.19.2)(esbuild@0.28.2)(yaml@2.9.1))
+
   fixtures/projects/edges-vitest:
     devDependencies:
       vitest:
@@ -330,6 +348,9 @@ importers:
       '@smarttest/smart-init':
         specifier: workspace:*
         version: link:../smart-init
+      '@smarttest/studio':
+        specifier: workspace:*
+        version: link:../studio
 
   packages/config:
     dependencies:
@@ -590,6 +611,39 @@ importers:
       '@smarttest/shared':
         specifier: workspace:*
         version: link:../shared
+
+  packages/studio:
+    dependencies:
+      '@smarttest/config':
+        specifier: workspace:*
+        version: link:../config
+      '@smarttest/core':
+        specifier: workspace:*
+        version: link:../core
+      '@smarttest/impact-engine':
+        specifier: workspace:*
+        version: link:../impact-engine
+      '@smarttest/project-detector':
+        specifier: workspace:*
+        version: link:../project-detector
+      '@smarttest/report-engine':
+        specifier: workspace:*
+        version: link:../report-engine
+      '@smarttest/shared':
+        specifier: workspace:*
+        version: link:../shared
+      '@smarttest/source-parser':
+        specifier: workspace:*
+        version: link:../source-parser
+      '@smarttest/test-discovery':
+        specifier: workspace:*
+        version: link:../test-discovery
+      '@smarttest/test-executor':
+        specifier: workspace:*
+        version: link:../test-executor
+      '@smarttest/vcs-core':
+        specifier: workspace:*
+        version: link:../vcs-core
 
   packages/symbol-index:
     dependencies:
@@ -1549,6 +1603,9 @@ packages:
 
   '@types/stack-utils@2.0.3':
     resolution: {integrity: sha512-9aEbYZ3TbYMznPdcdr3SmIrLXwC/AKZXQeCf9Pgao5CKb8CyHuEX5jzWPTkvregvhRJHcpRO6BFoGW9ycaOkYw==}
+
+  '@types/vscode@1.144.0':
+    resolution: {integrity: sha512-IDd4eQzu6MjGucfaQF0V/TY5vHX9o1albkKyZD6K/iVXSCcL5NSj4KW1wWfx1QDadPKWyxMaE/+M1wKLCJlXpA==}
 
   '@types/yargs-parser@21.0.3':
     resolution: {integrity: sha512-I4q9QU9MQv4oEOz4tAHJtNz1cwuLxn2F3xcc2iV5WdqLPpUnj30aUuxt1mAxYTG+oe8CZMV/+6rU4S4gRDzqtQ==}
@@ -3678,6 +3735,8 @@ snapshots:
       csstype: 3.2.3
 
   '@types/stack-utils@2.0.3': {}
+
+  '@types/vscode@1.144.0': {}
 
   '@types/yargs-parser@21.0.3': {}
 

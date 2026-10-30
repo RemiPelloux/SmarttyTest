@@ -21,6 +21,7 @@ export const OPTIONS = {
   "base-mode": { type: "string" },
   target: { type: "string" },
   staged: { type: "boolean" },
+  push: { type: "boolean" },
   uncommitted: { type: "boolean" },
   "since-snapshot": { type: "boolean" },
   snapshot: { type: "string" },
@@ -68,8 +69,12 @@ export const OPTIONS = {
   to: { type: "string" },
   dir: { type: "string" },
   fix: { type: "boolean" },
+  // studio
+  port: { type: "string" },
   // hook
   replace: { type: "boolean" },
+  hook: { type: "boolean" },
+  "pre-push": { type: "boolean" },
   manager: { type: "string" },
   // snapshot
   keep: { type: "string" },

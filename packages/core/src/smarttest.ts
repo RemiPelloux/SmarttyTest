@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
+import { existsSync } from "node:fs";
 import { availableParallelism } from "node:os";
-import { join, relative } from "node:path";
+import { isAbsolute, join, relative } from "node:path";
 import { CypressAdapter } from "@smarttest/adapter-cypress";
 import { JestAdapter } from "@smarttest/adapter-jest";
 import { NodeTestAdapter } from "@smarttest/adapter-node";
@@ -49,6 +50,7 @@ import {
   matchGlob,
   readJson,
   readText,
+  runWithEnvScope,
   type SafetyMode,
   SmartTestError,
   sha256,
@@ -63,6 +65,7 @@ import {
   type FilePlan,
   type HookManager,
   type HookPlan,
+  type HookStage,
   type MigratePlan,
   planHookInstall,
   planHookUninstall,
@@ -95,6 +98,25 @@ import type { ChangeAnalysisInput, ChangeSource } from "@smarttest/vcs-core";
 import { GitAdapter } from "@smarttest/vcs-git";
 import { HgAdapter } from "@smarttest/vcs-hg";
 import { SvnAdapter } from "@smarttest/vcs-svn";
+import {
+  assertPushIsHead,
+  type CheckResult,
+  commitsWithoutHook,
+  GIT_HOOK_ENV,
+  type HookRecords,
+  hookInvocations,
+  isHookContext,
+  isolate,
+  loadHookRecords,
+  median,
+  type PushRef,
+  planChecks,
+  readPrePushRefs,
+  runChecks,
+  saveHookRecords,
+  setAside,
+  treeOf,
+} from "./hook.js";
 import { ParsePool, parallelParsingAvailable } from "./parse-pool.js";
 import {
   cacheGet,
@@ -131,6 +153,8 @@ export interface OpenOptions {
   root: string;
   configPath?: string;
   logger?: Logger;
+  /** Use this state directory (absolute) instead of the project's (temporary checkouts). */
+  storeDir?: string;
 }
 
 export interface AnalyzeOptions {
@@ -143,6 +167,8 @@ export interface AnalyzeOptions {
 }
 
 export interface Analysis {
+  /** Project root the analysis ran in (a temporary checkout for isolated hook runs). */
+  root: string;
   input: ChangeAnalysisInput;
   index: SymbolIndex;
   indexStats: UpdateStats;
@@ -167,6 +193,17 @@ export interface RunOptions extends AnalyzeOptions {
   bail?: boolean;
   /** Reuse an analysis computed by the caller (benchmark) instead of analysing again. */
   analysis?: Analysis;
+  /**
+   * `staged` and `push` sources test exactly what is committed or pushed: when the working tree
+   * differs, the run happens in a temporary checkout (default true).
+   */
+  isolate?: boolean;
+  /** Notes added to the report's warnings. */
+  notes?: string[];
+  /** Work that must finish before a temporary checkout is removed (hook checks). */
+  holdCheckout?: () => Promise<unknown>;
+  /** Config loaded inside a temporary checkout (internal: hook runs use its checks and budgets). */
+  onIsolatedConfig?: (config: ResolvedConfig) => void;
   coverage?: boolean;
   retries?: number;
   timeoutMs?: number;
@@ -205,6 +242,23 @@ export interface SelectionValidation {
   analysisOverheadMs: number;
   savedPct: number;
   decision: ImpactResult;
+}
+
+export interface HookEstimate {
+  estimateMs: number;
+  budgetMs: number;
+  slowest: { file: string; ms: number }[];
+  /** Selected files with no recorded duration yet. */
+  unknown: number;
+  checks: { name: string; project: string; command: string }[];
+}
+
+export interface HookOutcome {
+  stage: "pre-commit" | "pre-push";
+  skipped: boolean;
+  outcome?: RunOutcome;
+  checks: CheckResult[];
+  durationMs: number;
 }
 
 export interface ShadowRecord {
@@ -286,13 +340,14 @@ export class SmartTest {
     readonly root: string,
     readonly loaded: LoadedConfig,
     public logger: Logger,
+    storeDir?: string,
   ) {
-    this.storeDir = join(root, loaded.config.storeDir);
+    this.storeDir = storeDir ?? join(root, loaded.config.storeDir);
   }
 
   static async open(options: OpenOptions): Promise<SmartTest> {
     const loaded = await loadConfig(options.root, options.configPath);
-    return new SmartTest(options.root, loaded, options.logger ?? silentLogger);
+    return new SmartTest(options.root, loaded, options.logger ?? silentLogger, options.storeDir);
   }
 
   useLogger(logger: Logger): this {
@@ -695,6 +750,7 @@ export class SmartTest {
         details: { triggers: [], seeds: [], trivialSkipped: [], ignored: [], uncertainty: [] },
       } satisfies ImpactResult;
       return {
+        root: this.root,
         input,
         index,
         indexStats: stats,
@@ -778,6 +834,7 @@ export class SmartTest {
     });
     this.logger.debug("index", { ...stats });
     return {
+      root: this.root,
       input,
       index,
       indexStats: stats,
@@ -789,6 +846,230 @@ export class SmartTest {
       assignment,
       decision,
       timings,
+    };
+  }
+
+  /**
+   * Runs a `staged` or `push` selection on exactly the committed/pushed content. Returns undefined
+   * when the working tree already matches it (the normal run is then exact).
+   */
+  private async runIsolated(
+    kind: "staged" | "push",
+    options: RunOptions,
+  ): Promise<RunOutcome | undefined> {
+    if ((await this.provider()) !== "git") return undefined;
+    const git = this.git();
+    const repoRoot = await git.root();
+    // A pre-push hook with no commit has nothing to push; the normal (conservative) run tests the
+    // working tree instead of an empty checkout.
+    if (kind === "push" && !(await git.hasHead())) return undefined;
+    const aside = await setAside(this.root, kind);
+    if (!aside.unstaged.length && !aside.untracked.length && !aside.staged.length) return undefined;
+    const detected = await this.changeInput(options.source ?? { kind });
+    // `readBefore` must keep reading the original repository even when called from inside the
+    // isolated run, where the hook's Git environment is deliberately unset. Capture the ambient
+    // values now and restore them for these reads only (never by mutating process.env).
+    const ambientGitEnv = Object.fromEntries(GIT_HOOK_ENV.map((key) => [key, process.env[key]]));
+    const readBefore = detected.readBefore.bind(detected);
+    const input: ChangeAnalysisInput = {
+      ...detected,
+      readBefore: (path) => runWithEnvScope(ambientGitEnv, () => readBefore(path)),
+    };
+    const profile = await this.profile();
+    const iso = await isolate({
+      projectRoot: this.root,
+      repoRoot,
+      prefix: await git.prefix(),
+      kind,
+      input,
+      aside,
+      nodeModulesDirs: [
+        ...new Set([
+          "",
+          ...profile.workspaces.map((w) => w.dir),
+          ...profile.runners.map((r) => r.dir),
+        ]),
+      ],
+    });
+    try {
+      // The checkout is ready; everything below runs with the hook's Git environment removed.
+      // Otherwise the engine (and the test/check subprocesses it starts) would still point at the
+      // real repository's index or worktree instead of the temporary checkout.
+      const hookEnvUnset = Object.fromEntries(GIT_HOOK_ENV.map((key) => [key, undefined]));
+      return await runWithEnvScope(hookEnvUnset, async () => {
+        // Load the configuration *inside* the checkout: a staged change to the config must be the
+        // one under test, never the dirty copy in the working tree.
+        const configPath = this.isolatedConfigPath(iso.root);
+        const engine = await SmartTest.open({
+          root: iso.root,
+          ...(configPath ? { configPath } : {}),
+          storeDir: this.storeDir,
+          logger: this.logger,
+        });
+        const outputDir = isAbsolute(this.config.reports.outputDir)
+          ? this.config.reports.outputDir
+          : join(this.root, this.config.reports.outputDir);
+        engine.loaded.config.reports.outputDir = relative(iso.root, outputDir) || ".";
+        options.onIsolatedConfig?.(engine.loaded.config);
+        try {
+          return await engine.run({
+            ...options,
+            input,
+            isolate: false,
+            notes: [...(options.notes ?? []), iso.note],
+          });
+        } finally {
+          // Hook checks run in this checkout; removing it before they finish would be a race.
+          await options.holdCheckout?.();
+        }
+      });
+    } finally {
+      await iso.cleanup();
+    }
+  }
+
+  /** Config path to use inside a temporary checkout (undefined: discover the staged default). */
+  private isolatedConfigPath(isoRoot: string): string | undefined {
+    if (!this.loaded.path) return undefined;
+    const rel = relative(this.root, this.loaded.path);
+    // A config outside the project cannot be reproduced in the checkout; keep it as-is.
+    if (rel.startsWith("..") || isAbsolute(rel)) return this.loaded.path;
+    const staged = join(isoRoot, rel);
+    return existsSync(staged) ? staged : undefined;
+  }
+
+  /**
+   * `smarttest run --hook`: the commit-hook profile. Fail-fast and `--bail`, result cache and
+   * parallel groups, project checks for the affected projects, a time budget that explains a slow
+   * hook, and a record of the run.
+   */
+  async runHook(
+    stage: "pre-commit" | "pre-push",
+    options: Omit<RunOptions, "source"> & {
+      onEstimate?: (e: HookEstimate) => void;
+      /** Refs from the pre-push hook's stdin; read automatically when Git invoked the hook. */
+      refs?: readonly PushRef[];
+    } = {},
+  ): Promise<HookOutcome> {
+    const t0 = performance.now();
+    const records = await loadHookRecords(this.storeDir);
+    if (process.env.SMARTTEST_SKIP === "1") {
+      records.bypasses.push({ at: new Date().toISOString(), stage, reason: "SMARTTEST_SKIP=1" });
+      await saveHookRecords(this.storeDir, records);
+      return { stage, skipped: true, checks: [], durationMs: 0 };
+    }
+    let remoteShas: string[] | undefined;
+    if (stage === "pre-push") {
+      const fromHook = isHookContext();
+      const refs = options.refs ?? (fromHook ? await readPrePushRefs() : []);
+      if (fromHook && !refs.length)
+        throw new SmartTestError("Could not read the refs being pushed from the pre-push hook", {
+          code: "ST_HOOK_PUSH_REFS_MISSING",
+          category: "usage",
+          hint: "Run `git push` normally: the hook receives the refs on stdin.",
+        });
+      await assertPushIsHead(this.root, refs);
+      if (refs.length || options.refs !== undefined)
+        remoteShas = refs.filter((ref) => !/^0+$/.test(ref.localSha)).map((ref) => ref.remoteSha);
+    }
+    const source: ChangeSource =
+      stage === "pre-commit"
+        ? { kind: "staged" }
+        : { kind: "push", ...(remoteShas !== undefined ? { remoteShas } : {}) };
+    const durations =
+      (await readJson<Record<string, number>>(join(this.storeDir, "state", "durations.json"))) ??
+      {};
+    // The config under test (the staged one inside a temporary checkout), never the dirty copy.
+    let active = this.config;
+    let checksPromise: Promise<CheckResult[]> = Promise.resolve([]);
+    const outcome = await this.run({
+      ...options,
+      source,
+      // The hook profile: stop at the first failure and reuse validated passes, unless the caller
+      // asked for `--no-cache` (an explicit `false` is respected).
+      bail: options.bail ?? true,
+      cache: options.cache ?? true,
+      command: `hook ${stage}`,
+      holdCheckout: () => checksPromise,
+      onIsolatedConfig: (config) => {
+        active = config;
+      },
+      onAnalysis: (a) => {
+        const projects = [
+          ...new Set([
+            "",
+            ...Object.keys(active.projects),
+            ...active.runners.map((r) => r.dir ?? ""),
+            ...a.runnerRoots.map((r) => r.dir ?? ""),
+          ]),
+        ];
+        const changed = a.input.changeSet.changes.map((c) => ({
+          path: c.path,
+          deleted: c.type === "deleted",
+        }));
+        const planned = planChecks(active.hook.checks, stage, changed, projects);
+        checksPromise = runChecks(a.root, planned, active.timeoutMs, options.signal);
+        const selected = a.decision.selectedTests.map((t) => t.filePath);
+        const known = selected.filter((f) => durations[f] !== undefined);
+        const summed = known.reduce((s, f) => s + (durations[f] ?? 0), 0);
+        const groups = new Set(selected.map((f) => a.assignment.get(f)?.dir ?? "")).size || 1;
+        const estimateMs = Math.round(
+          summed / Math.max(1, Math.min(groups, 4)) +
+            Object.values(a.timings).reduce((x, y) => x + y, 0),
+        );
+        options.onEstimate?.({
+          estimateMs,
+          budgetMs: active.hook.budgetMs,
+          slowest: [...known]
+            .sort((x, y) => (durations[y] ?? 0) - (durations[x] ?? 0))
+            .slice(0, 5)
+            .map((f) => ({ file: f, ms: durations[f] ?? 0 })),
+          unknown: selected.length - known.length,
+          checks: planned,
+        });
+        options.onAnalysis?.(a);
+      },
+    });
+    const checks = await checksPromise;
+    const durationMs = Math.round(performance.now() - t0);
+    const passed =
+      outcome.exitCode === ExitCode.Success && checks.every((c) => c.status === "passed");
+    const tree = await treeOf(this.root, stage);
+    records.runs.push({
+      at: new Date().toISOString(),
+      stage,
+      durationMs,
+      selected: outcome.report.decision.selectedTests.length,
+      passed,
+      ...(tree ? { tree } : {}),
+    });
+    await saveHookRecords(this.storeDir, records);
+    return { stage, skipped: false, outcome, checks, durationMs };
+  }
+
+  /** `smarttest hook status` details: recent hook durations, bypasses, commits made without it. */
+  async hookHistory(): Promise<{
+    runs: number;
+    medianMs: number;
+    slowestMs: number;
+    failures: number;
+    bypasses: HookRecords["bypasses"];
+    withoutHook: { checked: number; without: { sha: string; subject: string }[] };
+    installedLocally: boolean;
+  }> {
+    const records = await loadHookRecords(this.storeDir);
+    const recent = records.runs.slice(-30);
+    return {
+      runs: records.runs.length,
+      medianMs: median(recent.map((r) => r.durationMs)),
+      slowestMs: Math.max(0, ...recent.map((r) => r.durationMs)),
+      failures: recent.filter((r) => !r.passed).length,
+      bypasses: records.bypasses.slice(-10),
+      withoutHook:
+        (await this.provider()) === "git"
+          ? await commitsWithoutHook(this.root, records)
+          : { checked: 0, without: [] },
+      installedLocally: existsSync(join(this.root, "node_modules", ".bin", "smarttest")),
     };
   }
 
@@ -1048,6 +1329,16 @@ export class SmartTest {
   }
 
   async run(options: RunOptions = {}): Promise<RunOutcome> {
+    const kind = options.source?.kind;
+    if (
+      (kind === "staged" || kind === "push") &&
+      options.isolate !== false &&
+      !options.analysis &&
+      !options.input
+    ) {
+      const isolated = await this.runIsolated(kind, options);
+      if (isolated) return isolated;
+    }
     const started = new Date();
     const runId = newRunId();
     // Adaptive policy: when the whole suite ran faster last time than an analysis usually takes,
@@ -1100,7 +1391,7 @@ export class SmartTest {
     }
     const durationsPath = join(this.storeDir, "state", "durations.json");
     const durations = (await readJson<Record<string, number>>(durationsPath)) ?? {};
-    const warnings: string[] = [];
+    const warnings: string[] = [...(options.notes ?? [])];
     // Sharding: this run takes its share of the selection, balanced by recorded durations.
     if (options.shard) {
       const all = analysis.decision.selectedTests.map((t) => t.filePath);
@@ -1654,14 +1945,17 @@ export class SmartTest {
 
   /** Plans `smarttest hook install`. */
   async hookInstallPlan(
-    options: { manager?: HookManager; replace?: boolean } = {},
+    options: { manager?: HookManager; replace?: boolean; stage?: HookStage } = {},
   ): Promise<HookPlan> {
     const profile = await this.profile();
     return planHookInstall(this.root, { ...options, testCommands: profile.testCommands });
   }
 
-  async hookUninstallPlan(manager?: HookManager): Promise<FilePlan[]> {
-    return planHookUninstall(this.root, manager);
+  async hookUninstallPlan(
+    manager?: HookManager,
+    stages?: readonly HookStage[],
+  ): Promise<FilePlan[]> {
+    return planHookUninstall(this.root, manager, stages);
   }
 
   /** Applies hook file changes (recorded in the init journal, so `init --rollback` undoes them too). */
@@ -2151,6 +2445,77 @@ export class SmartTest {
         message: "node_modules not found at the project root",
         hint: "Install dependencies first",
       });
+    if ((await this.provider()) === "git") {
+      const history = await this.hookHistory();
+      const stages: HookStage[] = ["pre-commit", "pre-push"];
+      const plans = await Promise.all(stages.map((stage) => this.hookInstallPlan({ stage })));
+      for (const plan of plans) {
+        if (!plan.installed) {
+          out.push({
+            severity: "info",
+            check: "hook",
+            message: `${plan.stage} hook not installed`,
+            hint: `Run \`smarttest hook install${plan.stage === "pre-push" ? " --pre-push" : ""}\`.`,
+          });
+          continue;
+        }
+        const text = (await readText(join(this.root, plan.file))) ?? "";
+        const invocations = hookInvocations(text, plan.stage);
+        out.push({
+          severity: "ok",
+          check: "hook",
+          message: `${plan.stage} hook installed in ${plan.file} (${plan.manager})`,
+        });
+        if (invocations > 1)
+          out.push({
+            severity: "warn",
+            check: "hook",
+            message: `${plan.stage} runs SmartTest ${invocations} times`,
+            hint: "Remove the duplicate blocks (`smarttest hook uninstall`) and install once.",
+          });
+        if (plan.remaining.length)
+          out.push({
+            severity: "warn",
+            check: "hook",
+            message: `${plan.stage} still runs ${plan.remaining.length} whole-suite step(s)`,
+            hint: "Re-install with `smarttest hook install --replace` to comment them out.",
+          });
+      }
+      if (plans.some((p) => p.installed) && !history.installedLocally)
+        out.push({
+          // The installed hook deliberately does not block commits when SmartTest is absent
+          // (a teammate's fresh clone), so this is a warning rather than a doctor failure.
+          severity: "warn",
+          check: "hook",
+          message: "a hook is installed but node_modules/.bin/smarttest is missing",
+          hint: "The hook cannot run tests until dependencies are installed (or on a teammate's fresh clone).",
+        });
+      if (history.runs)
+        out.push({
+          severity: history.medianMs > this.config.hook.budgetMs ? "warn" : "ok",
+          check: "hook",
+          message: `hook: ${history.runs} run(s), median ${Math.round(history.medianMs)} ms, slowest ${Math.round(history.slowestMs)} ms`,
+          ...(history.medianMs > this.config.hook.budgetMs
+            ? {
+                hint: `Above the ${this.config.hook.budgetMs} ms budget: move slow checks to pre-push, or run \`smarttest trace --stale\`.`,
+              }
+            : {}),
+        });
+      if (history.bypasses.length)
+        out.push({
+          severity: "warn",
+          check: "hook",
+          message: `${history.bypasses.length} bypass(es) recorded (SMARTTEST_SKIP=1)`,
+          hint: "A bypass skips the affected tests; the commit is visible in `smarttest hook status`.",
+        });
+      if (history.withoutHook.without.length)
+        out.push({
+          severity: "warn",
+          check: "hook",
+          message: `${history.withoutHook.without.length} recent commit(s) have no successful hook record`,
+          hint: "They were made with --no-verify, before the hook was installed, or the hook failed to run.",
+        });
+    }
     return out;
   }
 
