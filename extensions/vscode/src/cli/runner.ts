@@ -172,8 +172,14 @@ export async function runCli(options: CliRunOptions): Promise<CliResult> {
       child.kill(signal);
     };
     const kill = (): void => {
-      // An exited CLI is only signalled again when runners it started may remain.
-      if (killTimer !== undefined || (exited() && !group)) return;
+      if (killTimer !== undefined) return;
+      if (exited() && !group) {
+        // Windows: the CLI is gone, so `taskkill /T` can no longer find the runners it
+        // started, and one of them may still hold stdout open. Stop waiting for it.
+        child.stdout?.destroy();
+        child.stderr?.destroy();
+        return;
+      }
       signalChild("SIGTERM");
       killTimer = setTimeout(() => {
         // The CLI may have exited while a runner it started still holds stdout open.

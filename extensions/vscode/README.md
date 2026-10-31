@@ -13,7 +13,7 @@ This is the 0.9.0 extension. It consumes the public `--json` contracts of SmartT
   2. `node_modules/.bin/smarttest`, walking up from the workspace folder;
   3. `PATH`.
 
-  On Windows the `.bin` entry is a `smarttest.cmd` batch shim, which Node refuses to start without a shell. The extension runs the `smarttest` package's JavaScript entry with `node.exe` (next to the shim, then on `PATH`, then VS Code's own runtime) instead. Only when that entry cannot be found is the shim started through `cmd.exe`, with every argument quoted and arguments containing `%`, `^`, `&`, `|`, `<`, `>`, `!` or `"` refused. `smarttest.executablePath` may also point at the JavaScript entry itself.
+  On Windows the `.bin` entry is a `smarttest.cmd` batch shim, which Node refuses to start without a shell. The extension runs the `smarttest` package's JavaScript entry with `node.exe` (next to the shim, then on `PATH`, then VS Code's own runtime) instead. Only when that entry cannot be found is the shim started through `cmd.exe`, with every argument quoted and arguments containing `%`, `^`, `&`, `|`, `<`, `>`, `!` or `"` refused. `smarttest.executablePath` may also point at the JavaScript entry itself (`.js`, `.mjs` or `.cjs`); on every platform such an entry is started with `node` from `PATH` (VS Code's own runtime if there is none), so it needs no executable bit.
 - A trusted workspace. In Restricted Mode every feature is disabled. SmartTest runs a local executable and reads project files; it does not pretend to work in a sandbox it does not have.
 
 ## What you get
@@ -105,7 +105,7 @@ pnpm --dir extensions/vscode package:check
 pnpm --dir extensions/vscode verify     # typecheck + tests + build + manifest/package checks
 ```
 
-The root `verify` gate runs `pnpm extension:verify`, which runs this package's `verify`; the root `extension:pack` script packages the VSIX. The extension's own `verify` does not launch VS Code. There is no VS Code executable in this environment; see the handoff document for the runtime UI checks that still need a real extension host.
+The root `verify` gate runs `pnpm extension:verify`, which runs this package's `verify`; the root `extension:pack` script packages the VSIX. Neither launches VS Code: the real-host test below downloads it and runs separately (and in CI on Linux, Windows and macOS, `.github/workflows/ci.yml`).
 
 ### Testing against the real CLI
 
@@ -116,13 +116,31 @@ pnpm build
 pnpm --dir extensions/vscode test
 ```
 
+### Testing in a real VS Code
+
+`test:host` downloads a pinned VS Code (see `DEFAULT_VSCODE_VERSION` in `scripts/test-host.mjs`) into `extensions/vscode/.vscode-test/`, builds the extension, and starts VS Code twice against a temporary git copy of `fixtures/projects/node-test-esm` with an uncommitted change to `src/money.js#round` and `smarttest.executablePath` set to `packages/cli/dist/bin.js`. The suite (`test/host/suite.ts`) runs inside the extension host:
+
+- trusted workspace: the extension activates and returns its Test-mode API; every contributed command is registered; the status bar reads `1 protected` for `src/money.js`; CodeLens and hover on `round()` say `Protected by 1 test` and name `test/cart.test.js`; Show Impact opens the file summary; Run Affected Tests runs only `test/cart.test.js` and reports `1 test(s) passed`; a breaking edit saved in the editor marks the results **Out of date**, clears the status verdict, and the next run reports `1 of 1 executed test(s) failed`;
+- Restricted Mode: the extension activates with every command registered, the status bar shows Restricted Mode, there is no CodeLens, and commands start no `smarttest` process.
+
+The status bar and results view are read through a small API that `activate` returns only when VS Code runs extension tests (`ExtensionMode.Test`). User data, extensions and workspaces live in one temporary directory that is deleted afterwards, so your own VS Code profile is never touched.
+
+```bash
+pnpm build                                        # the CLI under test
+pnpm --filter smarttest-vscode test:host          # Linux without a display: xvfb-run -a pnpm --filter smarttest-vscode test:host
+SMARTTEST_VSCODE_VERSION=1.85.0 pnpm --filter smarttest-vscode test:host   # another VS Code, e.g. the engines.vscode floor
+SMARTTEST_HOST_KEEP=1 pnpm --filter smarttest-vscode test:host             # keep the temporary workspace and profile
+```
+
+It is not part of `pnpm verify` because it downloads VS Code.
+
 ### Reproducible VSIX
 
 `scripts/package.mjs` writes the VSIX without `vsce`. It stages only `package.json`, README, CHANGELOG, LICENSE and `dist/`, fixes every timestamp to the ZIP epoch, sorts paths and uses `zip -X`. Running it twice on the same source produces the same SHA-256.
 
 ## Known limitations
 
-- No tests in a real extension host: the status bar, results view, commands, state and activation are tested against a small `vscode` stub (`test/vscode-stub.ts`) and a fake `smarttest`; CodeLens and Hover rendering have not been executed in a real host here.
+- Most behaviour is unit-tested against a small `vscode` stub (`test/vscode-stub.ts`) and a fake `smarttest`; the real-host test covers one JavaScript fixture end to end, not every setting or a multi-root workspace.
 - Per-symbol protection costs one `explain` process per file (one per unit with older CLIs); large files are capped by `smarttest.maxUnitsPerFile`.
 - The graph snapshot is kept until a save, a settings or trust change, Refresh, or a source/config file changed outside VS Code (a file watcher; `node_modules`, `.git`, `.smarttest`, `coverage`, `dist`, `build`, `out`, `.next`, `.turbo` and `.cache` are ignored unless the file is saved in the editor).
 - `Run Affected Tests for This File` cannot scope execution to one file because the CLI has no such selector. It runs the change set and reports the intersection.

@@ -294,6 +294,7 @@ async function linkNodeModules(
     const entries = await readdir(from, { withFileTypes: true });
     await mapLimit(entries, 32, async (e) => {
       const entry = join(from, e.name);
+      if (top && e.name === ".modules.yaml") return; // written below
       // A scope (`@org`) or `.bin` directory holds links of its own.
       if (top && e.isDirectory() && (e.name.startsWith("@") || e.name === ".bin"))
         return mirror(entry, join(to, e.name), false);
@@ -313,6 +314,18 @@ async function linkNodeModules(
     });
   };
   await mirror(src, dest, true);
+  // Vite loads files only inside its workspace root (`server.fs.allow`), and the mirrored packages
+  // resolve to the installed copies outside the checkout: a `?url` or `?raw` import of a package
+  // file fails with "Denied ID". Vite also allows an absolute `virtualStoreDir` named in
+  // node_modules/.modules.yaml, so name the installed directory there (pnpm's own file is JSON).
+  const modules = (await readJson<Record<string, unknown>>(join(src, ".modules.yaml"))) ?? {};
+  const stored = typeof modules.virtualStoreDir === "string" ? modules.virtualStoreDir : "";
+  const installed = stored ? resolve(src, stored) : src;
+  const virtualStoreDir = await realpath(installed).catch(() => installed);
+  await writeFile(
+    join(dest, ".modules.yaml"),
+    `${JSON.stringify({ ...modules, virtualStoreDir }, null, 2)}\n`,
+  );
   // pnpm's store (node_modules/.pnpm) is linked as a whole. A link from there into the
   // repository (a workspace package as a dependency of an installed package, or hoisted into
   // .pnpm/node_modules) bypasses the checkout. Links are read, not resolved: cheap at thousands

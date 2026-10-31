@@ -1,9 +1,10 @@
 /**
  * Extension-host wiring (state, commands, results view, status bar) against the
- * `vscode` stub and a fake `smarttest` executable. POSIX only: the fake CLI is a
- * script with a shebang.
+ * `vscode` stub and a fake `smarttest` CLI. The fake is a CommonJS entry, which
+ * the extension starts through Node on every platform, so this also exercises
+ * the Windows launch and process-tree kill paths when run there.
  */
-import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -14,7 +15,7 @@ import type { SmartTestCodeLensProvider } from "../src/providers/code-lens.js";
 import { SmartTestResultsProvider } from "../src/results-view.js";
 import { ExtensionState } from "../src/state.js";
 import { SmartTestStatusBar } from "../src/status.js";
-import { type StatusBarItem, stub, Uri } from "./vscode-stub.js";
+import { ExtensionMode, type StatusBarItem, stub, Uri } from "./vscode-stub.js";
 
 const fixture = (name: string): string =>
   readFileSync(new URL(`./fixtures/${name}`, import.meta.url), "utf8");
@@ -34,11 +35,10 @@ function project(commands: Readonly<Record<string, FakeCommand>>): string {
   const dir = mkdtempSync(join(tmpdir(), "smarttest-ext-host-"));
   temporary.push(dir);
   writeFileSync(join(dir, "commands.json"), JSON.stringify(commands));
-  const script = join(dir, "smarttest");
+  const script = join(dir, "smarttest.cjs");
   writeFileSync(
     script,
-    `#!${process.execPath}
-const fs = require("node:fs");
+    `const fs = require("node:fs");
 const path = require("node:path");
 const command = process.argv[2];
 const spec = JSON.parse(fs.readFileSync(path.join(${JSON.stringify(dir)}, "commands.json"), "utf8"))[command] ?? {};
@@ -50,7 +50,6 @@ if (spec.hang) {
 }
 `,
   );
-  chmodSync(script, 0o755);
   return dir;
 }
 
@@ -77,7 +76,7 @@ function pidOf(dir: string, command: string): number {
 
 function host(dir: string) {
   const folder = stub.folder(dir);
-  stub.settings.executablePath = join(dir, "smarttest");
+  stub.settings.executablePath = join(dir, "smarttest.cjs");
   const file = Uri.file(join(dir, "src", "core", "Labeler.ts"));
   stub.activeDocument = { uri: file };
   const state = new ExtensionState({
@@ -240,6 +239,36 @@ describe.skipIf(process.platform === "win32")("extension host", () => {
     state.dispose();
   });
 
+  it("exposes the inspection API only when VS Code runs extension tests", async () => {
+    const dir = project({
+      impact: { stdout: fixture("impact.json") },
+      run: { stdout: fixture("run.json"), exitCode: 0 },
+    });
+    stub.folder(dir);
+    stub.settings.executablePath = join(dir, "smarttest.cjs");
+    stub.activeDocument = { uri: Uri.file(join(dir, "src", "core", "Labeler.ts")) };
+    const contextFor = (extensionMode: ExtensionMode) => ({
+      subscriptions: [] as { dispose(): void }[],
+      extension: { packageJSON: { version: "0.0.0-test" } },
+      extensionMode,
+    });
+
+    const production = contextFor(ExtensionMode.Production);
+    expect(activate(production as unknown as vscode.ExtensionContext)).toBeUndefined();
+    deactivate();
+    for (const disposable of production.subscriptions) disposable.dispose();
+
+    const testing = contextFor(ExtensionMode.Test);
+    const api = activate(testing as unknown as vscode.ExtensionContext);
+    expect(api?.trusted).toBe(true);
+    expect(api?.results()).toEqual([]);
+    await (stub.commands.get("smarttest.runAffected")?.() as Promise<void>);
+    expect(api?.status().text).toContain("passed");
+    expect(api?.results()[0]?.label).toMatch(/executed test/);
+    deactivate();
+    for (const disposable of testing.subscriptions) disposable.dispose();
+  });
+
   it("clears the run verdict on save and stops every process on deactivate", async () => {
     const dir = project({
       impact: { stdout: fixture("impact.json") },
@@ -248,7 +277,7 @@ describe.skipIf(process.platform === "win32")("extension host", () => {
       graph: { hang: true },
     });
     stub.folder(dir);
-    stub.settings.executablePath = join(dir, "smarttest");
+    stub.settings.executablePath = join(dir, "smarttest.cjs");
     stub.settings.refreshDelayMs = 0;
     const file = Uri.file(join(dir, "src", "core", "Labeler.ts"));
     stub.activeDocument = { uri: file };

@@ -158,6 +158,17 @@ export class SmartTestStatusBar implements vscode.Disposable {
     this.#item.show();
   }
 
+  /** What the item shows now; read by the real-host test through the Test-mode API. */
+  snapshot(): { readonly text: string; readonly tooltip: string; readonly command: string } {
+    const tooltip = this.#item.tooltip;
+    const command = this.#item.command;
+    return {
+      text: this.#item.text,
+      tooltip: typeof tooltip === "string" ? tooltip : (tooltip?.value ?? ""),
+      command: typeof command === "string" ? command : (command?.command ?? ""),
+    };
+  }
+
   #activeFolder(): vscode.WorkspaceFolder | undefined {
     const document = vscode.window.activeTextEditor?.document;
     if (!document) return undefined;

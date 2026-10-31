@@ -47,6 +47,12 @@ export class Uri {
   }
 }
 
+export enum ExtensionMode {
+  Production = 1,
+  Development = 2,
+  Test = 3,
+}
+
 export class ThemeColor {
   constructor(readonly id: string) {}
 }
@@ -213,7 +219,9 @@ export const workspace = {
   getWorkspaceFolder(uri: Uri): StubFolder | undefined {
     return stub.folders.find(
       (folder) =>
-        uri.fsPath === folder.uri.fsPath || uri.fsPath.startsWith(`${folder.uri.fsPath}/`),
+        uri.fsPath === folder.uri.fsPath ||
+        uri.fsPath.startsWith(`${folder.uri.fsPath}/`) ||
+        uri.fsPath.startsWith(`${folder.uri.fsPath}\\`),
     );
   },
   getConfiguration() {

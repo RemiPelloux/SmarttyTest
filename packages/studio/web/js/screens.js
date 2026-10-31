@@ -33,26 +33,29 @@ export function screenHead({ parts, title, finding, actions = [] }) {
   );
 }
 
+/** Label and value pairs, as a description list so a screen reader pairs each value with its name. */
 export function facts(items) {
   return h(
-    "div",
+    "dl",
     { class: "facts" },
     items.map((item) =>
       h(
         "div",
         { class: "fact" },
-        h("span", { class: "fact__label" }, item.label),
+        h("dt", { class: "fact__label" }, item.label),
         h(
-          "span",
+          "dd",
           { class: "fact__value" },
           item.value,
           item.small ? h("small", null, item.small) : null,
         ),
-        h(
-          "span",
-          { class: "fact__note", ...(item.tone ? { dataset: { tone: item.tone } } : {}) },
-          item.note,
-        ),
+        item.note
+          ? h(
+              "dd",
+              { class: "fact__note", ...(item.tone ? { dataset: { tone: item.tone } } : {}) },
+              item.note,
+            )
+          : null,
       ),
     ),
   );
@@ -72,14 +75,14 @@ export function panel({ title, note, body, raised = false }) {
   );
 }
 
-export function section({ title, note, body }) {
+export function section({ title, note, body, level = 2 }) {
   return h(
     "section",
     { class: "section" },
     h(
       "div",
       { class: "section__head" },
-      h("h2", { class: "section__title" }, title),
+      h(`h${level}`, { class: "section__title" }, title),
       note ? h("span", { class: "section__note" }, note) : null,
     ),
     body,
@@ -143,11 +146,19 @@ function reasonTouches(reasons, file, unit) {
   return false;
 }
 
+/** An arrow between two graph nodes: drawn for the eye, read as "to" by a screen reader. */
+export function pathArrow(className) {
+  return [
+    h("span", { class: className, "aria-hidden": "true" }, "→"),
+    h("span", { class: "visually-hidden" }, " to "),
+  ];
+}
+
 function chain(nodes) {
   const unique = [...new Set(nodes.filter(Boolean))];
   const out = [];
   unique.forEach((node, index) => {
-    if (index) out.push(h("span", { class: "chain__arrow", "aria-hidden": "true" }, "→"));
+    if (index) out.push(pathArrow("chain__arrow"));
     const last = index === unique.length - 1 && unique.length > 1;
     out.push(
       h("span", { class: `chain__node${last ? " chain__node--test" : ""}`, title: node }, node),
@@ -230,8 +241,13 @@ function impactStrip(ctx) {
     );
   const animate = firstDraw(impact);
   return h(
-    "div",
-    { class: "strip", "aria-label": "Impact strip: changed units and the tests they reach" },
+    "section",
+    { class: "strip", "aria-labelledby": "strip-title" },
+    h(
+      "h2",
+      { class: "visually-hidden", id: "strip-title" },
+      "Changed units and the tests they reach",
+    ),
     h(
       "div",
       { class: "strip__head", "aria-hidden": "true" },
@@ -256,6 +272,7 @@ function impactStrip(ctx) {
           {
             class: `strip__row${row.test ? "" : " strip__row--unreached"}${animate ? " row-enter" : ""}`,
             type: "button",
+            "aria-describedby": `strip-path-${index}`,
             "data-fk": `strip:${index}`,
             ...(animate ? { vars: { "--i": String(Math.min(index, 18)) } } : {}),
             "aria-current": String(ctx.state.impactFile === row.file.path),
@@ -275,7 +292,14 @@ function impactStrip(ctx) {
             ),
             filePath(row.file.path),
           ),
-          h("span", { class: "chain" }, chain(pathNodes.slice(0, 5))),
+          // The path repeats the unit and test, so it stays out of the button's name and is read
+          // as its description instead.
+          h(
+            "span",
+            { class: "chain", id: `strip-path-${index}`, "aria-hidden": "true" },
+            h("span", { class: "visually-hidden" }, "Path: "),
+            chain(pathNodes.slice(0, 5)),
+          ),
           h(
             "span",
             { class: "strip__test" },
@@ -363,6 +387,7 @@ export function renderOverview(ctx) {
               {
                 class: "btn btn--small",
                 type: "button",
+                "data-fk": "open-run",
                 onClick: () => ctx.actions.openRun(last),
               },
               h("span", null, "Open run"),
@@ -403,7 +428,7 @@ export function renderOverview(ctx) {
           empty({
             title: "No run recorded yet",
             body: "The impact above comes from analysis alone. Run the affected tests to see real results.",
-            actions: [ctx.actions.runButton("affected")],
+            actions: [ctx.actions.runButton("affected", { fk: "run-affected-empty" })],
           }),
         ),
   });
@@ -501,31 +526,31 @@ export function renderOverview(ctx) {
             "div",
             { class: "detail__body" },
             h(
-              "div",
+              "dl",
               { class: "facts facts--panel" },
               h(
                 "div",
                 { class: "fact" },
-                h("span", { class: "fact__label" }, "Fresh traces"),
-                h("span", { class: "fact__value" }, num(traces.fresh)),
+                h("dt", { class: "fact__label" }, "Fresh traces"),
+                h("dd", { class: "fact__value" }, num(traces.fresh)),
               ),
               h(
                 "div",
                 { class: "fact" },
-                h("span", { class: "fact__label" }, "Stale traces"),
-                h("span", { class: "fact__value" }, num(traces.stale)),
+                h("dt", { class: "fact__label" }, "Stale traces"),
+                h("dd", { class: "fact__value" }, num(traces.stale)),
               ),
               h(
                 "div",
                 { class: "fact" },
-                h("span", { class: "fact__label" }, "Flaky tests"),
-                h("span", { class: "fact__value" }, num(overview.flaky.count)),
+                h("dt", { class: "fact__label" }, "Flaky tests"),
+                h("dd", { class: "fact__value" }, num(overview.flaky.count)),
               ),
               h(
                 "div",
                 { class: "fact" },
-                h("span", { class: "fact__label" }, "Cached results"),
-                h("span", { class: "fact__value" }, num(overview.cache.lastCached)),
+                h("dt", { class: "fact__label" }, "Cached results"),
+                h("dd", { class: "fact__value" }, num(overview.cache.lastCached)),
               ),
             ),
             overview.flaky.worst
@@ -552,6 +577,7 @@ export function renderOverview(ctx) {
                 {
                   class: "list__item",
                   type: "button",
+                  "data-fk": `top:${test.filePath}`,
                   onClick: () =>
                     ctx.actions.openImpact(overview.change.files[0]?.path ?? null, test.filePath),
                 },
@@ -611,15 +637,31 @@ function codePeek(ctx, filePath) {
   const start = Math.max(1, first - 5);
   const lines = source.lines.filter((line) => line.n >= start && line.n < start + 16);
   if (!lines.length) return h("p", { class: "hint mt-8" }, "No lines to show.");
+  // The block scrolls sideways as one region, so the keyboard can reach it at any width.
   return h(
     "div",
-    { class: "code-peek", "aria-label": `Code around the change in ${filePath}` },
-    lines.map((line) =>
-      h(
-        "div",
-        { class: `code-peek__line${changed.has(line.n) ? " code-peek__line--changed" : ""}` },
-        h("span", { class: "code-peek__n" }, line.n),
-        h("span", { class: "code-peek__t" }, line.text || " "),
+    {
+      class: "code-peek",
+      role: "region",
+      "aria-label": `Code around the change in ${filePath}`,
+      tabindex: "0",
+      "data-fk": "code-peek",
+    },
+    h(
+      "div",
+      { class: "code-peek__lines" },
+      lines.map((line) =>
+        h(
+          "div",
+          { class: `code-peek__line${changed.has(line.n) ? " code-peek__line--changed" : ""}` },
+          h("span", { class: "code-peek__n" }, line.n),
+          h(
+            "span",
+            { class: "code-peek__t" },
+            changed.has(line.n) ? h("span", { class: "visually-hidden" }, "changed: ") : null,
+            line.text || " ",
+          ),
+        ),
       ),
     ),
   );
@@ -650,8 +692,9 @@ function reasonBlock(reason) {
       ? h(
           "div",
           { class: "reason__path" },
+          h("span", { class: "visually-hidden" }, "Path: "),
           reason.path.map((node, index) => [
-            index ? h("span", { class: "reason__arrow", "aria-hidden": "true" }, "→") : null,
+            index ? pathArrow("reason__arrow") : null,
             h(
               "span",
               {
@@ -784,6 +827,7 @@ export function renderImpact(ctx) {
     }
     detailBody.appendChild(
       section({
+        level: 3,
         title: selectedTest ? `Why ${selectedTest.split("::")[0]} runs` : "Why these tests run",
         note: selectedTest ? "selected test" : `${num(tests.length)} selected`,
         body: tests.length
@@ -797,8 +841,8 @@ export function renderImpact(ctx) {
                     "div",
                     { class: "impact-test" },
                     h(
-                      "p",
-                      { class: "detail__title" },
+                      "h4",
+                      { class: "detail__title detail__name" },
                       test.filePath,
                       h(
                         "span",
@@ -818,6 +862,7 @@ export function renderImpact(ctx) {
     );
     detailBody.appendChild(
       section({
+        level: 3,
         title: "Code at the change",
         note: file.addedLines?.length
           ? plural(file.addedLines.length, "marked line")
@@ -881,7 +926,7 @@ export function renderImpact(ctx) {
           h(
             "div",
             { class: "detail__title" },
-            file?.path ?? "No file",
+            h("h2", { class: "detail__name" }, file?.path ?? "No file"),
             file
               ? h(
                   "p",
@@ -896,6 +941,7 @@ export function renderImpact(ctx) {
                 {
                   class: "btn btn--small",
                   type: "button",
+                  "aria-label": `Open source of ${file.path}`,
                   "data-fk": "impact-open-source",
                   onClick: () => ctx.navigate(`/source?path=${encodeURIComponent(file.path)}`),
                 },

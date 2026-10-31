@@ -2,6 +2,7 @@
  * The run drawer: one live run, streamed from `/api/stream`.
  */
 import {
+  announce,
   clockTime,
   duration,
   h,
@@ -76,6 +77,37 @@ export function scopeLabel(run) {
   return "affected tests";
 }
 
+/**
+ * Below 860 px the drawer covers the whole screen. The page behind it is then inert, so Tab and a
+ * screen reader stay in the drawer instead of moving through controls nobody can see.
+ */
+const fullScreen = window.matchMedia("(max-width: 860px)");
+let lastCtx = null;
+fullScreen.addEventListener("change", () => {
+  if (lastCtx) renderRun(lastCtx);
+});
+
+function setBackgroundInert(on) {
+  for (const el of [document.getElementById("app"), document.querySelector(".skip-link")]) {
+    if (!el) continue;
+    if (on) el.setAttribute("inert", "");
+    else el.removeAttribute("inert");
+  }
+}
+
+/** What the live region last said about the open run, so a re-render never repeats it. */
+let spoken = null;
+
+function spokenStatus(active, phaseMessage, summary) {
+  if (active || !summary) return phaseMessage;
+  const parts = [
+    `${num(summary.passed)} passed`,
+    `${num(summary.failed + summary.timedOut)} failed`,
+    summary.cached ? `${num(summary.cached)} cached, not run` : null,
+  ].filter(Boolean);
+  return `${phaseMessage}. ${parts.join(", ")}.`;
+}
+
 export function renderRun(ctx) {
   const { state } = ctx;
   const run = state.run;
@@ -94,7 +126,12 @@ export function renderRun(ctx) {
   root.setAttribute("aria-hidden", open ? "false" : "true");
   if (open) root.removeAttribute("inert");
   else root.setAttribute("inert", "");
-  if (!open) return;
+  lastCtx = ctx;
+  if (!document.querySelector('[role="dialog"]')) setBackgroundInert(open && fullScreen.matches);
+  if (!open) {
+    spoken = null;
+    return;
+  }
 
   const active = isRunActive(run);
   const verdict = state.runVerdict ?? runVerdict(run);
@@ -118,8 +155,8 @@ export function renderRun(ctx) {
         "div",
         { class: "drawer__text" },
         h(
-          "p",
-          { class: "drawer__title" },
+          "h2",
+          { class: "drawer__title", id: "run-title", tabindex: "-1" },
           active ? "Running" : "Run",
           " ",
           h("span", { class: "drawer__id" }, run.id),
@@ -139,18 +176,37 @@ export function renderRun(ctx) {
     ),
   ];
 
-  const body = h("div", { class: "drawer__body", "data-scroll": `run:${run.id}` });
+  // The body scrolls on its own, so it is a focusable, named region for the keyboard.
+  const body = h("div", {
+    class: "drawer__body",
+    "data-scroll": `run:${run.id}`,
+    role: "region",
+    "aria-label": "Run details",
+    tabindex: "0",
+    "data-fk": "run-body",
+  });
   children.push(body);
 
+  // Progress and the verdict are spoken through the page's persistent live region: this node is
+  // rebuilt on every render, and a live region inserted with its text is not announced.
+  const spokenText = spokenStatus(active, phaseMessage, state.runSummary ?? run.summary);
+  const key = `${run.id}\u0000${spokenText}`;
+  if (key !== spoken) {
+    spoken = key;
+    announce(spokenText);
+  }
   body.appendChild(
     h(
       "div",
       { class: "phase", dataset: { state: run.state, live: String(active) } },
       h("span", { class: "phase__dot", "aria-hidden": "true" }),
-      h("span", { "aria-live": "polite" }, phaseMessage),
+      h("span", null, phaseMessage),
     ),
   );
-  if (active) body.appendChild(h("div", { class: "progress", dataset: { live: "true" } }));
+  if (active)
+    body.appendChild(
+      h("div", { class: "progress", dataset: { live: "true" }, "aria-hidden": "true" }),
+    );
 
   const selection = state.runSelection;
   const selectedCount = selection?.selected ?? run.selected;
@@ -171,11 +227,11 @@ export function renderRun(ctx) {
   if (groups.length) {
     body.appendChild(
       h(
-        "div",
-        { class: "groups", "aria-label": "Runner groups" },
+        "ul",
+        { class: "groups", "aria-label": "Runner groups", tabindex: "0", "data-fk": "run-groups" },
         groups.map((group) =>
           h(
-            "div",
+            "li",
             { class: "group-line" },
             h(
               "span",
@@ -192,16 +248,20 @@ export function renderRun(ctx) {
   const results = state.runResults ?? [];
   if (results.length) {
     body.appendChild(
-      h("p", { class: "drawer__meta drawer__section" }, `Files · ${num(results.length)}`),
+      h(
+        "h3",
+        { class: "drawer__meta drawer__section", id: "run-files-title" },
+        `Files · ${num(results.length)}`,
+      ),
     );
     body.appendChild(
       h(
-        "div",
-        { class: "run-files" },
+        "ul",
+        { class: "run-files", "aria-labelledby": "run-files-title" },
         results.map((result) => {
           const status = runFileStatus(result);
           return h(
-            "div",
+            "li",
             { class: "run-file" },
             h(
               "div",
@@ -262,7 +322,7 @@ export function renderRun(ctx) {
     body.appendChild(
       h(
         "div",
-        { class: "run-summary", "aria-label": "Run summary" },
+        { class: "run-summary", role: "group", "aria-label": "Run summary" },
         h("div", null, h("b", null, num(summary.executed)), h("span", null, "files reported")),
         h("div", null, h("b", null, num(summary.passed)), h("span", null, "tests passed")),
         h("div", null, h("b", null, num(summary.cached)), h("span", null, "tests cached")),
@@ -343,14 +403,24 @@ export function renderRun(ctx) {
         run.scope === "affected" || run.scope === "all"
           ? h(
               "button",
-              { class: "btn btn--small", type: "button", onClick: () => ctx.actions.runAgain() },
+              {
+                class: "btn btn--small",
+                type: "button",
+                "data-fk": "run-again",
+                onClick: () => ctx.actions.runAgain(),
+              },
               icon("play", 12),
               h("span", null, "Run again"),
             )
           : null,
         h(
           "button",
-          { class: "btn btn--small", type: "button", onClick: () => ctx.navigate("/tests") },
+          {
+            class: "btn btn--small",
+            type: "button",
+            "data-fk": "run-open-tests",
+            onClick: () => ctx.navigate("/tests"),
+          },
           h("span", null, "Open tests"),
         ),
       ),

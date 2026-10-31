@@ -219,6 +219,7 @@
     "typecheck": "node scripts/tool.mjs tsc -p tsconfig.json",
     "test": "node scripts/tool.mjs vitest run --config vitest.config.ts",
     "test:watch": "node scripts/tool.mjs vitest --config vitest.config.ts",
+    "test:host": "node scripts/test-host.mjs",
     "package": "node scripts/build.mjs && node scripts/package.mjs",
     "package:check": "node scripts/package.mjs --check",
     "verify": "node scripts/tool.mjs tsc -p tsconfig.json && node scripts/tool.mjs vitest run --config vitest.config.ts && node scripts/build.mjs && node scripts/package.mjs --check --require-build",
@@ -228,6 +229,7 @@
   "devDependencies": {
     "@types/node": "^24.0.0",
     "@types/vscode": "^1.85.0",
+    "@vscode/test-electron": "^3.1.0",
     "esbuild": "^0.28.2",
     "typescript": "^6.0.3",
     "vitest": "^5.0.5"

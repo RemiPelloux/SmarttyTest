@@ -696,6 +696,46 @@ describe("the temporary checkout is the content under test", () => {
     );
   }, 120_000);
 
+  it("lets Vite load an installed package's file by URL in the checkout", async () => {
+    // A real node_modules (not a link to the fixture's): the package is inside the project.
+    const dir = await materialize("ts-lib-vitest");
+    await rm(join(dir, "node_modules"));
+    await mkdir(join(dir, "node_modules/asset-pkg"), { recursive: true });
+    for (const entry of ["vitest", ".bin"])
+      await symlink(
+        join(FIXTURES, "ts-lib-vitest/node_modules", entry),
+        join(dir, "node_modules", entry),
+      );
+    await writeFile(join(dir, "node_modules/asset-pkg/package.json"), '{"name":"asset-pkg"}\n');
+    await writeFile(join(dir, "node_modules/asset-pkg/greeting.txt"), "hello\n");
+    // Vite checks file access for the browser-like transform that DOM environments use.
+    await mkdir(join(dir, "node_modules/vitest-environment-client"));
+    await writeFile(
+      join(dir, "node_modules/vitest-environment-client/package.json"),
+      '{"name":"vitest-environment-client","type":"module","main":"index.js"}\n',
+    );
+    await writeFile(
+      join(dir, "node_modules/vitest-environment-client/index.js"),
+      'export default { name: "client", viteEnvironment: "client", setup: () => ({ teardown() {} }) };\n',
+    );
+    await writeFile(join(dir, ".gitignore"), "node_modules\n.smarttest/\n");
+    git(dir, "init", "-q", "-b", "main");
+    await commitAll(dir, "initial");
+    await writeFile(
+      join(dir, "test/asset.test.ts"),
+      // The docblock is split so this suite's own runner does not read it.
+      `// @vitest-${"environment"} client\nimport greeting from "asset-pkg/greeting.txt?raw";\nimport { expect, it } from "vitest";\nit("reads the asset", () => expect(greeting).toBe("hello\\n"));\n`,
+    );
+    git(dir, "add", "test/asset.test.ts");
+    await writeFile(join(dir, "notes.md"), "force isolation\n");
+
+    const result = await (await SmartTest.open({ root: dir })).runHook("pre-commit", {
+      cache: false,
+    });
+    const asset = result.outcome?.report.executions.find((e) => e.file === "test/asset.test.ts");
+    expect(asset?.status, JSON.stringify(asset)).toBe("passed");
+  }, 120_000);
+
   it("gives the checkout an index matching the staged tree", async () => {
     const dir = await materialize("ts-lib-vitest", { git: true });
     await writeConfig(dir, [

@@ -42,6 +42,10 @@ interface Ctx {
 
 const MODES: SafetyMode[] = ["fast", "balanced", "safe"];
 
+/** Colours a `previewDiff` line: added, removed, or the position of a change. */
+const diffColor = (t: Theme, l: string) =>
+  l.startsWith("+") ? t.green(l) : l.startsWith("-") ? t.red(l) : t.dim(l);
+
 function modeOf(flags: Flags): SafetyMode | undefined {
   if (!flags.mode) return undefined;
   if (!MODES.includes(flags.mode as SafetyMode)) {
@@ -803,8 +807,7 @@ async function cmdMigrate(ctx: Ctx): Promise<number> {
         `  ${f.action === "create" ? t.green("+") : t.yellow("~")} ${pad(f.path, 30)}${t.dim(f.reason)}`,
       );
       if (flags["dry-run"] || flags.verbose)
-        for (const l of previewDiff(f))
-          ctx.out(`      ${l.startsWith("+") ? t.green(l) : t.red(l)}`);
+        for (const l of previewDiff(f)) ctx.out(`      ${diffColor(t, l)}`);
     }
     for (const n of plan.notes) ctx.out(`  ${t.yellow("▲")} ${n.file}:${n.line} ${n.message}`);
     if (plan.install) ctx.out(`  ${t.dim("Then install Vitest:")} ${plan.install}`);
@@ -850,7 +853,7 @@ async function cmdSync(ctx: Ctx): Promise<number> {
         after: r.after,
         risk: "medium",
       }))
-        ctx.out(`    ${l.startsWith("+") ? t.green(l) : t.red(l)}`);
+        ctx.out(`    ${diffColor(t, l)}`);
     for (const m of r.manual) ctx.out(`  ${t.yellow("▲")} by hand: ${m}`);
   }
   if (!r.drift.length) return ExitCode.Success;
@@ -964,8 +967,7 @@ async function cmdInit(ctx: Ctx): Promise<number> {
         f.action === "create" ? t.green("+") : f.action === "modify" ? t.yellow("~") : t.dim("○");
       ctx.out(`  ${sym} ${pad(f.path, 22)}${t.dim(f.reason)}`);
       if (flags["dry-run"] || flags.verbose)
-        for (const l of previewDiff(f))
-          ctx.out(`      ${l.startsWith("+") ? t.green(l) : t.red(l)}`);
+        for (const l of previewDiff(f)) ctx.out(`      ${diffColor(t, l)}`);
     }
   }
   if (flags["dry-run"]) {
@@ -1114,8 +1116,7 @@ async function cmdHook(ctx: Ctx): Promise<number> {
     }
     if (!flags.json) {
       ctx.out(`${t.bold("Git hook")} · ${plan.manager} · ${plan.file}`);
-      for (const l of previewDiff(plan.plan))
-        ctx.out(`    ${l.startsWith("+") ? t.green(l) : t.red(l)}`);
+      for (const l of previewDiff(plan.plan)) ctx.out(`    ${diffColor(t, l)}`);
       for (const r of plan.replaced)
         ctx.out(`  ${t.yellow("~")} replaces line ${r.line}: ${t.dim(r.command)}`);
       for (const r of plan.remaining)
@@ -1156,7 +1157,7 @@ async function cmdHook(ctx: Ctx): Promise<number> {
     if (!flags.json)
       for (const f of files) {
         ctx.out(`${t.yellow("~")} ${f.path} ${t.dim(f.reason)}`);
-        for (const l of previewDiff(f)) ctx.out(`    ${l.startsWith("+") ? t.green(l) : t.red(l)}`);
+        for (const l of previewDiff(f)) ctx.out(`    ${diffColor(t, l)}`);
       }
     if (flags["dry-run"]) return ExitCode.Success;
     if (!flags.yes && !ctx.interactive)

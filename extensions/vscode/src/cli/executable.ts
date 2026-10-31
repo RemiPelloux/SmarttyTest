@@ -7,6 +7,10 @@
  * refuses without a shell. The shim's package entry is run through Node
  * instead, the way the shim itself would; only when that entry cannot be found
  * is the shim started through cmd.exe.
+ *
+ * A JavaScript entry (`.js`, `.mjs`, `.cjs`), configured or found, is started
+ * through Node on every platform: its executable bit and shebang are not needed,
+ * so `smarttest.executablePath` can point at `node_modules/smarttest/dist/bin.js`.
  */
 import { accessSync, constants, readFileSync, statSync } from "node:fs";
 import { homedir } from "node:os";
@@ -59,11 +63,14 @@ function expandHome(value: string, homeDir: string): string {
   return value;
 }
 
+const JS_ENTRY = /\.[cm]?js$/i;
+
 function isExecutableFile(path: string, platform: NodeJS.Platform): boolean {
   try {
     const stat = statSync(path);
     if (!stat.isFile()) return false;
-    if (platform === "win32") return true;
+    // Node runs a JS entry, so it needs no executable bit.
+    if (platform === "win32" || JS_ENTRY.test(path)) return true;
     accessSync(path, constants.X_OK);
     return true;
   } catch {
@@ -127,17 +134,20 @@ function packageEntry(shim: string): string | undefined {
   }
 }
 
-/** Runs a JS entry with `node.exe` next to the shim, then on PATH, then the host runtime. */
+/** Runs a JS entry with Node next to it, then on PATH, then the host runtime. */
 function nodeLaunch(
   entry: string,
   near: string,
   source: ExecutableResolution["source"],
   lookup: ExecutableLookup,
+  platform: NodeJS.Platform = "win32",
 ): ExecutableResolution {
+  const name = platform === "win32" ? "node.exe" : "node";
+  // A Windows install may ship node.exe next to the shim; on POSIX only PATH counts.
   const node = [
-    join(near, "node.exe"),
-    ...pathCandidatesFor(lookup.pathEnv ?? process.env.PATH ?? "", "win32", ["node.exe"]),
-  ].find((candidate) => isExecutableFile(candidate, "win32"));
+    ...(platform === "win32" ? [join(near, name)] : []),
+    ...pathCandidatesFor(lookup.pathEnv ?? process.env.PATH ?? "", platform, [name]),
+  ].find((candidate) => isExecutableFile(candidate, platform));
   if (node) return { executable: node, source, leadingArgs: [entry] };
   return {
     executable: lookup.execPath ?? process.execPath,
@@ -152,7 +162,7 @@ function windowsLaunch(
   source: ExecutableResolution["source"],
   lookup: ExecutableLookup,
 ): ExecutableResolution {
-  if (/\.[cm]?js$/i.test(found)) return nodeLaunch(found, dirname(found), source, lookup);
+  if (JS_ENTRY.test(found)) return nodeLaunch(found, dirname(found), source, lookup);
   if (!/\.(cmd|bat)$/i.test(found)) return { executable: found, source };
   const entry = packageEntry(found);
   if (entry) return nodeLaunch(entry, dirname(found), source, lookup);
@@ -166,8 +176,11 @@ function windowsLaunch(
 export function resolveExecutable(lookup: ExecutableLookup): ExecutableResolution | undefined {
   const platform = lookup.platform ?? process.platform;
   const found = findExecutable(lookup, platform);
-  if (!found || platform !== "win32") return found;
-  return windowsLaunch(found.executable, found.source, lookup);
+  if (!found) return found;
+  if (platform === "win32") return windowsLaunch(found.executable, found.source, lookup);
+  if (JS_ENTRY.test(found.executable))
+    return nodeLaunch(found.executable, dirname(found.executable), found.source, lookup, platform);
+  return found;
 }
 
 function findExecutable(

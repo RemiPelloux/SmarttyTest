@@ -68,6 +68,14 @@ async function install(root: string, stage: HookStage = "pre-commit") {
 const REFS =
   "refs/heads/main 1111111111111111111111111111111111111111 refs/heads/protected 2222222222222222222222222222222222222222\n";
 
+/**
+ * Git runs a hook through its `#!/bin/sh` line: dash on Debian and Ubuntu, bash on most other
+ * systems. The blocks are tested under each POSIX shell found here; CI on Ubuntu provides dash.
+ */
+const SHELLS = ["sh", "dash"].filter(
+  (shell) => spawnSync(shell, ["-c", ":"], { stdio: "ignore" }).status === 0,
+);
+
 const guard = `#!/bin/sh
 while read local_ref local_sha remote_ref remote_sha; do
   if [ "$remote_ref" = "refs/heads/protected" ]; then
@@ -78,19 +86,19 @@ done
 exit 0
 `;
 
-describe("pre-push stdin", () => {
+describe.each(SHELLS)("pre-push stdin under %s", (shell) => {
   it("passes the refs to SmartTest and still gives them to the user's guard", async () => {
     const root = await repo({ "package.json": "{}", ".git/hooks/pre-push": guard });
     const fake = await fakeSmartTest(root);
     const plan = await install(root, "pre-push");
     expect(plan.file).toBe(".git/hooks/pre-push");
 
-    const refused = spawnSync("sh", [plan.file], { cwd: root, input: REFS, env: fake.env });
+    const refused = spawnSync(shell, [plan.file], { cwd: root, input: REFS, env: fake.env });
     expect(refused.status).toBe(1);
     expect(refused.stderr.toString()).toContain("refusing to push to protected");
     expect(await fake.stdin()).toBe(REFS);
 
-    const allowed = spawnSync("sh", [plan.file], {
+    const allowed = spawnSync(shell, [plan.file], {
       cwd: root,
       input: REFS.replace("protected", "feature"),
       env: fake.env,
@@ -102,7 +110,7 @@ describe("pre-push stdin", () => {
     const root = await repo({ "package.json": "{}", ".git/hooks/pre-push": guard });
     const fake = await fakeSmartTest(root, 1);
     const plan = await install(root, "pre-push");
-    const r = spawnSync("sh", [plan.file], { cwd: root, input: REFS, env: fake.env });
+    const r = spawnSync(shell, [plan.file], { cwd: root, input: REFS, env: fake.env });
     expect(r.status).toBe(1);
     expect(r.stderr.toString()).not.toContain("refusing");
   });
@@ -135,7 +143,7 @@ describe("pre-push stdin", () => {
     const value = (JSON.parse(plan.plan.after as string) as Record<string, Record<string, string>>)[
       "simple-git-hooks"
     ]?.["pre-push"] as string;
-    const r = spawnSync("sh", ["-c", value], { cwd: root, input: REFS, env: fake.env });
+    const r = spawnSync(shell, ["-c", value], { cwd: root, input: REFS, env: fake.env });
     expect(r.status, r.stderr.toString()).toBe(0);
     expect(await fake.stdin()).toBe(REFS);
     expect(await readFile(join(root, "pushed.txt"), "utf8")).toBe("refs/heads/protected\n");
@@ -177,9 +185,11 @@ describe("where the hook lives", () => {
     const plan = await install(app);
     expect(plan.file).toBe("../.git/hooks/pre-commit");
     // Git runs hooks at the top-level of the worktree.
-    const r = spawnSync("sh", [".git/hooks/pre-commit"], { cwd: top, env: fake.env });
-    expect(r.status, r.stderr.toString()).toBe(0);
-    expect(await fake.pwd()).toBe(app);
+    for (const shell of SHELLS) {
+      const r = spawnSync(shell, [".git/hooks/pre-commit"], { cwd: top, env: fake.env });
+      expect(r.status, `${shell}: ${r.stderr}`).toBe(0);
+      expect(await fake.pwd()).toBe(app);
+    }
   });
 
   it("simple-git-hooks: enters a project in a subdirectory, and uninstall restores the command", async () => {

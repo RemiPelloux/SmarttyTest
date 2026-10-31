@@ -7,6 +7,9 @@ dist/
 *.tsbuildinfo
 coverage/
 
+# VS Code downloaded by the extension's real-host test
+.vscode-test/
+
 # SmartTest local state (never commit)
 .smarttest/
 

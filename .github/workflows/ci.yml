@@ -1,0 +1,64 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4 # version from package.json#packageManager
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # Some tests run the compiled CLI and core (packages/*/dist), as they do locally.
+      - run: pnpm build
+      - run: pnpm verify
+
+  extension:
+    name: extension (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      # Keep fixtures byte-identical to the repository (no CRLF conversion on Windows).
+      - run: git config --global core.autocrlf false
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # The real-host test runs this repository's CLI (packages/cli/dist/bin.js).
+      - run: pnpm build
+      - run: pnpm --filter smarttest-vscode typecheck
+      - run: pnpm --filter smarttest-vscode test
+      - uses: actions/cache@v4
+        with:
+          path: extensions/vscode/.vscode-test
+          # The pinned VS Code version lives in the launcher.
+          key: vscode-test-${{ runner.os }}-${{ hashFiles('extensions/vscode/scripts/test-host.mjs') }}
+      - name: Real VS Code host test (Linux, virtual display)
+        if: runner.os == 'Linux'
+        run: xvfb-run -a pnpm --filter smarttest-vscode test:host
+      - name: Real VS Code host test
+        if: runner.os != 'Linux'
+        run: pnpm --filter smarttest-vscode test:host

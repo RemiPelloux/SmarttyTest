@@ -22,7 +22,13 @@ Fresh traces establish that a test executed a named unit. The Source viewer proj
 
 ## Keyboard and themes
 
-`r` runs affected tests; `/` focuses Tests or Source search; `?` opens shortcuts; Escape closes a dialog or run drawer; in a filter field the first Escape clears the filter and the next one leaves the field. `g o`, `g i`, `g t` navigate within a one-second sequence. Shortcuts pause while typing or a dialog is open. Dialog Tab focus loops and Escape returns focus. Use the rail theme control; `?theme=light` and `?theme=dark` also choose a persisted theme.
+`r` runs affected tests; `/` focuses Tests or Source search; `?` opens shortcuts; Escape closes a dialog or run drawer; in a filter field the first Escape clears the filter and the next one leaves the field. `g o`, `g i`, `g t` navigate within a one-second sequence. Shortcuts pause while typing or a dialog is open. Dialog Tab focus loops and Escape returns focus. The shortcuts dialog has a switch that turns the single-key shortcuts (`r`, `?`, `/`, `g`) off for speech input or accidental presses; Escape keeps working. Use the rail theme control; `?theme=light` and `?theme=dark` also choose a persisted theme.
+
+## Accessibility
+
+Studio targets WCAG 2.2 AA in Chromium, Firefox and WebKit, light and dark. Opening the run drawer moves focus to its title; Escape or Close returns focus to the control that opened it. Run progress and the final verdict, a filter's result count and a screen change are spoken through one persistent live region. Changed and traced source lines are announced in words as well as colour, and scrollable code, run and source regions take keyboard focus. Below 860 px the navigation moves to a bottom bar and focus scrolls clear of it; at 320 px wide nothing scrolls sideways.
+
+`pnpm studio:a11y` starts Studio on a temporary git copy of `fixtures/projects/ts-lib-vitest`, drives every screen with Playwright in all three engines and both themes, and runs axe-core (WCAG 2.0 to 2.2 A and AA tags) plus keyboard, focus, live-region, reduced-motion, reflow and target-size checks. It writes `summary.md`, `results.json` and one accessibility tree per state to `--out` (default: the system temp directory) and exits 1 on a failed check. It needs the browsers that match the root `playwright-core` version, launches one browser at a time and is not part of `pnpm verify`. `--browsers`, `--themes` and `--assets=<web dir>` (compare another copy of `web/`) narrow or redirect a run. A real screen reader pass (NVDA with Firefox, VoiceOver with Safari) is still manual.
 
 ## Embedding and assets
 

@@ -15,6 +15,12 @@ import {
 
 type Node = SummaryNode | FileNode | TestNode | InfoNode;
 
+export interface ResultsSnapshotNode {
+  readonly label: string;
+  readonly description: string;
+  readonly children?: readonly ResultsSnapshotNode[];
+}
+
 interface SummaryNode {
   readonly kind: "summary";
   readonly verdict: RunVerdict;
@@ -204,6 +210,18 @@ export class SmartTestResultsProvider implements vscode.TreeDataProvider<Node>, 
         file: element.file.file,
       }));
     return [];
+  }
+
+  /** The rendered tree as plain labels; read by the real-host test through the Test-mode API. */
+  snapshot(): ResultsSnapshotNode[] {
+    const render = (node: Node): ResultsSnapshotNode => {
+      const item = this.getTreeItem(node);
+      const label = typeof item.label === "string" ? item.label : (item.label?.label ?? "");
+      const description = typeof item.description === "string" ? item.description : "";
+      const children = this.getChildren(node).map(render);
+      return { label, description, ...(children.length > 0 ? { children } : {}) };
+    };
+    return this.getChildren().map(render);
   }
 
   #uri(projectPath: string): vscode.Uri {

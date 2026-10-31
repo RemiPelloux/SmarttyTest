@@ -5,7 +5,7 @@ import { KeyedScheduler, LatestTask } from "./core/scheduler.js";
 import { SmartTestCodeLensProvider } from "./providers/code-lens.js";
 import { SmartTestHoverProvider } from "./providers/hover.js";
 import { logError } from "./providers/util.js";
-import { SmartTestResultsProvider } from "./results-view.js";
+import { type ResultsSnapshotNode, SmartTestResultsProvider } from "./results-view.js";
 import { ExtensionState } from "./state.js";
 import { SmartTestStatusBar } from "./status.js";
 
@@ -35,7 +35,18 @@ const SELECTOR: vscode.DocumentSelector = [
   { language: "javascriptreact", scheme: "file" },
 ];
 
-export function activate(context: vscode.ExtensionContext): void {
+/**
+ * Returned by `activate` only when VS Code runs extension tests
+ * (`ExtensionMode.Test`), so the real-host test can read what the status bar
+ * and the results view show. Normal sessions export nothing.
+ */
+export interface SmartTestTestApi {
+  status(): ReturnType<SmartTestStatusBar["snapshot"]>;
+  results(): ResultsSnapshotNode[];
+  readonly trusted: boolean;
+}
+
+export function activate(context: vscode.ExtensionContext): SmartTestTestApi | undefined {
   output = vscode.window.createOutputChannel("SmartTest");
   state = new ExtensionState(output);
   status = new SmartTestStatusBar(state);
@@ -164,6 +175,17 @@ export function activate(context: vscode.ExtensionContext): void {
   output.appendLine(
     `SmartTest extension ${context.extension.packageJSON.version as string} activated; executable is resolved per workspace folder.`,
   );
+  if (context.extensionMode !== vscode.ExtensionMode.Test) return undefined;
+  const testState = state;
+  const testStatus = status;
+  const testResults = results;
+  return {
+    status: () => testStatus.snapshot(),
+    results: () => testResults.snapshot(),
+    get trusted() {
+      return testState.trusted;
+    },
+  };
 }
 
 function folderByKey(key: string): vscode.WorkspaceFolder | undefined {

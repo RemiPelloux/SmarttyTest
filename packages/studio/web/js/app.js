@@ -6,6 +6,7 @@ import { isRunActive, renderRun, runVerdict } from "./run.js";
 import { renderImpact, renderOverview } from "./screens.js";
 import { filteredTests, renderSource, renderTests, renderTrust } from "./screens-b.js";
 import {
+  announce,
   button,
   download,
   empty,
@@ -21,6 +22,7 @@ import {
 
 const TOKEN_KEY = "smarttest.studio.token";
 const THEME_KEY = "smarttest.studio.theme";
+const KEYS_KEY = "smarttest.studio.singleKeyShortcuts";
 const app = document.getElementById("app");
 
 const state = {
@@ -64,6 +66,8 @@ let renderFrame = 0;
 let queryTimer = null;
 /** Files already in `state.runResults` for the open run, so each streamed result is O(1). */
 let runSeen = new Set();
+/** How to find the control that opened the run drawer again after a re-render. */
+let runOpener = null;
 
 const QUERY_DEBOUNCE_MS = 120;
 
@@ -79,7 +83,7 @@ const actions = {
       fk: "refresh",
       onClick: refresh,
     }),
-  runButton: (scope = "affected") =>
+  runButton: (scope = "affected", { fk = `run-${scope}` } = {}) =>
     button({
       label: scope === "all" ? "Run all" : "Run affected",
       iconName: "play",
@@ -87,7 +91,7 @@ const actions = {
       size: "btn--small",
       shortcut: scope === "affected" ? "r" : null,
       disabled: isRunActive(state.run),
-      fk: `run-${scope}`,
+      fk,
       onClick: () => run(scope),
     }),
   refresh,
@@ -98,11 +102,9 @@ const actions = {
     void run(state.run.scope, state.run.scopeFile ?? undefined);
   },
   cancelRun,
-  closeRun: () => {
-    state.runOpen = false;
-    render();
-  },
+  closeRun,
   openRun: (runData) => {
+    rememberRunOpener();
     state.run = runData;
     state.runOpen = true;
     state.runVerdict = null;
@@ -112,6 +114,7 @@ const actions = {
     setRunResults(runData.executions ?? []);
     state.runSummary = runData.summary;
     render();
+    focusRunDrawer();
   },
   selectImpactFile: (path) => {
     state.impactFile = path;
@@ -574,6 +577,34 @@ function loadingOrError(view) {
 
 // ── Run ───────────────────────────────────────────────────────────────────────────────────
 
+/** A selector for the focused control, so focus can return to it after the drawer closes. */
+function rememberRunOpener() {
+  const active = document.activeElement;
+  if (!(active instanceof HTMLElement) || active.closest("#run")) return;
+  runOpener = active.dataset.fk
+    ? `[data-fk="${CSS.escape(active.dataset.fk)}"]`
+    : active.id
+      ? `#${CSS.escape(active.id)}`
+      : null;
+}
+
+/** Opening the drawer moves focus to its title, so a screen reader reads the run it shows. */
+function focusRunDrawer() {
+  document.getElementById("run-title")?.focus({ preventScroll: true });
+}
+
+function closeRun() {
+  const hadFocus = document.getElementById("run")?.contains(document.activeElement);
+  state.runOpen = false;
+  render();
+  if (!hadFocus && document.activeElement !== document.body) return;
+  const opener = runOpener ? document.querySelector(runOpener) : null;
+  const target =
+    opener instanceof HTMLElement && !opener.hasAttribute("disabled") ? opener : shell?.main;
+  target?.focus(target === opener ? undefined : { preventScroll: true });
+  runOpener = null;
+}
+
 async function run(scope, file) {
   if (isRunActive(state.run)) {
     toast("A run is already in progress in this Studio session", "fail");
@@ -582,6 +613,7 @@ async function run(scope, file) {
   try {
     const body = { scope };
     if (file) body.file = file;
+    rememberRunOpener();
     const started = await api("/api/run", { method: "POST", body });
     state.run = started.run;
     state.runOpen = true;
@@ -592,6 +624,7 @@ async function run(scope, file) {
     setRunResults([]);
     state.runSummary = null;
     render();
+    focusRunDrawer();
     // Events streamed before this response arrived were dropped (the run id was not known yet);
     // a short run can even finish first. Replaying the run's record is safe: duplicates are ignored.
     void resyncRun(started.run.id);
@@ -789,6 +822,9 @@ function updateShell() {
 function renderPairing(message) {
   streamStop?.();
   document.getElementById("run")?.remove();
+  // A full-screen run drawer makes the page inert; the drawer is gone, so the page is not.
+  app.removeAttribute("inert");
+  document.querySelector(".skip-link")?.removeAttribute("inert");
   shell = null;
   app.className = "pairing";
   const input = h("input", {
@@ -820,9 +856,9 @@ function renderPairing(message) {
   replace(
     app,
     h(
-      "div",
-      { class: "pairing__card" },
-      h("p", { class: "pairing__title" }, "Pair this tab with Studio"),
+      "main",
+      { id: "main", class: "pairing__card", tabindex: "-1" },
+      h("h1", { class: "pairing__title" }, "Pair this tab with Studio"),
       h(
         "p",
         { class: "pairing__body" },
@@ -965,24 +1001,68 @@ function navigate(path) {
   window.scrollTo({ top: 0 });
   void load(route.view);
   render();
+  announce(`${NAV.find((item) => item.view === route.view)?.label ?? "Overview"} screen`);
 }
+
+function singleKeys() {
+  try {
+    return localStorage.getItem(KEYS_KEY) !== "off";
+  } catch {
+    return true;
+  }
+}
+
+function setSingleKeys(on) {
+  try {
+    localStorage.setItem(KEYS_KEY, on ? "on" : "off");
+  } catch {
+    /* the setting still applies until the page reloads */
+  }
+  singleKeysOn = on;
+}
+
+let singleKeysOn = singleKeys();
 
 function shortcuts() {
   let close = () => {};
   const row = (keys, text) =>
     h("div", { class: "dl-row" }, h("dt", null, keys), h("dd", null, text));
+  const toggle = h("input", {
+    type: "checkbox",
+    id: "single-key-shortcuts",
+    checked: singleKeysOn,
+    onChange: (event) => {
+      setSingleKeys(event.target.checked);
+      announce(event.target.checked ? "Single-key shortcuts on" : "Single-key shortcuts off");
+    },
+  });
   close = openDialog({
     title: "Keyboard shortcuts",
     body: h(
-      "dl",
+      "div",
       null,
-      row("r", "Run the affected tests"),
-      row("?", "This list"),
-      row("/", "Focus the search field on Tests or Source"),
-      row("Esc", "Clear a filter, leave a field, close the run panel or this dialog"),
-      row("g o", "Go to Overview"),
-      row("g i", "Go to Impact"),
-      row("g t", "Go to Tests"),
+      h(
+        "label",
+        { class: "check", for: "single-key-shortcuts" },
+        toggle,
+        h("span", null, "Use single-key shortcuts (r, ?, /, g)"),
+      ),
+      h(
+        "p",
+        { class: "hint mt-4" },
+        "Turn them off if you use speech input or they fire by accident. Esc always works.",
+      ),
+      h(
+        "dl",
+        null,
+        row("r", "Run the affected tests"),
+        row("?", "This list"),
+        row("/", "Focus the search field on Tests or Source"),
+        row("Esc", "Clear a filter, leave a field, close the run panel or this dialog"),
+        row("g o", "Go to Overview"),
+        row("g i", "Go to Impact"),
+        row("g t", "Go to Tests"),
+      ),
     ),
     footer: button({ label: "Close", onClick: () => close() }),
   });
@@ -1057,6 +1137,12 @@ document.addEventListener("keydown", (event) => {
     target.blur();
     return;
   }
+  if (event.key === "Escape" && state.runOpen) {
+    event.preventDefault();
+    actions.closeRun();
+    return;
+  }
+  if (!singleKeysOn) return;
   if (goUntil > Date.now()) {
     goUntil = 0;
     const path = { o: "/overview", i: "/impact", t: "/tests" }[event.key];
@@ -1068,11 +1154,6 @@ document.addEventListener("keydown", (event) => {
   }
   if (event.key === "g") {
     goUntil = Date.now() + 1000;
-    return;
-  }
-  if (event.key === "Escape" && state.runOpen) {
-    event.preventDefault();
-    actions.closeRun();
     return;
   }
   if (event.key === "r") {

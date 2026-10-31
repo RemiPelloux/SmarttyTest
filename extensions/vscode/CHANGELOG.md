@@ -30,4 +30,7 @@ First VS Code integration.
 - A failed `explain --units` call fell back to one `explain` per unit for any error; it now does so only for a usage error (a CLI without `--units`) and otherwise marks the file's units unknown.
 - `smarttest.analysisTimeoutMs` and `smarttest.runTimeoutMs` declare the maximum the extension enforces; `smarttest.refreshDelayMs` declares the same maximum (60000) as the code.
 - The status bar said "no symbols" for a file above `smarttest.maxUnitsPerFile`; it now says the file is too large to analyse and names the setting.
+- `smarttest.executablePath` pointing at a JavaScript entry (`bin.js`, as the Windows hint suggests) did not start on Linux and macOS, where the file is not executable; it is now started with `node` from PATH (VS Code's runtime if there is none).
+- Windows: a cancelled or timed-out run no longer waits for a test runner left behind by an exited CLI that still holds its output open; the extension's own unit tests run on Windows.
+- Tested in a real VS Code: `pnpm --filter smarttest-vscode test:host` runs the extension in VS Code 1.143.1, trusted and in Restricted Mode, and CI runs it on Linux, Windows and macOS.
 - A superseded analysis could clear the "analysing this file" indicator of the analysis that replaced it.

@@ -93,6 +93,55 @@ describe("executable discovery", () => {
     ).toBeUndefined();
   });
 
+  // A JS entry has no executable bit after a plain build (packages/cli/dist/bin.js),
+  // so it is started through Node instead of being executed directly.
+  describe.skipIf(process.platform === "win32")("a JavaScript entry on POSIX", () => {
+    function entry(root: string): string {
+      const path = join(root, "tools", "bin.js");
+      mkdirSync(join(path, ".."), { recursive: true });
+      writeFileSync(path, "console.log('smarttest')\n");
+      chmodSync(path, 0o644);
+      return path;
+    }
+
+    it("runs a configured, non-executable bin.js with node from PATH", () => {
+      const root = temp();
+      const bin = entry(root);
+      fakeBinary(join(root, "nodejs", "node"));
+      expect(
+        resolveExecutable({
+          configuredPath: "tools/bin.js",
+          workspaceDir: root,
+          pathEnv: join(root, "nodejs"),
+          platform: "linux",
+        }),
+      ).toEqual({
+        executable: join(root, "nodejs", "node"),
+        source: "setting",
+        leadingArgs: [bin],
+      });
+    });
+
+    it("falls back to the editor's runtime as Node when node is not on PATH", () => {
+      const root = temp();
+      const bin = entry(root);
+      expect(
+        resolveExecutable({
+          configuredPath: bin,
+          workspaceDir: root,
+          pathEnv: "",
+          platform: "darwin",
+          execPath: "/editor/Electron",
+        }),
+      ).toEqual({
+        executable: "/editor/Electron",
+        source: "setting",
+        leadingArgs: [bin],
+        env: { ELECTRON_RUN_AS_NODE: "1" },
+      });
+    });
+  });
+
   // Windows lookups run on any OS: the platform is a parameter and only `.cmd`
   // names and package manifests are read.
   describe("on Windows", () => {

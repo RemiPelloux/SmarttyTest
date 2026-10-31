@@ -184,13 +184,16 @@ class Studio {
    */
   async refresh(source?: ChangeSource | null): Promise<Snapshot> {
     if (source !== undefined) this.source = source;
+    // A caller that named a source gets that source, even if a later caller changed it while this
+    // one waited; a refresh without one (the file watcher) follows the current source.
+    const want = () => (source !== undefined ? source : this.source);
     while (this.inflight) {
       const pending = this.inflight;
-      if (sameSource(pending.source, this.source)) return pending.promise;
+      if (sameSource(pending.source, want())) return pending.promise;
       await pending.promise.catch(() => undefined);
       if (this.inflight === pending) this.inflight = null;
     }
-    const wanted = this.source;
+    const wanted = want();
     const run = (async () => {
       const started = Date.now();
       const analysis: Analysis = await this.st.analyze(wanted ? { source: wanted } : {});
@@ -198,6 +201,8 @@ class Studio {
       // Runs started outside Studio (terminal, commit hook) change the last run and coverage.
       await this.loadRunState();
       const snapshot = await buildSnapshot(this.st, view, this.coverage, analysis);
+      // An analysis of a source that was replaced meanwhile answers its caller only.
+      if (!sameSource(wanted, this.source)) return snapshot;
       this.snapshot = snapshot;
       this.broadcast({
         type: "snapshot",

@@ -161,7 +161,11 @@ export function label(text) {
 export function eyebrow(...parts) {
   const out = [];
   parts.filter(Boolean).forEach((part, index) => {
-    if (index) out.push(h("span", { class: "eyebrow__sep", "aria-hidden": "true" }, "/"));
+    if (index)
+      out.push(
+        h("span", { class: "eyebrow__sep", "aria-hidden": "true" }, "/"),
+        h("span", { class: "visually-hidden" }, ", "),
+      );
     out.push(h("span", null, part));
   });
   return h("div", { class: "eyebrow" }, out);
@@ -256,6 +260,7 @@ export function button({
   variant = "",
   size = "",
   title,
+  ariaLabel = null,
   disabled = false,
   shortcut = null,
   type = "button",
@@ -266,8 +271,10 @@ export function button({
     {
       class: `btn ${variant} ${size}`.trim(),
       type,
-      ...(fk ? { "data-fk": fk } : {}),
+      // A focus key lets a re-render put keyboard focus back on this button.
+      "data-fk": fk ?? `btn:${text}`,
       ...(title ? { title } : {}),
+      ...(ariaLabel ? { "aria-label": ariaLabel } : {}),
       ...(disabled ? { disabled: true } : {}),
       onClick,
     },
@@ -351,6 +358,7 @@ export function dataTable({ caption, columns, rows, rowProps, onRowClick }) {
 }
 
 export function tabs({ items, active, onSelect, idPrefix = "tab" }) {
+  // The panel is rendered by the screen as `tabPanel({ idPrefix, active })`.
   const list = h("div", { class: "tabs", role: "tablist", "aria-label": "Test states" });
   const buttons = [];
   items.forEach((item, index) => {
@@ -370,10 +378,10 @@ export function tabs({ items, active, onSelect, idPrefix = "tab" }) {
       item.count !== undefined ? h("span", { class: "tab__count" }, num(item.count)) : null,
     );
     button.addEventListener("keydown", (event) => {
-      if (event.key !== "ArrowRight" && event.key !== "ArrowLeft") return;
+      const moves = { ArrowRight: index + 1, ArrowLeft: index - 1, Home: 0, End: items.length - 1 };
+      if (!(event.key in moves)) return;
       event.preventDefault();
-      const direction = event.key === "ArrowRight" ? 1 : -1;
-      const next = items[(index + direction + items.length) % items.length];
+      const next = items[(moves[event.key] + items.length) % items.length];
       onSelect(next.id);
       // onSelect re-renders the screen, so focus the new tab by id rather than the old node.
       document.getElementById(`${idPrefix}-${next.id}`)?.focus();
@@ -382,6 +390,14 @@ export function tabs({ items, active, onSelect, idPrefix = "tab" }) {
     list.appendChild(button);
   });
   return list;
+}
+
+export function tabPanel({ idPrefix = "tab", active, children }) {
+  return h(
+    "div",
+    { role: "tabpanel", id: `${idPrefix}-panel`, "aria-labelledby": `${idPrefix}-${active}` },
+    children,
+  );
 }
 
 export function segmented({ items, active, onSelect, label: ariaLabel }) {
@@ -437,6 +453,32 @@ export function download(filename, text, type = "text/csv;charset=utf-8") {
 
 let toastTimer = null;
 
+/**
+ * Speaks a short message through the page's one persistent live region. A region inserted
+ * together with its text is not reliably announced, so screens never create their own.
+ */
+export function announce(message) {
+  const el = document.getElementById("announcer");
+  if (!el || !message) return;
+  // Clearing first makes a repeated message (two runs with the same verdict) announce again.
+  el.textContent = "";
+  setTimeout(() => {
+    el.textContent = message;
+  }, 60);
+}
+
+const announced = new Map();
+
+/**
+ * Announces `message` when `key` changes for this channel, never on the first render, so a
+ * filter result is read after typing and not each time the screen redraws.
+ */
+export function announceChange(channel, key, message) {
+  const previous = announced.get(channel);
+  announced.set(channel, key);
+  if (previous !== undefined && previous !== key) announce(message);
+}
+
 export function toast(message, tone = "info") {
   const el = document.getElementById("toast");
   if (!el) return;
@@ -454,18 +496,44 @@ export function toast(message, tone = "info") {
 
 export function openDialog({ title, body, footer = null }) {
   const previous = document.activeElement;
+  // A re-render replaces nodes; remember how to find the opener again.
+  const previousKey =
+    previous instanceof HTMLElement
+      ? previous.id
+        ? `#${CSS.escape(previous.id)}`
+        : previous.dataset.fk
+          ? `[data-fk="${CSS.escape(previous.dataset.fk)}"]`
+          : null
+      : null;
   const card = h(
     "div",
-    { class: "dialog__card", role: "dialog", "aria-modal": "true", "aria-label": title },
-    h("p", { class: "dialog__title" }, title),
+    {
+      class: "dialog__card",
+      role: "dialog",
+      "aria-modal": "true",
+      "aria-labelledby": "dialog-title",
+    },
+    h("h2", { class: "dialog__title", id: "dialog-title" }, title),
     h("div", { class: "dialog__body" }, body),
     footer ? h("div", { class: "dialog__foot" }, footer) : null,
   );
   const overlay = h("div", { class: "dialog" }, card);
+  // Everything behind a modal dialog is out of reach, for the keyboard and for screen readers.
+  const background = [...document.body.children].filter(
+    (el) =>
+      el !== overlay && !el.hasAttribute("inert") && el.id !== "announcer" && el.id !== "toast",
+  );
   const close = () => {
     overlay.remove();
     document.removeEventListener("keydown", onKey);
-    if (previous instanceof HTMLElement) previous.focus();
+    for (const el of background) el.removeAttribute("inert");
+    const target =
+      previous instanceof HTMLElement && previous.isConnected
+        ? previous
+        : previousKey
+          ? document.querySelector(previousKey)
+          : null;
+    (target ?? document.getElementById("main"))?.focus();
   };
   const onKey = (event) => {
     if (event.key === "Escape") {
@@ -493,6 +561,7 @@ export function openDialog({ title, body, footer = null }) {
   });
   document.addEventListener("keydown", onKey);
   document.body.appendChild(overlay);
+  for (const el of background) el.setAttribute("inert", "");
   const focusable = card.querySelector("button, input");
   focusable?.focus();
   return close;

@@ -388,18 +388,62 @@ export async function buildPlan(
   return { summary, recommendations: recs, warnings, files, config };
 }
 
-/** Minimal line diff for previews: "+ added", "- removed". */
+/**
+ * Line diff for previews, in file order: "@ line n" before each changed region (n is the line in
+ * the new file), then "- removed" and "+ added" lines. Repeated lines such as `fi` are kept.
+ */
 export function previewDiff(plan: FilePlan): string[] {
   if (plan.action === "skip") return [];
   const before = (plan.before ?? "").split("\n");
   const after = (plan.after ?? "").split("\n");
   if (plan.action === "create")
     return after.filter((l, i) => i < after.length - 1 || l !== "").map((l) => `+ ${l}`);
+  let start = 0;
+  while (start < before.length && start < after.length && before[start] === after[start]) start++;
+  let endB = before.length;
+  let endA = after.length;
+  while (endB > start && endA > start && before[endB - 1] === after[endA - 1]) {
+    endB--;
+    endA--;
+  }
+  const b = before.slice(start, endB);
+  const a = after.slice(start, endA);
+  // Longest common subsequence of the differing middle; previewed files are small.
+  const lcs = Array.from({ length: b.length + 1 }, () => new Uint32Array(a.length + 1));
+  for (let i = b.length - 1; i >= 0; i--)
+    for (let j = a.length - 1; j >= 0; j--)
+      (lcs[i] as Uint32Array)[j] =
+        b[i] === a[j]
+          ? ((lcs[i + 1] as Uint32Array)[j + 1] as number) + 1
+          : Math.max(
+              (lcs[i + 1] as Uint32Array)[j] as number,
+              (lcs[i] as Uint32Array)[j + 1] as number,
+            );
   const out: string[] = [];
-  const beforeSet = new Set(before);
-  const afterSet = new Set(after);
-  for (const l of before) if (!afterSet.has(l)) out.push(`- ${l}`);
-  for (const l of after) if (!beforeSet.has(l)) out.push(`+ ${l}`);
+  let open = false;
+  let i = 0;
+  let j = 0;
+  const change = (line: string) => {
+    if (!open) out.push(`@ line ${start + j + 1}`);
+    open = true;
+    out.push(line);
+  };
+  while (i < b.length || j < a.length) {
+    if (i < b.length && j < a.length && b[i] === a[j]) {
+      open = false;
+      i++;
+      j++;
+    } else if (
+      i < b.length &&
+      (j === a.length ||
+        ((lcs[i + 1] as Uint32Array)[j] as number) >= ((lcs[i] as Uint32Array)[j + 1] as number))
+    )
+      change(`- ${b[i++]}`);
+    else {
+      change(`+ ${a[j]}`);
+      j++;
+    }
+  }
   return out;
 }
 

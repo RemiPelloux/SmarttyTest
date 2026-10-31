@@ -373,12 +373,16 @@ describe("read models", () => {
   it("analyses the latest source when two refreshes overlap", async () => {
     const post = (source: unknown) =>
       api("/api/refresh", { method: "POST", body: { source }, headers: { origin: origin() } });
-    const [staged, uncommitted] = await Promise.all([
-      post({ kind: "staged" }),
-      new Promise((resolve) => setTimeout(resolve, 20)).then(() => post({ kind: "uncommitted" })),
+    const later = (ms: number, source: unknown) =>
+      new Promise((resolve) => setTimeout(resolve, ms)).then(() => post(source));
+    // A refresh is in flight when both arrive; each must get the source it asked for.
+    const [, staged, uncommitted] = await Promise.all([
+      post(null),
+      later(10, { kind: "staged" }),
+      later(20, { kind: "uncommitted" }),
     ]);
     const describe = (json: unknown) => (json as { description: string }).description;
-    expect(describe(staged.json)).not.toBe(describe(uncommitted.json));
+    expect(describe(staged.json)).toMatch(/staged/);
     expect(describe(uncommitted.json)).not.toMatch(/staged/);
     await post(null);
   });

@@ -33,7 +33,8 @@
     "site:build": "node scripts/site/build.mjs",
     "site:serve": "node scripts/site/build.mjs --serve",
     "site:demo": "node scripts/site/demo-data.mjs",
-    "site:publish": "node scripts/site/build.mjs && node scripts/site/publish.mjs"
+    "site:publish": "node scripts/site/build.mjs && node scripts/site/publish.mjs",
+    "studio:a11y": "node scripts/studio-a11y/audit.mjs"
   },
   "devDependencies": {
     "@biomejs/biome": "2.6.4",
@@ -46,6 +47,8 @@
     "@changesets/cli": "^3.0.3",
     "@smarttest/adapter-jest": "workspace:*",
     "@smarttest/adapter-vitest": "workspace:*",
-    "@smarttest/plugin-sdk": "workspace:*"
+    "@smarttest/plugin-sdk": "workspace:*",
+    "@axe-core/playwright": "4.14.0",
+    "playwright-core": "1.64.1"
   }
 }

@@ -91,6 +91,7 @@ code,
 h1,
 h2,
 h3,
+h4,
 p,
 ul,
 ol,
@@ -144,6 +145,14 @@ button {
 
 .skip-link:focus {
   left: 12px;
+}
+
+/* Regions that scroll on their own take keyboard focus; an inset ring is never clipped. */
+.drawer__body:focus-visible,
+.source__body:focus-visible,
+.code-peek:focus-visible,
+.groups:focus-visible {
+  outline-offset: -2px;
 }
 
 .boot {
@@ -583,6 +592,10 @@ h1 {
   padding-left: 0;
 }
 
+.facts dd {
+  margin: 0;
+}
+
 .fact__label {
   display: block;
   color: var(--st-muted);
@@ -941,6 +954,7 @@ h1 {
 /* ── Data tables ──────────────────────────────────────────────────────────────────────── */
 
 .table-wrap {
+  position: relative;
   overflow-x: auto;
   border: 1px solid var(--st-line-soft);
   border-radius: var(--radius);
@@ -1016,6 +1030,7 @@ table.data td.muted,
 
 table.data .row-btn {
   min-width: 16ch;
+  min-height: 24px;
   border: 0;
   background: transparent;
   padding: 2px 0;
@@ -1269,6 +1284,11 @@ table.data tbody tr[data-dim="true"] .row-btn {
   overflow-wrap: anywhere;
 }
 
+.detail__name {
+  font-size: inherit;
+  font-weight: inherit;
+}
+
 .detail__meta {
   margin-top: 3px;
   color: var(--st-muted);
@@ -1348,8 +1368,12 @@ table.data tbody tr[data-dim="true"] .row-btn {
   margin-top: 10px;
   border: 1px solid var(--st-line-soft);
   border-radius: var(--radius-small);
-  overflow: hidden;
+  overflow: auto;
   background: var(--st-bg-0);
+}
+
+.code-peek__lines {
+  min-width: max-content;
 }
 
 .code-peek__line {
@@ -1369,7 +1393,6 @@ table.data tbody tr[data-dim="true"] .row-btn {
 
 .code-peek__t {
   padding-right: 10px;
-  overflow-x: auto;
   white-space: pre;
 }
 
@@ -1844,6 +1867,12 @@ table.data tbody tr[data-dim="true"] .row-btn {
 .pairing__title {
   font-size: 19px;
   font-weight: 600;
+  letter-spacing: normal;
+  line-height: 1.45;
+}
+
+.pairing__card:focus {
+  outline: none;
 }
 
 .pairing__body {
@@ -1950,6 +1979,21 @@ table.data tbody tr[data-dim="true"] .row-btn {
   font-size: 13px;
 }
 
+.check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--st-text);
+  cursor: pointer;
+}
+
+.check input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--st-cyan);
+}
+
 .dialog__foot {
   display: flex;
   justify-content: flex-end;
@@ -1976,6 +2020,9 @@ table.data tbody tr[data-dim="true"] .row-btn {
   position: absolute;
   width: 1px;
   height: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
   overflow: hidden;
   clip: rect(0 0 0 0);
   white-space: nowrap;
@@ -2131,6 +2178,8 @@ table.data tbody tr[data-dim="true"] .row-btn {
   flex-direction: column;
   gap: 1px;
   min-width: 0;
+  font-size: inherit;
+  font-weight: 400;
 }
 
 .source__path .source__base {
@@ -2165,6 +2214,7 @@ table.data tbody tr[data-dim="true"] .row-btn {
 
 .drawer__section {
   margin: 14px 0 4px;
+  font-weight: 400;
 }
 
 .run-file__line {
@@ -2248,6 +2298,8 @@ table.data tbody tr[data-dim="true"] .row-btn {
 @media (max-width: 860px) {
   :root {
     --pad: 16px;
+    /* Focus and in-page jumps stop above the fixed navigation bar. */
+    scroll-padding-bottom: 76px;
   }
 
   .shell {
@@ -2419,6 +2471,28 @@ table.data tbody tr[data-dim="true"] .row-btn {
 
   .title-row .finding {
     font-size: 14px;
+  }
+}
+
+/* 320 px wide (a 1280 px window at 400% zoom): every navigation control stays on screen. */
+@media (max-width: 400px) {
+  .rail {
+    padding-left: 4px;
+    padding-right: 4px;
+  }
+
+  .rail__item {
+    flex: 1 1 0;
+    min-width: 0;
+    padding: 4px 2px;
+  }
+
+  .rail__label {
+    font-size: 11px;
+  }
+
+  .rail__bottom .icon-btn {
+    width: 28px;
   }
 }
 

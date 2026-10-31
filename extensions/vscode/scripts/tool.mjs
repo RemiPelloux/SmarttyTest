@@ -15,10 +15,13 @@ if (!tool) {
   process.exit(2);
 }
 
+// On Windows `.bin/<name>` is a POSIX shell script; the runnable shim is `<name>.cmd`.
+const windows = process.platform === "win32";
+
 function findBinary(name) {
   let dir = packageRoot;
   for (;;) {
-    const candidate = join(dir, "node_modules", ".bin", name);
+    const candidate = join(dir, "node_modules", ".bin", windows ? `${name}.cmd` : name);
     if (existsSync(candidate)) return candidate;
     const parent = dirname(dir);
     if (parent === dir) return undefined;
@@ -34,11 +37,17 @@ if (!binary) {
   process.exit(1);
 }
 
-const result = spawnSync(binary, process.argv.slice(3), {
-  cwd: packageRoot,
-  stdio: "inherit",
-  env: process.env,
-});
+const args = process.argv.slice(3);
+// Node starts a `.cmd` only through a shell (CVE-2024-27980); the arguments are
+// this package's own script arguments, quoted for cmd.exe.
+const result = windows
+  ? spawnSync([binary, ...args].map((value) => `"${value}"`).join(" "), {
+      cwd: packageRoot,
+      stdio: "inherit",
+      env: process.env,
+      shell: true,
+    })
+  : spawnSync(binary, args, { cwd: packageRoot, stdio: "inherit", env: process.env });
 if (result.error) {
   console.error(result.error.message);
   process.exit(1);
