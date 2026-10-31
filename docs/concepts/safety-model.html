@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Safety model · SmartTest</title>
+<meta name="description" content="SmartTest documentation: Safety model">
+<link rel="icon" href="../../assets/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../../assets/site.css">
+<link rel="stylesheet" href="../../assets/docs.css">
+</head>
+<body class="docs">
+<a class="skip" href="#content">Skip to content</a>
+<header class="bar">
+  <a class="wordmark" href="../../index.html"><img src="../../assets/logo.svg" alt="" width="22" height="22"> SmartTest</a>
+  <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="sidebar">Menu</button>
+  <nav class="bar-links" aria-label="Site">
+    <a href="../index.html">Docs</a>
+    <a href="../reference/cli.html">CLI</a>
+    <a href="../planning/roadmap.html">Roadmap</a>
+    <a href="https://github.com/RemiPelloux/SmarttyTest" rel="noopener">GitHub</a>
+  </nav>
+  <label class="search"><span class="sr">Search the docs</span><input type="search" placeholder="Search" data-search data-base="../.." autocomplete="off"><span class="search-results" data-results hidden></span></label>
+</header>
+<div class="layout">
+  <aside id="sidebar" class="sidebar"><div class="nav-group"><p class="nav-title">Start</p><ul><li><a href="../index.html">Overview</a></li><li><a href="../guides/getting-started.html">Getting started</a></li><li><a href="../guides/commit-hooks.html">Commit and push hooks</a></li><li><a href="../guides/studio.html">Studio</a></li><li><a href="../guides/vscode.html">VS Code</a></li><li><a href="../guides/ci.html">Running in CI</a></li></ul></div><div class="nav-group"><p class="nav-title">Concepts</p><ul><li><a href="how-selection-works.html">How selection works</a></li><li><a href="safety-model.html" aria-current="page">Safety model</a></li><li><a href="runtime-evidence.html">Runtime evidence</a></li><li><a href="speed.html">Running less, faster</a></li><li><a href="change-tracking.html">Change tracking</a></li><li><a href="rules.html">Rules</a></li></ul></div><div class="nav-group"><p class="nav-title">Reference</p><ul><li><a href="../reference/cli.html">CLI</a></li><li><a href="../reference/configuration.html">Configuration</a></li><li><a href="../benchmarks.html">Benchmarks</a></li><li><a href="../changelog.html">Changelog</a></li></ul></div><div class="nav-group"><p class="nav-title">Results</p><ul><li><a href="../case-studies/leadsit.html">Case study: LeadsIt</a></li><li><a href="../case-studies/external-repositories.html">External repositories</a></li></ul></div><div class="nav-group"><p class="nav-title">Project</p><ul><li><a href="../planning/roadmap.html">Roadmap</a></li><li><a href="../planning/delivery.html">Delivery log</a></li><li><a href="../architecture/overview.html">Architecture</a></li><li><a href="../architecture/adr/index.html">Decision records</a></li><li><a href="../design/design-system.html">Design system</a></li><li><a href="../design/studio.html">Studio design brief</a></li><li><a href="../product/PRD.html">Specification</a></li></ul></div><p class="version">Version 0.9.0</p></aside>
+  <main id="content" class="prose">
+<h1 id="safety-model">Safety model</h1>
+<p>No static analysis can guarantee that a skipped test would have passed. SmartTest's job is to make that risk small, measured and visible, and never hidden.</p>
+<h2 id="what-smarttest-will-never-do-prd-322">What SmartTest will never do (PRD §32.2) <a class="anchor" href="#what-smarttest-will-never-do-prd-322" aria-label="Link to this section">#</a></h2>
+<ul><li>Label skipped tests as passed.</li><li>Treat unknown dependencies as definitely unrelated.</li><li>Present partial coverage as global coverage.</li><li>Claim generated tests are verified without running them.</li><li>Reuse invalid cached results.</li><li>Ignore critical configuration changes without warning.</li><li>Suppress test failures to improve reported performance.</li></ul>
+<h2 id="how-each-guarantee-is-enforced">How each guarantee is enforced <a class="anchor" href="#how-each-guarantee-is-enforced" aria-label="Link to this section">#</a></h2>
+<div class="table"><table><thead><tr><th>Guarantee</th><th>Mechanism</th><th>Story</th></tr></thead><tbody><tr><td>Skipped ≠ passed</td><td>Separate status <code>skipped by selection</code>. Report integrity suite in CI</td><td>ST-051, ST-090</td></tr><tr><td>Unknown ≠ unrelated</td><td>Unresolved imports and dynamic patterns are stored as uncertainty and trigger fallback per mode</td><td>ST-038, ST-059</td></tr><tr><td>Global changes widen scope</td><td>Built-in mandatory triggers that can't be removed by rules</td><td>ST-058, ST-066</td></tr><tr><td>Partial ≠ full coverage</td><td>Every coverage figure is labelled <code>full</code> or <code>selected</code>, and the two are never merged</td><td>ST-088</td></tr><tr><td>No silent destruction</td><td>Dry-run equals the real plan. Atomic writes. Init journal and rollback. Generator never overwrites</td><td>ST-072–076, ST-082</td></tr><tr><td>Evidence before trust</td><td><code>validate-selection</code>, <code>shadow</code> and <code>benchmark</code> compare against full runs. The regression harness runs in the pre-push gate</td><td>ST-064, ST-095</td></tr><tr><td>Cached ≠ fresh</td><td>Cached results have their own status (<code>cached-pass</code>), counted apart and labelled "cached, not run"; keys cover every input; <code>benchmark</code> checks them against full runs (<a href="../architecture/adr/0009-validated-result-cache.html">ADR-0009</a>)</td><td>0.8.0</td></tr><tr><td>No stale evidence</td><td>A trace is used only while every file it loaded is unchanged and the runtime/lockfile fingerprint matches</td><td>0.5.0</td></tr><tr><td>Observed skips are bounded</td><td>Traces never rule out tests in SAFE mode, never for env, translation or asset changes, and only tests selected by static edges alone</td><td>0.5.0</td></tr></tbody></table></div>
+<h2 id="adoption-path-we-recommend">Adoption path we recommend <a class="anchor" href="#adoption-path-we-recommend" aria-label="Link to this section">#</a></h2>
+<ol><li>Observe. Run <code>smarttest impact</code> on PRs without changing CI and read the explanations.</li><li>Validate. Run <code>smarttest validate-selection</code> on a sample of real changes and check that 0 failures are missed.</li><li>Record. Run <code>smarttest trace</code> and, on a schedule, <code>smarttest shadow</code>; <code>shadow --report</code> shows whether any failure was ever missed.</li><li>Adopt on PRs. Use <code>run --affected --mode balanced</code> on pull requests and keep <code>run --all</code> on <code>main</code> and nightly.</li><li>Tighten. Add rules for critical areas (<code>risk: critical</code>) so they always run in SAFE mode.</li></ol>
+    <p class="edit"><a href="https://github.com/RemiPelloux/SmarttyTest/blob/main/documentation/concepts/safety-model.md" rel="noopener">Edit this page on GitHub</a></p>
+  </main>
+  <nav class="toc" aria-label="On this page"><p class="nav-title">On this page</p><ul><li><a href="#what-smarttest-will-never-do-prd-322">What SmartTest will never do (PRD §32.2)</a></li><li><a href="#how-each-guarantee-is-enforced">How each guarantee is enforced</a></li><li><a href="#adoption-path-we-recommend">Adoption path we recommend</a></li></ul></nav>
+</div>
+<script src="../../assets/docs.js" defer></script>
+
+</body>
+</html>

@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Change tracking: Git, Subversion, Mercurial, native snapshots · SmartTest</title>
+<meta name="description" content="SmartTest documentation: Change tracking: Git, Subversion, Mercurial, native snapshots">
+<link rel="icon" href="../../assets/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../../assets/site.css">
+<link rel="stylesheet" href="../../assets/docs.css">
+</head>
+<body class="docs">
+<a class="skip" href="#content">Skip to content</a>
+<header class="bar">
+  <a class="wordmark" href="../../index.html"><img src="../../assets/logo.svg" alt="" width="22" height="22"> SmartTest</a>
+  <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="sidebar">Menu</button>
+  <nav class="bar-links" aria-label="Site">
+    <a href="../index.html">Docs</a>
+    <a href="../reference/cli.html">CLI</a>
+    <a href="../planning/roadmap.html">Roadmap</a>
+    <a href="https://github.com/RemiPelloux/SmarttyTest" rel="noopener">GitHub</a>
+  </nav>
+  <label class="search"><span class="sr">Search the docs</span><input type="search" placeholder="Search" data-search data-base="../.." autocomplete="off"><span class="search-results" data-results hidden></span></label>
+</header>
+<div class="layout">
+  <aside id="sidebar" class="sidebar"><div class="nav-group"><p class="nav-title">Start</p><ul><li><a href="../index.html">Overview</a></li><li><a href="../guides/getting-started.html">Getting started</a></li><li><a href="../guides/commit-hooks.html">Commit and push hooks</a></li><li><a href="../guides/studio.html">Studio</a></li><li><a href="../guides/vscode.html">VS Code</a></li><li><a href="../guides/ci.html">Running in CI</a></li></ul></div><div class="nav-group"><p class="nav-title">Concepts</p><ul><li><a href="how-selection-works.html">How selection works</a></li><li><a href="safety-model.html">Safety model</a></li><li><a href="runtime-evidence.html">Runtime evidence</a></li><li><a href="speed.html">Running less, faster</a></li><li><a href="change-tracking.html" aria-current="page">Change tracking</a></li><li><a href="rules.html">Rules</a></li></ul></div><div class="nav-group"><p class="nav-title">Reference</p><ul><li><a href="../reference/cli.html">CLI</a></li><li><a href="../reference/configuration.html">Configuration</a></li><li><a href="../benchmarks.html">Benchmarks</a></li><li><a href="../changelog.html">Changelog</a></li></ul></div><div class="nav-group"><p class="nav-title">Results</p><ul><li><a href="../case-studies/leadsit.html">Case study: LeadsIt</a></li><li><a href="../case-studies/external-repositories.html">External repositories</a></li></ul></div><div class="nav-group"><p class="nav-title">Project</p><ul><li><a href="../planning/roadmap.html">Roadmap</a></li><li><a href="../planning/delivery.html">Delivery log</a></li><li><a href="../architecture/overview.html">Architecture</a></li><li><a href="../architecture/adr/index.html">Decision records</a></li><li><a href="../design/design-system.html">Design system</a></li><li><a href="../design/studio.html">Studio design brief</a></li><li><a href="../product/PRD.html">Specification</a></li></ul></div><p class="version">Version 0.9.0</p></aside>
+  <main id="content" class="prose">
+<h1 id="change-tracking-git-subversion-mercurial-native-snapshots">Change tracking: Git, Subversion, Mercurial, native snapshots</h1>
+<h2 id="git-default-when-a-repo-is-detected">Git (default when a repo is detected) <a class="anchor" href="#git-default-when-a-repo-is-detected" aria-label="Link to this section">#</a></h2>
+<div class="table"><table><thead><tr><th>Flag</th><th>Compares</th></tr></thead><tbody><tr><td><code>--base &lt;ref&gt;</code></td><td>merge-base(<code>&lt;ref&gt;</code>, HEAD) → working tree (<code>--base-mode direct</code> to skip merge-base)</td></tr><tr><td><code>--staged</code></td><td>HEAD → index</td></tr><tr><td><code>--uncommitted</code></td><td>HEAD → working tree + untracked (honours <code>.gitignore</code>)</td></tr></tbody></table></div>
+<p>Renames carry <code>previousPath</code>. Deletions mark dependent tests as affected. Worktrees and nested repositories are supported, and each repository boundary is reported, never mixed. A shallow clone that doesn't contain the base gives a clear error (exit 4) with a <code>git fetch</code> hint.</p>
+<h2 id="subversion-and-mercurial">Subversion and Mercurial <a class="anchor" href="#subversion-and-mercurial" aria-label="Link to this section">#</a></h2>
+<p>Detected automatically when there is no Git repository (<code>vcs.provider: "auto"</code>), or chosen with <code>vcs.provider: "svn"</code> / <code>"hg"</code>. Neither has a staging area, so <code>run</code>, <code>--staged</code> and <code>--uncommitted</code> all compare the working copy with its base (<code>BASE</code> in Subversion, the working directory's parent in Mercurial), unversioned files included. <code>--base &lt;rev&gt;</code> takes a revision: in Subversion it is compared directly (<code>svn diff -r &lt;rev&gt;</code>); in Mercurial with the common ancestor of <code>&lt;rev&gt;</code> and the working directory (<code>--base-mode direct</code> compares with <code>&lt;rev&gt;</code> itself). Changed line ranges and the content before the change come from <code>svn diff</code> / <code>svn cat</code> and <code>hg diff</code> / <code>hg cat</code>. <code>benchmark</code>, <code>ci</code> and <code>hook</code> are Git-only.</p>
+<h2 id="native-snapshots-no-vcs-required">Native snapshots (no VCS required) <a class="anchor" href="#native-snapshots-no-vcs-required" aria-label="Link to this section">#</a></h2>
+<pre data-lang="bash"><code>smarttest snapshot create            # baseline: content hashes, not copies
+# …edit files…
+smarttest snapshot diff              # ChangeSet vs latest snapshot
+smarttest run --affected             # uses the latest snapshot automatically</code></pre>
+<ul><li>Fingerprints use mtime and size as a pre-check, then a content hash to confirm.</li><li>Content isn't stored by default. In that case changed ranges are <em>unknown</em>, and the ChangeSet is marked <code>partial</code>, which widens selection.</li><li>A snapshot becomes a verified baseline only once execution evidence is attached to it.</li></ul>
+<h2 id="hybrid-mode">Hybrid mode <a class="anchor" href="#hybrid-mode" aria-label="Link to this section">#</a></h2>
+<p>With Git present and <code>vcs.snapshots: true</code> (the default), SmartTest records a native snapshot after every fully passing run. <code>smarttest run --since-snapshot</code> then compares against the last green run, which is fast and incremental between commits, while <code>--base main</code> still compares against Git. Snapshot IDs are never treated as commits.</p>
+<p>The baseline only moves forward on green runs. A failing test therefore stays selected until it passes.</p>
+<h2 id="not-in-10">Not in 1.0 <a class="anchor" href="#not-in-10" aria-label="Link to this section">#</a></h2>
+<p>SVN and Mercurial (roadmap 0.8.0) and other systems through plugins will implement the same <code>VersionControlAdapter</code> contract. Their markers are detected and reported as unsupported in 1.0.</p>
+    <p class="edit"><a href="https://github.com/RemiPelloux/SmarttyTest/blob/main/documentation/concepts/change-tracking.md" rel="noopener">Edit this page on GitHub</a></p>
+  </main>
+  <nav class="toc" aria-label="On this page"><p class="nav-title">On this page</p><ul><li><a href="#git-default-when-a-repo-is-detected">Git (default when a repo is detected)</a></li><li><a href="#subversion-and-mercurial">Subversion and Mercurial</a></li><li><a href="#native-snapshots-no-vcs-required">Native snapshots (no VCS required)</a></li><li><a href="#hybrid-mode">Hybrid mode</a></li><li><a href="#not-in-10">Not in 1.0</a></li></ul></nav>
+</div>
+<script src="../../assets/docs.js" defer></script>
+
+</body>
+</html>

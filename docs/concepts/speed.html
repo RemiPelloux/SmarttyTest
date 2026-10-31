@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Running less, faster · SmartTest</title>
+<meta name="description" content="SmartTest documentation: Running less, faster">
+<link rel="icon" href="../../assets/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../../assets/site.css">
+<link rel="stylesheet" href="../../assets/docs.css">
+</head>
+<body class="docs">
+<a class="skip" href="#content">Skip to content</a>
+<header class="bar">
+  <a class="wordmark" href="../../index.html"><img src="../../assets/logo.svg" alt="" width="22" height="22"> SmartTest</a>
+  <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="sidebar">Menu</button>
+  <nav class="bar-links" aria-label="Site">
+    <a href="../index.html">Docs</a>
+    <a href="../reference/cli.html">CLI</a>
+    <a href="../planning/roadmap.html">Roadmap</a>
+    <a href="https://github.com/RemiPelloux/SmarttyTest" rel="noopener">GitHub</a>
+  </nav>
+  <label class="search"><span class="sr">Search the docs</span><input type="search" placeholder="Search" data-search data-base="../.." autocomplete="off"><span class="search-results" data-results hidden></span></label>
+</header>
+<div class="layout">
+  <aside id="sidebar" class="sidebar"><div class="nav-group"><p class="nav-title">Start</p><ul><li><a href="../index.html">Overview</a></li><li><a href="../guides/getting-started.html">Getting started</a></li><li><a href="../guides/commit-hooks.html">Commit and push hooks</a></li><li><a href="../guides/studio.html">Studio</a></li><li><a href="../guides/vscode.html">VS Code</a></li><li><a href="../guides/ci.html">Running in CI</a></li></ul></div><div class="nav-group"><p class="nav-title">Concepts</p><ul><li><a href="how-selection-works.html">How selection works</a></li><li><a href="safety-model.html">Safety model</a></li><li><a href="runtime-evidence.html">Runtime evidence</a></li><li><a href="speed.html" aria-current="page">Running less, faster</a></li><li><a href="change-tracking.html">Change tracking</a></li><li><a href="rules.html">Rules</a></li></ul></div><div class="nav-group"><p class="nav-title">Reference</p><ul><li><a href="../reference/cli.html">CLI</a></li><li><a href="../reference/configuration.html">Configuration</a></li><li><a href="../benchmarks.html">Benchmarks</a></li><li><a href="../changelog.html">Changelog</a></li></ul></div><div class="nav-group"><p class="nav-title">Results</p><ul><li><a href="../case-studies/leadsit.html">Case study: LeadsIt</a></li><li><a href="../case-studies/external-repositories.html">External repositories</a></li></ul></div><div class="nav-group"><p class="nav-title">Project</p><ul><li><a href="../planning/roadmap.html">Roadmap</a></li><li><a href="../planning/delivery.html">Delivery log</a></li><li><a href="../architecture/overview.html">Architecture</a></li><li><a href="../architecture/adr/index.html">Decision records</a></li><li><a href="../design/design-system.html">Design system</a></li><li><a href="../design/studio.html">Studio design brief</a></li><li><a href="../product/PRD.html">Specification</a></li></ul></div><p class="version">Version 0.9.0</p></aside>
+  <main id="content" class="prose">
+<h1 id="running-less-faster">Running less, faster</h1>
+<p>Selection decides which tests can be affected. Four more mechanisms make the remaining run shorter, and none of them turns a test that was not run into a pass.</p>
+<h2 id="validated-result-cache">Validated result cache <a class="anchor" href="#validated-result-cache" aria-label="Link to this section">#</a></h2>
+<p>A test file's passing result is reused when nothing that can change the result has changed since it passed. The cache key is a hash of:</p>
+<ul><li>the test file and every file in its static dependency closure, plus the files its last fresh trace loaded;</li><li>the runner's config file, <code>package.json</code> and lockfiles, <code>tsconfig*.json</code>, <code>.env*</code> files, Babel/SWC config, setup files and <code>__mocks__/</code> files in its project;</li><li>its snapshot file;</li><li>the Node.js major version, the runner and its installed version, and the SmartTest version.</li></ul>
+<p>Tests are never cached when their dependencies include an import SmartTest cannot resolve, a file read through <code>fs</code>, when they run in Playwright or Cypress, or when their history shows a flaky result. Only clean passes are stored (no retries), at most three keys per file.</p>
+<p>A reused result has the status <code>cached-pass</code>. The terminal shows <code>⧉ … cached, not run</code>, the summary counts it separately (<code>2 cached (not run)</code>), the HTML and Markdown reports list it as cached, and JUnit names the test case <code>… (cached, not run)</code>. It never counts as passed in this run. <code>run --no-cache</code> or <code>cache: false</code> turns it off; <code>run --all</code> and <code>run --coverage</code> never use it.</p>
+<p><code>benchmark</code> checks the cache: a cached pass whose test fails in the same commit's full run is an integrity violation, reported and counted as a failure of the benchmark.</p>
+<h2 id="fail-fast-order-and---bail">Fail-fast order and <code>--bail</code> <a class="anchor" href="#fail-fast-order-and---bail" aria-label="Link to this section">#</a></h2>
+<p>Selected test files run in this order: files with a failure in their last five recorded runs first (newest failure first), then by graph distance from the change (closest first). Runner groups start in the order of their first file. <code>--bail</code> stops starting new runner groups once one has a failure; groups not started are reported as <code>cancelled</code>.</p>
+<h2 id="parallel-runner-groups">Parallel runner groups <a class="anchor" href="#parallel-runner-groups" aria-label="Link to this section">#</a></h2>
+<p>Each runner project is a group (LeadsIt has four: Jest in <code>backend/</code>, Vitest in <code>FrontLeadsIt/app/</code>, two <code>node --test</code> projects). With <code>parallelGroups: "auto"</code> (the default), up to <code>min(groups, CPUs / 4, 4)</code> groups run at the same time, and each gets an equal share of the CPUs as its worker count unless <code>workers</code> is set. Playwright and Cypress groups always run alone, after the others, since they usually start servers. <code>parallelGroups: 1</code> runs groups one after another.</p>
+<h2 id="sharding">Sharding <a class="anchor" href="#sharding" aria-label="Link to this section">#</a></h2>
+<p><code>smarttest run --shard 2/4</code> runs the second of four shards of the selection. Files are spread by their recorded durations (longest first onto the lightest shard); a file without a duration counts as the median. Every machine of a CI matrix must see the same <code>.smarttest/state/durations.json</code> (restore it from a cache) to get the same split. <code>smarttest shard --total 4 --index 2</code> prints a shard's files without running them.</p>
+<h2 id="flaky-tests">Flaky tests <a class="anchor" href="#flaky-tests" aria-label="Link to this section">#</a></h2>
+<p>Every fresh result is recorded per test in <code>.smarttest/state/history.json</code> (last 30 statuses, run, failure and flaky counts). <code>smarttest flaky</code> lists tests whose results flip between pass and fail, or that passed only on retry, above a rate (<code>--min-rate</code>, default 5%), and prints a rule that retries them. SmartTest never skips a flaky test on its own.</p>
+<h2 id="watch-mode-and-graph-patches">Watch mode and graph patches <a class="anchor" href="#watch-mode-and-graph-patches" aria-label="Link to this section">#</a></h2>
+<p><code>smarttest watch</code> keeps the index and the graph in memory. When a save changes only bodies (what other files see of the file — imports, exports, declarations — is the same), the graph is patched: the edges the file contributes are removed and rebuilt. Other saves rebuild the graph. On the 2,000-module benchmark a patch takes under a millisecond and a rebuild about 60 ms.</p>
+    <p class="edit"><a href="https://github.com/RemiPelloux/SmarttyTest/blob/main/documentation/concepts/speed.md" rel="noopener">Edit this page on GitHub</a></p>
+  </main>
+  <nav class="toc" aria-label="On this page"><p class="nav-title">On this page</p><ul><li><a href="#validated-result-cache">Validated result cache</a></li><li><a href="#fail-fast-order-and---bail">Fail-fast order and --bail</a></li><li><a href="#parallel-runner-groups">Parallel runner groups</a></li><li><a href="#sharding">Sharding</a></li><li><a href="#flaky-tests">Flaky tests</a></li><li><a href="#watch-mode-and-graph-patches">Watch mode and graph patches</a></li></ul></nav>
+</div>
+<script src="../../assets/docs.js" defer></script>
+
+</body>
+</html>

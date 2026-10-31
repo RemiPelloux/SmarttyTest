@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rules · SmartTest</title>
+<meta name="description" content="SmartTest documentation: Rules">
+<link rel="icon" href="../../assets/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../../assets/site.css">
+<link rel="stylesheet" href="../../assets/docs.css">
+</head>
+<body class="docs">
+<a class="skip" href="#content">Skip to content</a>
+<header class="bar">
+  <a class="wordmark" href="../../index.html"><img src="../../assets/logo.svg" alt="" width="22" height="22"> SmartTest</a>
+  <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="sidebar">Menu</button>
+  <nav class="bar-links" aria-label="Site">
+    <a href="../index.html">Docs</a>
+    <a href="../reference/cli.html">CLI</a>
+    <a href="../planning/roadmap.html">Roadmap</a>
+    <a href="https://github.com/RemiPelloux/SmarttyTest" rel="noopener">GitHub</a>
+  </nav>
+  <label class="search"><span class="sr">Search the docs</span><input type="search" placeholder="Search" data-search data-base="../.." autocomplete="off"><span class="search-results" data-results hidden></span></label>
+</header>
+<div class="layout">
+  <aside id="sidebar" class="sidebar"><div class="nav-group"><p class="nav-title">Start</p><ul><li><a href="../index.html">Overview</a></li><li><a href="../guides/getting-started.html">Getting started</a></li><li><a href="../guides/commit-hooks.html">Commit and push hooks</a></li><li><a href="../guides/studio.html">Studio</a></li><li><a href="../guides/vscode.html">VS Code</a></li><li><a href="../guides/ci.html">Running in CI</a></li></ul></div><div class="nav-group"><p class="nav-title">Concepts</p><ul><li><a href="how-selection-works.html">How selection works</a></li><li><a href="safety-model.html">Safety model</a></li><li><a href="runtime-evidence.html">Runtime evidence</a></li><li><a href="speed.html">Running less, faster</a></li><li><a href="change-tracking.html">Change tracking</a></li><li><a href="rules.html" aria-current="page">Rules</a></li></ul></div><div class="nav-group"><p class="nav-title">Reference</p><ul><li><a href="../reference/cli.html">CLI</a></li><li><a href="../reference/configuration.html">Configuration</a></li><li><a href="../benchmarks.html">Benchmarks</a></li><li><a href="../changelog.html">Changelog</a></li></ul></div><div class="nav-group"><p class="nav-title">Results</p><ul><li><a href="../case-studies/leadsit.html">Case study: LeadsIt</a></li><li><a href="../case-studies/external-repositories.html">External repositories</a></li></ul></div><div class="nav-group"><p class="nav-title">Project</p><ul><li><a href="../planning/roadmap.html">Roadmap</a></li><li><a href="../planning/delivery.html">Delivery log</a></li><li><a href="../architecture/overview.html">Architecture</a></li><li><a href="../architecture/adr/index.html">Decision records</a></li><li><a href="../design/design-system.html">Design system</a></li><li><a href="../design/studio.html">Studio design brief</a></li><li><a href="../product/PRD.html">Specification</a></li></ul></div><p class="version">Version 0.9.0</p></aside>
+  <main id="content" class="prose">
+<h1 id="rules">Rules</h1>
+<p>Rules turn your architecture into testing policy. They are deterministic, inspectable and kept as code.</p>
+<pre data-lang="ts"><code>// smarttest.config.ts
+import { defineConfig } from "smarttest";
+
+export default defineConfig({
+  rules: [
+    {
+      name: "service-tests",
+      match: { class: "*Service" },
+      require: ["unit"],
+      coverage: { lines: 90, branches: 85 },
+      generate: { template: "service" },
+    },
+    {
+      name: "repository-tests",
+      match: { class: "*Repository" },
+      require: ["unit", "integration"],
+      generate: { template: "database" },
+    },
+    {
+      name: "authentication-critical",
+      match: { path: "src/modules/auth/**" },
+      risk: "critical",
+      execution: { alwaysRunOnAffected: true, mode: "safe" },
+    },
+  ],
+});</code></pre>
+<h2 id="selectors-10">Selectors (1.0) <a class="anchor" href="#selectors-10" aria-label="Link to this section">#</a></h2>
+<p><code>path</code> (glob) · <code>package</code> · <code>class</code> · <code>function</code> · <code>method</code> · <code>decorator</code> · <code>visibility</code> · <code>kind</code> · <code>implements</code> / <code>extends</code>. Multiple selectors in one rule are combined with AND.</p>
+<h2 id="effects">Effects <a class="anchor" href="#effects" aria-label="Link to this section">#</a></h2>
+<div class="table"><table><thead><tr><th>Field</th><th>Effect</th></tr></thead><tbody><tr><td><code>require</code></td><td>Required test categories (<code>unit</code>, <code>integration</code>, <code>e2e</code>). Missing ones are reported as policy findings</td></tr><tr><td><code>coverage</code></td><td>Thresholds, evaluated when coverage is available, otherwise reported as <em>not evaluated</em></td></tr><tr><td><code>risk</code></td><td><code>low                                                                                                  | medium | high | critical</code>. Critical upgrades the mode to SAFE for affected areas</td></tr><tr><td><code>execution</code></td><td><code>alwaysRunOnAffected</code>, <code>mode</code>, <code>retries</code></td></tr><tr><td><code>generate</code></td><td>Template and path template for the generator</td></tr></tbody></table></div>
+<h2 id="precedence">Precedence <a class="anchor" href="#precedence" aria-label="Link to this section">#</a></h2>
+<ol><li>Built-in safeguards (mandatory triggers) always apply and cannot be weakened.</li><li>Matching rules are ordered by specificity: method (6) &gt; function (5) &gt; class / decorator / extends / implements (4) &gt; exact file path (3.5) &gt; visibility / kind (3) &gt; path glob (2.x, deeper prefixes first) &gt; package (1). Ties keep declaration order.</li><li>Safety fields are never weakened by a more specific rule: <code>risk</code> is the maximum, <code>execution.mode</code> the strictest, <code>alwaysRunOnAffected</code> an OR. <code>risk: critical</code> implies mode <code>safe</code>.</li><li><code>require</code> lists are merged. Scalars such as <code>retries</code> and <code>generate</code> come from the most specific rule.</li><li>Two equally specific rules with different generation targets raise <code>ST_RULE_CONFLICT</code> (exit 3).</li></ol>
+<pre data-lang="bash"><code>smarttest rules list
+smarttest rules validate
+smarttest rules explain src/modules/auth/AuthService.ts</code></pre>
+    <p class="edit"><a href="https://github.com/RemiPelloux/SmarttyTest/blob/main/documentation/concepts/rules.md" rel="noopener">Edit this page on GitHub</a></p>
+  </main>
+  <nav class="toc" aria-label="On this page"><p class="nav-title">On this page</p><ul><li><a href="#selectors-10">Selectors (1.0)</a></li><li><a href="#effects">Effects</a></li><li><a href="#precedence">Precedence</a></li></ul></nav>
+</div>
+<script src="../../assets/docs.js" defer></script>
+
+</body>
+</html>

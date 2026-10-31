@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Architecture overview · SmartTest</title>
+<meta name="description" content="SmartTest documentation: Architecture overview">
+<link rel="icon" href="../../assets/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../../assets/site.css">
+<link rel="stylesheet" href="../../assets/docs.css">
+</head>
+<body class="docs">
+<a class="skip" href="#content">Skip to content</a>
+<header class="bar">
+  <a class="wordmark" href="../../index.html"><img src="../../assets/logo.svg" alt="" width="22" height="22"> SmartTest</a>
+  <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="sidebar">Menu</button>
+  <nav class="bar-links" aria-label="Site">
+    <a href="../index.html">Docs</a>
+    <a href="../reference/cli.html">CLI</a>
+    <a href="../planning/roadmap.html">Roadmap</a>
+    <a href="https://github.com/RemiPelloux/SmarttyTest" rel="noopener">GitHub</a>
+  </nav>
+  <label class="search"><span class="sr">Search the docs</span><input type="search" placeholder="Search" data-search data-base="../.." autocomplete="off"><span class="search-results" data-results hidden></span></label>
+</header>
+<div class="layout">
+  <aside id="sidebar" class="sidebar"><div class="nav-group"><p class="nav-title">Start</p><ul><li><a href="../index.html">Overview</a></li><li><a href="../guides/getting-started.html">Getting started</a></li><li><a href="../guides/commit-hooks.html">Commit and push hooks</a></li><li><a href="../guides/studio.html">Studio</a></li><li><a href="../guides/vscode.html">VS Code</a></li><li><a href="../guides/ci.html">Running in CI</a></li></ul></div><div class="nav-group"><p class="nav-title">Concepts</p><ul><li><a href="../concepts/how-selection-works.html">How selection works</a></li><li><a href="../concepts/safety-model.html">Safety model</a></li><li><a href="../concepts/runtime-evidence.html">Runtime evidence</a></li><li><a href="../concepts/speed.html">Running less, faster</a></li><li><a href="../concepts/change-tracking.html">Change tracking</a></li><li><a href="../concepts/rules.html">Rules</a></li></ul></div><div class="nav-group"><p class="nav-title">Reference</p><ul><li><a href="../reference/cli.html">CLI</a></li><li><a href="../reference/configuration.html">Configuration</a></li><li><a href="../benchmarks.html">Benchmarks</a></li><li><a href="../changelog.html">Changelog</a></li></ul></div><div class="nav-group"><p class="nav-title">Results</p><ul><li><a href="../case-studies/leadsit.html">Case study: LeadsIt</a></li><li><a href="../case-studies/external-repositories.html">External repositories</a></li></ul></div><div class="nav-group"><p class="nav-title">Project</p><ul><li><a href="../planning/roadmap.html">Roadmap</a></li><li><a href="../planning/delivery.html">Delivery log</a></li><li><a href="overview.html" aria-current="page">Architecture</a></li><li><a href="adr/index.html">Decision records</a></li><li><a href="../design/design-system.html">Design system</a></li><li><a href="../design/studio.html">Studio design brief</a></li><li><a href="../product/PRD.html">Specification</a></li></ul></div><p class="version">Version 0.9.0</p></aside>
+  <main id="content" class="prose">
+<h1 id="architecture-overview">Architecture overview</h1>
+<blockquote><p>SmartTest is an intelligent layer <strong>on top of</strong> existing test runners. It works out what changed, what depends on it and which tests protect it, then lets Jest, Vitest, <code>node --test</code>, Playwright or Cypress do the running.</p></blockquote>
+<p>This document describes the architecture as of 0.9.0, including the local Studio server and the VS Code CLI client. The full long-term architecture (AI and Cloud) is in <a href="../product/PRD.html#4-system-architecture">PRD §4</a>. Decisions are recorded in <a href="adr/index.html">ADRs</a>.</p>
+<h2 id="layers">Layers <a class="anchor" href="#layers" aria-label="Link to this section">#</a></h2>
+<pre class="mermaid">flowchart TB
+  subgraph Surface["Surfaces"]
+    CLI["smarttest CLI&lt;br/&gt;&lt;small&gt;packages/cli&lt;/small&gt;"]
+    Studio["Local Studio&lt;br/&gt;&lt;small&gt;packages/studio&lt;/small&gt;"]
+    Editor["VS Code extension&lt;br/&gt;&lt;small&gt;extensions/vscode&lt;/small&gt;"]
+  end
+
+  CORE["Application core&lt;br/&gt;&lt;small&gt;packages/core&lt;/small&gt;"]
+
+  subgraph Project["Project engine"]
+    DET["project-detector"]
+    INIT["smart-init"]
+    CFG["config"]
+  end
+
+  subgraph Change["Change engine"]
+    VCSCORE["vcs-core"]
+    GIT["vcs-git"]
+    SVN["vcs-svn"]
+    HG["vcs-hg"]
+    SNAP["native-snapshots"]
+  end
+
+  subgraph Code["Code engine"]
+    PARSER["source-parser"]
+    TS["language-typescript"]
+    JS["language-javascript"]
+    SYM["symbol-index"]
+    SEM["semantic-diff"]
+    GRAPH["dependency-graph"]
+  end
+
+  subgraph Decide["Decision engine"]
+    RULES["rules-engine"]
+    IMPACT["impact-engine"]
+    SEL["test-selector"]
+  end
+
+  subgraph Test["Test engine"]
+    DISC["test-discovery"]
+    EXEC["test-executor"]
+    VIT["adapter-vitest"]
+    JEST["adapter-jest"]
+    NODE["adapter-node"]
+    PW["adapter-playwright"]
+    CY["adapter-cypress"]
+    COV["coverage-engine"]
+    GEN["test-generator"]
+  end
+
+  REP["report-engine"]
+  STORE[("Local intelligence store&lt;br/&gt;.smarttest/")]
+
+  CLI --&gt; CORE
+  CLI --&gt; Studio
+  Studio --&gt; CORE
+  Editor --&gt; CLI
+  CORE --&gt; Project &amp; Change &amp; Code &amp; Decide &amp; Test &amp; REP
+  Code --&gt; STORE
+  Change --&gt; STORE
+  Test --&gt; STORE
+  REP --&gt; STORE</pre>
+<p><strong>Rules of the road</strong></p>
+<ol><li><strong>Dependencies point inwards.</strong> <code>shared</code> → contracts → engines → <code>core</code> → <code>studio</code> → <code>cli</code>. The manifest (<code>scripts/packages.manifest.json</code>) is the source of truth and the scaffolder rejects cycles.</li><li><strong>The core is deterministic and local.</strong> Nothing in <code>core</code> or below may make network calls or depend on <code>ai-*</code> packages (<a href="adr/0004-deterministic-core-ai-optional.html">ADR-0004</a>).</li><li><strong>Adapters declare capabilities.</strong> Anything not declared counts as unsupported and is never emulated (<a href="adr/0005-capability-declared-adapters.html">ADR-0005</a>).</li><li><strong>Uncertainty is data.</strong> Unresolved imports, dynamic patterns and partial change sets are stored and passed along. They never get dropped.</li></ol>
+<h2 id="the-run---affected-data-flow">The <code>run --affected</code> data flow <a class="anchor" href="#the-run---affected-data-flow" aria-label="Link to this section">#</a></h2>
+<pre class="mermaid">sequenceDiagram
+  autonumber
+  actor Dev as Developer
+  participant CLI as cli
+  participant Core as core
+  participant VCS as vcs-git / native-snapshots
+  participant Code as symbol-index + semantic-diff
+  participant G as dependency-graph
+  participant R as rules-engine
+  participant I as impact-engine
+  participant X as test-executor (+ adapter)
+  participant Rep as report-engine
+
+  Dev-&gt;&gt;CLI: smarttest run --affected --base main
+  CLI-&gt;&gt;Core: runAffected(options)
+  Core-&gt;&gt;VCS: getChanges(base, working-tree)
+  VCS--&gt;&gt;Core: ChangeSet (completeness, warnings)
+  Core-&gt;&gt;Code: update index for changed files (incremental)
+  Code--&gt;&gt;Core: SemanticChange[] (with confidence)
+  Core-&gt;&gt;G: apply updates, reverse-traverse from changed symbols
+  G--&gt;&gt;Core: candidate tests + paths + uncertainty
+  Core-&gt;&gt;Core: compare with fresh traces (observed execution)
+  Core-&gt;&gt;R: evaluate rules for affected symbols
+  R--&gt;&gt;Core: risk, mandatory tests, effective mode
+  Core-&gt;&gt;I: decide(candidates, rules, mode, uncertainty)
+  I--&gt;&gt;Core: ImpactDecision (selected / skipped / reasons / fallback)
+  Core-&gt;&gt;X: execute(selection) via Jest / Vitest / node --test
+  X--&gt;&gt;Core: TestRunResult (normalized statuses)
+  Core-&gt;&gt;Rep: write JSON / HTML / JUnit / Markdown
+  Core--&gt;&gt;CLI: summary + exit code
+  CLI--&gt;&gt;Dev: 12 selected · 474 skipped (not run) · why? smarttest explain</pre>
+<h2 id="package-map">Package map <a class="anchor" href="#package-map" aria-label="Link to this section">#</a></h2>
+<div class="table"><table><thead><tr><th>Package</th><th>Responsibility</th><th>Epic</th></tr></thead><tbody><tr><td><code>@smarttest/shared</code></td><td>Contracts from the spec, primitives, <code>SmartTestError</code>, exit codes</td><td>FND</td></tr><tr><td><code>@smarttest/config</code></td><td><code>defineConfig</code>, schema, loader, validation</td><td>FND</td></tr><tr><td><code>@smarttest/plugin-sdk</code></td><td>Public adapter contracts + conformance kit</td><td>FND</td></tr><tr><td><code>@smarttest/project-detector</code></td><td>Runtime, package manager, workspaces, frameworks, runners, VCS, CI</td><td>DET</td></tr><tr><td><code>@smarttest/smart-init</code></td><td>Recommendation engine, plan, safe writes, journal, rollback</td><td>INI</td></tr><tr><td><code>@smarttest/vcs-core</code></td><td><code>VersionControlAdapter</code>, <code>ChangeSet</code> utilities</td><td>VCS</td></tr><tr><td><code>@smarttest/vcs-git</code></td><td>Git adapter</td><td>VCS</td></tr><tr><td><code>@smarttest/vcs-svn</code> / <code>vcs-hg</code></td><td>Subversion and Mercurial adapters</td><td>VCS</td></tr><tr><td><code>@smarttest/native-snapshots</code></td><td>Snapshots, fingerprints, comparisons</td><td>VCS</td></tr><tr><td><code>@smarttest/source-parser</code></td><td>Language-neutral parse pipeline &amp; cache</td><td>SRC</td></tr><tr><td><code>@smarttest/language-typescript</code> / <code>-javascript</code></td><td>Language adapters</td><td>SRC</td></tr><tr><td><code>@smarttest/symbol-index</code></td><td>Persistent incremental symbol index</td><td>SRC</td></tr><tr><td><code>@smarttest/semantic-diff</code></td><td>Change classification with confidence</td><td>SRC</td></tr><tr><td><code>@smarttest/dependency-graph</code></td><td>Member-level graph, resource nodes, mock-aware traversal, queries</td><td>GRA</td></tr><tr><td><code>@smarttest/rules-engine</code></td><td>Rule evaluation, precedence, explanations</td><td>RUL</td></tr><tr><td><code>@smarttest/impact-engine</code></td><td>Modes, mandatory triggers, fallbacks, decisions</td><td>IMP</td></tr><tr><td><code>@smarttest/test-selector</code></td><td>Decision → runnable selection</td><td>IMP</td></tr><tr><td><code>@smarttest/test-discovery</code></td><td>Normalized discovery</td><td>EXE</td></tr><tr><td><code>@smarttest/test-executor</code></td><td>Scheduling, timeouts, cancellation, retries</td><td>EXE</td></tr><tr><td><code>@smarttest/adapter-vitest</code> / <code>-jest</code> / <code>-node</code></td><td>Runner adapters (Vitest, Jest, <code>node --test</code>)</td><td>EXE</td></tr><tr><td><code>@smarttest/adapter-playwright</code> / <code>-cypress</code></td><td>End-to-end runner adapters</td><td>EXE</td></tr><tr><td><code>@smarttest/coverage-engine</code></td><td>Coverage ingestion with scope</td><td>REP</td></tr><tr><td><code>@smarttest/test-generator</code></td><td>Layouts, templates, scaffolds, sync</td><td>GEN</td></tr><tr><td><code>@smarttest/report-engine</code></td><td>JSON / HTML / JUnit / Markdown + integrity</td><td>REP</td></tr><tr><td><code>@smarttest/core</code></td><td>Orchestration API used by CLI and Studio</td><td>FND</td></tr><tr><td><code>@smarttest/studio</code></td><td>Loopback HTTP API, session security, run stream and web interface</td><td>UI</td></tr><tr><td><code>smarttest</code></td><td>The CLI (<code>bin: smarttest</code>)</td><td>CLI</td></tr></tbody></table></div>
+<h2 id="interface-and-hook-boundaries">Interface and hook boundaries <a class="anchor" href="#interface-and-hook-boundaries" aria-label="Link to this section">#</a></h2>
+<p>Studio binds to loopback and serves its packaged assets without a CDN. A session token, host checks and origin checks protect its API; state changes require POST. It delegates analysis and execution to <code>core</code> and stores reports in the same <code>.smarttest/</code> directory as the CLI. Only Studio may import <code>node:http</code> and <code>node:net</code>; network imports remain forbidden in the engine packages. The VS Code extension calls the installed local CLI in a trusted workspace.</p>
+<p>Commit and push profiles share the core API. When the working tree differs from the content under test, core creates a temporary checkout, materialises the staged index or committed HEAD and links installed dependencies. Checks and tests use that checkout; reports, history and the symbol index use the original store. The checkout records the working tree's file stats for content it shares with the working tree, so isolation does not invalidate the incremental index. The user's index and working files are not stashed or rewritten. Push hooks validate Git's input refs and reject non-HEAD content that the profile cannot test.</p>
+<h2 id="local-intelligence-store">Local intelligence store <a class="anchor" href="#local-intelligence-store" aria-label="Link to this section">#</a></h2>
+<pre data-lang="text"><code>.smarttest/                    (git-ignored, path configurable via storeDir)
+├── state/
+│   ├── index.json             per-file analyses (content-hash cached), file stats, resolution context
+│   ├── discovery.json         files each runner collects (cached per config and file list)
+│   ├── durations.json         last measured duration per test file
+│   ├── traces.json            observed execution per test file (smarttest trace)
+│   ├── history.json           last results per test (fail-fast order, smarttest flaky)
+│   ├── timings.json           typical analysis time and last full run (adaptive policy)
+│   ├── hooks.json             checked trees, durations, checks and explicit bypasses
+│   ├── snapshots/             snapshot manifests (hashes; content optional)
+│   ├── blobs/                 deduplicated gzip content (when snapshots.storeContent)
+│   └── init-journal.json      what init changed → rollback
+├── runs/                      latest.json, &lt;runId&gt;.json, last-decision.json, coverage.json, flaky.json
+├── reports/                   report.html · report.json · junit.xml · summary.md · setup.md
+├── shadow/                    history.jsonl (smarttest shadow)
+├── cache/                     results.json: validated passing results (ADR-0009)
+├── coverage/                  raw coverage per runner root
+└── logs/                      smarttest.log (JSON, redacted, rotated at 1 MB)</code></pre>
+<p>See <a href="adr/0003-local-store-sqlite.html">ADR-0003</a> for why this is a JSON store and not SQLite in 1.0.</p>
+<h2 id="distribution">Distribution <a class="anchor" href="#distribution" aria-label="Link to this section">#</a></h2>
+<p>Internal <code>@smarttest/*</code> packages are private. <code>scripts/release/bundle-cli.mjs</code> bundles the CLI and every engine into one ESM package, <code>smarttest</code>, with <code>typescript</code> as its only runtime dependency (loaded with <code>require</code>, so Node does not scan it for ESM exports). A separate <code>parse-worker.js</code> entry parses files in worker threads on cold starts. The engine is loaded lazily and Node's compile cache is enabled, so <code>--help</code> and <code>--version</code> start in under 100 ms. <code>release:pack</code> also writes a CycloneDX SBOM and runs <code>npm audit</code>.</p>
+<h2 id="where-the-spec-contracts-live">Where the spec contracts live <a class="anchor" href="#where-the-spec-contracts-live" aria-label="Link to this section">#</a></h2>
+<p>The TypeScript contracts from the spec (<code>ChangeSet</code>, <code>SourceSymbol</code>, <code>ImpactDecision</code>, <code>TraceRecord</code>, <code>TestAdapter</code>, <code>LanguageAdapter</code>, <code>VersionControlAdapter</code>) are in <a href="https://github.com/RemiPelloux/SmarttyTest/tree/main/packages/shared/src/contracts" rel="noopener"><code>packages/shared/src/contracts</code></a> for Sprint 0. They will move to their owning packages once their APIs stabilise (<a href="adr/0006-contracts-first.html">ADR-0006</a>).</p>
+    <p class="edit"><a href="https://github.com/RemiPelloux/SmarttyTest/blob/main/documentation/architecture/overview.md" rel="noopener">Edit this page on GitHub</a></p>
+  </main>
+  <nav class="toc" aria-label="On this page"><p class="nav-title">On this page</p><ul><li><a href="#layers">Layers</a></li><li><a href="#the-run---affected-data-flow">The run --affected data flow</a></li><li><a href="#package-map">Package map</a></li><li><a href="#interface-and-hook-boundaries">Interface and hook boundaries</a></li><li><a href="#local-intelligence-store">Local intelligence store</a></li><li><a href="#distribution">Distribution</a></li><li><a href="#where-the-spec-contracts-live">Where the spec contracts live</a></li></ul></nav>
+</div>
+<script src="../../assets/docs.js" defer></script>
+<script type="module">import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs"; mermaid.initialize({ startOnLoad: true, theme: "dark" });</script>
+</body>
+</html>

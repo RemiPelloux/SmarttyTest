@@ -1,0 +1,1686 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SMARTTEST · SmartTest</title>
+<meta name="description" content="SmartTest documentation: SMARTTEST">
+<link rel="icon" href="../../assets/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../../assets/site.css">
+<link rel="stylesheet" href="../../assets/docs.css">
+</head>
+<body class="docs">
+<a class="skip" href="#content">Skip to content</a>
+<header class="bar">
+  <a class="wordmark" href="../../index.html"><img src="../../assets/logo.svg" alt="" width="22" height="22"> SmartTest</a>
+  <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="sidebar">Menu</button>
+  <nav class="bar-links" aria-label="Site">
+    <a href="../index.html">Docs</a>
+    <a href="../reference/cli.html">CLI</a>
+    <a href="../planning/roadmap.html">Roadmap</a>
+    <a href="https://github.com/RemiPelloux/SmarttyTest" rel="noopener">GitHub</a>
+  </nav>
+  <label class="search"><span class="sr">Search the docs</span><input type="search" placeholder="Search" data-search data-base="../.." autocomplete="off"><span class="search-results" data-results hidden></span></label>
+</header>
+<div class="layout">
+  <aside id="sidebar" class="sidebar"><div class="nav-group"><p class="nav-title">Start</p><ul><li><a href="../index.html">Overview</a></li><li><a href="../guides/getting-started.html">Getting started</a></li><li><a href="../guides/commit-hooks.html">Commit and push hooks</a></li><li><a href="../guides/studio.html">Studio</a></li><li><a href="../guides/vscode.html">VS Code</a></li><li><a href="../guides/ci.html">Running in CI</a></li></ul></div><div class="nav-group"><p class="nav-title">Concepts</p><ul><li><a href="../concepts/how-selection-works.html">How selection works</a></li><li><a href="../concepts/safety-model.html">Safety model</a></li><li><a href="../concepts/runtime-evidence.html">Runtime evidence</a></li><li><a href="../concepts/speed.html">Running less, faster</a></li><li><a href="../concepts/change-tracking.html">Change tracking</a></li><li><a href="../concepts/rules.html">Rules</a></li></ul></div><div class="nav-group"><p class="nav-title">Reference</p><ul><li><a href="../reference/cli.html">CLI</a></li><li><a href="../reference/configuration.html">Configuration</a></li><li><a href="../benchmarks.html">Benchmarks</a></li><li><a href="../changelog.html">Changelog</a></li></ul></div><div class="nav-group"><p class="nav-title">Results</p><ul><li><a href="../case-studies/leadsit.html">Case study: LeadsIt</a></li><li><a href="../case-studies/external-repositories.html">External repositories</a></li></ul></div><div class="nav-group"><p class="nav-title">Project</p><ul><li><a href="../planning/roadmap.html">Roadmap</a></li><li><a href="../planning/delivery.html">Delivery log</a></li><li><a href="../architecture/overview.html">Architecture</a></li><li><a href="../architecture/adr/index.html">Decision records</a></li><li><a href="../design/design-system.html">Design system</a></li><li><a href="../design/studio.html">Studio design brief</a></li><li><a href="PRD.html" aria-current="page">Specification</a></li></ul></div><p class="version">Version 0.9.0</p></aside>
+  <main id="content" class="prose">
+<h1 id="smarttest">SMARTTEST</h1>
+<h2 id="complete-product-requirements-document--technical-design-specification">Complete Product Requirements Document &amp; Technical Design Specification <a class="anchor" href="#complete-product-requirements-document--technical-design-specification" aria-label="Link to this section">#</a></h2>
+<p><strong>Document Version:</strong> 2.0<br> <strong>Document Status:</strong> Master Specification<br> <strong>Product Name:</strong> SmartTest (working name)<br> <strong>Product Type:</strong> Intelligent Testing Platform<br> <strong>Distribution:</strong> npm, CLI, SDK, Desktop/Web Studio, CI/CD, SaaS<br> <strong>Business Model:</strong> Open Source Core + Commercial Cloud<br> <strong>Initial Languages:</strong> TypeScript / JavaScript<br> <strong>Future Languages:</strong> Python, Java, Go, C#, PHP, Rust, Kotlin, and more<br> <strong>Core Philosophy:</strong> Intelligent by default. Deterministic at its core. AI-enhanced. Developer-first.</p>
+<blockquote><p>This is the master specification, kept as the source of truth. It covers the intelligent testing engine, automated setup, Git/SVN/native version tracking, AI-powered test engineering, a Cypress-like GUI, multi-language architecture and the commercial SaaS model. It is written for developers, AI coding agents, architects and QA engineers. <strong>Scope for v1.0.0</strong> is defined in the <a href="../planning/roadmap.html">roadmap</a> (what is built so far: <a href="../planning/delivery.html">delivery log</a>; the first 103 stories: <a href="https://github.com/RemiPelloux/SmarttyTest/blob/main/documentation/planning/foundation/README.md" rel="noopener">foundation backlog</a>). Section numbers (§) are what the backlog and ADRs cite.</p></blockquote>
+<hr>
+<h2 id="table-of-contents">Table of Contents <a class="anchor" href="#table-of-contents" aria-label="Link to this section">#</a></h2>
+<ol><li><a href="#1-executive-summary">Executive Summary</a></li><li><a href="#2-target-users-and-use-cases">Target Users and Use Cases</a></li><li><a href="#3-product-scope-and-delivery-priorities">Product Scope and Delivery Priorities</a></li><li><a href="#4-system-architecture">System Architecture</a></li><li><a href="#5-smart-init--fully-automated-setup">Smart Init — Fully Automated Setup</a></li><li><a href="#6-adaptive-configuration-engine">Adaptive Configuration Engine</a></li><li><a href="#7-universal-version-control-system">Universal Version Control System</a></li><li><a href="#8-smarttest-native-snapshot-engine">SmartTest Native Snapshot Engine</a></li><li><a href="#9-source-code-intelligence-engine">Source Code Intelligence Engine</a></li><li><a href="#10-dependency-graph-engine">Dependency Graph Engine</a></li><li><a href="#11-intelligent-test-impact-engine">Intelligent Test Impact Engine</a></li><li><a href="#12-runtime-tracing-engine">Runtime Tracing Engine</a></li><li><a href="#13-automatic-test-architecture-generator">Automatic Test Architecture Generator</a></li><li><a href="#14-custom-rules-engine">Custom Rules Engine</a></li><li><a href="#15-smart-test-execution-engine">Smart Test Execution Engine</a></li><li><a href="#16-coverage-intelligence">Coverage Intelligence</a></li><li><a href="#17-smarttest-ai--universal-ai-testing-assistant">SmartTest AI — Universal AI Testing Assistant</a></li><li><a href="#18-ai-provider-setup-and-model-discovery">AI Provider Setup and Model Discovery</a></li><li><a href="#19-ai-command-system">AI Command System</a></li><li><a href="#20-ai-test-generation-engine">AI Test Generation Engine</a></li><li><a href="#21-ai-coverage-audit-and-gap-detection">AI Coverage Audit and Gap Detection</a></li><li><a href="#22-ai-test-repair-improvement-and-review">AI Test Repair, Improvement, and Review</a></li><li><a href="#23-smarttest-autopilot">SmartTest Autopilot</a></li><li><a href="#24-smarttest-studio--interactive-gui">SmartTest Studio — Interactive GUI</a></li><li><a href="#25-reporting-engine">Reporting Engine</a></li><li><a href="#26-cli-developer-experience">CLI Developer Experience</a></li><li><a href="#27-plugin-sdk-and-multi-language-support">Plugin SDK and Multi-Language Support</a></li><li><a href="#28-smarttest-cloud--commercial-platform">SmartTest Cloud — Commercial Platform</a></li><li><a href="#29-business-model-and-monetization">Business Model and Monetization</a></li><li><a href="#30-security-and-privacy">Security and Privacy</a></li><li><a href="#31-performance-requirements">Performance Requirements</a></li><li><a href="#32-reliability-and-correctness">Reliability and Correctness</a></li><li><a href="#33-metrics-and-kpis">Metrics and KPIs</a></li><li><a href="#34-engineering-backlog">Engineering Backlog</a></li><li><a href="#35-release-roadmap">Release Roadmap</a></li><li><a href="#36-definition-of-done">Definition of Done</a></li><li><a href="#37-key-technical-risks">Key Technical Risks</a></li><li><a href="#38-product-success-criteria">Product Success Criteria</a></li><li><a href="#39-final-product-positioning">Final Product Positioning</a></li><li><a href="#40-final-product-objective">Final Product Objective</a></li></ol>
+<hr>
+<h1 id="1-executive-summary">1. Executive Summary</h1>
+<h2 id="11-product-vision">1.1. Product Vision <a class="anchor" href="#11-product-vision" aria-label="Link to this section">#</a></h2>
+<p>SmartTest is a next-generation software testing intelligence platform designed to automatically understand source code changes, identify affected components, select the most relevant tests, execute them efficiently, and generate detailed, interactive reports.</p>
+<p>Unlike conventional testing tools, SmartTest should understand the relationship between source code, dependencies, tests, runtime execution, coverage, and code history.</p>
+<p>SmartTest must also automatically discover and configure existing software projects, generate organized test architectures, adapt to changing development environments, and optionally use artificial intelligence to generate, audit, repair, and improve tests.</p>
+<p>The platform will include:</p>
+<ol><li><strong>SmartTest Core:</strong> Intelligent code analysis and test-impact engine.</li><li><strong>Smart Init:</strong> Fully automated project discovery and configuration.</li><li><strong>Universal Version Control:</strong> Support for Git, SVN, Mercurial, Perforce, and a native snapshot engine.</li><li><strong>Adaptive Configuration:</strong> Automatic detection of project and environment changes.</li><li><strong>Automatic Test Architecture:</strong> Source-aware organization and generation of test directories.</li><li><strong>Rules Engine:</strong> Custom testing policies at project, package, class, and method levels.</li><li><strong>Smart Execution:</strong> Selective, risk-aware, parallelized test execution.</li><li><strong>Coverage Intelligence:</strong> Analysis of code coverage and missing test protection.</li><li><strong>SmartTest AI:</strong> Optional AI-driven test generation, auditing, repair, and optimization.</li><li><strong>SmartTest Studio:</strong> An interactive testing GUI inspired by the usability of Cypress.</li><li><strong>Reporting Engine:</strong> Modern, detailed, explainable test and coverage reports.</li><li><strong>SmartTest Cloud:</strong> Collaboration, CI optimization, historical analytics, and enterprise capabilities.</li></ol>
+<h2 id="12-main-objective">1.2. Main Objective <a class="anchor" href="#12-main-objective" aria-label="Link to this section">#</a></h2>
+<p>Transform software testing from a mostly static and repetitive process into a continuously adaptive system that understands:</p>
+<ul><li>What changed.</li><li>Which components depend on the changed code.</li><li>Which behaviors may be affected.</li><li>Which tests can detect relevant regressions.</li><li>Which tests are missing.</li><li>Which tests should execute.</li><li>Why those tests were selected.</li><li>How to improve test quality.</li><li>How much execution time and CI capacity can be saved.</li></ul>
+<h2 id="13-product-statement">1.3. Product Statement <a class="anchor" href="#13-product-statement" aria-label="Link to this section">#</a></h2>
+<p><strong>SmartTest — Understand the change. Test what matters.</strong></p>
+<h2 id="14-fundamental-principles">1.4. Fundamental Principles <a class="anchor" href="#14-fundamental-principles" aria-label="Link to this section">#</a></h2>
+<p><strong>Local-first:</strong> Core functionality must work without cloud services or user accounts.</p>
+<p><strong>Framework-agnostic:</strong> SmartTest orchestrates existing testing frameworks rather than replacing them.</p>
+<p><strong>Deterministic-first:</strong> Critical decisions must be based on verifiable analysis and explicit policies.</p>
+<p><strong>AI-optional:</strong> Artificial intelligence enhances the experience but is not required.</p>
+<p><strong>Non-destructive:</strong> SmartTest must preserve existing source files, tests, and custom configurations unless explicitly authorized to modify them.</p>
+<p><strong>Explainable:</strong> Every test-selection decision must have a traceable explanation.</p>
+<p><strong>Adaptive:</strong> SmartTest should evolve with the project without requiring repeated manual setup.</p>
+<p><strong>Secure:</strong> Source code, credentials, and execution artifacts must be protected.</p>
+<p><strong>Performance-oriented:</strong> Analysis overhead must remain lower than the savings it enables whenever selective execution is appropriate.</p>
+<p><strong>Extensible:</strong> New languages, frameworks, providers, and version-control systems must be supported through plugins.</p>
+<h2 id="15-important-engineering-constraint">1.5. Important Engineering Constraint <a class="anchor" href="#15-important-engineering-constraint" aria-label="Link to this section">#</a></h2>
+<p>No static or dynamic analysis engine can universally guarantee that a skipped test could not detect a regression.</p>
+<p>Dynamic imports, reflection, shared state, external services, environment changes, and other runtime behaviors create uncertainty.</p>
+<p>SmartTest must therefore use conservative fallbacks, explicit risk policies, and periodic full-suite validation.</p>
+<p>The product must never present skipped tests as passed tests.</p>
+<hr>
+<h1 id="2-target-users-and-use-cases">2. Target Users and Use Cases</h1>
+<h2 id="21-independent-developers">2.1. Independent Developers <a class="anchor" href="#21-independent-developers" aria-label="Link to this section">#</a></h2>
+<p>Primary needs:</p>
+<ul><li>Simple installation.</li><li>Automatic test organization.</li><li>Intelligent local testing.</li><li>Coverage reports.</li><li>Fast feedback.</li><li>Optional AI assistance.</li><li>No account or subscription requirements.</li></ul>
+<h2 id="22-development-teams">2.2. Development Teams <a class="anchor" href="#22-development-teams" aria-label="Link to this section">#</a></h2>
+<p>Primary needs:</p>
+<ul><li>Faster pull request validation.</li><li>Lower CI execution costs.</li><li>Shared testing rules.</li><li>Reliable regression detection.</li><li>Test-quality monitoring.</li><li>Historical reports.</li><li>Collaboration.</li></ul>
+<h2 id="23-engineering-managers">2.3. Engineering Managers <a class="anchor" href="#23-engineering-managers" aria-label="Link to this section">#</a></h2>
+<p>Primary needs:</p>
+<ul><li>Visibility into test quality.</li><li>CI execution efficiency.</li><li>Coverage trends.</li><li>Flaky-test monitoring.</li><li>Maintenance costs.</li><li>Engineering productivity metrics.</li><li>Risk identification.</li></ul>
+<h2 id="24-qa-engineers">2.4. QA Engineers <a class="anchor" href="#24-qa-engineers" aria-label="Link to this section">#</a></h2>
+<p>Primary needs:</p>
+<ul><li>Test discovery.</li><li>Coverage analysis.</li><li>Missing scenario detection.</li><li>Test creation and maintenance.</li><li>Test execution visualization.</li><li>Regression investigation.</li><li>Test architecture management.</li></ul>
+<h2 id="25-enterprise-organizations">2.5. Enterprise Organizations <a class="anchor" href="#25-enterprise-organizations" aria-label="Link to this section">#</a></h2>
+<p>Primary needs:</p>
+<ul><li>Multi-repository support.</li><li>Custom version-control systems.</li><li>Centralized governance.</li><li>Security controls.</li><li>Private deployments.</li><li>Compliance features.</li><li>Organization-wide analytics.</li></ul>
+<hr>
+<h1 id="3-product-scope-and-delivery-priorities">3. Product Scope and Delivery Priorities</h1>
+<h2 id="31-priority-definitions">3.1. Priority Definitions <a class="anchor" href="#31-priority-definitions" aria-label="Link to this section">#</a></h2>
+<p><strong>P0 — Core MVP:</strong> Essential for a usable, publicly distributable package.</p>
+<p><strong>P1 — Advanced Product:</strong> High-value enhancements after the core is stable.</p>
+<p><strong>P2 — Platform Expansion:</strong> Commercial, AI, and multi-language extensions.</p>
+<h2 id="32-functional-modules">3.2. Functional Modules <a class="anchor" href="#32-functional-modules" aria-label="Link to this section">#</a></h2>
+<div class="table"><table><thead><tr><th>Module</th><th>Priority</th><th>Description</th></tr></thead><tbody><tr><td>Smart Init</td><td>P0</td><td>Automatic project setup</td></tr><tr><td>Project Detector</td><td>P0</td><td>Technology and structure discovery</td></tr><tr><td>Git Adapter</td><td>P0</td><td>Git change tracking</td></tr><tr><td>Native Snapshot Engine</td><td>P0</td><td>Local changes without Git</td></tr><tr><td>Source Parser</td><td>P0</td><td>AST and semantic analysis</td></tr><tr><td>Dependency Graph</td><td>P0</td><td>Code relationship mapping</td></tr><tr><td>Impact Engine</td><td>P0</td><td>Change-impact calculation</td></tr><tr><td>Test Discovery</td><td>P0</td><td>Existing test identification</td></tr><tr><td>Test Selector</td><td>P0</td><td>Intelligent test selection</td></tr><tr><td>Rules Engine</td><td>P0</td><td>Custom testing policies</td></tr><tr><td>Test Generator</td><td>P0</td><td>Automatic test structure and scaffolding</td></tr><tr><td>Jest Adapter</td><td>P0</td><td>Jest integration</td></tr><tr><td>Vitest Adapter</td><td>P0</td><td>Vitest integration</td></tr><tr><td>Report Engine</td><td>P0</td><td>Local HTML and machine-readable reports</td></tr><tr><td>CLI UX</td><td>P0</td><td>Interactive and scriptable terminal</td></tr><tr><td>Adaptive Configuration</td><td>P1</td><td>Project evolution detection</td></tr><tr><td>SVN Adapter</td><td>P1</td><td>Subversion integration</td></tr><tr><td>Runtime Tracer</td><td>P1</td><td>Execution-to-test mapping</td></tr><tr><td>Advanced Coverage</td><td>P1</td><td>Diff and branch coverage intelligence</td></tr><tr><td>SmartTest Studio</td><td>P1</td><td>Interactive local GUI</td></tr><tr><td>Watch Mode</td><td>P1</td><td>Continuous incremental testing</td></tr><tr><td>Intelligent Cache</td><td>P1</td><td>Validated execution caching</td></tr><tr><td>CI Integrations</td><td>P1</td><td>GitHub Actions and other CI systems</td></tr><tr><td>AI Provider Manager</td><td>P1</td><td>LLM connection and model discovery</td></tr><tr><td>AI Test Generation</td><td>P1</td><td>Automated test creation</td></tr><tr><td>AI Coverage Audit</td><td>P1</td><td>Coverage and behavior analysis</td></tr><tr><td>AI Test Repair</td><td>P2</td><td>Assisted test maintenance</td></tr><tr><td>Mercurial Adapter</td><td>P2</td><td>Mercurial integration</td></tr><tr><td>Perforce Adapter</td><td>P2</td><td>Perforce integration</td></tr><tr><td>Cloud SaaS</td><td>P2</td><td>Commercial platform</td></tr><tr><td>Multi-language SDK</td><td>P2</td><td>New language support</td></tr><tr><td>Enterprise Features</td><td>P2</td><td>Governance and private deployment</td></tr></tbody></table></div>
+<h2 id="33-initial-compatibility">3.3. Initial Compatibility <a class="anchor" href="#33-initial-compatibility" aria-label="Link to this section">#</a></h2>
+<p>The MVP must support:</p>
+<ul><li>Node.js projects.</li><li>JavaScript.</li><li>TypeScript.</li><li>ESM and CommonJS projects.</li><li>npm.</li><li>pnpm.</li><li>Yarn.</li><li>Standard workspaces and monorepos.</li><li>Jest.</li><li>Vitest.</li><li>Git.</li><li>Projects without version control.</li></ul>
+<p>Framework-specific detection should initially prioritize:</p>
+<ul><li>React.</li><li>Next.js.</li><li>Express.</li><li>NestJS.</li><li>Node.js libraries.</li></ul>
+<p>The architecture must not assume that every supported project uses one of these frameworks.</p>
+<hr>
+<h1 id="4-system-architecture">4. System Architecture</h1>
+<h2 id="41-architectural-overview">4.1. Architectural Overview <a class="anchor" href="#41-architectural-overview" aria-label="Link to this section">#</a></h2>
+<p>SmartTest will use a modular architecture separating project discovery, source intelligence, change tracking, test selection, execution, reporting, and optional AI capabilities.</p>
+<pre data-lang="text"><code>                         SMARTTEST
+                             |
+                   CLI / Studio / SDK
+                             |
+                  APPLICATION CORE
+                             |
+       +---------------------+--------------------+
+       |                     |                    |
+   PROJECT ENGINE        CODE ENGINE         TEST ENGINE
+       |                     |                    |
+   Smart Init            AST Analysis         Test Discovery
+   Configuration         Symbol Index         Test Selection
+   Environment           Dependency Graph     Execution
+   VCS Adapters          Semantic Diff        Coverage
+   Native Snapshots      Impact Analysis      Runtime Tracing
+       |                     |                    |
+       +---------------------+--------------------+
+                             |
+                     RULES &amp; SAFETY ENGINE
+                             |
+                    LOCAL INTELLIGENCE STORE
+                             |
+                 Cache / Traces / Graph / Runs
+                             |
+                      REPORTING ENGINE
+                             |
+                  CLI / HTML / JSON / CI
+                             |
+                    OPTIONAL AI ENGINE
+                             |
+                    OPTIONAL CLOUD API</code></pre>
+<h2 id="42-monorepo-structure">4.2. Monorepo Structure <a class="anchor" href="#42-monorepo-structure" aria-label="Link to this section">#</a></h2>
+<pre data-lang="text"><code>smarttest/
+├── apps/
+│   ├── studio/
+│   ├── docs/
+│   ├── playground/
+│   ├── cloud-console/
+│   └── cloud-api/
+│
+├── packages/
+│   ├── cli/
+│   ├── core/
+│   ├── config/
+│   ├── shared/
+│   │
+│   ├── smart-init/
+│   ├── project-detector/
+│   ├── environment-scanner/
+│   ├── adaptive-config/
+│   │
+│   ├── vcs-core/
+│   ├── vcs-git/
+│   ├── vcs-svn/
+│   ├── vcs-mercurial/
+│   ├── vcs-perforce/
+│   ├── native-snapshots/
+│   │
+│   ├── source-parser/
+│   ├── symbol-index/
+│   ├── semantic-diff/
+│   ├── dependency-graph/
+│   ├── impact-engine/
+│   │
+│   ├── test-discovery/
+│   ├── test-selector/
+│   ├── test-generator/
+│   ├── test-executor/
+│   ├── runtime-tracer/
+│   ├── coverage-engine/
+│   ├── rules-engine/
+│   ├── quality-engine/
+│   ├── cache-engine/
+│   │
+│   ├── report-engine/
+│   ├── studio-server/
+│   │
+│   ├── ai-core/
+│   ├── ai-provider-manager/
+│   ├── ai-test-generator/
+│   ├── ai-test-auditor/
+│   ├── ai-test-repair/
+│   ├── ai-test-review/
+│   │
+│   ├── adapter-jest/
+│   ├── adapter-vitest/
+│   ├── adapter-playwright/
+│   ├── adapter-cypress/
+│   │
+│   ├── language-typescript/
+│   ├── language-javascript/
+│   └── plugin-sdk/
+│
+├── examples/
+│   ├── node/
+│   ├── react/
+│   ├── nextjs/
+│   ├── nestjs/
+│   ├── monorepo/
+│   └── no-vcs/
+│
+├── benchmarks/
+├── fixtures/
+├── integration-tests/
+├── e2e-tests/
+├── scripts/
+└── documentation/</code></pre>
+<h2 id="43-technology-stack">4.3. Technology Stack <a class="anchor" href="#43-technology-stack" aria-label="Link to this section">#</a></h2>
+<h3 id="core">Core <a class="anchor" href="#core" aria-label="Link to this section">#</a></h3>
+<ul><li>TypeScript in strict mode.</li><li>Supported Node.js LTS versions.</li><li>pnpm Workspaces.</li><li>TypeScript Compiler API for TypeScript-aware semantic analysis.</li><li>Tree-sitter where incremental parsing or additional language support provides value.</li><li>SQLite for persistent local metadata.</li><li>Worker threads or child processes where appropriate.</li><li>Schema validation for external configuration.</li><li>Content-addressed caching.</li></ul>
+<h3 id="smarttest-studio">SmartTest Studio <a class="anchor" href="#smarttest-studio" aria-label="Link to this section">#</a></h3>
+<ul><li>React.</li><li>TypeScript.</li><li>Vite or equivalent build tooling.</li><li>Tailwind CSS.</li><li>Accessible component library.</li><li>Interactive graph visualization.</li><li>WebSocket-based live updates.</li><li>Local HTTP API.</li></ul>
+<h3 id="cloud">Cloud <a class="anchor" href="#cloud" aria-label="Link to this section">#</a></h3>
+<ul><li>TypeScript backend.</li><li>PostgreSQL.</li><li>Object storage.</li><li>Queue-based background jobs.</li><li>Tenant-aware authentication and authorization.</li><li>Usage metering.</li><li>OpenTelemetry instrumentation.</li></ul>
+<h3 id="future-native-acceleration">Future Native Acceleration <a class="anchor" href="#future-native-acceleration" aria-label="Link to this section">#</a></h3>
+<p>High-cost CPU operations may be migrated to Rust if measured benchmarks justify the complexity.</p>
+<p>This must not be a prerequisite for the initial npm package.</p>
+<hr>
+<h1 id="5-smart-init--fully-automated-setup">5. Smart Init — Fully Automated Setup</h1>
+<h2 id="51-objective">5.1. Objective <a class="anchor" href="#51-objective" aria-label="Link to this section">#</a></h2>
+<p><code>smarttest init</code> must provide a near-zero-configuration installation experience.</p>
+<p>The developer should not need to manually identify their test framework, source directories, module structure, or version-control system.</p>
+<p>SmartTest should inspect the project, create a recommended setup plan, explain it, and apply authorized changes.</p>
+<h2 id="52-main-commands">5.2. Main Commands <a class="anchor" href="#52-main-commands" aria-label="Link to this section">#</a></h2>
+<pre data-lang="bash"><code>smarttest init
+smarttest init --auto
+smarttest init --advanced
+smarttest init --dry-run
+smarttest init --yes --non-interactive
+smarttest doctor
+smarttest sync</code></pre>
+<h2 id="53-project-discovery">5.3. Project Discovery <a class="anchor" href="#53-project-discovery" aria-label="Link to this section">#</a></h2>
+<p>Smart Init must detect:</p>
+<h3 id="runtime-environment">Runtime Environment <a class="anchor" href="#runtime-environment" aria-label="Link to this section">#</a></h3>
+<ul><li>Operating system.</li><li>CPU architecture.</li><li>Node.js version.</li><li>Available CPU resources.</li><li>Available memory.</li><li>Relevant environment variables.</li><li>Filesystem permissions.</li><li>Installed runtime tools.</li></ul>
+<h3 id="project-structure">Project Structure <a class="anchor" href="#project-structure" aria-label="Link to this section">#</a></h3>
+<ul><li>Package manager.</li><li>Package manifest.</li><li>Workspace configuration.</li><li>Monorepo boundaries.</li><li>Source directories.</li><li>Application entry points.</li><li>Internal packages.</li><li>Import aliases.</li><li>Build configuration.</li><li>Generated-code directories.</li><li>Existing test folders.</li></ul>
+<h3 id="frameworks">Frameworks <a class="anchor" href="#frameworks" aria-label="Link to this section">#</a></h3>
+<p>Detect frameworks through package manifests, configuration files, source imports, and known project conventions.</p>
+<h3 id="existing-tests">Existing Tests <a class="anchor" href="#existing-tests" aria-label="Link to this section">#</a></h3>
+<p>Detect:</p>
+<ul><li>Test runners.</li><li>Existing test suites.</li><li>Test filenames.</li><li>Test placement conventions.</li><li>Fixtures.</li><li>Mocks.</li><li>Shared setup files.</li><li>Coverage providers.</li><li>Reporter configurations.</li><li>E2E test tools.</li></ul>
+<h3 id="version-control">Version Control <a class="anchor" href="#version-control" aria-label="Link to this section">#</a></h3>
+<p>Detect:</p>
+<ul><li>Git.</li><li>SVN.</li><li>Mercurial.</li><li>Perforce.</li><li>Nested repositories.</li><li>Projects without version control.</li></ul>
+<h3 id="cicd">CI/CD <a class="anchor" href="#cicd" aria-label="Link to this section">#</a></h3>
+<p>Detect supported configuration files for:</p>
+<ul><li>GitHub Actions.</li><li>GitLab CI.</li><li>Jenkins.</li><li>Azure Pipelines.</li><li>Other integration plugins.</li></ul>
+<h2 id="54-smart-init-pipeline">5.4. Smart Init Pipeline <a class="anchor" href="#54-smart-init-pipeline" aria-label="Link to this section">#</a></h2>
+<pre data-lang="text"><code>START
+  |
+Environment Scan
+  |
+Project Discovery
+  |
+Framework Detection
+  |
+Test Runner Detection
+  |
+Version Control Detection
+  |
+Existing Test Analysis
+  |
+Rules &amp; Coverage Discovery
+  |
+Compatibility Checks
+  |
+Recommended Setup Plan
+  |
+User Review
+  |
+Apply Authorized Changes
+  |
+Validate Installation
+  |
+Generate Setup Report
+  |
+READY</code></pre>
+<h2 id="55-setup-recommendation-engine">5.5. Setup Recommendation Engine <a class="anchor" href="#55-setup-recommendation-engine" aria-label="Link to this section">#</a></h2>
+<p>The initialization engine should determine:</p>
+<ul><li>Recommended test directory layout.</li><li>Test naming convention.</li><li>Suitable framework adapters.</li><li>Coverage provider.</li><li>Source inclusion patterns.</li><li>Exclusion patterns.</li><li>Initial impact strategy.</li><li>Snapshot configuration.</li><li>Cache location.</li><li>Recommended worker configuration.</li><li>Required optional dependencies.</li><li>Suggested testing rules.</li></ul>
+<p>Recommendations must include a reason.</p>
+<p>Example:</p>
+<pre data-lang="text"><code>Detected: NestJS + TypeScript + Jest
+
+Recommended:
+  Test layout: Mirror source
+  Unit tests: Jest
+  Integration tests: Jest
+  Source tracking: Git + Native Snapshots
+  Impact mode: Balanced
+  Coverage: Existing Jest provider
+  Cache: Local persistent
+
+Warnings:
+  4 modules have no matching tests
+  2 configuration files may affect all suites</code></pre>
+<h2 id="56-setup-modes">5.6. Setup Modes <a class="anchor" href="#56-setup-modes" aria-label="Link to this section">#</a></h2>
+<h3 id="interactive">Interactive <a class="anchor" href="#interactive" aria-label="Link to this section">#</a></h3>
+<p>Guided setup with suggested defaults.</p>
+<h3 id="automatic">Automatic <a class="anchor" href="#automatic" aria-label="Link to this section">#</a></h3>
+<p>Applies only permitted, low-risk actions.</p>
+<h3 id="advanced">Advanced <a class="anchor" href="#advanced" aria-label="Link to this section">#</a></h3>
+<p>Exposes all configuration options.</p>
+<h3 id="non-interactive">Non-Interactive <a class="anchor" href="#non-interactive" aria-label="Link to this section">#</a></h3>
+<p>Designed for CI, scripts, and automated environments.</p>
+<p>Missing required configuration must produce a deterministic error rather than an interactive prompt.</p>
+<h3 id="dry-run">Dry Run <a class="anchor" href="#dry-run" aria-label="Link to this section">#</a></h3>
+<p>Displays the proposed changes without writing files.</p>
+<h2 id="57-installation-safety">5.7. Installation Safety <a class="anchor" href="#57-installation-safety" aria-label="Link to this section">#</a></h2>
+<p>Smart Init must:</p>
+<ul><li>Preserve existing configuration.</li><li>Avoid duplicate script entries.</li><li>Detect naming collisions.</li><li>Preview file modifications.</li><li>Ask before replacing existing files.</li><li>Avoid automatic major dependency upgrades.</li><li>Avoid executing arbitrary installation hooks without appropriate controls.</li><li>Record changes made during setup.</li><li>Support rollback of generated or modified configuration files.</li></ul>
+<h2 id="58-idempotency">5.8. Idempotency <a class="anchor" href="#58-idempotency" aria-label="Link to this section">#</a></h2>
+<p>Executing <code>smarttest init</code> repeatedly must not create duplicated configuration, scripts, or directories.</p>
+<p>Existing user customizations must be retained.</p>
+<h2 id="59-acceptance-criteria">5.9. Acceptance Criteria <a class="anchor" href="#59-acceptance-criteria" aria-label="Link to this section">#</a></h2>
+<ul><li>Automatic detection works for supported project fixtures.</li><li>Existing tests remain unchanged.</li><li>The generated configuration validates successfully.</li><li>The selected test adapter can discover tests.</li><li>The setup report explains warnings and actions.</li><li>Repeated initialization is idempotent.</li><li>Unsupported configurations produce actionable diagnostics.</li></ul>
+<hr>
+<h1 id="6-adaptive-configuration-engine">6. Adaptive Configuration Engine</h1>
+<h2 id="61-objective">6.1. Objective <a class="anchor" href="#61-objective" aria-label="Link to this section">#</a></h2>
+<p>SmartTest must adapt to changes in the project after initial setup.</p>
+<p>A project may begin without version control, adopt Git later, change test frameworks, introduce new packages, or migrate to a monorepo.</p>
+<p>SmartTest should identify these changes and propose the necessary updates.</p>
+<h2 id="62-events-to-detect">6.2. Events to Detect <a class="anchor" href="#62-events-to-detect" aria-label="Link to this section">#</a></h2>
+<ul><li>New version-control repository.</li><li>Repository removal.</li><li>VCS provider replacement.</li><li>New workspace package.</li><li>Package removal.</li><li>Test framework installation.</li><li>Test framework migration.</li><li>TypeScript configuration changes.</li><li>Import alias changes.</li><li>New source directory.</li><li>New test directory.</li><li>Package manager changes.</li><li>Runtime version changes.</li><li>Coverage configuration changes.</li><li>New supported programming language.</li><li>AI provider configuration changes.</li></ul>
+<h2 id="63-adaptation-process">6.3. Adaptation Process <a class="anchor" href="#63-adaptation-process" aria-label="Link to this section">#</a></h2>
+<ol><li>Detect environment change.</li><li>Compare with the previous known configuration.</li><li>Identify affected SmartTest components.</li><li>Invalidate stale metadata.</li><li>Build a migration or synchronization plan.</li><li>Preserve existing user settings.</li><li>Request approval when modifications are required.</li><li>Apply changes.</li><li>Validate the new state.</li><li>Record the adaptation event.</li></ol>
+<h2 id="64-commands">6.4. Commands <a class="anchor" href="#64-commands" aria-label="Link to this section">#</a></h2>
+<pre data-lang="bash"><code>smarttest sync
+smarttest sync --check
+smarttest sync --vcs
+smarttest sync --tests
+smarttest sync --frameworks
+
+smarttest doctor
+smarttest doctor --fix
+smarttest migrate</code></pre>
+<h2 id="65-example-adding-git-after-initialization">6.5. Example: Adding Git After Initialization <a class="anchor" href="#65-example-adding-git-after-initialization" aria-label="Link to this section">#</a></h2>
+<p>Initial state:</p>
+<pre data-lang="text"><code>Project:
+  Version control: None
+  Change tracking: Native Snapshots</code></pre>
+<p>Developer runs:</p>
+<pre data-lang="bash"><code>git init</code></pre>
+<p>SmartTest detects Git.</p>
+<p>Suggested adaptation:</p>
+<pre data-lang="text"><code>New version control detected: Git
+
+Recommended actions:
+  Connect Git adapter
+  Preserve native snapshots
+  Establish a new Git baseline
+  Reconcile source fingerprints
+  Validate existing impact graph</code></pre>
+<p>SmartTest must not silently assume that old native snapshot identifiers are equivalent to Git commits.</p>
+<h2 id="66-acceptance-criteria">6.6. Acceptance Criteria <a class="anchor" href="#66-acceptance-criteria" aria-label="Link to this section">#</a></h2>
+<ul><li>Project changes are detected reliably.</li><li>Existing configuration is preserved.</li><li>Invalidated traces are not reused.</li><li>Version-control transitions maintain historical metadata where valid.</li><li>Conflicts are surfaced explicitly.</li><li>Migration is reversible where feasible.</li></ul>
+<hr>
+<h1 id="7-universal-version-control-system">7. Universal Version Control System</h1>
+<h2 id="71-objective">7.1. Objective <a class="anchor" href="#71-objective" aria-label="Link to this section">#</a></h2>
+<p>The impact engine must work independently of the source-control provider.</p>
+<p>Supported providers should produce a common normalized representation of changes.</p>
+<h2 id="72-planned-providers">7.2. Planned Providers <a class="anchor" href="#72-planned-providers" aria-label="Link to this section">#</a></h2>
+<div class="table"><table><thead><tr><th>Provider</th><th>Support</th></tr></thead><tbody><tr><td>Git</td><td>Initial</td></tr><tr><td>SmartTest Native</td><td>Initial</td></tr><tr><td>SVN</td><td>Advanced</td></tr><tr><td>Mercurial</td><td>Extension</td></tr><tr><td>Perforce</td><td>Extension</td></tr><tr><td>Custom VCS</td><td>Plugin SDK</td></tr></tbody></table></div>
+<h2 id="73-common-adapter-contract">7.3. Common Adapter Contract <a class="anchor" href="#73-common-adapter-contract" aria-label="Link to this section">#</a></h2>
+<pre data-lang="ts"><code>interface VersionControlAdapter {
+  readonly id: string;
+
+  detect(root: string): Promise&lt;boolean&gt;;
+
+  getWorkingState(): Promise&lt;WorkingState&gt;;
+
+  getChanges(base: RevisionRef, target?: RevisionRef): Promise&lt;ChangeSet&gt;;
+
+  getFileContent(path: string, revision: RevisionRef): Promise&lt;Uint8Array | null&gt;;
+
+  getCapabilities(): VersionControlCapabilities;
+}</code></pre>
+<p>Each adapter must declare supported capabilities.</p>
+<p>Git branches, SVN revisions, and Perforce changelists must not be treated as semantically identical.</p>
+<h2 id="74-unified-changeset">7.4. Unified ChangeSet <a class="anchor" href="#74-unified-changeset" aria-label="Link to this section">#</a></h2>
+<pre data-lang="ts"><code>interface ChangeSet {
+  provider: string;
+
+  baseRevision?: string;
+  targetRevision?: string;
+
+  changes: FileChange[];
+
+  completeness: "complete" | "partial" | "unknown";
+
+  warnings: string[];
+}
+
+interface FileChange {
+  path: string;
+  previousPath?: string;
+
+  type: "added" | "modified" | "deleted" | "renamed";
+
+  changedRanges?: SourceRange[];
+
+  previousHash?: string;
+  currentHash?: string;
+}</code></pre>
+<h2 id="75-git-integration">7.5. Git Integration <a class="anchor" href="#75-git-integration" aria-label="Link to this section">#</a></h2>
+<p>Support:</p>
+<ul><li>Branch comparison.</li><li>Commit comparison.</li><li>Working-tree changes.</li><li>Staged changes.</li><li>Untracked files.</li><li>File renames.</li><li>Deleted files.</li><li>Merge-base calculations.</li><li>Worktrees.</li><li>Monorepos.</li><li>Nested repositories.</li></ul>
+<p>Example:</p>
+<pre data-lang="bash"><code>smarttest run --base main
+smarttest run --staged
+smarttest run --uncommitted</code></pre>
+<h2 id="76-svn-integration">7.6. SVN Integration <a class="anchor" href="#76-svn-integration" aria-label="Link to this section">#</a></h2>
+<p>Support:</p>
+<ul><li>Revision comparisons.</li><li>Working-copy modifications.</li><li>Added files.</li><li>Deleted files.</li><li>Renamed or copied paths where detectable.</li><li>Repository revisions.</li><li>Local working-copy state.</li></ul>
+<p>Example:</p>
+<pre data-lang="bash"><code>smarttest run --vcs svn --base r142</code></pre>
+<h2 id="77-mercurial-and-perforce">7.7. Mercurial and Perforce <a class="anchor" href="#77-mercurial-and-perforce" aria-label="Link to this section">#</a></h2>
+<p>Provide extension adapters for:</p>
+<ul><li>Changesets.</li><li>Changelists.</li><li>Depot paths.</li><li>Revision comparisons.</li><li>Workspace state.</li><li>Provider-specific configuration.</li></ul>
+<h2 id="78-multiple-vcs-detection">7.8. Multiple VCS Detection <a class="anchor" href="#78-multiple-vcs-detection" aria-label="Link to this section">#</a></h2>
+<p>If multiple providers are detected, SmartTest must:</p>
+<ul><li>Identify repository boundaries.</li><li>Determine which source directories belong to each provider.</li><li>Avoid silently mixing unrelated revision references.</li><li>Allow explicit provider selection.</li><li>Support distinct adapters within a monorepo where necessary.</li></ul>
+<hr>
+<h1 id="8-smarttest-native-snapshot-engine">8. SmartTest Native Snapshot Engine</h1>
+<h2 id="81-objective">8.1. Objective <a class="anchor" href="#81-objective" aria-label="Link to this section">#</a></h2>
+<p>Allow intelligent change tracking without Git, SVN, or another VCS.</p>
+<p>Native Snapshots are a testing-oriented history system, not a full source-control replacement.</p>
+<h2 id="82-features">8.2. Features <a class="anchor" href="#82-features" aria-label="Link to this section">#</a></h2>
+<ul><li>Initial project baseline.</li><li>Incremental file snapshots.</li><li>Content fingerprints.</li><li>File rename detection.</li><li>Modification history.</li><li>Source comparisons.</li><li>Test-result associations.</li><li>Dependency graph snapshots.</li><li>Snapshot restoration of metadata.</li><li>Retention policies.</li></ul>
+<h2 id="83-local-storage-structure">8.3. Local Storage Structure <a class="anchor" href="#83-local-storage-structure" aria-label="Link to this section">#</a></h2>
+<pre data-lang="text"><code>.smarttest/
+├── state/
+│   ├── index.db
+│   ├── snapshots/
+│   ├── graph/
+│   └── fingerprints/
+├── traces/
+├── cache/
+├── runs/
+├── reports/
+└── logs/</code></pre>
+<p>Actual storage paths must be configurable.</p>
+<p>Generated files should be excluded from source-control commits by default.</p>
+<h2 id="84-storage-strategy">8.4. Storage Strategy <a class="anchor" href="#84-storage-strategy" aria-label="Link to this section">#</a></h2>
+<p>Prefer:</p>
+<ul><li>Content hashing.</li><li>Incremental indexing.</li><li>Deduplication.</li><li>Compressed metadata.</li><li>Configurable retention.</li><li>Optional source-content storage.</li></ul>
+<p>Snapshots must not copy entire repositories unnecessarily.</p>
+<h2 id="85-hybrid-mode">8.5. Hybrid Mode <a class="anchor" href="#85-hybrid-mode" aria-label="Link to this section">#</a></h2>
+<p>SmartTest should support:</p>
+<pre data-lang="text"><code>Git / SVN / Perforce
+        +
+SmartTest Native Snapshots
+        |
+Semantic Change Analysis
+        |
+Impact Graph
+        |
+Test Selection</code></pre>
+<p>Native snapshots provide local incremental analysis while external VCS providers supply official repository revisions.</p>
+<h2 id="86-commands">8.6. Commands <a class="anchor" href="#86-commands" aria-label="Link to this section">#</a></h2>
+<pre data-lang="bash"><code>smarttest snapshot create
+smarttest snapshot list
+smarttest snapshot inspect
+smarttest snapshot diff
+smarttest snapshot prune
+
+smarttest vcs detect
+smarttest vcs status
+smarttest vcs connect</code></pre>
+<h2 id="87-snapshot-reliability">8.7. Snapshot Reliability <a class="anchor" href="#87-snapshot-reliability" aria-label="Link to this section">#</a></h2>
+<p>A source snapshot must be distinguished from a verified testing baseline.</p>
+<p>A verified baseline requires associated execution evidence.</p>
+<p>Snapshot comparisons must indicate missing or incomplete content.</p>
+<hr>
+<h1 id="9-source-code-intelligence-engine">9. Source Code Intelligence Engine</h1>
+<h2 id="91-objective">9.1. Objective <a class="anchor" href="#91-objective" aria-label="Link to this section">#</a></h2>
+<p>Analyze code at a finer level than files.</p>
+<p>SmartTest must understand symbols, references, exports, and dependency relationships.</p>
+<h2 id="92-supported-symbol-types">9.2. Supported Symbol Types <a class="anchor" href="#92-supported-symbol-types" aria-label="Link to this section">#</a></h2>
+<ul><li>Modules.</li><li>Classes.</li><li>Interfaces.</li><li>Functions.</li><li>Methods.</li><li>Constructors.</li><li>Properties.</li><li>Type declarations.</li><li>Exports.</li><li>Imports.</li><li>Decorators.</li><li>Relevant configuration entities.</li></ul>
+<h2 id="93-symbol-data-model">9.3. Symbol Data Model <a class="anchor" href="#93-symbol-data-model" aria-label="Link to this section">#</a></h2>
+<pre data-lang="ts"><code>interface SourceSymbol {
+  id: string;
+
+  filePath: string;
+  qualifiedName: string;
+
+  kind: "module" | "class" | "interface" | "function" | "method" | "property" | "type";
+
+  signature?: string;
+
+  sourceRange: SourceRange;
+
+  parentSymbolId?: string;
+
+  visibility?: "public" | "protected" | "private";
+
+  decorators: string[];
+
+  dependencies: string[];
+}</code></pre>
+<h2 id="94-semantic-change-detection">9.4. Semantic Change Detection <a class="anchor" href="#94-semantic-change-detection" aria-label="Link to this section">#</a></h2>
+<p>Classify changes such as:</p>
+<ul><li>Comment-only modification.</li><li>Formatting modification.</li><li>Function implementation change.</li><li>Method signature change.</li><li>Exported API change.</li><li>Interface change.</li><li>Inheritance change.</li><li>Decorator change.</li><li>Import change.</li><li>Configuration change.</li><li>Potential behavioral change.</li><li>Unclassifiable change.</li></ul>
+<p>Classification must report uncertainty.</p>
+<h2 id="95-incremental-analysis">9.5. Incremental Analysis <a class="anchor" href="#95-incremental-analysis" aria-label="Link to this section">#</a></h2>
+<p>Only changed and invalidated portions of the project should be reparsed when possible.</p>
+<p>The engine must maintain persistent indexes and update dependent relationships incrementally.</p>
+<h2 id="96-generated-code">9.6. Generated Code <a class="anchor" href="#96-generated-code" aria-label="Link to this section">#</a></h2>
+<p>Generated code must be handled separately.</p>
+<p>The engine should understand whether generated output must be rebuilt, tested, or excluded based on explicit rules.</p>
+<hr>
+<h1 id="10-dependency-graph-engine">10. Dependency Graph Engine</h1>
+<h2 id="101-objective">10.1. Objective <a class="anchor" href="#101-objective" aria-label="Link to this section">#</a></h2>
+<p>Build a graph representing relationships between source code, tests, configuration, and observed execution paths.</p>
+<h2 id="102-node-types">10.2. Node Types <a class="anchor" href="#102-node-types" aria-label="Link to this section">#</a></h2>
+<ul><li>Workspace.</li><li>Package.</li><li>Module.</li><li>File.</li><li>Class.</li><li>Function.</li><li>Method.</li><li>Test suite.</li><li>Test case.</li><li>Configuration.</li><li>External dependency.</li></ul>
+<h2 id="103-edge-types">10.3. Edge Types <a class="anchor" href="#103-edge-types" aria-label="Link to this section">#</a></h2>
+<ul><li>IMPORTS.</li><li>EXPORTS.</li><li>CALLS.</li><li>REFERENCES.</li><li>EXTENDS.</li><li>IMPLEMENTS.</li><li>INSTANTIATES.</li><li>DEPENDS_ON.</li><li>TESTS.</li><li>COVERS.</li><li>OBSERVED_EXECUTION.</li><li>CONFIGURES.</li></ul>
+<h2 id="104-static-dependency-graph">10.4. Static Dependency Graph <a class="anchor" href="#104-static-dependency-graph" aria-label="Link to this section">#</a></h2>
+<p>Built through source analysis.</p>
+<p>Captures known code relationships.</p>
+<h2 id="105-dynamic-execution-graph">10.5. Dynamic Execution Graph <a class="anchor" href="#105-dynamic-execution-graph" aria-label="Link to this section">#</a></h2>
+<p>Built from observed test execution and coverage information.</p>
+<p>Captures which source elements were exercised by tests.</p>
+<h2 id="106-hybrid-graph">10.6. Hybrid Graph <a class="anchor" href="#106-hybrid-graph" aria-label="Link to this section">#</a></h2>
+<p>Combines static and dynamic information, preserving provenance and confidence.</p>
+<p>A relationship observed during execution must not automatically invalidate other potential static relationships.</p>
+<h2 id="107-reverse-dependency-analysis">10.7. Reverse Dependency Analysis <a class="anchor" href="#107-reverse-dependency-analysis" aria-label="Link to this section">#</a></h2>
+<p>Example:</p>
+<pre data-lang="text"><code>AuthService.validateToken()
+          |
+          +-- AuthService.test.ts
+          |
+          +-- AuthController
+          |       |
+          |       +-- AuthController.test.ts
+          |
+          +-- AuthenticationMiddleware
+                  |
+                  +-- ProtectedRoutes.test.ts</code></pre>
+<h2 id="108-graph-requirements">10.8. Graph Requirements <a class="anchor" href="#108-graph-requirements" aria-label="Link to this section">#</a></h2>
+<ul><li>Persistent indexing.</li><li>Direct dependency traversal.</li><li>Transitive dependency traversal.</li><li>Cycle detection.</li><li>Incremental updates.</li><li>Graph snapshots.</li><li>Symbol lookup.</li><li>Query performance measurements.</li><li>Uncertainty tracking.</li><li>Graph visualization API.</li></ul>
+<hr>
+<h1 id="11-intelligent-test-impact-engine">11. Intelligent Test Impact Engine</h1>
+<h2 id="111-objective">11.1. Objective <a class="anchor" href="#111-objective" aria-label="Link to this section">#</a></h2>
+<p>Identify a defensible set of tests relevant to a change.</p>
+<p>The selection engine must combine:</p>
+<ul><li>File changes.</li><li>Semantic changes.</li><li>Static dependencies.</li><li>Dynamic execution traces.</li><li>Test-to-source mapping.</li><li>Custom rules.</li><li>Risk levels.</li><li>Cache validity.</li><li>Environment changes.</li><li>Adapter capabilities.</li></ul>
+<h2 id="112-impact-selection-pipeline">11.2. Impact Selection Pipeline <a class="anchor" href="#112-impact-selection-pipeline" aria-label="Link to this section">#</a></h2>
+<pre data-lang="text"><code>Changed Files
+     |
+Semantic Diff
+     |
+Affected Symbols
+     |
+Static Dependencies
+     |
+Runtime Execution Traces
+     |
+Risk and Safety Policies
+     |
+Candidate Test Set
+     |
+Confidence and Completeness Check
+     |
+Final Test Selection
+     |
+Execution Plan</code></pre>
+<h2 id="113-selection-modes">11.3. Selection Modes <a class="anchor" href="#113-selection-modes" aria-label="Link to this section">#</a></h2>
+<h3 id="fast">FAST <a class="anchor" href="#fast" aria-label="Link to this section">#</a></h3>
+<p>Optimized for local feedback.</p>
+<p>Characteristics:</p>
+<ul><li>Highly targeted selection.</li><li>Minimal analysis overhead.</li><li>Cache-first where valid.</li><li>Direct and observed relationships prioritized.</li><li>Clear warnings for unresolved risk.</li></ul>
+<h3 id="balanced">BALANCED <a class="anchor" href="#balanced" aria-label="Link to this section">#</a></h3>
+<p>Recommended default for pull requests.</p>
+<p>Characteristics:</p>
+<ul><li>Static and dynamic analysis.</li><li>Transitive dependency expansion.</li><li>Critical rule enforcement.</li><li>Conservative handling of uncertainty.</li><li>Periodic full-suite validation.</li></ul>
+<h3 id="safe">SAFE <a class="anchor" href="#safe" aria-label="Link to this section">#</a></h3>
+<p>Recommended for releases and critical code.</p>
+<p>Characteristics:</p>
+<ul><li>Strict invalidation.</li><li>Mandatory critical tests.</li><li>Broad dependency selection.</li><li>Full-suite execution when required.</li><li>Conservative risk handling.</li></ul>
+<h2 id="114-mandatory-test-selection">11.4. Mandatory Test Selection <a class="anchor" href="#114-mandatory-test-selection" aria-label="Link to this section">#</a></h2>
+<p>Certain events must trigger broader verification.</p>
+<p>Examples:</p>
+<ul><li>Compiler configuration changes.</li><li>Test runner configuration changes.</li><li>Shared authentication changes.</li><li>Global middleware changes.</li><li>Package dependency changes.</li><li>Database schema modifications.</li><li>Shared environment configuration changes.</li><li>Framework upgrades.</li><li>Changes with unresolved dependencies.</li></ul>
+<h2 id="115-selection-result-model">11.5. Selection Result Model <a class="anchor" href="#115-selection-result-model" aria-label="Link to this section">#</a></h2>
+<pre data-lang="ts"><code>interface ImpactDecision {
+  selectedTests: SelectedTest[];
+
+  skippedTests: SkippedTest[];
+
+  affectedFiles: string[];
+
+  affectedSymbols: string[];
+
+  analysisStatus: "complete" | "partial" | "fallback";
+
+  safetyMode: "fast" | "balanced" | "safe";
+
+  reasons: SelectionReason[];
+
+  warnings: string[];
+
+  fallbackApplied: boolean;
+}</code></pre>
+<h2 id="116-explainability">11.6. Explainability <a class="anchor" href="#116-explainability" aria-label="Link to this section">#</a></h2>
+<p>Every selected test must expose its selection reasons.</p>
+<p>Example:</p>
+<pre data-lang="text"><code>SELECTED: AuthService.test.ts
+
+Reasons:
+  Modified symbol: AuthService.validateToken
+  Direct dependency relationship
+  Previously observed execution coverage
+  Matched rule: authentication-critical</code></pre>
+<p>For skipped tests:</p>
+<pre data-lang="text"><code>SKIPPED: CatalogService.test.ts
+
+Reasons:
+  No detected static dependency
+  No valid observed execution overlap
+  No mandatory rule matched
+  Baseline available
+
+Confidence:
+  Limited to the analyzed dependency model</code></pre>
+<h2 id="117-safety-validation">11.7. Safety Validation <a class="anchor" href="#117-safety-validation" aria-label="Link to this section">#</a></h2>
+<p>Provide:</p>
+<pre data-lang="bash"><code>smarttest validate-selection</code></pre>
+<p>The validation workflow should compare selective execution against a full reference run.</p>
+<p>Measure:</p>
+<ul><li>Tests selected.</li><li>Tests skipped.</li><li>Failing tests discovered.</li><li>Failing tests missed.</li><li>Runtime savings.</li><li>Analysis overhead.</li><li>Flaky-test interference.</li></ul>
+<p>The product must not guarantee zero missed regressions beyond what its evidence supports.</p>
+<hr>
+<h1 id="12-runtime-tracing-engine">12. Runtime Tracing Engine</h1>
+<h2 id="121-objective">12.1. Objective <a class="anchor" href="#121-objective" aria-label="Link to this section">#</a></h2>
+<p>Record which source elements are actually exercised by each test.</p>
+<h2 id="122-supported-granularity">12.2. Supported Granularity <a class="anchor" href="#122-supported-granularity" aria-label="Link to this section">#</a></h2>
+<p>Depending on adapter capabilities:</p>
+<ul><li>Test suite.</li><li>Individual test case.</li><li>Source file.</li><li>Function.</li><li>Method.</li><li>Executed line.</li><li>Executed branch.</li></ul>
+<h2 id="123-trace-record">12.3. Trace Record <a class="anchor" href="#123-trace-record" aria-label="Link to this section">#</a></h2>
+<pre data-lang="ts"><code>interface TraceRecord {
+  testId: string;
+  runId: string;
+
+  sourceFingerprint: string;
+
+  environmentFingerprint: string;
+
+  granularity: "suite" | "test" | "file" | "symbol";
+
+  coveredFiles: string[];
+
+  coveredSymbols: string[];
+
+  collectedAt: string;
+
+  valid: boolean;
+}</code></pre>
+<h2 id="124-requirements">12.4. Requirements <a class="anchor" href="#124-requirements" aria-label="Link to this section">#</a></h2>
+<ul><li>Framework-compatible instrumentation.</li><li>Low-overhead collection.</li><li>Explicit granularity reporting.</li><li>Persistent storage.</li><li>Reliable invalidation.</li><li>Source-map support where possible.</li><li>Trace-to-test mapping.</li><li>Safe fallback when trace data is unavailable.</li></ul>
+<h2 id="125-important-limitation">12.5. Important Limitation <a class="anchor" href="#125-important-limitation" aria-label="Link to this section">#</a></h2>
+<p>Individual test-to-method mapping cannot be assumed universally available for every framework and execution mode.</p>
+<p>Adapters must declare what they actually support.</p>
+<p>If only suite-level tracing is available, SmartTest must select at suite granularity or use additional conservative evidence.</p>
+<hr>
+<h1 id="13-automatic-test-architecture-generator">13. Automatic Test Architecture Generator</h1>
+<h2 id="131-objective">13.1. Objective <a class="anchor" href="#131-objective" aria-label="Link to this section">#</a></h2>
+<p>SmartTest should automatically create and maintain a well-organized test architecture derived from the source code.</p>
+<h2 id="132-example-source-structure">13.2. Example Source Structure <a class="anchor" href="#132-example-source-structure" aria-label="Link to this section">#</a></h2>
+<pre data-lang="text"><code>src/
+├── modules/
+│   ├── auth/
+│   │   ├── AuthController.ts
+│   │   ├── AuthService.ts
+│   │   └── TokenManager.ts
+│   └── users/
+│       ├── UserController.ts
+│       ├── UserService.ts
+│       └── UserRepository.ts
+└── shared/
+    └── validators/
+        └── EmailValidator.ts</code></pre>
+<h2 id="133-generated-test-structure">13.3. Generated Test Structure <a class="anchor" href="#133-generated-test-structure" aria-label="Link to this section">#</a></h2>
+<pre data-lang="text"><code>tests/
+├── unit/
+│   ├── modules/
+│   │   ├── auth/
+│   │   │   ├── AuthController.test.ts
+│   │   │   ├── AuthService.test.ts
+│   │   │   └── TokenManager.test.ts
+│   │   └── users/
+│   │       ├── UserController.test.ts
+│   │       ├── UserService.test.ts
+│   │       └── UserRepository.test.ts
+│   └── shared/
+│       └── validators/
+│           └── EmailValidator.test.ts
+├── integration/
+├── e2e/
+├── fixtures/
+├── mocks/
+├── helpers/
+└── setup.ts</code></pre>
+<h2 id="134-organization-strategies">13.4. Organization Strategies <a class="anchor" href="#134-organization-strategies" aria-label="Link to this section">#</a></h2>
+<h3 id="mirror">MIRROR <a class="anchor" href="#mirror" aria-label="Link to this section">#</a></h3>
+<p>Mirror the source structure.</p>
+<h3 id="colocated">COLOCATED <a class="anchor" href="#colocated" aria-label="Link to this section">#</a></h3>
+<p>Place tests alongside source files.</p>
+<h3 id="domain">DOMAIN <a class="anchor" href="#domain" aria-label="Link to this section">#</a></h3>
+<p>Group tests by business domain.</p>
+<h3 id="custom">CUSTOM <a class="anchor" href="#custom" aria-label="Link to this section">#</a></h3>
+<p>Use user-defined path and naming templates.</p>
+<h2 id="135-naming-tokens">13.5. Naming Tokens <a class="anchor" href="#135-naming-tokens" aria-label="Link to this section">#</a></h2>
+<p>Supported template variables should include:</p>
+<pre data-lang="text"><code>{ClassName}
+{FunctionName}
+{MethodName}
+{FileName}
+{ModuleName}
+{PackageName}
+{DomainName}
+{Type}
+{Extension}</code></pre>
+<p>Example:</p>
+<pre data-lang="text"><code>{ClassName}.{Type}.test.ts</code></pre>
+<h2 id="136-generation-modes">13.6. Generation Modes <a class="anchor" href="#136-generation-modes" aria-label="Link to this section">#</a></h2>
+<h3 id="scaffold">SCAFFOLD <a class="anchor" href="#scaffold" aria-label="Link to this section">#</a></h3>
+<p>Create directories and explicit test placeholders.</p>
+<h3 id="analyze">ANALYZE <a class="anchor" href="#analyze" aria-label="Link to this section">#</a></h3>
+<p>Inspect public behavior, dependencies, and likely scenarios.</p>
+<h3 id="ai-generate">AI GENERATE <a class="anchor" href="#ai-generate" aria-label="Link to this section">#</a></h3>
+<p>Produce meaningful proposed tests using the configured AI provider.</p>
+<h3 id="sync">SYNC <a class="anchor" href="#sync" aria-label="Link to this section">#</a></h3>
+<p>Compare test architecture with the current source layout.</p>
+<h3 id="refactor">REFACTOR <a class="anchor" href="#refactor" aria-label="Link to this section">#</a></h3>
+<p>Propose a non-destructive reorganization of existing tests.</p>
+<h2 id="137-commands">13.7. Commands <a class="anchor" href="#137-commands" aria-label="Link to this section">#</a></h2>
+<pre data-lang="bash"><code>smarttest generate
+smarttest generate --mode scaffold
+smarttest generate --mode analyze
+smarttest generate --sync
+
+smarttest generate --class UserService
+smarttest generate --module auth
+smarttest generate --type integration
+
+smarttest generate --dry-run
+smarttest generate --ai</code></pre>
+<h2 id="138-safety-requirements">13.8. Safety Requirements <a class="anchor" href="#138-safety-requirements" aria-label="Link to this section">#</a></h2>
+<p>The generator must:</p>
+<ul><li>Preserve existing tests.</li><li>Never overwrite by default.</li><li>Detect duplicates.</li><li>Detect naming collisions.</li><li>Support dry-run.</li><li>Use atomic writes.</li><li>Respect custom folder structures.</li><li>Handle renamed files.</li><li>Avoid empty passing tests.</li><li>Generate valid imports where possible.</li><li>Report unresolved dependencies.</li></ul>
+<p>Incomplete test skeletons must not count as meaningful test coverage.</p>
+<h2 id="139-architecture-synchronization">13.9. Architecture Synchronization <a class="anchor" href="#139-architecture-synchronization" aria-label="Link to this section">#</a></h2>
+<p>When source code changes, SmartTest should identify:</p>
+<ul><li>Missing test files.</li><li>Orphaned tests.</li><li>Renamed classes.</li><li>Moved modules.</li><li>Newly introduced public methods.</li><li>Changed testing conventions.</li><li>Coverage gaps.</li></ul>
+<p>The generator should propose updates rather than silently restructuring user code.</p>
+<hr>
+<h1 id="14-custom-rules-engine">14. Custom Rules Engine</h1>
+<h2 id="141-objective">14.1. Objective <a class="anchor" href="#141-objective" aria-label="Link to this section">#</a></h2>
+<p>Allow developers to define fine-grained test requirements based on source architecture.</p>
+<h2 id="142-rule-scopes">14.2. Rule Scopes <a class="anchor" href="#142-rule-scopes" aria-label="Link to this section">#</a></h2>
+<ul><li>Organization.</li><li>Workspace.</li><li>Project.</li><li>Package.</li><li>Module.</li><li>Directory.</li><li>File.</li><li>Class.</li><li>Function.</li><li>Method.</li><li>Individual test.</li></ul>
+<h2 id="143-supported-selectors">14.3. Supported Selectors <a class="anchor" href="#143-supported-selectors" aria-label="Link to this section">#</a></h2>
+<ul><li>Path glob.</li><li>Class name.</li><li>Method name.</li><li>Function name.</li><li>Decorator.</li><li>Interface.</li><li>Inheritance.</li><li>Package name.</li><li>Visibility.</li><li>Symbol type.</li><li>Domain.</li><li>Custom annotation.</li></ul>
+<h2 id="144-rule-types">14.4. Rule Types <a class="anchor" href="#144-rule-types" aria-label="Link to this section">#</a></h2>
+<h3 id="generation-rules">Generation Rules <a class="anchor" href="#generation-rules" aria-label="Link to this section">#</a></h3>
+<p>Define test folder layout and templates.</p>
+<h3 id="coverage-rules">Coverage Rules <a class="anchor" href="#coverage-rules" aria-label="Link to this section">#</a></h3>
+<p>Define required line and branch coverage.</p>
+<h3 id="execution-rules">Execution Rules <a class="anchor" href="#execution-rules" aria-label="Link to this section">#</a></h3>
+<p>Define mandatory tests and execution policies.</p>
+<h3 id="risk-rules">Risk Rules <a class="anchor" href="#risk-rules" aria-label="Link to this section">#</a></h3>
+<p>Classify critical components.</p>
+<h3 id="quality-rules">Quality Rules <a class="anchor" href="#quality-rules" aria-label="Link to this section">#</a></h3>
+<p>Define limits for instability, redundancy, and excessive execution time.</p>
+<h3 id="ci-rules">CI Rules <a class="anchor" href="#ci-rules" aria-label="Link to this section">#</a></h3>
+<p>Define pass/fail quality gates.</p>
+<h2 id="145-example-configuration">14.5. Example Configuration <a class="anchor" href="#145-example-configuration" aria-label="Link to this section">#</a></h2>
+<pre data-lang="ts"><code>export default defineConfig({
+  rules: [
+    {
+      name: "service-tests",
+
+      match: {
+        class: "*Service",
+      },
+
+      require: ["unit"],
+
+      coverage: {
+        lines: 90,
+        branches: 85,
+      },
+
+      generate: {
+        template: "service",
+      },
+    },
+
+    {
+      name: "repository-tests",
+
+      match: {
+        class: "*Repository",
+      },
+
+      require: ["unit", "integration"],
+
+      generate: {
+        template: "database",
+      },
+    },
+
+    {
+      name: "authentication-critical",
+
+      match: {
+        path: "src/modules/auth/**",
+      },
+
+      risk: "critical",
+
+      execution: {
+        alwaysRunOnAffected: true,
+        mode: "safe",
+      },
+    },
+  ],
+});</code></pre>
+<h2 id="146-rule-precedence">14.6. Rule Precedence <a class="anchor" href="#146-rule-precedence" aria-label="Link to this section">#</a></h2>
+<p>Rule evaluation must be deterministic.</p>
+<p>Mandatory safeguards cannot be weakened by lower-priority rules.</p>
+<p>Conflicting destination paths or incompatible templates must produce an explicit error.</p>
+<p>Rule decisions must be inspectable.</p>
+<h2 id="147-commands">14.7. Commands <a class="anchor" href="#147-commands" aria-label="Link to this section">#</a></h2>
+<pre data-lang="bash"><code>smarttest rules list
+smarttest rules validate
+
+smarttest rules explain \
+  src/modules/auth/AuthService.ts</code></pre>
+<hr>
+<h1 id="15-smart-test-execution-engine">15. Smart Test Execution Engine</h1>
+<h2 id="151-objective">15.1. Objective <a class="anchor" href="#151-objective" aria-label="Link to this section">#</a></h2>
+<p>Execute selected tests efficiently through existing test frameworks.</p>
+<p>SmartTest should not unnecessarily rebuild the full functionality of Jest, Vitest, Playwright, or Cypress.</p>
+<h2 id="152-features">15.2. Features <a class="anchor" href="#152-features" aria-label="Link to this section">#</a></h2>
+<ul><li>File-level selection.</li><li>Test-case selection where supported.</li><li>Package-level execution.</li><li>Class-targeted execution.</li><li>Full-suite execution.</li><li>Parallel execution.</li><li>Adaptive worker scheduling.</li><li>Timeouts.</li><li>Cancellation.</li><li>Retry policies.</li><li>Safe caching.</li><li>Live output.</li><li>Machine-readable results.</li></ul>
+<h2 id="153-intelligent-scheduling">15.3. Intelligent Scheduling <a class="anchor" href="#153-intelligent-scheduling" aria-label="Link to this section">#</a></h2>
+<p>The scheduler may consider:</p>
+<ul><li>Historical duration.</li><li>Memory usage.</li><li>Worker availability.</li><li>Resource contention.</li><li>Isolation requirements.</li><li>Test dependencies.</li><li>Previous instability.</li><li>Execution priority.</li></ul>
+<h2 id="154-cache-requirements">15.4. Cache Requirements <a class="anchor" href="#154-cache-requirements" aria-label="Link to this section">#</a></h2>
+<p>Cache validity must consider relevant inputs, including:</p>
+<ul><li>Source code.</li><li>Test code.</li><li>Dependencies.</li><li>Runtime version.</li><li>Test configuration.</li><li>Relevant environment configuration.</li><li>Fixtures.</li><li>Compiler configuration.</li><li>Adapter version.</li></ul>
+<p>Tests dependent on uncontrolled external state should be excluded from caching unless a valid reproducibility contract exists.</p>
+<h2 id="155-result-statuses">15.5. Result Statuses <a class="anchor" href="#155-result-statuses" aria-label="Link to this section">#</a></h2>
+<p>Required statuses:</p>
+<ul><li>Passed.</li><li>Failed.</li><li>Skipped.</li><li>Pending.</li><li>Cancelled.</li><li>Timed out.</li><li>Cached pass.</li><li>Cached failure.</li><li>Flaky.</li><li>Infrastructure error.</li></ul>
+<p>A cached result must not appear as a fresh execution.</p>
+<h2 id="156-flaky-test-detection">15.6. Flaky Test Detection <a class="anchor" href="#156-flaky-test-detection" aria-label="Link to this section">#</a></h2>
+<p>Track:</p>
+<ul><li>Historical failures.</li><li>Retry outcomes.</li><li>Failure frequency.</li><li>Execution environment.</li><li>Duration variance.</li><li>Known instability patterns.</li></ul>
+<p>A test that fails and later passes on retry must remain visibly marked as unstable.</p>
+<hr>
+<h1 id="16-coverage-intelligence">16. Coverage Intelligence</h1>
+<h2 id="161-supported-measurements">16.1. Supported Measurements <a class="anchor" href="#161-supported-measurements" aria-label="Link to this section">#</a></h2>
+<ul><li>Line coverage.</li><li>Statement coverage.</li><li>Branch coverage.</li><li>Function coverage.</li><li>Changed-line coverage.</li><li>Package-level coverage.</li><li>Class-level coverage where supported.</li><li>Critical-domain coverage.</li></ul>
+<h2 id="162-coverage-types">16.2. Coverage Types <a class="anchor" href="#162-coverage-types" aria-label="Link to this section">#</a></h2>
+<p>SmartTest must clearly distinguish:</p>
+<p><strong>Full Coverage:</strong> Coverage from a complete test-suite execution.</p>
+<p><strong>Selected Coverage:</strong> Coverage from the selected subset.</p>
+<p><strong>Diff Coverage:</strong> Coverage of changed lines or branches.</p>
+<p>These figures must never be combined or substituted without explanation.</p>
+<h2 id="163-coverage-gaps">16.3. Coverage Gaps <a class="anchor" href="#163-coverage-gaps" aria-label="Link to this section">#</a></h2>
+<p>Detect:</p>
+<ul><li>Uncovered methods.</li><li>Uncovered branches.</li><li>Critical code with insufficient tests.</li><li>Changed code without relevant test protection.</li><li>Newly introduced public behavior.</li><li>Tests targeting deleted functionality.</li><li>Missing required test categories.</li></ul>
+<h2 id="164-quality-gates">16.4. Quality Gates <a class="anchor" href="#164-quality-gates" aria-label="Link to this section">#</a></h2>
+<p>Examples:</p>
+<pre data-lang="text"><code>Changed line coverage &gt;= 90%
+Critical branch coverage &gt;= 95%
+No untested critical public API changes
+No required integration tests missing</code></pre>
+<p>Thresholds must be configurable.</p>
+<h2 id="165-commands">16.5. Commands <a class="anchor" href="#165-commands" aria-label="Link to this section">#</a></h2>
+<pre data-lang="bash"><code>smarttest coverage
+smarttest coverage --changed
+smarttest coverage --explain
+
+smarttest generate --missing-coverage</code></pre>
+<h2 id="166-coverage-quality-principle">16.6. Coverage Quality Principle <a class="anchor" href="#166-coverage-quality-principle" aria-label="Link to this section">#</a></h2>
+<p>High execution coverage does not automatically imply strong assertions.</p>
+<p>Coverage quality should also be evaluated through behavioral tests, edge-case analysis, and optional mutation testing.</p>
+<hr>
+<h1 id="17-smarttest-ai--universal-ai-testing-assistant">17. SmartTest AI — Universal AI Testing Assistant</h1>
+<h2 id="171-objective">17.1. Objective <a class="anchor" href="#171-objective" aria-label="Link to this section">#</a></h2>
+<p>Provide an optional AI engineering assistant that can understand project structure, generate tests, analyze coverage, explain failures, suggest improvements, and maintain test quality.</p>
+<p>The AI system must use SmartTest's existing project indexes and impact graph to minimize unnecessary context and repeated analysis.</p>
+<h2 id="172-architecture">17.2. Architecture <a class="anchor" href="#172-architecture" aria-label="Link to this section">#</a></h2>
+<pre data-lang="text"><code>SmartTest AI CLI / Studio
+             |
+       AI Task Manager
+             |
+        Context Builder
+             |
+   Provider Abstraction Layer
+             |
+    Model Discovery &amp; Routing
+             |
+       AI Model Endpoint
+             |
+      Structured Proposal
+             |
+   Validation &amp; Safety Engine
+             |
+     Review / Apply Changes</code></pre>
+<h2 id="173-ai-must-remain-optional">17.3. AI Must Remain Optional <a class="anchor" href="#173-ai-must-remain-optional" aria-label="Link to this section">#</a></h2>
+<p>All deterministic source analysis, test selection, rule evaluation, and execution must work with AI disabled.</p>
+<p>AI must not become a required dependency for the core engine.</p>
+<hr>
+<h1 id="18-ai-provider-setup-and-model-discovery">18. AI Provider Setup and Model Discovery</h1>
+<h2 id="181-main-commands">18.1. Main Commands <a class="anchor" href="#181-main-commands" aria-label="Link to this section">#</a></h2>
+<pre data-lang="bash"><code>smarttest ai setup
+smarttest --ai setup
+
+smarttest ai providers list
+smarttest ai providers add
+smarttest ai providers remove
+
+smarttest ai models
+smarttest ai models --refresh
+
+smarttest ai test-connection
+smarttest ai config</code></pre>
+<h2 id="182-interactive-setup-flow">18.2. Interactive Setup Flow <a class="anchor" href="#182-interactive-setup-flow" aria-label="Link to this section">#</a></h2>
+<p>The user provides:</p>
+<ol><li>Provider type.</li><li>API base URL.</li><li>API key if required.</li><li>Preferred model.</li></ol>
+<p>SmartTest should automatically:</p>
+<ul><li>Normalize the URL.</li><li>Test connectivity.</li><li>Validate authentication.</li><li>Attempt model discovery.</li><li>Display available models.</li><li>Detect supported API capabilities.</li><li>Allow manual model entry.</li><li>Validate a selected model.</li><li>Store credentials securely.</li><li>Save non-sensitive configuration.</li></ul>
+<h2 id="183-supported-provider-types">18.3. Supported Provider Types <a class="anchor" href="#183-supported-provider-types" aria-label="Link to this section">#</a></h2>
+<ul><li>OpenAI-compatible APIs.</li><li>OpenAI native adapter.</li><li>Anthropic native adapter.</li><li>DeepSeek-compatible endpoints.</li><li>Ollama.</li><li>LM Studio.</li><li>vLLM.</li><li>LiteLLM.</li><li>Other custom providers through plugins.</li></ul>
+<h2 id="184-model-discovery">18.4. Model Discovery <a class="anchor" href="#184-model-discovery" aria-label="Link to this section">#</a></h2>
+<p>For compatible APIs, SmartTest should attempt:</p>
+<pre data-lang="http"><code>GET {baseURL}/models
+Authorization: Bearer &lt;API_KEY&gt;</code></pre>
+<p>The base URL must be normalized carefully to avoid duplicated API prefixes.</p>
+<p>When model discovery is unavailable:</p>
+<ul><li>Explain the failure.</li><li>Allow manual model selection.</li><li>Support custom model IDs.</li><li>Perform optional capability probes.</li></ul>
+<h2 id="185-capability-detection">18.5. Capability Detection <a class="anchor" href="#185-capability-detection" aria-label="Link to this section">#</a></h2>
+<p>Where supported, determine:</p>
+<ul><li>Text generation.</li><li>Structured JSON output.</li><li>Streaming.</li><li>Tool calling.</li><li>Context limits.</li><li>Maximum output limits.</li><li>Reasoning-related controls.</li><li>Token usage reporting.</li></ul>
+<p>Capability detection must not assume that all OpenAI-compatible servers implement identical parameters.</p>
+<p>Unknown capabilities must remain explicitly unknown.</p>
+<h2 id="186-multiple-ai-profiles">18.6. Multiple AI Profiles <a class="anchor" href="#186-multiple-ai-profiles" aria-label="Link to this section">#</a></h2>
+<p>Support multiple provider configurations.</p>
+<p>Example:</p>
+<pre data-lang="text"><code>Profiles:
+
+default
+  Provider: Custom API
+  Model: coding-model
+
+fast
+  Provider: Local Ollama
+  Model: lightweight-model
+
+review
+  Provider: Remote API
+  Model: reasoning-model</code></pre>
+<h2 id="187-model-routing">18.7. Model Routing <a class="anchor" href="#187-model-routing" aria-label="Link to this section">#</a></h2>
+<p>Allow models to be assigned to different tasks:</p>
+<ul><li>Planning.</li><li>Generation.</li><li>Repair.</li><li>Explanation.</li><li>Coverage audit.</li><li>Code review.</li><li>Refactoring.</li></ul>
+<h2 id="188-credential-security">18.8. Credential Security <a class="anchor" href="#188-credential-security" aria-label="Link to this section">#</a></h2>
+<p>Requirements:</p>
+<ul><li>Never store keys directly in shared project configuration.</li><li>Prefer operating-system secure credential storage.</li><li>Support environment variables.</li><li>Hide credentials in logs.</li><li>Never include keys in reports.</li><li>Require HTTPS for non-local remote endpoints by default.</li><li>Protect against accidental source-code disclosure.</li></ul>
+<h2 id="189-usage-budgets">18.9. Usage Budgets <a class="anchor" href="#189-usage-budgets" aria-label="Link to this section">#</a></h2>
+<p>Support:</p>
+<ul><li>Request limits.</li><li>Token limits.</li><li>Estimated cost limits.</li><li>Per-task limits.</li><li>Per-provider limits.</li><li>Explicit approval for large jobs.</li></ul>
+<p>If reliable pricing information is unavailable, SmartTest must not present an estimated cost as guaranteed.</p>
+<hr>
+<h1 id="19-ai-command-system">19. AI Command System</h1>
+<h2 id="191-cli-design">19.1. CLI Design <a class="anchor" href="#191-cli-design" aria-label="Link to this section">#</a></h2>
+<p>Primary syntax:</p>
+<pre data-lang="bash"><code>smarttest ai &lt;command&gt;</code></pre>
+<p>Compatibility alias:</p>
+<pre data-lang="bash"><code>smarttest --ai &lt;command&gt;</code></pre>
+<p>Optional enhancement syntax:</p>
+<pre data-lang="bash"><code>smarttest generate --ai
+smarttest coverage --ai
+smarttest run --ai</code></pre>
+<p>The CLI parser must define these behaviors consistently and avoid ambiguous command combinations.</p>
+<h2 id="192-ai-command-catalog">19.2. AI Command Catalog <a class="anchor" href="#192-ai-command-catalog" aria-label="Link to this section">#</a></h2>
+<div class="table"><table><thead><tr><th>Command</th><th>Responsibility</th></tr></thead><tbody><tr><td><code>ai setup</code></td><td>Configure a provider</td></tr><tr><td><code>ai models</code></td><td>Discover and select models</td></tr><tr><td><code>ai generate-tests</code></td><td>Generate tests</td></tr><tr><td><code>ai audit</code></td><td>Audit overall test quality</td></tr><tr><td><code>ai gaps</code></td><td>Identify missing scenarios</td></tr><tr><td><code>ai coverage</code></td><td>Analyze coverage weaknesses</td></tr><tr><td><code>ai fix</code></td><td>Propose test repairs</td></tr><tr><td><code>ai improve</code></td><td>Improve existing tests</td></tr><tr><td><code>ai explain</code></td><td>Explain failures</td></tr><tr><td><code>ai review</code></td><td>Review code changes and tests</td></tr><tr><td><code>ai mutation</code></td><td>Suggest or analyze mutation tests</td></tr><tr><td><code>ai mocks</code></td><td>Generate mocks</td></tr><tr><td><code>ai fixtures</code></td><td>Generate fixtures</td></tr><tr><td><code>ai edge-cases</code></td><td>Discover boundary conditions</td></tr><tr><td><code>ai refactor</code></td><td>Refactor tests</td></tr><tr><td><code>ai rules</code></td><td>Suggest testing rules</td></tr><tr><td><code>ai optimize</code></td><td>Identify expensive or redundant tests</td></tr><tr><td><code>ai plan</code></td><td>Create a testing strategy</td></tr><tr><td><code>ai doctor</code></td><td>Diagnose setup and testing issues</td></tr></tbody></table></div>
+<hr>
+<h1 id="20-ai-test-generation-engine">20. AI Test Generation Engine</h1>
+<h2 id="201-objective">20.1. Objective <a class="anchor" href="#201-objective" aria-label="Link to this section">#</a></h2>
+<p>Generate meaningful tests for selected source files, modules, classes, methods, or complete repositories.</p>
+<h2 id="202-targeting-commands">20.2. Targeting Commands <a class="anchor" href="#202-targeting-commands" aria-label="Link to this section">#</a></h2>
+<pre data-lang="bash"><code>smarttest ai generate-tests
+
+smarttest ai generate-tests --module auth
+
+smarttest ai generate-tests --class AuthService
+
+smarttest ai generate-tests \
+  --method AuthService.login
+
+smarttest ai generate-tests \
+  --path src/modules/users
+
+smarttest ai generate-tests --changed
+
+smarttest ai generate-tests --missing
+
+smarttest ai generate-tests --all</code></pre>
+<h2 id="203-generation-pipeline">20.3. Generation Pipeline <a class="anchor" href="#203-generation-pipeline" aria-label="Link to this section">#</a></h2>
+<h3 id="step-1--analyze">Step 1 — Analyze <a class="anchor" href="#step-1--analyze" aria-label="Link to this section">#</a></h3>
+<p>Collect:</p>
+<ul><li>Target source symbols.</li><li>Method signatures.</li><li>Public behavior.</li><li>Dependencies.</li><li>Existing tests.</li><li>Project conventions.</li><li>Rules.</li><li>Coverage.</li><li>Relevant execution history.</li></ul>
+<h3 id="step-2--plan">Step 2 — Plan <a class="anchor" href="#step-2--plan" aria-label="Link to this section">#</a></h3>
+<p>Build a testing plan containing:</p>
+<ul><li>Happy paths.</li><li>Error cases.</li><li>Boundary cases.</li><li>Invalid inputs.</li><li>Exception behavior.</li><li>State transitions.</li><li>Security-sensitive behavior.</li><li>Integration cases.</li></ul>
+<h3 id="step-3--generate">Step 3 — Generate <a class="anchor" href="#step-3--generate" aria-label="Link to this section">#</a></h3>
+<p>Produce:</p>
+<ul><li>Test code.</li><li>Imports.</li><li>Mocks.</li><li>Fixtures.</li><li>Setup and teardown code.</li><li>Assertions.</li><li>Test metadata.</li></ul>
+<h3 id="step-4--validate">Step 4 — Validate <a class="anchor" href="#step-4--validate" aria-label="Link to this section">#</a></h3>
+<p>Check:</p>
+<ul><li>Syntax.</li><li>Type compatibility.</li><li>Compilation.</li><li>Test execution.</li><li>Assertion quality.</li><li>Relevant coverage.</li><li>Obvious false-positive patterns.</li></ul>
+<h3 id="step-5--improve">Step 5 — Improve <a class="anchor" href="#step-5--improve" aria-label="Link to this section">#</a></h3>
+<p>Revise invalid or weak tests within a configured retry and cost budget.</p>
+<h3 id="step-6--review">Step 6 — Review <a class="anchor" href="#step-6--review" aria-label="Link to this section">#</a></h3>
+<p>Display proposed changes and validation evidence.</p>
+<h3 id="step-7--apply">Step 7 — Apply <a class="anchor" href="#step-7--apply" aria-label="Link to this section">#</a></h3>
+<p>Write only explicitly approved changes.</p>
+<h2 id="204-full-project-generation">20.4. Full Project Generation <a class="anchor" href="#204-full-project-generation" aria-label="Link to this section">#</a></h2>
+<p><code>--all</code> must not attempt to place the entire repository into one model prompt.</p>
+<p>Instead:</p>
+<ol><li>Analyze the complete source index.</li><li>Build a dependency-aware work plan.</li><li>Split work into modules or symbols.</li><li>Estimate requests and resource usage.</li><li>Obtain approval.</li><li>Generate in bounded batches.</li><li>Validate each batch.</li><li>Store resumable checkpoints.</li><li>Produce a consolidated report.</li></ol>
+<h2 id="205-non-destructive-behavior">20.5. Non-Destructive Behavior <a class="anchor" href="#205-non-destructive-behavior" aria-label="Link to this section">#</a></h2>
+<p>Default behavior must be:</p>
+<pre data-lang="text"><code>Analyze
+  -&gt; Propose
+  -&gt; Generate Draft
+  -&gt; Validate
+  -&gt; Review
+  -&gt; Apply</code></pre>
+<p>Automatic application must be an explicit opt-in.</p>
+<h2 id="206-generated-test-quality">20.6. Generated Test Quality <a class="anchor" href="#206-generated-test-quality" aria-label="Link to this section">#</a></h2>
+<p>Tests should not be considered valid merely because they pass.</p>
+<p>SmartTest should detect suspicious patterns such as:</p>
+<ul><li>Assertions that always pass.</li><li>Tests that do not invoke target behavior.</li><li>Empty test bodies.</li><li>Excessive mocking of the subject under test.</li><li>Assertions unrelated to expected behavior.</li><li>Duplicate scenarios.</li><li>Skipped or disabled generated tests.</li></ul>
+<hr>
+<h1 id="21-ai-coverage-audit-and-gap-detection">21. AI Coverage Audit and Gap Detection</h1>
+<h2 id="211-commands">21.1. Commands <a class="anchor" href="#211-commands" aria-label="Link to this section">#</a></h2>
+<pre data-lang="bash"><code>smarttest ai audit
+
+smarttest ai audit --coverage
+
+smarttest ai gaps
+
+smarttest ai gaps --module auth
+
+smarttest ai coverage --changed</code></pre>
+<h2 id="212-audit-dimensions">21.2. Audit Dimensions <a class="anchor" href="#212-audit-dimensions" aria-label="Link to this section">#</a></h2>
+<ul><li>Line coverage.</li><li>Branch coverage.</li><li>Function coverage.</li><li>Changed-code coverage.</li><li>Behavioral scenarios.</li><li>Boundary conditions.</li><li>Assertion quality.</li><li>Critical-path protection.</li><li>Mutation-test results where available.</li><li>Test stability.</li></ul>
+<h2 id="213-findings">21.3. Findings <a class="anchor" href="#213-findings" aria-label="Link to this section">#</a></h2>
+<p>Each finding should contain:</p>
+<ul><li>Affected source symbol.</li><li>Problem description.</li><li>Evidence.</li><li>Severity.</li><li>Confidence.</li><li>Related existing tests.</li><li>Recommended action.</li><li>Optional generated test proposal.</li></ul>
+<h2 id="214-example">21.4. Example <a class="anchor" href="#214-example" aria-label="Link to this section">#</a></h2>
+<pre data-lang="text"><code>AI COVERAGE AUDIT
+
+Module: Authentication
+
+Line Coverage:   87%
+Branch Coverage: 63%
+
+Potential gaps:
+  [HIGH] Expired token behavior
+  [HIGH] Password validation boundaries
+  [MED]  Database connection failure
+  [LOW]  Optional parameter behavior
+
+Suggested:
+  6 additional test scenarios</code></pre>
+<p>Coverage findings must be supported by verifiable source or test evidence rather than unsupported model guesses.</p>
+<hr>
+<h1 id="22-ai-test-repair-improvement-and-review">22. AI Test Repair, Improvement, and Review</h1>
+<h2 id="221-ai-fix">22.1. AI Fix <a class="anchor" href="#221-ai-fix" aria-label="Link to this section">#</a></h2>
+<pre data-lang="bash"><code>smarttest ai fix --failed</code></pre>
+<p>SmartTest should analyze failures and distinguish between:</p>
+<ul><li>Real regressions.</li><li>Outdated test expectations.</li><li>Broken mocks.</li><li>Fixture errors.</li><li>Dependency changes.</li><li>Environment issues.</li><li>Flaky behavior.</li></ul>
+<p>The assistant must not automatically modify assertions simply to make a failing test pass.</p>
+<h2 id="222-ai-improve">22.2. AI Improve <a class="anchor" href="#222-ai-improve" aria-label="Link to this section">#</a></h2>
+<pre data-lang="bash"><code>smarttest ai improve --module auth</code></pre>
+<p>Suggested improvements may include:</p>
+<ul><li>Stronger assertions.</li><li>Better isolation.</li><li>Reduced duplication.</li><li>More relevant test inputs.</li><li>Additional boundary scenarios.</li><li>Clearer test descriptions.</li><li>Improved fixture reuse.</li></ul>
+<h2 id="223-ai-review">22.3. AI Review <a class="anchor" href="#223-ai-review" aria-label="Link to this section">#</a></h2>
+<pre data-lang="bash"><code>smarttest ai review --base main</code></pre>
+<p>Review:</p>
+<ul><li>Changed code.</li><li>Affected dependencies.</li><li>Selected tests.</li><li>Coverage.</li><li>Unverified behaviors.</li><li>Missing tests.</li><li>Critical risk.</li></ul>
+<p>Output should be suitable for:</p>
+<ul><li>CLI.</li><li>HTML report.</li><li>SmartTest Studio.</li><li>Pull request summaries.</li></ul>
+<h2 id="224-ai-mutation-assistance">22.4. AI Mutation Assistance <a class="anchor" href="#224-ai-mutation-assistance" aria-label="Link to this section">#</a></h2>
+<p>The AI may recommend mutation-testing targets or interpret mutation results.</p>
+<p>Mutation execution should rely on a compatible mutation-testing engine rather than model-generated assumptions.</p>
+<hr>
+<h1 id="23-smarttest-autopilot">23. SmartTest Autopilot</h1>
+<h2 id="231-objective">23.1. Objective <a class="anchor" href="#231-objective" aria-label="Link to this section">#</a></h2>
+<p>Provide a unified workflow for project testing intelligence.</p>
+<p>Command:</p>
+<pre data-lang="bash"><code>smarttest autopilot</code></pre>
+<h2 id="232-workflow">23.2. Workflow <a class="anchor" href="#232-workflow" aria-label="Link to this section">#</a></h2>
+<pre data-lang="text"><code>Project Audit
+     |
+Detect Changes
+     |
+Update Dependency Graph
+     |
+Identify Affected Tests
+     |
+Check Coverage Gaps
+     |
+Generate Improvement Plan
+     |
+Optional AI Test Generation
+     |
+Validate Proposed Tests
+     |
+Execute Approved Tests
+     |
+Generate Final Report</code></pre>
+<h2 id="233-default-mode">23.3. Default Mode <a class="anchor" href="#233-default-mode" aria-label="Link to this section">#</a></h2>
+<p>Autopilot must operate in planning and review mode by default.</p>
+<p>It must not silently:</p>
+<ul><li>Modify source code.</li><li>Overwrite tests.</li><li>Install dependencies.</li><li>Execute arbitrary generated scripts.</li><li>Send source code to remote providers.</li><li>Spend AI credits.</li><li>Modify CI configuration.</li></ul>
+<h2 id="234-commands">23.4. Commands <a class="anchor" href="#234-commands" aria-label="Link to this section">#</a></h2>
+<pre data-lang="bash"><code>smarttest autopilot
+
+smarttest autopilot --plan
+
+smarttest autopilot --changed
+
+smarttest autopilot --module auth
+
+smarttest autopilot --non-interactive</code></pre>
+<p>More autonomous behavior should require explicit policies describing permitted actions and limits.</p>
+<hr>
+<h1 id="24-smarttest-studio--interactive-gui">24. SmartTest Studio — Interactive GUI</h1>
+<h2 id="241-vision">24.1. Vision <a class="anchor" href="#241-vision" aria-label="Link to this section">#</a></h2>
+<p>SmartTest Studio should deliver an interactive testing experience comparable in usability to tools such as Cypress, but covering a broader range of testing activities.</p>
+<p>The Studio must support unit, integration, and E2E workflows through their respective adapters.</p>
+<h2 id="242-launch">24.2. Launch <a class="anchor" href="#242-launch" aria-label="Link to this section">#</a></h2>
+<pre data-lang="bash"><code>smarttest open</code></pre>
+<p>Or:</p>
+<pre data-lang="bash"><code>smarttest studio</code></pre>
+<p>The CLI starts a local server and opens the Studio in the default browser.</p>
+<h2 id="243-initial-architecture">24.3. Initial Architecture <a class="anchor" href="#243-initial-architecture" aria-label="Link to this section">#</a></h2>
+<p>Use a local web application rather than requiring Electron from the beginning.</p>
+<pre data-lang="text"><code>React Studio
+     |
+Local HTTP API + WebSocket
+     |
+SmartTest Core
+     |
+Test Framework Adapters
+     |
+Project Source / Tests</code></pre>
+<p>A native desktop wrapper may be introduced later.</p>
+<h2 id="244-primary-navigation">24.4. Primary Navigation <a class="anchor" href="#244-primary-navigation" aria-label="Link to this section">#</a></h2>
+<p>The Studio should contain:</p>
+<ol><li>Overview.</li><li>Test Explorer.</li><li>Impact Map.</li><li>Test Builder.</li><li>Live Runner.</li><li>Coverage.</li><li>Reports.</li><li>AI Assistant.</li><li>Rules.</li><li>Settings.</li></ol>
+<h2 id="245-overview">24.5. Overview <a class="anchor" href="#245-overview" aria-label="Link to this section">#</a></h2>
+<p>Display:</p>
+<ul><li>Project health.</li><li>Current branch or revision.</li><li>Last test execution.</li><li>Test totals.</li><li>Passed and failed tests.</li><li>Changed files.</li><li>Coverage.</li><li>Time saved.</li><li>Active warnings.</li><li>Missing test protection.</li></ul>
+<h2 id="246-test-explorer">24.6. Test Explorer <a class="anchor" href="#246-test-explorer" aria-label="Link to this section">#</a></h2>
+<p>Tree structure:</p>
+<pre data-lang="text"><code>Workspace
+  Package
+    Module
+      Class
+        Test Suite
+          Test Case</code></pre>
+<p>Features:</p>
+<ul><li>Search.</li><li>Filters.</li><li>Tags.</li><li>Test selection.</li><li>Individual execution.</li><li>Multi-selection.</li><li>Test history.</li><li>Direct source navigation.</li><li>Status indicators.</li><li>Test duration.</li><li>Coverage information.</li></ul>
+<h2 id="247-impact-map">24.7. Impact Map <a class="anchor" href="#247-impact-map" aria-label="Link to this section">#</a></h2>
+<p>Interactive dependency graph displaying:</p>
+<ul><li>Changed symbols.</li><li>Affected files.</li><li>Transitive dependencies.</li><li>Related tests.</li><li>Selected tests.</li><li>Skipped tests.</li><li>Risk levels.</li></ul>
+<p>Interactions:</p>
+<ul><li>Zoom and pan.</li><li>Node inspection.</li><li>Dependency path highlighting.</li><li>Filtering.</li><li>Search.</li><li>Export.</li><li>Source navigation.</li></ul>
+<h2 id="248-test-builder">24.8. Test Builder <a class="anchor" href="#248-test-builder" aria-label="Link to this section">#</a></h2>
+<p>Allow users to:</p>
+<ul><li>Select a class.</li><li>Inspect its methods.</li><li>Select scenarios.</li><li>Configure test categories.</li><li>Configure mocks and fixtures.</li><li>Choose test file destinations.</li><li>Generate scaffolds.</li><li>Generate tests with AI.</li><li>Review generated code.</li><li>Validate proposed tests.</li></ul>
+<p>The Test Builder should work without AI for structural generation.</p>
+<h2 id="249-live-runner">24.9. Live Runner <a class="anchor" href="#249-live-runner" aria-label="Link to this section">#</a></h2>
+<p>Provide real-time execution views:</p>
+<ul><li>Running tests.</li><li>Progress.</li><li>Logs.</li><li>Failures.</li><li>Stack traces.</li><li>Execution duration.</li><li>Worker activity.</li><li>Retries.</li><li>Cancellation.</li><li>Watch mode.</li></ul>
+<p>For supported browser-testing adapters, additional capabilities may include:</p>
+<ul><li>Browser preview.</li><li>DOM inspection.</li><li>Screenshots.</li><li>Interaction recording.</li><li>Browser traces.</li><li>Test-step inspection.</li></ul>
+<p>Browser time-travel functionality must only be offered when the underlying framework or recording mechanism actually supports it.</p>
+<h2 id="2410-coverage-viewer">24.10. Coverage Viewer <a class="anchor" href="#2410-coverage-viewer" aria-label="Link to this section">#</a></h2>
+<p>Display annotated source code:</p>
+<ul><li>Covered lines.</li><li>Uncovered lines.</li><li>Changed lines.</li><li>Uncovered branches.</li><li>Associated tests.</li><li>Coverage history.</li><li>AI recommendations.</li></ul>
+<h2 id="2411-rules-editor">24.11. Rules Editor <a class="anchor" href="#2411-rules-editor" aria-label="Link to this section">#</a></h2>
+<p>Provide a visual interface for configuring rules by:</p>
+<ul><li>Package.</li><li>Module.</li><li>Class.</li><li>Method.</li><li>Risk.</li><li>Test category.</li><li>Coverage threshold.</li></ul>
+<p>Rules must remain editable as code or structured configuration.</p>
+<h2 id="2412-ai-assistant-panel">24.12. AI Assistant Panel <a class="anchor" href="#2412-ai-assistant-panel" aria-label="Link to this section">#</a></h2>
+<p>Support:</p>
+<ul><li>Project questions.</li><li>Test generation.</li><li>Coverage audits.</li><li>Test repair suggestions.</li><li>Explanation of failures.</li><li>Missing scenario detection.</li><li>Testing plans.</li></ul>
+<p>The GUI must display which provider and model are being used and whether remote source access is enabled.</p>
+<h2 id="2413-studio-ux-requirements">24.13. Studio UX Requirements <a class="anchor" href="#2413-studio-ux-requirements" aria-label="Link to this section">#</a></h2>
+<ul><li>Modern professional interface.</li><li>Light and dark themes.</li><li>Fast navigation.</li><li>Keyboard shortcuts.</li><li>Compact but readable tables.</li><li>Clear status hierarchy.</li><li>Responsive layouts.</li><li>Accessible controls.</li><li>Live updates.</li><li>Non-blocking interactions.</li><li>Explicit progress for long-running operations.</li><li>Preservation of UI state during navigation.</li></ul>
+<h2 id="2414-local-studio-security">24.14. Local Studio Security <a class="anchor" href="#2414-local-studio-security" aria-label="Link to this section">#</a></h2>
+<p>The local server must:</p>
+<ul><li>Bind to loopback by default.</li><li>Use authenticated local sessions or equivalent protection.</li><li>Validate origin and request authorization.</li><li>Protect file modification and command execution endpoints.</li><li>Avoid exposing secrets.</li><li>Avoid rendering untrusted repository content as executable HTML.</li><li>Restrict access to configured project roots.</li></ul>
+<hr>
+<h1 id="25-reporting-engine">25. Reporting Engine</h1>
+<h2 id="251-objective">25.1. Objective <a class="anchor" href="#251-objective" aria-label="Link to this section">#</a></h2>
+<p>Produce attractive, useful, and technically accurate reports.</p>
+<h2 id="252-export-formats">25.2. Export Formats <a class="anchor" href="#252-export-formats" aria-label="Link to this section">#</a></h2>
+<ul><li>HTML.</li><li>JSON.</li><li>JUnit XML.</li><li>LCOV.</li><li>Cobertura where supported.</li><li>SARIF for applicable diagnostics.</li><li>Markdown summaries.</li><li>CI-specific outputs.</li></ul>
+<h2 id="253-report-sections">25.3. Report Sections <a class="anchor" href="#253-report-sections" aria-label="Link to this section">#</a></h2>
+<h3 id="executive-summary">Executive Summary <a class="anchor" href="#executive-summary" aria-label="Link to this section">#</a></h3>
+<ul><li>Overall result.</li><li>Tests selected.</li><li>Tests executed.</li><li>Tests skipped.</li><li>Tests cached.</li><li>Tests passed.</li><li>Tests failed.</li><li>Tests flaky.</li><li>Total duration.</li></ul>
+<h3 id="change-analysis">Change Analysis <a class="anchor" href="#change-analysis" aria-label="Link to this section">#</a></h3>
+<ul><li>Modified files.</li><li>Modified symbols.</li><li>Dependency impact.</li><li>Risk classification.</li><li>Analysis completeness.</li></ul>
+<h3 id="test-selection">Test Selection <a class="anchor" href="#test-selection" aria-label="Link to this section">#</a></h3>
+<ul><li>Selected tests.</li><li>Skipped tests.</li><li>Selection reasons.</li><li>Mandatory rule matches.</li><li>Safety fallbacks.</li></ul>
+<h3 id="coverage">Coverage <a class="anchor" href="#coverage" aria-label="Link to this section">#</a></h3>
+<ul><li>Full-suite baseline coverage.</li><li>Selected-run coverage.</li><li>Diff coverage.</li><li>Missing critical protection.</li></ul>
+<h3 id="performance">Performance <a class="anchor" href="#performance" aria-label="Link to this section">#</a></h3>
+<ul><li>Analysis overhead.</li><li>Test execution time.</li><li>Cache savings.</li><li>Worker utilization.</li><li>Historical comparisons.</li></ul>
+<h3 id="ai-findings">AI Findings <a class="anchor" href="#ai-findings" aria-label="Link to this section">#</a></h3>
+<p>When AI is enabled:</p>
+<ul><li>Suggested tests.</li><li>Quality warnings.</li><li>Coverage gaps.</li><li>Repair proposals.</li><li>Validation status.</li></ul>
+<h2 id="254-report-integrity">25.4. Report Integrity <a class="anchor" href="#254-report-integrity" aria-label="Link to this section">#</a></h2>
+<p>Reports must never imply:</p>
+<ul><li>Skipped tests passed.</li><li>Cached results were freshly executed.</li><li>AI-generated tests were validated if they were not.</li><li>Partial coverage represents full-project coverage.</li><li>An incomplete impact graph provides exhaustive certainty.</li></ul>
+<hr>
+<h1 id="26-cli-developer-experience">26. CLI Developer Experience</h1>
+<h2 id="261-main-ux-principle">26.1. Main UX Principle <a class="anchor" href="#261-main-ux-principle" aria-label="Link to this section">#</a></h2>
+<p>The CLI must be intuitive for beginners and fully scriptable for advanced users.</p>
+<p>Three interaction patterns:</p>
+<p><strong>Interactive:</strong> Guided menus and intelligent defaults.</p>
+<p><strong>Direct:</strong> Explicit commands and options.</p>
+<p><strong>Automation:</strong> Stable non-interactive behavior and machine-readable output.</p>
+<h2 id="262-main-commands">26.2. Main Commands <a class="anchor" href="#262-main-commands" aria-label="Link to this section">#</a></h2>
+<pre data-lang="bash"><code>smarttest
+smarttest init
+smarttest doctor
+smarttest sync
+
+smarttest scan
+smarttest impact
+smarttest explain
+smarttest graph
+
+smarttest run
+smarttest run --affected
+smarttest run --all
+
+smarttest watch
+
+smarttest generate
+smarttest coverage
+smarttest report
+
+smarttest rules
+smarttest snapshot
+smarttest vcs
+
+smarttest ai
+smarttest autopilot
+
+smarttest studio</code></pre>
+<h2 id="263-interactive-root-command">26.3. Interactive Root Command <a class="anchor" href="#263-interactive-root-command" aria-label="Link to this section">#</a></h2>
+<p>Running:</p>
+<pre data-lang="bash"><code>smarttest</code></pre>
+<p>Should display an interactive menu.</p>
+<p>Example:</p>
+<pre data-lang="text"><code>SMARTTEST
+
+Workspace: my-project
+Status: Ready
+
+&gt; Run affected tests
+  Open SmartTest Studio
+  Generate test architecture
+  AI Test Assistant
+  Coverage and reports
+  Project diagnostics
+  Settings
+
+↑↓ Navigate   Enter Select   / Search</code></pre>
+<h2 id="264-common-flags">26.4. Common Flags <a class="anchor" href="#264-common-flags" aria-label="Link to this section">#</a></h2>
+<p>Where relevant:</p>
+<pre data-lang="text"><code>--dry-run
+--json
+--quiet
+--verbose
+--non-interactive
+--output
+--config
+--workspace
+--profile
+--help</code></pre>
+<h2 id="265-cli-output-requirements">26.5. CLI Output Requirements <a class="anchor" href="#265-cli-output-requirements" aria-label="Link to this section">#</a></h2>
+<ul><li>Clear progress.</li><li>Compact summaries.</li><li>Structured diagnostics.</li><li>Stable exit codes.</li><li>Colored output when supported.</li><li>Proper non-TTY behavior.</li><li>Searchable interactive lists.</li><li>Keyboard navigation.</li><li>Helpful error messages.</li><li>No unnecessary prompts.</li><li>No hidden destructive operations.</li></ul>
+<h2 id="266-exit-codes">26.6. Exit Codes <a class="anchor" href="#266-exit-codes" aria-label="Link to this section">#</a></h2>
+<p>Define stable categories for:</p>
+<ul><li>Success.</li><li>Test failure.</li><li>Configuration failure.</li><li>Infrastructure failure.</li><li>Safety or policy failure.</li><li>Invalid command usage.</li></ul>
+<p>The exact numeric mapping should be documented and versioned.</p>
+<hr>
+<h1 id="27-plugin-sdk-and-multi-language-support">27. Plugin SDK and Multi-Language Support</h1>
+<h2 id="271-objective">27.1. Objective <a class="anchor" href="#271-objective" aria-label="Link to this section">#</a></h2>
+<p>Allow SmartTest to expand without rebuilding its core.</p>
+<h2 id="272-plugin-categories">27.2. Plugin Categories <a class="anchor" href="#272-plugin-categories" aria-label="Link to this section">#</a></h2>
+<ul><li>Language adapters.</li><li>Test runner adapters.</li><li>Coverage providers.</li><li>Version-control adapters.</li><li>Framework detectors.</li><li>Test generators.</li><li>Reporter exporters.</li><li>CI integrations.</li><li>AI providers.</li><li>Rules extensions.</li></ul>
+<h2 id="273-test-runner-adapter">27.3. Test Runner Adapter <a class="anchor" href="#273-test-runner-adapter" aria-label="Link to this section">#</a></h2>
+<pre data-lang="ts"><code>interface TestAdapter {
+  id: string;
+
+  discover(): Promise&lt;TestCase[]&gt;;
+
+  execute(selection: TestSelection, options: ExecutionOptions): Promise&lt;TestRunResult&gt;;
+
+  collectCoverage?(): Promise&lt;CoverageArtifact&gt;;
+
+  getCapabilities(): TestAdapterCapabilities;
+}</code></pre>
+<h2 id="274-language-adapter">27.4. Language Adapter <a class="anchor" href="#274-language-adapter" aria-label="Link to this section">#</a></h2>
+<pre data-lang="ts"><code>interface LanguageAdapter {
+  language: string;
+
+  analyze(files: string[]): Promise&lt;SymbolGraph&gt;;
+
+  findTestTargets(symbol: SourceSymbol): Promise&lt;TestTarget[]&gt;;
+}</code></pre>
+<h2 id="275-adapter-capabilities">27.5. Adapter Capabilities <a class="anchor" href="#275-adapter-capabilities" aria-label="Link to this section">#</a></h2>
+<p>Adapters must declare:</p>
+<ul><li>Test discovery support.</li><li>File-level selection.</li><li>Test-case selection.</li><li>Coverage support.</li><li>Tracing support.</li><li>Parallel execution.</li><li>Cancellation.</li><li>Retry support.</li><li>Source-map support.</li></ul>
+<p>Unsupported capabilities must not be silently emulated inaccurately.</p>
+<h2 id="276-language-expansion">27.6. Language Expansion <a class="anchor" href="#276-language-expansion" aria-label="Link to this section">#</a></h2>
+<h3 id="javascript--typescript">JavaScript / TypeScript <a class="anchor" href="#javascript--typescript" aria-label="Link to this section">#</a></h3>
+<p>Initial implementation.</p>
+<h3 id="python">Python <a class="anchor" href="#python" aria-label="Link to this section">#</a></h3>
+<p>pytest adapter and Python source analysis.</p>
+<h3 id="java">Java <a class="anchor" href="#java" aria-label="Link to this section">#</a></h3>
+<p>JUnit integration and Java source analysis.</p>
+<h3 id="go">Go <a class="anchor" href="#go" aria-label="Link to this section">#</a></h3>
+<p>go test integration and Go source analysis.</p>
+<h3 id="additional-languages">Additional Languages <a class="anchor" href="#additional-languages" aria-label="Link to this section">#</a></h3>
+<p>C#, PHP, Rust, Kotlin, and others based on demand.</p>
+<h2 id="277-cross-language-analysis">27.7. Cross-Language Analysis <a class="anchor" href="#277-cross-language-analysis" aria-label="Link to this section">#</a></h2>
+<p>Future versions should support dependencies across languages and service boundaries.</p>
+<p>Examples:</p>
+<ul><li>TypeScript API calling Python service.</li><li>Frontend consuming generated API contracts.</li><li>Java application relying on shared schemas.</li></ul>
+<p>Cross-language relationships must be based on detectable contracts, configuration, or explicitly declared mappings.</p>
+<hr>
+<h1 id="28-smarttest-cloud--commercial-platform">28. SmartTest Cloud — Commercial Platform</h1>
+<h2 id="281-objective">28.1. Objective <a class="anchor" href="#281-objective" aria-label="Link to this section">#</a></h2>
+<p>Provide paid collaboration and organization-wide intelligence while keeping the local core valuable and accessible.</p>
+<h2 id="282-cloud-features">28.2. Cloud Features <a class="anchor" href="#282-cloud-features" aria-label="Link to this section">#</a></h2>
+<h3 id="project-management">Project Management <a class="anchor" href="#project-management" aria-label="Link to this section">#</a></h3>
+<ul><li>Organizations.</li><li>Workspaces.</li><li>Projects.</li><li>Repositories.</li><li>Members.</li><li>Roles.</li></ul>
+<h3 id="test-analytics">Test Analytics <a class="anchor" href="#test-analytics" aria-label="Link to this section">#</a></h3>
+<ul><li>Execution history.</li><li>Failure trends.</li><li>Coverage trends.</li><li>Flaky tests.</li><li>CI duration trends.</li><li>Test efficiency.</li><li>Historical comparisons.</li></ul>
+<h3 id="pull-request-intelligence">Pull Request Intelligence <a class="anchor" href="#pull-request-intelligence" aria-label="Link to this section">#</a></h3>
+<ul><li>Change impact summaries.</li><li>Selected test reports.</li><li>Missing test warnings.</li><li>Quality gates.</li><li>Risk scores.</li><li>PR comments.</li></ul>
+<h3 id="shared-execution-infrastructure">Shared Execution Infrastructure <a class="anchor" href="#shared-execution-infrastructure" aria-label="Link to this section">#</a></h3>
+<ul><li>Shared metadata cache.</li><li>Remote execution cache.</li><li>Distributed execution as a future capability.</li><li>Usage monitoring.</li></ul>
+<h3 id="ai-collaboration">AI Collaboration <a class="anchor" href="#ai-collaboration" aria-label="Link to this section">#</a></h3>
+<ul><li>Shared AI review reports.</li><li>Organization-wide testing recommendations.</li><li>Centralized provider policies.</li><li>Configurable usage budgets.</li></ul>
+<h2 id="283-organization-data-model">28.3. Organization Data Model <a class="anchor" href="#283-organization-data-model" aria-label="Link to this section">#</a></h2>
+<pre data-lang="text"><code>Organization
+├── Members
+├── Roles
+├── Policies
+├── Subscriptions
+└── Workspaces
+    └── Projects
+        └── Repositories
+            └── Branches
+                └── Commits
+                    └── TestRuns
+                        ├── TestExecutions
+                        ├── CoverageSnapshots
+                        ├── ImpactDecisions
+                        └── Reports</code></pre>
+<h2 id="284-example-api">28.4. Example API <a class="anchor" href="#284-example-api" aria-label="Link to this section">#</a></h2>
+<pre data-lang="http"><code>POST /v1/runs
+
+GET /v1/runs/:id
+
+GET /v1/projects/:id/metrics
+
+GET /v1/projects/:id/coverage
+
+GET /v1/projects/:id/impact
+
+GET /v1/projects/:id/flaky-tests
+
+POST /v1/impact/analyze
+
+POST /v1/reports
+
+GET /v1/organizations/:id/usage</code></pre>
+<h2 id="285-enterprise-capabilities">28.5. Enterprise Capabilities <a class="anchor" href="#285-enterprise-capabilities" aria-label="Link to this section">#</a></h2>
+<ul><li>Single Sign-On.</li><li>Advanced RBAC.</li><li>Audit logs.</li><li>Private deployment.</li><li>Self-hosting options.</li><li>Configurable retention.</li><li>Data residency.</li><li>Security policies.</li><li>Compliance support.</li><li>Dedicated support.</li><li>Custom integrations.</li></ul>
+<h2 id="286-data-minimization">28.6. Data Minimization <a class="anchor" href="#286-data-minimization" aria-label="Link to this section">#</a></h2>
+<p>Cloud operation should prefer:</p>
+<ul><li>Hashes.</li><li>Test identifiers.</li><li>Source identifiers.</li><li>Metrics.</li><li>Statuses.</li><li>Coverage metadata.</li><li>Impact decisions.</li></ul>
+<p>Uploading full source code should not be required for standard reporting features.</p>
+<hr>
+<h1 id="29-business-model-and-monetization">29. Business Model and Monetization</h1>
+<h2 id="291-strategy">29.1. Strategy <a class="anchor" href="#291-strategy" aria-label="Link to this section">#</a></h2>
+<p>Use an <strong>Open Core + SaaS</strong> model.</p>
+<p>The open-source engine creates adoption and developer trust.</p>
+<p>The commercial service monetizes collaboration, organization-wide analytics, and advanced infrastructure.</p>
+<h2 id="292-proposed-pricing">29.2. Proposed Pricing <a class="anchor" href="#292-proposed-pricing" aria-label="Link to this section">#</a></h2>
+<div class="table"><table><thead><tr><th>Plan</th><th>Proposed Price</th><th>Target</th></tr></thead><tbody><tr><td>Community</td><td>Free</td><td>Individual developers</td></tr><tr><td>Team</td><td>$12/developer/month</td><td>Small teams</td></tr><tr><td>Business</td><td>$29/developer/month</td><td>Engineering organizations</td></tr><tr><td>Enterprise</td><td>Custom</td><td>Large companies</td></tr></tbody></table></div>
+<p>Pricing is an initial commercial hypothesis and must be validated with customers.</p>
+<h2 id="293-community-edition">29.3. Community Edition <a class="anchor" href="#293-community-edition" aria-label="Link to this section">#</a></h2>
+<p>Include:</p>
+<ul><li>Smart Init.</li><li>Git support.</li><li>Native Snapshots.</li><li>Core impact analysis.</li><li>Local selective execution.</li><li>Automatic test architecture.</li><li>Custom rules.</li><li>Basic coverage.</li><li>Local reporting.</li><li>Local Studio.</li><li>Basic framework adapters.</li><li>User-provided AI integration where sustainable.</li></ul>
+<h2 id="294-team-edition">29.4. Team Edition <a class="anchor" href="#294-team-edition" aria-label="Link to this section">#</a></h2>
+<p>Include:</p>
+<ul><li>Shared dashboards.</li><li>Historical reports.</li><li>CI analytics.</li><li>Pull request integration.</li><li>Shared cache.</li><li>Team-level insights.</li><li>Flaky-test monitoring.</li><li>Collaboration.</li></ul>
+<h2 id="295-business-edition">29.5. Business Edition <a class="anchor" href="#295-business-edition" aria-label="Link to this section">#</a></h2>
+<p>Include:</p>
+<ul><li>Multi-repository analytics.</li><li>Centralized policies.</li><li>Advanced governance.</li><li>Organization-wide quality insights.</li><li>Cost analytics.</li><li>Advanced AI workflows.</li><li>Extended history.</li><li>Private integration options.</li></ul>
+<h2 id="296-enterprise-edition">29.6. Enterprise Edition <a class="anchor" href="#296-enterprise-edition" aria-label="Link to this section">#</a></h2>
+<p>Include:</p>
+<ul><li>Private deployments.</li><li>Custom security controls.</li><li>SSO.</li><li>Advanced auditability.</li><li>Contractual support.</li><li>Custom integrations.</li><li>Organization-specific operational requirements.</li></ul>
+<h2 id="297-commercial-value">29.7. Commercial Value <a class="anchor" href="#297-commercial-value" aria-label="Link to this section">#</a></h2>
+<p>SmartTest should sell measurable improvements:</p>
+<ul><li>Faster CI pipelines.</li><li>Reduced compute consumption.</li><li>Reduced developer waiting time.</li><li>Improved test maintainability.</li><li>Better visibility into regressions.</li><li>More reliable release processes.</li></ul>
+<h2 id="298-go-to-market">29.8. Go-to-Market <a class="anchor" href="#298-go-to-market" aria-label="Link to this section">#</a></h2>
+<p>Primary channels:</p>
+<ul><li>npm.</li><li>GitHub.</li><li>Technical documentation.</li><li>Developer communities.</li><li>Public benchmarks.</li><li>CI integration templates.</li><li>Tutorial videos.</li><li>Engineering blogs.</li><li>Open-source contributors.</li><li>Framework ecosystem partnerships.</li></ul>
+<h2 id="299-adoption-strategy">29.9. Adoption Strategy <a class="anchor" href="#299-adoption-strategy" aria-label="Link to this section">#</a></h2>
+<ol><li>Publish a genuinely useful free CLI.</li><li>Demonstrate reliable savings on representative repositories.</li><li>Make installation exceptionally simple.</li><li>Offer impressive local reports and Studio.</li><li>Encourage CI adoption.</li><li>Introduce commercial team features.</li><li>Expand to additional language ecosystems.</li></ol>
+<hr>
+<h1 id="30-security-and-privacy">30. Security and Privacy</h1>
+<h2 id="301-general-requirements">30.1. General Requirements <a class="anchor" href="#301-general-requirements" aria-label="Link to this section">#</a></h2>
+<p>SmartTest operates on developer repositories and may execute arbitrary project tests.</p>
+<p>It must therefore assume repository content, plugins, test results, and generated code can be untrusted.</p>
+<h2 id="302-local-security">30.2. Local Security <a class="anchor" href="#302-local-security" aria-label="Link to this section">#</a></h2>
+<ul><li>Minimal permissions.</li><li>No mandatory telemetry.</li><li>No automatic source upload.</li><li>Safe filesystem handling.</li><li>Path traversal protection.</li><li>Atomic file updates.</li><li>Explicit authorization for modifications.</li><li>Clear execution boundaries.</li><li>Secure temporary files.</li><li>Secret redaction.</li><li>Controlled plugin execution.</li></ul>
+<h2 id="303-ai-security">30.3. AI Security <a class="anchor" href="#303-ai-security" aria-label="Link to this section">#</a></h2>
+<ul><li>Explicit provider connection.</li><li>Explicit remote-source access approval.</li><li>Secure credential storage.</li><li>Secret detection and redaction.</li><li>Context minimization.</li><li>Protection against prompt injection.</li><li>No unreviewed application of generated code by default.</li><li>Controlled execution of generated tests.</li><li>Provider-specific privacy disclosures.</li><li>Usage limits.</li></ul>
+<h2 id="304-studio-security">30.4. Studio Security <a class="anchor" href="#304-studio-security" aria-label="Link to this section">#</a></h2>
+<ul><li>Loopback binding by default.</li><li>Request authentication or equivalent local access controls.</li><li>Origin verification.</li><li>CSRF protection where applicable.</li><li>Safe rendering of source files and logs.</li><li>Restricted filesystem access.</li><li>Protected execution endpoints.</li></ul>
+<h2 id="305-cloud-security">30.5. Cloud Security <a class="anchor" href="#305-cloud-security" aria-label="Link to this section">#</a></h2>
+<ul><li>Tenant isolation.</li><li>Encryption in transit.</li><li>Encryption at rest.</li><li>RBAC.</li><li>Secure tokens.</li><li>Audit logging.</li><li>Retention controls.</li><li>Data deletion.</li><li>Rate limiting.</li><li>Backup and recovery.</li><li>Security monitoring.</li></ul>
+<h2 id="306-supply-chain-security">30.6. Supply Chain Security <a class="anchor" href="#306-supply-chain-security" aria-label="Link to this section">#</a></h2>
+<ul><li>Secure npm publishing.</li><li>Package provenance where available.</li><li>Dependency vulnerability checks.</li><li>SBOM generation.</li><li>Signed releases where feasible.</li><li>CI workflow hardening.</li><li>Secret scanning.</li><li>Reproducible build practices.</li></ul>
+<hr>
+<h1 id="31-performance-requirements">31. Performance Requirements</h1>
+<h2 id="311-philosophy">31.1. Philosophy <a class="anchor" href="#311-philosophy" aria-label="Link to this section">#</a></h2>
+<p>Performance is a core product feature.</p>
+<p>SmartTest must measure its own overhead and avoid expensive analysis when the expected benefit is smaller than the cost.</p>
+<h2 id="312-optimization-techniques">31.2. Optimization Techniques <a class="anchor" href="#312-optimization-techniques" aria-label="Link to this section">#</a></h2>
+<ul><li>Incremental parsing.</li><li>Persistent symbol indexes.</li><li>Persistent dependency graphs.</li><li>Content-addressed caching.</li><li>Lazy analysis.</li><li>Worker pools.</li><li>Adaptive concurrency.</li><li>Batch graph updates.</li><li>Efficient filesystem scanning.</li><li>Query optimization.</li><li>Test duration-aware scheduling.</li><li>Controlled memory usage.</li></ul>
+<h2 id="313-initial-performance-targets">31.3. Initial Performance Targets <a class="anchor" href="#313-initial-performance-targets" aria-label="Link to this section">#</a></h2>
+<p>Targets must be evaluated under explicitly defined benchmark conditions.</p>
+<div class="table"><table><thead><tr><th>Operation</th><th>Initial Target</th></tr></thead><tbody><tr><td>Warm CLI startup</td><td>Under 300 ms</td></tr><tr><td>Simple diff analysis with warm index</td><td>Under 500 ms</td></tr><tr><td>Warm graph selection</td><td>Under 200 ms</td></tr><tr><td>Standard report generation</td><td>Under 2 seconds</td></tr><tr><td>Small-project overhead</td><td>Below 10% where feasible</td></tr><tr><td>End-to-end savings on suitable suites</td><td>Target 30–80%</td></tr></tbody></table></div>
+<p>These are aspirational engineering targets, not guaranteed results.</p>
+<h2 id="314-performance-observability">31.4. Performance Observability <a class="anchor" href="#314-performance-observability" aria-label="Link to this section">#</a></h2>
+<p>Measure:</p>
+<ul><li>Initialization duration.</li><li>Source scanning duration.</li><li>Parsing duration.</li><li>Graph update duration.</li><li>Impact calculation duration.</li><li>Test discovery duration.</li><li>Test execution duration.</li><li>Coverage collection duration.</li><li>Report generation duration.</li><li>Peak memory.</li><li>Cache hit rate.</li><li>Overall time saved.</li></ul>
+<h2 id="315-adaptive-performance-policy">31.5. Adaptive Performance Policy <a class="anchor" href="#315-adaptive-performance-policy" aria-label="Link to this section">#</a></h2>
+<p>If selective execution is slower than a full run for a specific workload, SmartTest should recommend or automatically use an appropriate fallback within the configured policy.</p>
+<hr>
+<h1 id="32-reliability-and-correctness">32. Reliability and Correctness</h1>
+<h2 id="321-reliability-goals">32.1. Reliability Goals <a class="anchor" href="#321-reliability-goals" aria-label="Link to this section">#</a></h2>
+<ul><li>Deterministic analysis where possible.</li><li>Stable adapter behavior.</li><li>Graceful failure handling.</li><li>Cache integrity.</li><li>Reproducible decisions.</li><li>Correct test statuses.</li><li>Safe fallback.</li><li>Cross-platform compatibility.</li></ul>
+<h2 id="322-critical-correctness-rules">32.2. Critical Correctness Rules <a class="anchor" href="#322-critical-correctness-rules" aria-label="Link to this section">#</a></h2>
+<p>SmartTest must never:</p>
+<ul><li>Label skipped tests as passed.</li><li>Treat unknown dependencies as definitely unrelated.</li><li>Present partial coverage as global coverage.</li><li>Claim AI-generated tests are verified without running validation.</li><li>Reuse invalid cached results.</li><li>Ignore critical configuration changes without warning.</li><li>Suppress test failures to improve reported performance.</li></ul>
+<h2 id="323-testing-strategy">32.3. Testing Strategy <a class="anchor" href="#323-testing-strategy" aria-label="Link to this section">#</a></h2>
+<p>SmartTest itself requires:</p>
+<ul><li>Unit tests.</li><li>Integration tests.</li><li>E2E tests.</li><li>Adapter compatibility tests.</li><li>Mutation-testing experiments.</li><li>Benchmark suites.</li><li>Regression fixtures.</li><li>Security tests.</li><li>Snapshot integrity tests.</li></ul>
+<h2 id="324-shadow-mode">32.4. Shadow Mode <a class="anchor" href="#324-shadow-mode" aria-label="Link to this section">#</a></h2>
+<p>Provide a validation mode that executes both:</p>
+<ul><li>SmartTest-selected tests.</li><li>The full reference suite.</li></ul>
+<p>Compare the outcomes to detect incorrect exclusions.</p>
+<p>Shadow Mode should be a key feature during early adoption and on customer pilot repositories.</p>
+<hr>
+<h1 id="33-metrics-and-kpis">33. Metrics and KPIs</h1>
+<h2 id="331-technical-kpis">33.1. Technical KPIs <a class="anchor" href="#331-technical-kpis" aria-label="Link to this section">#</a></h2>
+<ul><li>Total execution time saved.</li><li>Percentage of tests selected.</li><li>Percentage of tests skipped.</li><li>Analysis overhead.</li><li>Cache hit rate.</li><li>Graph update performance.</li><li>Memory usage.</li><li>Adapter compatibility rate.</li></ul>
+<h2 id="332-correctness-kpis">33.2. Correctness KPIs <a class="anchor" href="#332-correctness-kpis" aria-label="Link to this section">#</a></h2>
+<ul><li>Missed reproducible failures.</li><li>False-negative selection rate.</li><li>Invalid trace frequency.</li><li>Fallback frequency.</li><li>Unknown dependency count.</li><li>Full-suite comparison outcomes.</li><li>Selection explanation completeness.</li></ul>
+<h2 id="333-test-quality-kpis">33.3. Test Quality KPIs <a class="anchor" href="#333-test-quality-kpis" aria-label="Link to this section">#</a></h2>
+<ul><li>Changed-code coverage.</li><li>Branch coverage.</li><li>Critical-path coverage.</li><li>Missing test scenarios.</li><li>Valid generated tests.</li><li>Flaky-test frequency.</li><li>Mutation score where measured.</li></ul>
+<h2 id="334-developer-experience-kpis">33.4. Developer Experience KPIs <a class="anchor" href="#334-developer-experience-kpis" aria-label="Link to this section">#</a></h2>
+<ul><li>Setup success rate.</li><li>Time to first meaningful run.</li><li>Installation friction.</li><li>Number of manual configuration steps.</li><li>Studio usage.</li><li>Watch mode adoption.</li><li>Report engagement.</li></ul>
+<h2 id="335-commercial-kpis">33.5. Commercial KPIs <a class="anchor" href="#335-commercial-kpis" aria-label="Link to this section">#</a></h2>
+<ul><li>npm installations.</li><li>Active repositories.</li><li>Active organizations.</li><li>Cloud conversion rate.</li><li>Paying seats.</li><li>MRR.</li><li>ARR.</li><li>Churn.</li><li>Average revenue per organization.</li><li>Infrastructure cost per customer.</li><li>Gross margin.</li></ul>
+<hr>
+<h1 id="34-engineering-backlog">34. Engineering Backlog</h1>
+<blockquote><p>For v1.0.0 these spec items are decomposed into user stories in <a href="https://github.com/RemiPelloux/SmarttyTest/blob/main/documentation/planning/foundation/epics/README.md" rel="noopener"><code>../planning/foundation/epics/</code></a>.</p></blockquote>
+<h2 id="epic-a--core-project-foundation">Epic A — Core Project Foundation <a class="anchor" href="#epic-a--core-project-foundation" aria-label="Link to this section">#</a></h2>
+<ul><li>A01 — Initialize the TypeScript monorepo.</li><li>A02 — Define package boundaries.</li><li>A03 — Implement core configuration contracts.</li><li>A04 — Configure linting, formatting, and strict typing.</li><li>A05 — Create testing fixtures.</li><li>A06 — Establish CI.</li><li>A07 — Implement structured logging.</li><li>A08 — Implement stable error handling.</li><li>A09 — Create the Plugin SDK foundation.</li><li>A10 — Publish architecture documentation.</li></ul>
+<p><strong>Acceptance Gate:</strong> Core packages build and test independently.</p>
+<h2 id="epic-b--smart-init">Epic B — Smart Init <a class="anchor" href="#epic-b--smart-init" aria-label="Link to this section">#</a></h2>
+<ul><li>B01 — Runtime detection.</li><li>B02 — Package manager detection.</li><li>B03 — Framework detection.</li><li>B04 — Test runner detection.</li><li>B05 — Source layout analysis.</li><li>B06 — Existing test discovery.</li><li>B07 — VCS detection.</li><li>B08 — Coverage provider detection.</li><li>B09 — Setup recommendation engine.</li><li>B10 — Interactive setup wizard.</li><li>B11 — Dry-run and preview.</li><li>B12 — Safe configuration writing.</li><li>B13 — Setup validation.</li><li>B14 — Idempotency tests.</li><li>B15 — Rollback support.</li></ul>
+<p><strong>Acceptance Gate:</strong> Supported repositories can be initialized safely with minimal manual configuration.</p>
+<h2 id="epic-c--adaptive-configuration">Epic C — Adaptive Configuration <a class="anchor" href="#epic-c--adaptive-configuration" aria-label="Link to this section">#</a></h2>
+<ul><li>C01 — Environment fingerprinting.</li><li>C02 — Configuration change detection.</li><li>C03 — Framework migration detection.</li><li>C04 — New package discovery.</li><li>C05 — VCS transition detection.</li><li>C06 — Metadata invalidation.</li><li>C07 — Synchronization planning.</li><li>C08 — Configuration reconciliation.</li><li>C09 — Migration diagnostics.</li><li>C10 — Non-destructive adaptation.</li></ul>
+<p><strong>Acceptance Gate:</strong> Existing test architecture and valid history survive supported project changes.</p>
+<h2 id="epic-d--version-control-and-snapshots">Epic D — Version Control and Snapshots <a class="anchor" href="#epic-d--version-control-and-snapshots" aria-label="Link to this section">#</a></h2>
+<ul><li>D01 — Define the VCS adapter contract.</li><li>D02 — Implement Git detection.</li><li>D03 — Implement Git diff handling.</li><li>D04 — Support staged and uncommitted changes.</li><li>D05 — Handle renames and deletions.</li><li>D06 — Implement Native Snapshots.</li><li>D07 — Implement incremental fingerprinting.</li><li>D08 — Implement snapshot comparison.</li><li>D09 — Implement hybrid VCS mode.</li><li>D10 — Implement SVN adapter.</li><li>D11 — Implement Mercurial adapter.</li><li>D12 — Implement Perforce adapter.</li><li>D13 — Support custom VCS plugins.</li><li>D14 — Implement snapshot retention.</li></ul>
+<p><strong>Acceptance Gate:</strong> All adapters produce consistent normalized changes within their declared capabilities.</p>
+<h2 id="epic-e--source-intelligence">Epic E — Source Intelligence <a class="anchor" href="#epic-e--source-intelligence" aria-label="Link to this section">#</a></h2>
+<ul><li>E01 — TypeScript parser.</li><li>E02 — JavaScript parser.</li><li>E03 — Symbol indexing.</li><li>E04 — Import resolution.</li><li>E05 — Class and method analysis.</li><li>E06 — Export analysis.</li><li>E07 — Semantic diff.</li><li>E08 — Incremental parsing.</li><li>E09 — Source-map handling.</li><li>E10 — Generated-code policies.</li></ul>
+<p><strong>Acceptance Gate:</strong> Known source fixtures produce expected symbols and relationships.</p>
+<h2 id="epic-f--dependency-graph">Epic F — Dependency Graph <a class="anchor" href="#epic-f--dependency-graph" aria-label="Link to this section">#</a></h2>
+<ul><li>F01 — Graph node model.</li><li>F02 — Graph edge model.</li><li>F03 — Persistent storage.</li><li>F04 — Reverse dependency traversal.</li><li>F05 — Transitive analysis.</li><li>F06 — Cycle handling.</li><li>F07 — Incremental updates.</li><li>F08 — Uncertainty metadata.</li><li>F09 — Graph snapshots.</li><li>F10 — Graph query API.</li></ul>
+<p><strong>Acceptance Gate:</strong> Dependency queries are reproducible and benchmarked.</p>
+<h2 id="epic-g--impact-engine">Epic G — Impact Engine <a class="anchor" href="#epic-g--impact-engine" aria-label="Link to this section">#</a></h2>
+<ul><li>G01 — Direct test selection.</li><li>G02 — Transitive test selection.</li><li>G03 — Runtime trace integration.</li><li>G04 — Risk classification.</li><li>G05 — Mandatory test policies.</li><li>G06 — FAST mode.</li><li>G07 — BALANCED mode.</li><li>G08 — SAFE mode.</li><li>G09 — Safe fallback.</li><li>G10 — Selection explanation.</li><li>G11 — Shadow Mode.</li><li>G12 — Full-suite comparison.</li></ul>
+<p><strong>Acceptance Gate:</strong> No known reproducible failing test is missed in the defined validation fixtures.</p>
+<h2 id="epic-h--test-architecture-generator">Epic H — Test Architecture Generator <a class="anchor" href="#epic-h--test-architecture-generator" aria-label="Link to this section">#</a></h2>
+<ul><li>H01 — Mirror layout.</li><li>H02 — Colocated layout.</li><li>H03 — Domain layout.</li><li>H04 — Custom layout.</li><li>H05 — Naming templates.</li><li>H06 — Class-specific templates.</li><li>H07 — Module-specific templates.</li><li>H08 — Unit scaffolding.</li><li>H09 — Integration scaffolding.</li><li>H10 — Existing test detection.</li><li>H11 — Duplicate prevention.</li><li>H12 — Dry-run.</li><li>H13 — Rename handling.</li><li>H14 — Architecture synchronization.</li><li>H15 — Non-destructive migration preview.</li></ul>
+<p><strong>Acceptance Gate:</strong> Generation is repeatable and does not overwrite user content by default.</p>
+<h2 id="epic-i--rules-engine">Epic I — Rules Engine <a class="anchor" href="#epic-i--rules-engine" aria-label="Link to this section">#</a></h2>
+<ul><li>I01 — Global rules.</li><li>I02 — Package rules.</li><li>I03 — Module rules.</li><li>I04 — Class rules.</li><li>I05 — Method rules.</li><li>I06 — Decorator selectors.</li><li>I07 — Coverage requirements.</li><li>I08 — Criticality policies.</li><li>I09 — Execution policies.</li><li>I10 — Rule conflict resolution.</li><li>I11 — Rule explanation.</li><li>I12 — Configuration validation.</li></ul>
+<p><strong>Acceptance Gate:</strong> Rule evaluation is deterministic and explainable.</p>
+<h2 id="epic-j--test-execution-and-cache">Epic J — Test Execution and Cache <a class="anchor" href="#epic-j--test-execution-and-cache" aria-label="Link to this section">#</a></h2>
+<ul><li>J01 — Vitest adapter.</li><li>J02 — Jest adapter.</li><li>J03 — Test discovery normalization.</li><li>J04 — Test execution normalization.</li><li>J05 — Parallel scheduling.</li><li>J06 — Timeout handling.</li><li>J07 — Cancellation.</li><li>J08 — Retry policies.</li><li>J09 — Local cache.</li><li>J10 — Cache invalidation.</li><li>J11 — Flaky-test tracking.</li><li>J12 — Execution telemetry.</li></ul>
+<p><strong>Acceptance Gate:</strong> Native runner results and SmartTest results remain consistent.</p>
+<h2 id="epic-k--tracing-and-coverage">Epic K — Tracing and Coverage <a class="anchor" href="#epic-k--tracing-and-coverage" aria-label="Link to this section">#</a></h2>
+<ul><li>K01 — Coverage ingestion.</li><li>K02 — Test-to-source mapping.</li><li>K03 — Runtime trace collection.</li><li>K04 — Trace storage.</li><li>K05 — Trace invalidation.</li><li>K06 — Diff coverage.</li><li>K07 — Branch coverage.</li><li>K08 — Coverage gaps.</li><li>K09 — Coverage quality gates.</li><li>K10 — Full versus partial coverage separation.</li></ul>
+<p><strong>Acceptance Gate:</strong> Coverage reports accurately describe collection scope and granularity.</p>
+<h2 id="epic-l--ai-provider-manager">Epic L — AI Provider Manager <a class="anchor" href="#epic-l--ai-provider-manager" aria-label="Link to this section">#</a></h2>
+<ul><li>L01 — Provider abstraction.</li><li>L02 — Interactive AI setup.</li><li>L03 — API URL normalization.</li><li>L04 — Authentication testing.</li><li>L05 — Automatic model discovery.</li><li>L06 — Manual model fallback.</li><li>L07 — Capability probes.</li><li>L08 — Secure credential management.</li><li>L09 — Multiple AI profiles.</li><li>L10 — Model routing.</li><li>L11 — Usage accounting.</li><li>L12 — Request and cost budgets.</li><li>L13 — Local model support.</li><li>L14 — Provider error handling.</li></ul>
+<p><strong>Acceptance Gate:</strong> Custom compatible endpoints can be configured without hardcoded provider assumptions.</p>
+<h2 id="epic-m--ai-test-engineering">Epic M — AI Test Engineering <a class="anchor" href="#epic-m--ai-test-engineering" aria-label="Link to this section">#</a></h2>
+<ul><li>M01 — AI context builder.</li><li>M02 — Test planning.</li><li>M03 — Test generation.</li><li>M04 — Class targeting.</li><li>M05 — Method targeting.</li><li>M06 — Module targeting.</li><li>M07 — Full-project batch generation.</li><li>M08 — Missing test detection.</li><li>M09 — Coverage audit.</li><li>M10 — Behavioral gap analysis.</li><li>M11 — Edge-case generation.</li><li>M12 — Mock generation.</li><li>M13 — Fixture generation.</li><li>M14 — Test repair.</li><li>M15 — Test improvement.</li><li>M16 — AI review.</li><li>M17 — Mutation analysis.</li><li>M18 — Generated test validation.</li><li>M19 — Review and apply workflow.</li><li>M20 — Resumable generation jobs.</li><li>M21 — AI audit logs.</li><li>M22 — Source privacy controls.</li></ul>
+<p><strong>Acceptance Gate:</strong> Proposed tests are validated and cannot silently replace existing behavior.</p>
+<h2 id="epic-n--smarttest-studio">Epic N — SmartTest Studio <a class="anchor" href="#epic-n--smarttest-studio" aria-label="Link to this section">#</a></h2>
+<ul><li>N01 — Local Studio server.</li><li>N02 — Authentication and local security.</li><li>N03 — Design system.</li><li>N04 — Overview dashboard.</li><li>N05 — Test Explorer.</li><li>N06 — Impact Map.</li><li>N07 — Test Builder.</li><li>N08 — Live Runner.</li><li>N09 — Coverage Viewer.</li><li>N10 — Rules Editor.</li><li>N11 — AI Assistant panel.</li><li>N12 — Report Explorer.</li><li>N13 — Real-time updates.</li><li>N14 — Source navigation.</li><li>N15 — Dark and light modes.</li><li>N16 — Keyboard navigation.</li><li>N17 — Browser testing integrations.</li><li>N18 — Responsive and accessible interface.</li></ul>
+<p><strong>Acceptance Gate:</strong> Core testing workflows can be completed from the Studio without a Cloud account.</p>
+<h2 id="epic-o--reporting">Epic O — Reporting <a class="anchor" href="#epic-o--reporting" aria-label="Link to this section">#</a></h2>
+<ul><li>O01 — JSON reporting.</li><li>O02 — HTML reporting.</li><li>O03 — JUnit XML.</li><li>O04 — Coverage export.</li><li>O05 — Impact explanations.</li><li>O06 — Source annotations.</li><li>O07 — Historical comparison.</li><li>O08 — Performance insights.</li><li>O09 — Report integrity validation.</li><li>O10 — PR summary export.</li></ul>
+<p><strong>Acceptance Gate:</strong> Reports are accurate, portable, and clear about skipped, cached, and executed tests.</p>
+<h2 id="epic-p--cicd">Epic P — CI/CD <a class="anchor" href="#epic-p--cicd" aria-label="Link to this section">#</a></h2>
+<ul><li>P01 — GitHub Actions integration.</li><li>P02 — PR summaries.</li><li>P03 — Quality gates.</li><li>P04 — CI cache integration.</li><li>P05 — GitLab CI integration.</li><li>P06 — Jenkins support.</li><li>P07 — Safe handling of untrusted PRs.</li><li>P08 — Artifact publishing.</li><li>P09 — Machine-readable output.</li><li>P10 — CI diagnostics.</li></ul>
+<p><strong>Acceptance Gate:</strong> CI integration remains deterministic and secure.</p>
+<h2 id="epic-q--cloud-saas">Epic Q — Cloud SaaS <a class="anchor" href="#epic-q--cloud-saas" aria-label="Link to this section">#</a></h2>
+<ul><li>Q01 — Authentication.</li><li>Q02 — Organizations.</li><li>Q03 — Workspaces.</li><li>Q04 — Projects and repositories.</li><li>Q05 — Run ingestion.</li><li>Q06 — Historical analytics.</li><li>Q07 — Shared reports.</li><li>Q08 — Shared cache.</li><li>Q09 — Pull request intelligence.</li><li>Q10 — Billing.</li><li>Q11 — RBAC.</li><li>Q12 — Audit logs.</li><li>Q13 — Usage metering.</li><li>Q14 — Retention controls.</li><li>Q15 — Enterprise deployment options.</li></ul>
+<p><strong>Acceptance Gate:</strong> Multi-tenant isolation, billing accuracy, and operational cost controls are verified.</p>
+<h2 id="epic-r--performance-and-reliability">Epic R — Performance and Reliability <a class="anchor" href="#epic-r--performance-and-reliability" aria-label="Link to this section">#</a></h2>
+<ul><li>R01 — Incremental analysis benchmarks.</li><li>R02 — Graph performance benchmarks.</li><li>R03 — Cache benchmarks.</li><li>R04 — Execution scheduling benchmarks.</li><li>R05 — Memory profiling.</li><li>R06 — Stress tests.</li><li>R07 — Failure recovery.</li><li>R08 — Cross-platform validation.</li><li>R09 — Regression detection benchmark suite.</li><li>R10 — Shadow Mode validation.</li><li>R11 — Performance regression CI.</li></ul>
+<p><strong>Acceptance Gate:</strong> Performance claims are reproducible under documented conditions.</p>
+<h2 id="epic-s--ecosystem-expansion">Epic S — Ecosystem Expansion <a class="anchor" href="#epic-s--ecosystem-expansion" aria-label="Link to this section">#</a></h2>
+<ul><li>S01 — Stable Plugin SDK.</li><li>S02 — Python adapter.</li><li>S03 — pytest integration.</li><li>S04 — Java adapter.</li><li>S05 — JUnit integration.</li><li>S06 — Go adapter.</li><li>S07 — go test integration.</li><li>S08 — Cross-language dependency mappings.</li><li>S09 — Plugin documentation.</li><li>S10 — Community plugin testing.</li></ul>
+<p><strong>Acceptance Gate:</strong> New languages can be added through documented plugin contracts without rewriting the core engine.</p>
+<hr>
+<h1 id="35-release-roadmap">35. Release Roadmap</h1>
+<h2 id="release-0--foundation">Release 0 — Foundation <a class="anchor" href="#release-0--foundation" aria-label="Link to this section">#</a></h2>
+<p>Deliverables:</p>
+<ul><li>Monorepo architecture.</li><li>Configuration system.</li><li>Plugin contracts.</li><li>Project detection.</li><li>Base CLI.</li><li>Testing fixtures.</li><li>Documentation.</li><li>CI foundation.</li></ul>
+<h2 id="release-1--intelligent-npm-mvp">Release 1 — Intelligent npm MVP <a class="anchor" href="#release-1--intelligent-npm-mvp" aria-label="Link to this section">#</a></h2>
+<p>Deliverables:</p>
+<ul><li>Smart Init.</li><li>Git integration.</li><li>Native Snapshots.</li><li>TypeScript and JavaScript source analysis.</li><li>Dependency graph.</li><li>Impact selection.</li><li>Custom rules.</li><li>Jest and Vitest adapters.</li><li>Automatic test structure generation.</li><li>Basic HTML reports.</li><li>Explanation commands.</li><li>Safe fallback.</li></ul>
+<p><strong>Release Goal:</strong> A reliable, useful npm package that reduces unnecessary tests and organizes test architecture.</p>
+<h2 id="release-2--advanced-intelligence">Release 2 — Advanced Intelligence <a class="anchor" href="#release-2--advanced-intelligence" aria-label="Link to this section">#</a></h2>
+<p>Deliverables:</p>
+<ul><li>Adaptive Setup.</li><li>SVN support.</li><li>Runtime tracing.</li><li>Advanced coverage.</li><li>Incremental cache.</li><li>Watch Mode.</li><li>Shadow Mode.</li><li>Improved scheduling.</li><li>Performance dashboards.</li></ul>
+<p><strong>Release Goal:</strong> Stronger selection accuracy, better performance, and continuous project adaptation.</p>
+<h2 id="release-3--ai-test-engineering">Release 3 — AI Test Engineering <a class="anchor" href="#release-3--ai-test-engineering" aria-label="Link to this section">#</a></h2>
+<p>Deliverables:</p>
+<ul><li>Universal AI setup.</li><li>Model discovery.</li><li>Provider profiles.</li><li>AI test generation.</li><li>Coverage auditing.</li><li>Missing scenario analysis.</li><li>Test validation pipeline.</li><li>AI repair proposals.</li><li>AI review.</li></ul>
+<p><strong>Release Goal:</strong> Optional AI assistance for test creation and maintenance.</p>
+<h2 id="release-4--smarttest-studio">Release 4 — SmartTest Studio <a class="anchor" href="#release-4--smarttest-studio" aria-label="Link to this section">#</a></h2>
+<p>Deliverables:</p>
+<ul><li>Interactive GUI.</li><li>Test Explorer.</li><li>Impact Map.</li><li>Test Builder.</li><li>Live Runner.</li><li>Coverage Viewer.</li><li>AI Assistant.</li><li>Visual Rules Editor.</li><li>Browser testing integrations.</li></ul>
+<p><strong>Release Goal:</strong> A unified interactive developer experience across testing workflows.</p>
+<h2 id="release-5--commercial-cloud">Release 5 — Commercial Cloud <a class="anchor" href="#release-5--commercial-cloud" aria-label="Link to this section">#</a></h2>
+<p>Deliverables:</p>
+<ul><li>Organizations.</li><li>Workspaces.</li><li>Shared reports.</li><li>Historical analytics.</li><li>CI integrations.</li><li>Billing.</li><li>Team permissions.</li><li>Shared cache.</li><li>Enterprise controls.</li></ul>
+<p><strong>Release Goal:</strong> Recurring revenue through collaborative testing intelligence.</p>
+<h2 id="release-6--multi-language-platform">Release 6 — Multi-Language Platform <a class="anchor" href="#release-6--multi-language-platform" aria-label="Link to this section">#</a></h2>
+<p>Deliverables:</p>
+<ul><li>Python.</li><li>Java.</li><li>Go.</li><li>Additional VCS adapters.</li><li>Cross-language analysis.</li><li>Broader ecosystem integrations.</li><li>Advanced enterprise deployment.</li></ul>
+<p><strong>Release Goal:</strong> A language-independent testing intelligence platform.</p>
+<p>Release sequencing may be adjusted based on technical dependencies, benchmark results, and customer validation.</p>
+<hr>
+<h1 id="36-definition-of-done">36. Definition of Done</h1>
+<p>A feature is considered complete only when:</p>
+<ul><li>Functional requirements are implemented.</li><li>Public APIs are typed and documented.</li><li>Errors are handled.</li><li>Edge cases are covered.</li><li>Unit tests pass.</li><li>Relevant integration tests pass.</li><li>Regression tests pass.</li><li>Compatibility is verified.</li><li>Security implications are reviewed.</li><li>Performance is measured where relevant.</li><li>Documentation is updated.</li><li>Examples remain functional.</li><li>Logs and diagnostics are useful.</li><li>No unexpected destructive behavior occurs.</li><li>Test selection remains explainable.</li><li>Fallback behavior is defined.</li><li>Reports accurately represent execution evidence.</li></ul>
+<hr>
+<h1 id="37-key-technical-risks">37. Key Technical Risks</h1>
+<h2 id="risk-1--missed-regressions">Risk 1 — Missed Regressions <a class="anchor" href="#risk-1--missed-regressions" aria-label="Link to this section">#</a></h2>
+<p>An incomplete dependency model may exclude tests that could detect failures.</p>
+<p><strong>Mitigation:</strong> Hybrid analysis, mandatory rules, conservative fallbacks, Shadow Mode, and periodic full-suite execution.</p>
+<h2 id="risk-2--analysis-overhead">Risk 2 — Analysis Overhead <a class="anchor" href="#risk-2--analysis-overhead" aria-label="Link to this section">#</a></h2>
+<p>The analysis engine may cost more than the test time it saves.</p>
+<p><strong>Mitigation:</strong> Incremental analysis, caching, benchmarks, and adaptive execution policies.</p>
+<h2 id="risk-3--framework-compatibility">Risk 3 — Framework Compatibility <a class="anchor" href="#risk-3--framework-compatibility" aria-label="Link to this section">#</a></h2>
+<p>Some frameworks may not expose sufficiently precise tracing or selection APIs.</p>
+<p><strong>Mitigation:</strong> Capability-aware adapters and explicit granularity fallback.</p>
+<h2 id="risk-4--poor-ai-generated-tests">Risk 4 — Poor AI-Generated Tests <a class="anchor" href="#risk-4--poor-ai-generated-tests" aria-label="Link to this section">#</a></h2>
+<p>Generated tests may pass while failing to validate meaningful behavior.</p>
+<p><strong>Mitigation:</strong> Compilation, execution, assertion analysis, coverage checks, and optional mutation testing.</p>
+<h2 id="risk-5--vcs-complexity">Risk 5 — VCS Complexity <a class="anchor" href="#risk-5--vcs-complexity" aria-label="Link to this section">#</a></h2>
+<p>Different VCS providers have different revision and workspace semantics.</p>
+<p><strong>Mitigation:</strong> Explicit provider capabilities, normalized changes, and careful baseline reconciliation.</p>
+<h2 id="risk-6--cloud-cost">Risk 6 — Cloud Cost <a class="anchor" href="#risk-6--cloud-cost" aria-label="Link to this section">#</a></h2>
+<p>Storage, remote execution, and AI services may reduce margins.</p>
+<p><strong>Mitigation:</strong> Data minimization, usage limits, retention policies, and cost-aware architecture.</p>
+<h2 id="risk-7--market-competition">Risk 7 — Market Competition <a class="anchor" href="#risk-7--market-competition" aria-label="Link to this section">#</a></h2>
+<p>Existing test frameworks and CI platforms already provide affected-test selection and caching.</p>
+<p><strong>Mitigation:</strong> Differentiate through semantic intelligence, source-aware test generation, universal configuration, explainability, adaptive setup, and unified tooling.</p>
+<h2 id="risk-8--developer-trust">Risk 8 — Developer Trust <a class="anchor" href="#risk-8--developer-trust" aria-label="Link to this section">#</a></h2>
+<p>Teams may be reluctant to skip tests using a new tool.</p>
+<p><strong>Mitigation:</strong> Transparent reports, reproducible benchmarks, Shadow Mode, and safe adoption workflows.</p>
+<hr>
+<h1 id="38-product-success-criteria">38. Product Success Criteria</h1>
+<h2 id="381-technical-success">38.1. Technical Success <a class="anchor" href="#381-technical-success" aria-label="Link to this section">#</a></h2>
+<p>SmartTest should demonstrate:</p>
+<ul><li>Reliable project detection.</li><li>Correct source change normalization.</li><li>Accurate dependency mapping within supported language capabilities.</li><li>Explainable test selection.</li><li>Safe fallbacks.</li><li>Non-destructive test generation.</li><li>Accurate reports.</li><li>Measurable performance improvements on representative workloads.</li></ul>
+<h2 id="382-developer-success">38.2. Developer Success <a class="anchor" href="#382-developer-success" aria-label="Link to this section">#</a></h2>
+<p>Developers should be able to:</p>
+<ul><li>Install SmartTest easily.</li><li>Initialize a supported project.</li><li>Run affected tests.</li><li>Inspect why tests were selected.</li><li>Generate a coherent test structure.</li><li>Review coverage gaps.</li><li>Use the Studio locally.</li><li>Connect an optional AI provider.</li><li>Remove SmartTest without losing their existing tests.</li></ul>
+<h2 id="383-commercial-success">38.3. Commercial Success <a class="anchor" href="#383-commercial-success" aria-label="Link to this section">#</a></h2>
+<p>The platform should demonstrate:</p>
+<ul><li>Organic adoption.</li><li>Repeated usage.</li><li>Validated time savings.</li><li>CI integration adoption.</li><li>Willingness to pay for team capabilities.</li><li>Recurring revenue.</li><li>Sustainable infrastructure margins.</li><li>Growing ecosystem participation.</li></ul>
+<hr>
+<h1 id="39-final-product-positioning">39. Final Product Positioning</h1>
+<p>SmartTest is not simply a faster test runner.</p>
+<p>It is an intelligent testing layer connecting source code, version history, dependencies, test execution, coverage, quality policies, and optional AI assistance.</p>
+<p>Its main product pillars are:</p>
+<h3 id="1-smart-init">1. Smart Init <a class="anchor" href="#1-smart-init" aria-label="Link to this section">#</a></h3>
+<p>Understand and configure a project automatically.</p>
+<h3 id="2-universal-change-intelligence">2. Universal Change Intelligence <a class="anchor" href="#2-universal-change-intelligence" aria-label="Link to this section">#</a></h3>
+<p>Analyze modifications across Git, SVN, other VCS providers, and native snapshots.</p>
+<h3 id="3-semantic-impact-analysis">3. Semantic Impact Analysis <a class="anchor" href="#3-semantic-impact-analysis" aria-label="Link to this section">#</a></h3>
+<p>Determine which parts of the software may be affected by code changes.</p>
+<h3 id="4-intelligent-test-selection">4. Intelligent Test Selection <a class="anchor" href="#4-intelligent-test-selection" aria-label="Link to this section">#</a></h3>
+<p>Execute relevant tests while respecting correctness and safety requirements.</p>
+<h3 id="5-automatic-test-architecture">5. Automatic Test Architecture <a class="anchor" href="#5-automatic-test-architecture" aria-label="Link to this section">#</a></h3>
+<p>Generate and maintain consistent test organization based on source structure and developer rules.</p>
+<h3 id="6-ai-test-engineering">6. AI Test Engineering <a class="anchor" href="#6-ai-test-engineering" aria-label="Link to this section">#</a></h3>
+<p>Generate, audit, repair, and improve tests using configurable AI providers.</p>
+<h3 id="7-smarttest-studio">7. SmartTest Studio <a class="anchor" href="#7-smarttest-studio" aria-label="Link to this section">#</a></h3>
+<p>Provide a modern visual interface for test development, execution, debugging, and analysis.</p>
+<h3 id="8-coverage-and-quality-intelligence">8. Coverage and Quality Intelligence <a class="anchor" href="#8-coverage-and-quality-intelligence" aria-label="Link to this section">#</a></h3>
+<p>Identify gaps, weak tests, unstable suites, and unprotected behavior.</p>
+<h3 id="9-open-ecosystem">9. Open Ecosystem <a class="anchor" href="#9-open-ecosystem" aria-label="Link to this section">#</a></h3>
+<p>Support additional languages, frameworks, test runners, and version-control systems through plugins.</p>
+<h3 id="10-commercial-cloud">10. Commercial Cloud <a class="anchor" href="#10-commercial-cloud" aria-label="Link to this section">#</a></h3>
+<p>Deliver collaboration, historical intelligence, CI optimization, governance, and enterprise capabilities.</p>
+<hr>
+<h1 id="40-final-product-objective">40. Final Product Objective</h1>
+<p>The long-term ambition is to make SmartTest a universal testing intelligence platform that can be introduced into almost any software project, automatically understand its structure, adapt to its environment, and continuously improve the way tests are organized, selected, executed, and maintained.</p>
+<p>The user experience should ultimately be as simple as:</p>
+<pre data-lang="bash"><code>npm install -D smarttest
+
+npx smarttest init
+
+npx smarttest run --affected
+
+npx smarttest studio</code></pre>
+<p>With optional AI:</p>
+<pre data-lang="bash"><code>npx smarttest ai setup
+
+npx smarttest ai generate-tests --changed
+
+npx smarttest ai audit --coverage
+
+npx smarttest autopilot</code></pre>
+<p><strong>Final vision: SmartTest should make software testing faster, more intelligent, more maintainable, and easier to understand without forcing developers to abandon their existing tools.</strong></p>
+<p><strong>Product mission: Test less when it is safe. Test better everywhere. Know exactly why.</strong></p>
+<p>Architecture recommendation: Start with the fully automatic setup, semantic dependency graph, safe test selector, configurable test generator, and Jest/Vitest integration. These form the technical foundation that every other feature—including AI, the Studio, and the commercial Cloud—will depend on.</p>
+<p>The SmartTest name and npm package availability still need verification before publication; the specification uses SmartTest as the working product name.</p>
+    <p class="edit"><a href="https://github.com/RemiPelloux/SmarttyTest/blob/main/documentation/product/PRD.md" rel="noopener">Edit this page on GitHub</a></p>
+  </main>
+  <nav class="toc" aria-label="On this page"><p class="nav-title">On this page</p><ul><li><a href="#complete-product-requirements-document--technical-design-specification">Complete Product Requirements Document &amp; Technical Design Specification</a></li><li><a href="#table-of-contents">Table of Contents</a></li><li><a href="#11-product-vision">1.1. Product Vision</a></li><li><a href="#12-main-objective">1.2. Main Objective</a></li><li><a href="#13-product-statement">1.3. Product Statement</a></li><li><a href="#14-fundamental-principles">1.4. Fundamental Principles</a></li><li><a href="#15-important-engineering-constraint">1.5. Important Engineering Constraint</a></li><li><a href="#21-independent-developers">2.1. Independent Developers</a></li><li><a href="#22-development-teams">2.2. Development Teams</a></li><li><a href="#23-engineering-managers">2.3. Engineering Managers</a></li><li><a href="#24-qa-engineers">2.4. QA Engineers</a></li><li><a href="#25-enterprise-organizations">2.5. Enterprise Organizations</a></li><li><a href="#31-priority-definitions">3.1. Priority Definitions</a></li><li><a href="#32-functional-modules">3.2. Functional Modules</a></li><li><a href="#33-initial-compatibility">3.3. Initial Compatibility</a></li><li><a href="#41-architectural-overview">4.1. Architectural Overview</a></li><li><a href="#42-monorepo-structure">4.2. Monorepo Structure</a></li><li><a href="#43-technology-stack">4.3. Technology Stack</a></li><li><a href="#51-objective">5.1. Objective</a></li><li><a href="#52-main-commands">5.2. Main Commands</a></li><li><a href="#53-project-discovery">5.3. Project Discovery</a></li><li><a href="#54-smart-init-pipeline">5.4. Smart Init Pipeline</a></li><li><a href="#55-setup-recommendation-engine">5.5. Setup Recommendation Engine</a></li><li><a href="#56-setup-modes">5.6. Setup Modes</a></li><li><a href="#57-installation-safety">5.7. Installation Safety</a></li><li><a href="#58-idempotency">5.8. Idempotency</a></li><li><a href="#59-acceptance-criteria">5.9. Acceptance Criteria</a></li><li><a href="#61-objective">6.1. Objective</a></li><li><a href="#62-events-to-detect">6.2. Events to Detect</a></li><li><a href="#63-adaptation-process">6.3. Adaptation Process</a></li><li><a href="#64-commands">6.4. Commands</a></li><li><a href="#65-example-adding-git-after-initialization">6.5. Example: Adding Git After Initialization</a></li><li><a href="#66-acceptance-criteria">6.6. Acceptance Criteria</a></li><li><a href="#71-objective">7.1. Objective</a></li><li><a href="#72-planned-providers">7.2. Planned Providers</a></li><li><a href="#73-common-adapter-contract">7.3. Common Adapter Contract</a></li><li><a href="#74-unified-changeset">7.4. Unified ChangeSet</a></li><li><a href="#75-git-integration">7.5. Git Integration</a></li><li><a href="#76-svn-integration">7.6. SVN Integration</a></li><li><a href="#77-mercurial-and-perforce">7.7. Mercurial and Perforce</a></li><li><a href="#78-multiple-vcs-detection">7.8. Multiple VCS Detection</a></li><li><a href="#81-objective">8.1. Objective</a></li><li><a href="#82-features">8.2. Features</a></li><li><a href="#83-local-storage-structure">8.3. Local Storage Structure</a></li><li><a href="#84-storage-strategy">8.4. Storage Strategy</a></li><li><a href="#85-hybrid-mode">8.5. Hybrid Mode</a></li><li><a href="#86-commands">8.6. Commands</a></li><li><a href="#87-snapshot-reliability">8.7. Snapshot Reliability</a></li><li><a href="#91-objective">9.1. Objective</a></li><li><a href="#92-supported-symbol-types">9.2. Supported Symbol Types</a></li><li><a href="#93-symbol-data-model">9.3. Symbol Data Model</a></li><li><a href="#94-semantic-change-detection">9.4. Semantic Change Detection</a></li><li><a href="#95-incremental-analysis">9.5. Incremental Analysis</a></li><li><a href="#96-generated-code">9.6. Generated Code</a></li><li><a href="#101-objective">10.1. Objective</a></li><li><a href="#102-node-types">10.2. Node Types</a></li><li><a href="#103-edge-types">10.3. Edge Types</a></li><li><a href="#104-static-dependency-graph">10.4. Static Dependency Graph</a></li><li><a href="#105-dynamic-execution-graph">10.5. Dynamic Execution Graph</a></li><li><a href="#106-hybrid-graph">10.6. Hybrid Graph</a></li><li><a href="#107-reverse-dependency-analysis">10.7. Reverse Dependency Analysis</a></li><li><a href="#108-graph-requirements">10.8. Graph Requirements</a></li><li><a href="#111-objective">11.1. Objective</a></li><li><a href="#112-impact-selection-pipeline">11.2. Impact Selection Pipeline</a></li><li><a href="#113-selection-modes">11.3. Selection Modes</a></li><li><a href="#114-mandatory-test-selection">11.4. Mandatory Test Selection</a></li><li><a href="#115-selection-result-model">11.5. Selection Result Model</a></li><li><a href="#116-explainability">11.6. Explainability</a></li><li><a href="#117-safety-validation">11.7. Safety Validation</a></li><li><a href="#121-objective">12.1. Objective</a></li><li><a href="#122-supported-granularity">12.2. Supported Granularity</a></li><li><a href="#123-trace-record">12.3. Trace Record</a></li><li><a href="#124-requirements">12.4. Requirements</a></li><li><a href="#125-important-limitation">12.5. Important Limitation</a></li><li><a href="#131-objective">13.1. Objective</a></li><li><a href="#132-example-source-structure">13.2. Example Source Structure</a></li><li><a href="#133-generated-test-structure">13.3. Generated Test Structure</a></li><li><a href="#134-organization-strategies">13.4. Organization Strategies</a></li><li><a href="#135-naming-tokens">13.5. Naming Tokens</a></li><li><a href="#136-generation-modes">13.6. Generation Modes</a></li><li><a href="#137-commands">13.7. Commands</a></li><li><a href="#138-safety-requirements">13.8. Safety Requirements</a></li><li><a href="#139-architecture-synchronization">13.9. Architecture Synchronization</a></li><li><a href="#141-objective">14.1. Objective</a></li><li><a href="#142-rule-scopes">14.2. Rule Scopes</a></li><li><a href="#143-supported-selectors">14.3. Supported Selectors</a></li><li><a href="#144-rule-types">14.4. Rule Types</a></li><li><a href="#145-example-configuration">14.5. Example Configuration</a></li><li><a href="#146-rule-precedence">14.6. Rule Precedence</a></li><li><a href="#147-commands">14.7. Commands</a></li><li><a href="#151-objective">15.1. Objective</a></li><li><a href="#152-features">15.2. Features</a></li><li><a href="#153-intelligent-scheduling">15.3. Intelligent Scheduling</a></li><li><a href="#154-cache-requirements">15.4. Cache Requirements</a></li><li><a href="#155-result-statuses">15.5. Result Statuses</a></li><li><a href="#156-flaky-test-detection">15.6. Flaky Test Detection</a></li><li><a href="#161-supported-measurements">16.1. Supported Measurements</a></li><li><a href="#162-coverage-types">16.2. Coverage Types</a></li><li><a href="#163-coverage-gaps">16.3. Coverage Gaps</a></li><li><a href="#164-quality-gates">16.4. Quality Gates</a></li><li><a href="#165-commands">16.5. Commands</a></li><li><a href="#166-coverage-quality-principle">16.6. Coverage Quality Principle</a></li><li><a href="#171-objective">17.1. Objective</a></li><li><a href="#172-architecture">17.2. Architecture</a></li><li><a href="#173-ai-must-remain-optional">17.3. AI Must Remain Optional</a></li><li><a href="#181-main-commands">18.1. Main Commands</a></li><li><a href="#182-interactive-setup-flow">18.2. Interactive Setup Flow</a></li><li><a href="#183-supported-provider-types">18.3. Supported Provider Types</a></li><li><a href="#184-model-discovery">18.4. Model Discovery</a></li><li><a href="#185-capability-detection">18.5. Capability Detection</a></li><li><a href="#186-multiple-ai-profiles">18.6. Multiple AI Profiles</a></li><li><a href="#187-model-routing">18.7. Model Routing</a></li><li><a href="#188-credential-security">18.8. Credential Security</a></li><li><a href="#189-usage-budgets">18.9. Usage Budgets</a></li><li><a href="#191-cli-design">19.1. CLI Design</a></li><li><a href="#192-ai-command-catalog">19.2. AI Command Catalog</a></li><li><a href="#201-objective">20.1. Objective</a></li><li><a href="#202-targeting-commands">20.2. Targeting Commands</a></li><li><a href="#203-generation-pipeline">20.3. Generation Pipeline</a></li><li><a href="#204-full-project-generation">20.4. Full Project Generation</a></li><li><a href="#205-non-destructive-behavior">20.5. Non-Destructive Behavior</a></li><li><a href="#206-generated-test-quality">20.6. Generated Test Quality</a></li><li><a href="#211-commands">21.1. Commands</a></li><li><a href="#212-audit-dimensions">21.2. Audit Dimensions</a></li><li><a href="#213-findings">21.3. Findings</a></li><li><a href="#214-example">21.4. Example</a></li><li><a href="#221-ai-fix">22.1. AI Fix</a></li><li><a href="#222-ai-improve">22.2. AI Improve</a></li><li><a href="#223-ai-review">22.3. AI Review</a></li><li><a href="#224-ai-mutation-assistance">22.4. AI Mutation Assistance</a></li><li><a href="#231-objective">23.1. Objective</a></li><li><a href="#232-workflow">23.2. Workflow</a></li><li><a href="#233-default-mode">23.3. Default Mode</a></li><li><a href="#234-commands">23.4. Commands</a></li><li><a href="#241-vision">24.1. Vision</a></li><li><a href="#242-launch">24.2. Launch</a></li><li><a href="#243-initial-architecture">24.3. Initial Architecture</a></li><li><a href="#244-primary-navigation">24.4. Primary Navigation</a></li><li><a href="#245-overview">24.5. Overview</a></li><li><a href="#246-test-explorer">24.6. Test Explorer</a></li><li><a href="#247-impact-map">24.7. Impact Map</a></li><li><a href="#248-test-builder">24.8. Test Builder</a></li><li><a href="#249-live-runner">24.9. Live Runner</a></li><li><a href="#2410-coverage-viewer">24.10. Coverage Viewer</a></li><li><a href="#2411-rules-editor">24.11. Rules Editor</a></li><li><a href="#2412-ai-assistant-panel">24.12. AI Assistant Panel</a></li><li><a href="#2413-studio-ux-requirements">24.13. Studio UX Requirements</a></li><li><a href="#2414-local-studio-security">24.14. Local Studio Security</a></li><li><a href="#251-objective">25.1. Objective</a></li><li><a href="#252-export-formats">25.2. Export Formats</a></li><li><a href="#253-report-sections">25.3. Report Sections</a></li><li><a href="#254-report-integrity">25.4. Report Integrity</a></li><li><a href="#261-main-ux-principle">26.1. Main UX Principle</a></li><li><a href="#262-main-commands">26.2. Main Commands</a></li><li><a href="#263-interactive-root-command">26.3. Interactive Root Command</a></li><li><a href="#264-common-flags">26.4. Common Flags</a></li><li><a href="#265-cli-output-requirements">26.5. CLI Output Requirements</a></li><li><a href="#266-exit-codes">26.6. Exit Codes</a></li><li><a href="#271-objective">27.1. Objective</a></li><li><a href="#272-plugin-categories">27.2. Plugin Categories</a></li><li><a href="#273-test-runner-adapter">27.3. Test Runner Adapter</a></li><li><a href="#274-language-adapter">27.4. Language Adapter</a></li><li><a href="#275-adapter-capabilities">27.5. Adapter Capabilities</a></li><li><a href="#276-language-expansion">27.6. Language Expansion</a></li><li><a href="#277-cross-language-analysis">27.7. Cross-Language Analysis</a></li><li><a href="#281-objective">28.1. Objective</a></li><li><a href="#282-cloud-features">28.2. Cloud Features</a></li><li><a href="#283-organization-data-model">28.3. Organization Data Model</a></li><li><a href="#284-example-api">28.4. Example API</a></li><li><a href="#285-enterprise-capabilities">28.5. Enterprise Capabilities</a></li><li><a href="#286-data-minimization">28.6. Data Minimization</a></li><li><a href="#291-strategy">29.1. Strategy</a></li><li><a href="#292-proposed-pricing">29.2. Proposed Pricing</a></li><li><a href="#293-community-edition">29.3. Community Edition</a></li><li><a href="#294-team-edition">29.4. Team Edition</a></li><li><a href="#295-business-edition">29.5. Business Edition</a></li><li><a href="#296-enterprise-edition">29.6. Enterprise Edition</a></li><li><a href="#297-commercial-value">29.7. Commercial Value</a></li><li><a href="#298-go-to-market">29.8. Go-to-Market</a></li><li><a href="#299-adoption-strategy">29.9. Adoption Strategy</a></li><li><a href="#301-general-requirements">30.1. General Requirements</a></li><li><a href="#302-local-security">30.2. Local Security</a></li><li><a href="#303-ai-security">30.3. AI Security</a></li><li><a href="#304-studio-security">30.4. Studio Security</a></li><li><a href="#305-cloud-security">30.5. Cloud Security</a></li><li><a href="#306-supply-chain-security">30.6. Supply Chain Security</a></li><li><a href="#311-philosophy">31.1. Philosophy</a></li><li><a href="#312-optimization-techniques">31.2. Optimization Techniques</a></li><li><a href="#313-initial-performance-targets">31.3. Initial Performance Targets</a></li><li><a href="#314-performance-observability">31.4. Performance Observability</a></li><li><a href="#315-adaptive-performance-policy">31.5. Adaptive Performance Policy</a></li><li><a href="#321-reliability-goals">32.1. Reliability Goals</a></li><li><a href="#322-critical-correctness-rules">32.2. Critical Correctness Rules</a></li><li><a href="#323-testing-strategy">32.3. Testing Strategy</a></li><li><a href="#324-shadow-mode">32.4. Shadow Mode</a></li><li><a href="#331-technical-kpis">33.1. Technical KPIs</a></li><li><a href="#332-correctness-kpis">33.2. Correctness KPIs</a></li><li><a href="#333-test-quality-kpis">33.3. Test Quality KPIs</a></li><li><a href="#334-developer-experience-kpis">33.4. Developer Experience KPIs</a></li><li><a href="#335-commercial-kpis">33.5. Commercial KPIs</a></li><li><a href="#epic-a--core-project-foundation">Epic A — Core Project Foundation</a></li><li><a href="#epic-b--smart-init">Epic B — Smart Init</a></li><li><a href="#epic-c--adaptive-configuration">Epic C — Adaptive Configuration</a></li><li><a href="#epic-d--version-control-and-snapshots">Epic D — Version Control and Snapshots</a></li><li><a href="#epic-e--source-intelligence">Epic E — Source Intelligence</a></li><li><a href="#epic-f--dependency-graph">Epic F — Dependency Graph</a></li><li><a href="#epic-g--impact-engine">Epic G — Impact Engine</a></li><li><a href="#epic-h--test-architecture-generator">Epic H — Test Architecture Generator</a></li><li><a href="#epic-i--rules-engine">Epic I — Rules Engine</a></li><li><a href="#epic-j--test-execution-and-cache">Epic J — Test Execution and Cache</a></li><li><a href="#epic-k--tracing-and-coverage">Epic K — Tracing and Coverage</a></li><li><a href="#epic-l--ai-provider-manager">Epic L — AI Provider Manager</a></li><li><a href="#epic-m--ai-test-engineering">Epic M — AI Test Engineering</a></li><li><a href="#epic-n--smarttest-studio">Epic N — SmartTest Studio</a></li><li><a href="#epic-o--reporting">Epic O — Reporting</a></li><li><a href="#epic-p--cicd">Epic P — CI/CD</a></li><li><a href="#epic-q--cloud-saas">Epic Q — Cloud SaaS</a></li><li><a href="#epic-r--performance-and-reliability">Epic R — Performance and Reliability</a></li><li><a href="#epic-s--ecosystem-expansion">Epic S — Ecosystem Expansion</a></li><li><a href="#release-0--foundation">Release 0 — Foundation</a></li><li><a href="#release-1--intelligent-npm-mvp">Release 1 — Intelligent npm MVP</a></li><li><a href="#release-2--advanced-intelligence">Release 2 — Advanced Intelligence</a></li><li><a href="#release-3--ai-test-engineering">Release 3 — AI Test Engineering</a></li><li><a href="#release-4--smarttest-studio">Release 4 — SmartTest Studio</a></li><li><a href="#release-5--commercial-cloud">Release 5 — Commercial Cloud</a></li><li><a href="#release-6--multi-language-platform">Release 6 — Multi-Language Platform</a></li><li><a href="#risk-1--missed-regressions">Risk 1 — Missed Regressions</a></li><li><a href="#risk-2--analysis-overhead">Risk 2 — Analysis Overhead</a></li><li><a href="#risk-3--framework-compatibility">Risk 3 — Framework Compatibility</a></li><li><a href="#risk-4--poor-ai-generated-tests">Risk 4 — Poor AI-Generated Tests</a></li><li><a href="#risk-5--vcs-complexity">Risk 5 — VCS Complexity</a></li><li><a href="#risk-6--cloud-cost">Risk 6 — Cloud Cost</a></li><li><a href="#risk-7--market-competition">Risk 7 — Market Competition</a></li><li><a href="#risk-8--developer-trust">Risk 8 — Developer Trust</a></li><li><a href="#381-technical-success">38.1. Technical Success</a></li><li><a href="#382-developer-success">38.2. Developer Success</a></li><li><a href="#383-commercial-success">38.3. Commercial Success</a></li></ul></nav>
+</div>
+<script src="../../assets/docs.js" defer></script>
+
+</body>
+</html>

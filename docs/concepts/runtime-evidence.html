@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Runtime evidence · SmartTest</title>
+<meta name="description" content="SmartTest documentation: Runtime evidence">
+<link rel="icon" href="../../assets/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../../assets/site.css">
+<link rel="stylesheet" href="../../assets/docs.css">
+</head>
+<body class="docs">
+<a class="skip" href="#content">Skip to content</a>
+<header class="bar">
+  <a class="wordmark" href="../../index.html"><img src="../../assets/logo.svg" alt="" width="22" height="22"> SmartTest</a>
+  <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="sidebar">Menu</button>
+  <nav class="bar-links" aria-label="Site">
+    <a href="../index.html">Docs</a>
+    <a href="../reference/cli.html">CLI</a>
+    <a href="../planning/roadmap.html">Roadmap</a>
+    <a href="https://github.com/RemiPelloux/SmarttyTest" rel="noopener">GitHub</a>
+  </nav>
+  <label class="search"><span class="sr">Search the docs</span><input type="search" placeholder="Search" data-search data-base="../.." autocomplete="off"><span class="search-results" data-results hidden></span></label>
+</header>
+<div class="layout">
+  <aside id="sidebar" class="sidebar"><div class="nav-group"><p class="nav-title">Start</p><ul><li><a href="../index.html">Overview</a></li><li><a href="../guides/getting-started.html">Getting started</a></li><li><a href="../guides/commit-hooks.html">Commit and push hooks</a></li><li><a href="../guides/studio.html">Studio</a></li><li><a href="../guides/vscode.html">VS Code</a></li><li><a href="../guides/ci.html">Running in CI</a></li></ul></div><div class="nav-group"><p class="nav-title">Concepts</p><ul><li><a href="how-selection-works.html">How selection works</a></li><li><a href="safety-model.html">Safety model</a></li><li><a href="runtime-evidence.html" aria-current="page">Runtime evidence</a></li><li><a href="speed.html">Running less, faster</a></li><li><a href="change-tracking.html">Change tracking</a></li><li><a href="rules.html">Rules</a></li></ul></div><div class="nav-group"><p class="nav-title">Reference</p><ul><li><a href="../reference/cli.html">CLI</a></li><li><a href="../reference/configuration.html">Configuration</a></li><li><a href="../benchmarks.html">Benchmarks</a></li><li><a href="../changelog.html">Changelog</a></li></ul></div><div class="nav-group"><p class="nav-title">Results</p><ul><li><a href="../case-studies/leadsit.html">Case study: LeadsIt</a></li><li><a href="../case-studies/external-repositories.html">External repositories</a></li></ul></div><div class="nav-group"><p class="nav-title">Project</p><ul><li><a href="../planning/roadmap.html">Roadmap</a></li><li><a href="../planning/delivery.html">Delivery log</a></li><li><a href="../architecture/overview.html">Architecture</a></li><li><a href="../architecture/adr/index.html">Decision records</a></li><li><a href="../design/design-system.html">Design system</a></li><li><a href="../design/studio.html">Studio design brief</a></li><li><a href="../product/PRD.html">Specification</a></li></ul></div><p class="version">Version 0.9.0</p></aside>
+  <main id="content" class="prose">
+<h1 id="runtime-evidence">Runtime evidence</h1>
+<p>Static analysis says what a test can reach. A trace says what it ran. SmartTest combines both.</p>
+<h2 id="collecting-traces">Collecting traces <a class="anchor" href="#collecting-traces" aria-label="Link to this section">#</a></h2>
+<p><code>smarttest trace</code> runs every test file on its own with V8 coverage (<code>NODE_V8_COVERAGE</code>). Vitest runs in worker-thread mode for this, Jest runs in band, <code>node --test</code> needs nothing special. For each test, <code>.smarttest/state/traces.json</code> stores:</p>
+<ul><li>the functions it ran in each project file, by name (methods, functions, arrow functions assigned to a name),</li><li>every function name V8 reported for those files, to detect names that do not map to a declaration,</li><li>the content hash of every project file it loaded,</li><li>a fingerprint of the Node.js major version and the lockfiles.</li></ul>
+<p>A failing test is not traced. Collection takes about one run of each test file; on LeadsIt (100 test files, three runners) it takes 23 seconds with four workers.</p>
+<h2 id="when-a-trace-is-used">When a trace is used <a class="anchor" href="#when-a-trace-is-used" aria-label="Link to this section">#</a></h2>
+<p>A trace is fresh while every file it loaded has, at the base of the change being analysed, the content it had when the trace was taken, and the runtime fingerprint is unchanged. A file changed by the current change is compared through its old content, so a trace taken at <code>HEAD</code> stays usable for the working tree. A stale trace is ignored, never reused. <code>smarttest trace --stale</code> refreshes only the stale ones.</p>
+<h2 id="how-traces-change-the-selection">How traces change the selection <a class="anchor" href="#how-traces-change-the-selection" aria-label="Link to this section">#</a></h2>
+<p>Only code changes are compared with traces. Environment keys, translation keys, assets and deleted files keep their static edges.</p>
+<div class="table"><table><thead><tr><th>Mode</th><th>Effect of a fresh trace</th></tr></thead><tbody><tr><td>FAST, BALANCED</td><td>A test selected only by static dependency edges is skipped when its trace never ran any changed unit. A test with unresolved dynamic imports is not selected for uncertainty when its trace never ran the changed code. A test static analysis does not reach is selected when its trace ran a changed unit (<code>observed-execution</code>).</td></tr><tr><td>SAFE</td><td>Static selections are kept. Observed execution can only add tests.</td></tr></tbody></table></div>
+<p>"Ran a changed unit" is decided per function where V8 reports a name that matches the changed declaration. For values, classes as a whole, constructors, anonymous code and names V8 does not report, loading the file counts as running it.</p>
+<p>The argument that skipping is safe: a changed function that a test never called can only start being called through code the test does run, and that code would then be part of the change too. This assumes the test is deterministic. Shadow Mode exists to catch the cases where that assumption fails.</p>
+<p><code>explain</code> shows skipped tests with the trace date: "Reachable statically, but its trace (date) never ran the changed code".</p>
+<h2 id="unprotected-changes">Unprotected changes <a class="anchor" href="#unprotected-changes" aria-label="Link to this section">#</a></h2>
+<p><code>impact</code> lists changed units that no test reaches statically and no fresh trace ran. These are the places a change has no test coverage at all.</p>
+<h2 id="shadow-mode">Shadow Mode <a class="anchor" href="#shadow-mode" aria-label="Link to this section">#</a></h2>
+<p><code>smarttest shadow</code> runs the full suite next to the selection and records the comparison in <code>.smarttest/shadow/history.jsonl</code>. <code>smarttest shadow --report</code> summarises the drift over all runs. Run it nightly or on a schedule in any CI system; it needs no hosted service.</p>
+    <p class="edit"><a href="https://github.com/RemiPelloux/SmarttyTest/blob/main/documentation/concepts/runtime-evidence.md" rel="noopener">Edit this page on GitHub</a></p>
+  </main>
+  <nav class="toc" aria-label="On this page"><p class="nav-title">On this page</p><ul><li><a href="#collecting-traces">Collecting traces</a></li><li><a href="#when-a-trace-is-used">When a trace is used</a></li><li><a href="#how-traces-change-the-selection">How traces change the selection</a></li><li><a href="#unprotected-changes">Unprotected changes</a></li><li><a href="#shadow-mode">Shadow Mode</a></li></ul></nav>
+</div>
+<script src="../../assets/docs.js" defer></script>
+
+</body>
+</html>

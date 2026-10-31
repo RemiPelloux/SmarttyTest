@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Commit and push hooks · SmartTest</title>
+<meta name="description" content="SmartTest documentation: Commit and push hooks">
+<link rel="icon" href="../../assets/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../../assets/site.css">
+<link rel="stylesheet" href="../../assets/docs.css">
+</head>
+<body class="docs">
+<a class="skip" href="#content">Skip to content</a>
+<header class="bar">
+  <a class="wordmark" href="../../index.html"><img src="../../assets/logo.svg" alt="" width="22" height="22"> SmartTest</a>
+  <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="sidebar">Menu</button>
+  <nav class="bar-links" aria-label="Site">
+    <a href="../index.html">Docs</a>
+    <a href="../reference/cli.html">CLI</a>
+    <a href="../planning/roadmap.html">Roadmap</a>
+    <a href="https://github.com/RemiPelloux/SmarttyTest" rel="noopener">GitHub</a>
+  </nav>
+  <label class="search"><span class="sr">Search the docs</span><input type="search" placeholder="Search" data-search data-base="../.." autocomplete="off"><span class="search-results" data-results hidden></span></label>
+</header>
+<div class="layout">
+  <aside id="sidebar" class="sidebar"><div class="nav-group"><p class="nav-title">Start</p><ul><li><a href="../index.html">Overview</a></li><li><a href="getting-started.html">Getting started</a></li><li><a href="commit-hooks.html" aria-current="page">Commit and push hooks</a></li><li><a href="studio.html">Studio</a></li><li><a href="vscode.html">VS Code</a></li><li><a href="ci.html">Running in CI</a></li></ul></div><div class="nav-group"><p class="nav-title">Concepts</p><ul><li><a href="../concepts/how-selection-works.html">How selection works</a></li><li><a href="../concepts/safety-model.html">Safety model</a></li><li><a href="../concepts/runtime-evidence.html">Runtime evidence</a></li><li><a href="../concepts/speed.html">Running less, faster</a></li><li><a href="../concepts/change-tracking.html">Change tracking</a></li><li><a href="../concepts/rules.html">Rules</a></li></ul></div><div class="nav-group"><p class="nav-title">Reference</p><ul><li><a href="../reference/cli.html">CLI</a></li><li><a href="../reference/configuration.html">Configuration</a></li><li><a href="../benchmarks.html">Benchmarks</a></li><li><a href="../changelog.html">Changelog</a></li></ul></div><div class="nav-group"><p class="nav-title">Results</p><ul><li><a href="../case-studies/leadsit.html">Case study: LeadsIt</a></li><li><a href="../case-studies/external-repositories.html">External repositories</a></li></ul></div><div class="nav-group"><p class="nav-title">Project</p><ul><li><a href="../planning/roadmap.html">Roadmap</a></li><li><a href="../planning/delivery.html">Delivery log</a></li><li><a href="../architecture/overview.html">Architecture</a></li><li><a href="../architecture/adr/index.html">Decision records</a></li><li><a href="../design/design-system.html">Design system</a></li><li><a href="../design/studio.html">Studio design brief</a></li><li><a href="../product/PRD.html">Specification</a></li></ul></div><p class="version">Version 0.9.0</p></aside>
+  <main id="content" class="prose">
+<h1 id="commit-and-push-hooks">Commit and push hooks</h1>
+<p>A hook tests the content being committed or pushed. In 0.9.0, <code>run --staged</code> uses the Git index and <code>run --push</code> uses committed content. When the working tree differs, SmartTest creates a temporary checkout, links installed dependencies, runs there, and removes the checkout. It never stashes the user's work. The checkout's Git index matches the content under test, so <code>git diff --cached</code> inside a check shows the staged change. Workspace packages linked in <code>node_modules</code> (for example <code>node_modules/@acme/lib -&gt; ../../packages/lib</code>) point at the package in the checkout, so an import loads the staged content, not unstaged edits. A linked package's untracked build output (such as <code>dist/</code>) is taken from the working tree and named in a warning, because it may not match the staged source; any other link that still reaches the working tree, including links inside pnpm's store (<code>node_modules/.pnpm</code>), is reported the same way. A run ended by Ctrl-C, SIGTERM or SIGHUP removes its checkout; a checkout left by a killed run is removed at the start of the next one. Only SmartTest's own checkouts are unregistered: your worktrees are never pruned, even when their directory is missing for now. Files whose content is the same in the checkout and the working tree keep the working tree's index entries, so the next normal run does not re-read the whole project.</p>
+<h2 id="install">Install <a class="anchor" href="#install" aria-label="Link to this section">#</a></h2>
+<p>Preview before writing the hook:</p>
+<pre data-lang="bash"><code>smarttest hook install --replace --dry-run
+smarttest hook install --replace --yes</code></pre>
+<p>For pre-push:</p>
+<pre data-lang="bash"><code>smarttest hook install --pre-push --replace --dry-run
+smarttest hook install --pre-push --replace --yes</code></pre>
+<p>Husky, lefthook, simple-git-hooks and plain Git hooks are detected. <code>--manager</code> chooses one explicitly. Plain Git hooks go where Git looks for them: <code>.git/hooks</code> (shared by linked worktrees) or <code>core.hooksPath</code>, relative to the repository's top level. A <code>core.hooksPath</code> outside the repository is refused (<code>ST_HOOK_PATH_OUTSIDE_REPO</code>), and so is an existing hook that is not a shell script (<code>ST_HOOK_NOT_SHELL</code>); call SmartTest from such hooks yourself. When the project is in a subdirectory of the repository, the block (and the simple-git-hooks command) changes to that directory, in a subshell, before it looks for <code>node_modules/.bin/smarttest</code>. Lefthook only reads its configuration at the repository's top level: for a project in a subdirectory, install says so, and the command belongs in the top-level <code>lefthook.yml</code> with <code>root:</code> set to the project directory.</p>
+<p>A pre-push hook receives the pushed refs on stdin. The SmartTest block reads them once, passes them to SmartTest and restores them, so later steps in the same script (such as a <code>while read local_ref local_sha remote_ref remote_sha</code> guard) still receive them. The simple-git-hooks command does the same for the existing command, and the lefthook entry sets <code>use_stdin: true</code>. Running install again upgrades a block written by an earlier version. With simple-git-hooks, run <code>npx simple-git-hooks</code> after applying the package.json plan. Lefthook test steps that cannot be safely rewritten are listed as remaining; remove duplicate commands after reviewing them.</p>
+<p><code>--replace</code> comments out recognised test steps, including <code>vitest related</code> and package scripts that invoke a runner. A background step retains a successful background job so the script's existing PID and <code>wait</code> statements still work. Uninstall restores the replaced steps:</p>
+<pre data-lang="bash"><code>smarttest hook uninstall --dry-run
+smarttest hook uninstall --yes</code></pre>
+<p>An existing SmartTest hook is upgraded to the hook profile when you run install again. Hooks installed locally must also be set up on each teammate's machine using the project's hook manager.</p>
+<h2 id="what-runs">What runs <a class="anchor" href="#what-runs" aria-label="Link to this section">#</a></h2>
+<p>The pre-commit command is <code>smarttest run --staged --hook</code>; pre-push uses <code>smarttest run --push --hook</code>. The profile uses fail-fast ordering, bail, validated result caching and parallel runner groups. A cached result remains “cached, not run”. Tests outside the selection remain “skipped, not run”.</p>
+<p>Pre-push compares HEAD with the upstream merge-base. With no upstream, it tries the remote's default branch and the conventional <code>origin/main</code> and <code>origin/master</code> refs. A missing comparison base must broaden selection; it cannot justify ignoring older commits. Push mode checks the current HEAD. A push that only deletes remote branches sends no content: it runs no tests or checks, exits 0 and is recorded as nothing pushed. A push that also sends another commit or ref is refused, because SmartTest will not report a pass for content it did not test; push the checked-out commit (for example <code>git push origin HEAD</code>) or check out the ref first.</p>
+<p>Browser end-to-end specs are selected like any other test. A spec whose imports cannot be resolved cannot be ruled out, so it is selected on every change; if your hook should not start browsers or reach a deployed environment, exclude those specs (<code>exclude: ["e2e/**"]</code>) and run them in CI. Excluded tests are not analysed by any command.</p>
+<p>The compact output shows the changed-file count, selected tests, failing files and their first errors, check results and elapsed time. <code>smarttest explain &lt;test&gt;</code> gives the full selection reason.</p>
+<h2 id="project-checks">Project checks <a class="anchor" href="#project-checks" aria-label="Link to this section">#</a></h2>
+<p>Checks run in the affected project's directory, alongside the tests, at most one per CPU core at a time:</p>
+<pre data-lang="ts"><code>import { defineConfig } from "smarttest";
+
+export default defineConfig({
+  hook: {
+    budgetMs: 60000,
+    checks: [
+      { name: "Lint", run: "npx --no-install eslint {files}", files: "**/*.{ts,tsx,js,jsx}" },
+      { name: "Types", run: "npm run type-check", projects: ["app", "backend"], stage: "both" },
+      { name: "Build", run: "npm run build", projects: ["app"], stage: "pre-push" },
+    ],
+  },
+});</code></pre>
+<p><code>projects</code> contains project directories relative to the SmartTest root; <code>""</code> means the root project. Configured projects, workspace packages and runner directories count, and <code>./packages/app/</code> is the same as <code>packages/app</code>. A check naming a directory that is none of these is reported as a warning with the hook result, since it would never run. Omitting <code>projects</code> allows every affected project. The deepest detected project owns a changed file. <code>files</code> filters project-relative paths. <code>{files}</code> is replaced with the changed paths, quoted and prefixed with <code>./</code> so a file named like an option (<code>-rf</code>) is never read as one. Commands default to pre-commit; <code>stage</code> also accepts <code>pre-push</code> and <code>both</code>.</p>
+<p>Use checks that inspect content. A command that rewrites or stages files runs inside the temporary checkout when isolation is necessary; those edits do not update the user's index. Locale generation, formatting with writes, and other commit preparation should happen before SmartTest.</p>
+<h2 id="budget-and-bypasses">Budget and bypasses <a class="anchor" href="#budget-and-bypasses" aria-label="Link to this section">#</a></h2>
+<p><code>hook.budgetMs</code> is an expectation, not a timeout. When recorded test durations exceed it, SmartTest names the slowest files and suggests moving checks to pre-push or refreshing traces. Unknown durations make the estimate incomplete. The hook still runs the complete selection.</p>
+<pre data-lang="bash"><code>smarttest hook status
+smarttest hook status --pre-push --json
+smarttest doctor</code></pre>
+<p>Status includes recorded durations, recent failures, explicit bypasses and commits with no matching successful hook record. <code>SMARTTEST_SKIP=1</code> records an explicit bypass. Git's <code>--no-verify</code> prevents the hook from starting, so SmartTest can only infer a missing record later. A missing record also occurs when a hook is not installed; it does not prove a deliberate bypass. The local history cannot measure other developers' hook installations.</p>
+    <p class="edit"><a href="https://github.com/RemiPelloux/SmarttyTest/blob/main/documentation/guides/commit-hooks.md" rel="noopener">Edit this page on GitHub</a></p>
+  </main>
+  <nav class="toc" aria-label="On this page"><p class="nav-title">On this page</p><ul><li><a href="#install">Install</a></li><li><a href="#what-runs">What runs</a></li><li><a href="#project-checks">Project checks</a></li><li><a href="#budget-and-bypasses">Budget and bypasses</a></li></ul></nav>
+</div>
+<script src="../../assets/docs.js" defer></script>
+
+</body>
+</html>

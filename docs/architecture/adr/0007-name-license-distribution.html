@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ADR-0007: Name, license and distribution · SmartTest</title>
+<meta name="description" content="SmartTest documentation: ADR-0007: Name, license and distribution">
+<link rel="icon" href="../../../assets/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../../../assets/site.css">
+<link rel="stylesheet" href="../../../assets/docs.css">
+</head>
+<body class="docs">
+<a class="skip" href="#content">Skip to content</a>
+<header class="bar">
+  <a class="wordmark" href="../../../index.html"><img src="../../../assets/logo.svg" alt="" width="22" height="22"> SmartTest</a>
+  <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="sidebar">Menu</button>
+  <nav class="bar-links" aria-label="Site">
+    <a href="../../index.html">Docs</a>
+    <a href="../../reference/cli.html">CLI</a>
+    <a href="../../planning/roadmap.html">Roadmap</a>
+    <a href="https://github.com/RemiPelloux/SmarttyTest" rel="noopener">GitHub</a>
+  </nav>
+  <label class="search"><span class="sr">Search the docs</span><input type="search" placeholder="Search" data-search data-base="../../.." autocomplete="off"><span class="search-results" data-results hidden></span></label>
+</header>
+<div class="layout">
+  <aside id="sidebar" class="sidebar"><div class="nav-group"><p class="nav-title">Start</p><ul><li><a href="../../index.html">Overview</a></li><li><a href="../../guides/getting-started.html">Getting started</a></li><li><a href="../../guides/commit-hooks.html">Commit and push hooks</a></li><li><a href="../../guides/studio.html">Studio</a></li><li><a href="../../guides/vscode.html">VS Code</a></li><li><a href="../../guides/ci.html">Running in CI</a></li></ul></div><div class="nav-group"><p class="nav-title">Concepts</p><ul><li><a href="../../concepts/how-selection-works.html">How selection works</a></li><li><a href="../../concepts/safety-model.html">Safety model</a></li><li><a href="../../concepts/runtime-evidence.html">Runtime evidence</a></li><li><a href="../../concepts/speed.html">Running less, faster</a></li><li><a href="../../concepts/change-tracking.html">Change tracking</a></li><li><a href="../../concepts/rules.html">Rules</a></li></ul></div><div class="nav-group"><p class="nav-title">Reference</p><ul><li><a href="../../reference/cli.html">CLI</a></li><li><a href="../../reference/configuration.html">Configuration</a></li><li><a href="../../benchmarks.html">Benchmarks</a></li><li><a href="../../changelog.html">Changelog</a></li></ul></div><div class="nav-group"><p class="nav-title">Results</p><ul><li><a href="../../case-studies/leadsit.html">Case study: LeadsIt</a></li><li><a href="../../case-studies/external-repositories.html">External repositories</a></li></ul></div><div class="nav-group"><p class="nav-title">Project</p><ul><li><a href="../../planning/roadmap.html">Roadmap</a></li><li><a href="../../planning/delivery.html">Delivery log</a></li><li><a href="../overview.html">Architecture</a></li><li><a href="index.html">Decision records</a></li><li><a href="../../design/design-system.html">Design system</a></li><li><a href="../../design/studio.html">Studio design brief</a></li><li><a href="../../product/PRD.html">Specification</a></li></ul></div><p class="version">Version 0.9.0</p></aside>
+  <main id="content" class="prose">
+<h1 id="adr-0007-name-license-and-distribution">ADR-0007: Name, license and distribution</h1>
+<ul><li><strong>Status:</strong> Proposed. To be finalised by <strong>ST-011</strong> in Sprint 0</li><li><strong>Related:</strong> ST-011, ST-099, PRD §29, §40</li></ul>
+<h2 id="context">Context <a class="anchor" href="#context" aria-label="Link to this section">#</a></h2>
+<p>The spec uses "SmartTest" as a working name and asks for npm availability to be verified. The business model is open core plus SaaS.</p>
+<h2 id="findings-so-far">Findings so far <a class="anchor" href="#findings-so-far" aria-label="Link to this section">#</a></h2>
+<ul><li><code>npm view smarttest</code> → <strong>404, "Unpublished"</strong>. The name was unpublished and is probably claimable. Confirm with npm support or by attempting to publish a placeholder.</li><li><code>smart-test</code> exists (0.0.2, an unrelated package).</li><li>The <code>@smarttest</code> scope is unverified. Create the npm org to reserve it.</li><li>No trademark search has been done yet.</li></ul>
+<h2 id="proposed-decision">Proposed decision <a class="anchor" href="#proposed-decision" aria-label="Link to this section">#</a></h2>
+<ul><li>CLI package <strong><code>smarttest</code></strong> (bin <code>smarttest</code>). Internal packages under <strong><code>@smarttest/*</code></strong>.</li><li><strong>Apache-2.0</strong> for the open-source core. It includes an explicit patent grant, which suits enterprise adoption and an open-core model. Cloud and enterprise code live in separate, closed repositories.</li><li>Publish locally with <code>pnpm release:publish</code> after <code>pnpm verify</code>. There is no hosted CI, so no npm provenance attestation. Pre-releases go to the <code>next</code> tag.</li></ul>
+<h2 id="fallbacks">Fallbacks <a class="anchor" href="#fallbacks" aria-label="Link to this section">#</a></h2>
+<p>If <code>smarttest</code> can't be claimed: use <code>@smarttest/cli</code> with <code>npx @smarttest/cli</code>, or a rename. Brand assets are generated by <code>scripts/brand/build-readme-assets.mjs</code>, so a rename means one script run plus a search and replace.</p>
+    <p class="edit"><a href="https://github.com/RemiPelloux/SmarttyTest/blob/main/documentation/architecture/adr/0007-name-license-distribution.md" rel="noopener">Edit this page on GitHub</a></p>
+  </main>
+  <nav class="toc" aria-label="On this page"><p class="nav-title">On this page</p><ul><li><a href="#context">Context</a></li><li><a href="#findings-so-far">Findings so far</a></li><li><a href="#proposed-decision">Proposed decision</a></li><li><a href="#fallbacks">Fallbacks</a></li></ul></nav>
+</div>
+<script src="../../../assets/docs.js" defer></script>
+
+</body>
+</html>

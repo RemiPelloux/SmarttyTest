@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Getting started · SmartTest</title>
+<meta name="description" content="SmartTest documentation: Getting started">
+<link rel="icon" href="../../assets/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../../assets/site.css">
+<link rel="stylesheet" href="../../assets/docs.css">
+</head>
+<body class="docs">
+<a class="skip" href="#content">Skip to content</a>
+<header class="bar">
+  <a class="wordmark" href="../../index.html"><img src="../../assets/logo.svg" alt="" width="22" height="22"> SmartTest</a>
+  <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="sidebar">Menu</button>
+  <nav class="bar-links" aria-label="Site">
+    <a href="../index.html">Docs</a>
+    <a href="../reference/cli.html">CLI</a>
+    <a href="../planning/roadmap.html">Roadmap</a>
+    <a href="https://github.com/RemiPelloux/SmarttyTest" rel="noopener">GitHub</a>
+  </nav>
+  <label class="search"><span class="sr">Search the docs</span><input type="search" placeholder="Search" data-search data-base="../.." autocomplete="off"><span class="search-results" data-results hidden></span></label>
+</header>
+<div class="layout">
+  <aside id="sidebar" class="sidebar"><div class="nav-group"><p class="nav-title">Start</p><ul><li><a href="../index.html">Overview</a></li><li><a href="getting-started.html" aria-current="page">Getting started</a></li><li><a href="commit-hooks.html">Commit and push hooks</a></li><li><a href="studio.html">Studio</a></li><li><a href="vscode.html">VS Code</a></li><li><a href="ci.html">Running in CI</a></li></ul></div><div class="nav-group"><p class="nav-title">Concepts</p><ul><li><a href="../concepts/how-selection-works.html">How selection works</a></li><li><a href="../concepts/safety-model.html">Safety model</a></li><li><a href="../concepts/runtime-evidence.html">Runtime evidence</a></li><li><a href="../concepts/speed.html">Running less, faster</a></li><li><a href="../concepts/change-tracking.html">Change tracking</a></li><li><a href="../concepts/rules.html">Rules</a></li></ul></div><div class="nav-group"><p class="nav-title">Reference</p><ul><li><a href="../reference/cli.html">CLI</a></li><li><a href="../reference/configuration.html">Configuration</a></li><li><a href="../benchmarks.html">Benchmarks</a></li><li><a href="../changelog.html">Changelog</a></li></ul></div><div class="nav-group"><p class="nav-title">Results</p><ul><li><a href="../case-studies/leadsit.html">Case study: LeadsIt</a></li><li><a href="../case-studies/external-repositories.html">External repositories</a></li></ul></div><div class="nav-group"><p class="nav-title">Project</p><ul><li><a href="../planning/roadmap.html">Roadmap</a></li><li><a href="../planning/delivery.html">Delivery log</a></li><li><a href="../architecture/overview.html">Architecture</a></li><li><a href="../architecture/adr/index.html">Decision records</a></li><li><a href="../design/design-system.html">Design system</a></li><li><a href="../design/studio.html">Studio design brief</a></li><li><a href="../product/PRD.html">Specification</a></li></ul></div><p class="version">Version 0.9.0</p></aside>
+  <main id="content" class="prose">
+<h1 id="getting-started">Getting started</h1>
+<h2 id="requirements">Requirements <a class="anchor" href="#requirements" aria-label="Link to this section">#</a></h2>
+<ul><li>Node.js 22.12 or newer</li><li>A JavaScript or TypeScript project that uses Jest, Vitest or <code>node --test</code> (several runners and several projects in one repository are fine)</li><li>Git is optional; without it SmartTest uses local snapshots</li></ul>
+<h2 id="install">Install <a class="anchor" href="#install" aria-label="Link to this section">#</a></h2>
+<p>SmartTest is not on npm yet. Build the package from this repository and install the tarball:</p>
+<pre data-lang="bash"><code>git clone https://github.com/RemiPelloux/SmarttyTest &amp;&amp; cd SmarttyTest
+corepack enable &amp;&amp; pnpm install &amp;&amp; pnpm build &amp;&amp; pnpm release:pack
+# in your project:
+npm install -D /path/to/SmarttyTest/packages/cli/.publish/smarttest-0.8.0.tgz</code></pre>
+<p>If your repository has no root <code>package.json</code> (several independent projects), add a minimal one for repository tooling, as LeadsIt does.</p>
+<h2 id="set-up">Set up <a class="anchor" href="#set-up" aria-label="Link to this section">#</a></h2>
+<pre data-lang="bash"><code>npx smarttest init --dry-run    # print the plan and the diff of every file
+npx smarttest init --yes        # apply it</code></pre>
+<p>Example output on a repository with three runners:</p>
+<pre data-lang="text"><code>Detected: Wasp + React + Express + Prisma + TypeScript + Vitest + Jest + node:test · npm · 6 independent projects · Git
+
+Recommended
+  Test layout      colocated                  (63% of existing tests follow this convention)
+  Adapter          vitest, jest, node         (existing runner configuration is reused as-is)
+  Impact mode      balanced
+  Skipped tests    backend/**/*redisJobQueue* (your existing test commands skip these, so SmartTest does too)
+  Git hook         smarttest run --staged     (.husky/pre-commit runs 3 full suite(s); one affected-tests run can replace them)
+
+Changes
+  + smarttest.config.ts   SmartTest configuration
+  ~ .gitignore            ignore local SmartTest state</code></pre>
+<p>Running <code>init</code> again changes nothing. <code>npx smarttest init --rollback</code> restores the files it changed, unless you edited them since.</p>
+<h2 id="run">Run <a class="anchor" href="#run" aria-label="Link to this section">#</a></h2>
+<pre data-lang="bash"><code>npx smarttest run                  # affected by uncommitted changes
+npx smarttest run --staged         # affected by staged changes, for a pre-commit hook
+npx smarttest run --base main      # affected by the current branch
+npx smarttest run --all            # everything</code></pre>
+<p align="center"><img src="../assets/terminal.svg" alt="Terminal: smarttest run selects 12 of 486 test files and reports 474 as not run." width="90%"></p>
+<h2 id="check-the-selection">Check the selection <a class="anchor" href="#check-the-selection" aria-label="Link to this section">#</a></h2>
+<pre data-lang="bash"><code>npx smarttest explain &lt;test&gt;          # why it ran or not
+npx smarttest explain &lt;file&gt;          # which tests cover a file
+npx smarttest validate-selection      # run selection and full suite, compare
+npx smarttest benchmark --commits 20  # replay history: full run vs SmartTest, misses re-checked
+npx smarttest shadow                  # full suite next to the selection, recorded over time
+npx smarttest graph why &lt;from&gt; &lt;to&gt;   # shortest dependency path between two places
+npx smarttest doctor                  # runners, discovery, index, configuration</code></pre>
+<h2 id="record-what-each-test-runs-optional">Record what each test runs (optional) <a class="anchor" href="#record-what-each-test-runs-optional" aria-label="Link to this section">#</a></h2>
+<pre data-lang="bash"><code>npx smarttest trace           # runs each test file once with V8 coverage (about one full run)
+npx smarttest trace --status  # how many traces are still fresh
+npx smarttest trace --stale   # refresh only the stale ones</code></pre>
+<p>With fresh traces, a test that can reach a change on paper but never ran the changed code is skipped in FAST and BALANCED mode. See <a href="../concepts/runtime-evidence.html">runtime evidence</a>.</p>
+<h2 id="use-it-in-a-git-hook">Use it in a Git hook <a class="anchor" href="#use-it-in-a-git-hook" aria-label="Link to this section">#</a></h2>
+<p><code>init</code> plans this for you. To do it separately:</p>
+<pre data-lang="bash"><code>npx smarttest hook status             # which hook manager, and which steps run whole suites
+npx smarttest hook install --replace  # add SmartTest, comment out the full-suite steps
+npx smarttest hook uninstall          # remove it and restore those steps</code></pre>
+<p>It works with husky, lefthook, simple-git-hooks and plain <code>.git/hooks</code>. The hook runs <code>npx --no-install smarttest run --staged --non-interactive</code>.</p>
+<h2 id="use-it-in-ci">Use it in CI <a class="anchor" href="#use-it-in-ci" aria-label="Link to this section">#</a></h2>
+<pre data-lang="bash"><code>npx smarttest ci                      # picks the base for merge requests and branch builds</code></pre>
+<h2 id="reports-and-generated-tests">Reports and generated tests <a class="anchor" href="#reports-and-generated-tests" aria-label="Link to this section">#</a></h2>
+<pre data-lang="bash"><code>npx smarttest report --open           # HTML report of the last run
+npx smarttest generate --dry-run      # missing test files as it.todo scaffolds</code></pre>
+<p>Next: <a href="../concepts/how-selection-works.html">how selection works</a>, <a href="../concepts/runtime-evidence.html">runtime evidence</a>, <a href="../reference/cli.html">CLI reference</a>, <a href="../reference/configuration.html">configuration</a>, <a href="ci.html">running in CI</a>.</p>
+    <p class="edit"><a href="https://github.com/RemiPelloux/SmarttyTest/blob/main/documentation/guides/getting-started.md" rel="noopener">Edit this page on GitHub</a></p>
+  </main>
+  <nav class="toc" aria-label="On this page"><p class="nav-title">On this page</p><ul><li><a href="#requirements">Requirements</a></li><li><a href="#install">Install</a></li><li><a href="#set-up">Set up</a></li><li><a href="#run">Run</a></li><li><a href="#check-the-selection">Check the selection</a></li><li><a href="#record-what-each-test-runs-optional">Record what each test runs (optional)</a></li><li><a href="#use-it-in-a-git-hook">Use it in a Git hook</a></li><li><a href="#use-it-in-ci">Use it in CI</a></li><li><a href="#reports-and-generated-tests">Reports and generated tests</a></li></ul></nav>
+</div>
+<script src="../../assets/docs.js" defer></script>
+
+</body>
+</html>

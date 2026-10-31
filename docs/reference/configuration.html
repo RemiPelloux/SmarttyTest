@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Configuration reference · SmartTest</title>
+<meta name="description" content="SmartTest documentation: Configuration reference">
+<link rel="icon" href="../../assets/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../../assets/site.css">
+<link rel="stylesheet" href="../../assets/docs.css">
+</head>
+<body class="docs">
+<a class="skip" href="#content">Skip to content</a>
+<header class="bar">
+  <a class="wordmark" href="../../index.html"><img src="../../assets/logo.svg" alt="" width="22" height="22"> SmartTest</a>
+  <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="sidebar">Menu</button>
+  <nav class="bar-links" aria-label="Site">
+    <a href="../index.html">Docs</a>
+    <a href="cli.html">CLI</a>
+    <a href="../planning/roadmap.html">Roadmap</a>
+    <a href="https://github.com/RemiPelloux/SmarttyTest" rel="noopener">GitHub</a>
+  </nav>
+  <label class="search"><span class="sr">Search the docs</span><input type="search" placeholder="Search" data-search data-base="../.." autocomplete="off"><span class="search-results" data-results hidden></span></label>
+</header>
+<div class="layout">
+  <aside id="sidebar" class="sidebar"><div class="nav-group"><p class="nav-title">Start</p><ul><li><a href="../index.html">Overview</a></li><li><a href="../guides/getting-started.html">Getting started</a></li><li><a href="../guides/commit-hooks.html">Commit and push hooks</a></li><li><a href="../guides/studio.html">Studio</a></li><li><a href="../guides/vscode.html">VS Code</a></li><li><a href="../guides/ci.html">Running in CI</a></li></ul></div><div class="nav-group"><p class="nav-title">Concepts</p><ul><li><a href="../concepts/how-selection-works.html">How selection works</a></li><li><a href="../concepts/safety-model.html">Safety model</a></li><li><a href="../concepts/runtime-evidence.html">Runtime evidence</a></li><li><a href="../concepts/speed.html">Running less, faster</a></li><li><a href="../concepts/change-tracking.html">Change tracking</a></li><li><a href="../concepts/rules.html">Rules</a></li></ul></div><div class="nav-group"><p class="nav-title">Reference</p><ul><li><a href="cli.html">CLI</a></li><li><a href="configuration.html" aria-current="page">Configuration</a></li><li><a href="../benchmarks.html">Benchmarks</a></li><li><a href="../changelog.html">Changelog</a></li></ul></div><div class="nav-group"><p class="nav-title">Results</p><ul><li><a href="../case-studies/leadsit.html">Case study: LeadsIt</a></li><li><a href="../case-studies/external-repositories.html">External repositories</a></li></ul></div><div class="nav-group"><p class="nav-title">Project</p><ul><li><a href="../planning/roadmap.html">Roadmap</a></li><li><a href="../planning/delivery.html">Delivery log</a></li><li><a href="../architecture/overview.html">Architecture</a></li><li><a href="../architecture/adr/index.html">Decision records</a></li><li><a href="../design/design-system.html">Design system</a></li><li><a href="../design/studio.html">Studio design brief</a></li><li><a href="../product/PRD.html">Specification</a></li></ul></div><p class="version">Version 0.9.0</p></aside>
+  <main id="content" class="prose">
+<h1 id="configuration-reference">Configuration reference</h1>
+<p>SmartTest reads <code>smarttest.config.{ts,mts,js,mjs,json}</code> from the project root, or the file given with <code>--config</code>. <code>smarttest init</code> writes one for you. The file is transpiled on load, so <code>import { defineConfig } from "smarttest"</code> works even before the package is resolvable.</p>
+<pre data-lang="ts"><code>import { defineConfig } from "smarttest";
+
+export default defineConfig({
+  mode: "balanced",
+  adapters: ["vitest"],
+  vcs: { provider: "auto", base: "main", snapshots: true },
+  snapshots: { storeContent: false, keep: 20 },
+  tests: { layout: "mirror", directory: "tests", naming: "{FileName}.test.{Extension}" },
+  generated: [{ path: "src/generated/**", policy: "exclude" }],
+  triggers: ["db/schema.sql"],
+  rules: [
+    {
+      name: "auth-critical",
+      match: { path: "src/auth/**" },
+      risk: "critical",
+      execution: { alwaysRunOnAffected: true },
+    },
+  ],
+  retries: 0,
+  timeoutMs: 600000,
+  reports: { formats: ["html", "json", "junit"], outputDir: ".smarttest/reports" },
+});</code></pre>
+<div class="table"><table><thead><tr><th>Key</th><th>Type</th><th>Default</th><th>Notes</th></tr></thead><tbody><tr><td><code>include</code></td><td><code>string[]</code></td><td>all <code>ts/tsx/mts/cts/js/jsx/mjs/cjs</code></td><td>Globs of analysed files, relative to the root</td></tr><tr><td><code>exclude</code></td><td><code>string[]</code></td><td>—</td><td>Added to built-in excludes (<code>node_modules</code>, <code>dist</code>, <code>build</code>, <code>coverage</code>, <code>.next</code>, <code>*.d.ts</code>…)</td></tr><tr><td><code>mode</code></td><td><code>"fast" | "balanced" | "safe"</code></td><td><code>"balanced"</code></td><td>Overridable per run (<code>--mode</code>) and per rule</td></tr><tr><td><code>adapters</code></td><td><code>("vitest" | "jest" | "node" | "playwright" | "cypress")[]</code></td><td>detected</td><td>Restricts and orders runners</td></tr><tr><td><code>runners</code></td><td><code>{ adapter, dir?, config?, patterns? }[]</code></td><td>detected</td><td>Explicit runners. Replaces detection (custom config names, <code>node --test</code> patterns)</td></tr><tr><td><code>tests.discovery</code></td><td><code>"runner" | "static"</code></td><td><code>"runner"</code></td><td><code>runner</code>: each runner lists the files it collects (cached). <code>static</code>: filename patterns</td></tr><tr><td><code>vcs.provider</code></td><td><code>"auto" | "git" | "svn" | "hg" | "native"</code></td><td><code>"auto"</code></td><td><code>auto</code> uses Git, then Subversion, then Mercurial, then native snapshots</td></tr><tr><td><code>vcs.base</code></td><td><code>string</code></td><td>—</td><td>Default comparison ref for <code>run</code> / <code>impact</code></td></tr><tr><td><code>vcs.snapshots</code></td><td><code>boolean</code></td><td><code>true</code></td><td>With Git, record a native snapshot after each fully passing run (<code>--since-snapshot</code>)</td></tr><tr><td><code>snapshots.storeContent</code></td><td><code>boolean</code></td><td><code>false</code></td><td>Store compressed, deduplicated source content so snapshot diffs get line ranges</td></tr><tr><td><code>snapshots.keep</code></td><td><code>number</code></td><td><code>20</code></td><td>Default for <code>snapshot prune</code></td></tr><tr><td><code>tests.layout</code></td><td><code>"mirror" | "colocated" | "domain" | "custom"</code></td><td>detected</td><td>Generator layout</td></tr><tr><td><code>tests.directory</code></td><td><code>string</code></td><td><code>"tests"</code></td><td>Root for mirror/domain layouts</td></tr><tr><td><code>tests.naming</code></td><td><code>string</code></td><td><code>{FileName}.test.{Extension}</code></td><td>Tokens: <code>{ClassName} {FunctionName} {MethodName} {FileName} {ModuleName} {PackageName} {DomainName} {Type} {Extension}</code></td></tr><tr><td><code>tests.match</code></td><td><code>string[]</code></td><td>Jest/Vitest defaults</td><td>Globs that identify test files</td></tr><tr><td><code>tests.templates</code></td><td><code>string</code></td><td>—</td><td>Directory with <code>&lt;template&gt;.tpl</code> files (<code>{{source}}</code>, <code>{{scaffold}}</code>)</td></tr><tr><td><code>generated</code></td><td><code>{ path, policy, from? }[]</code></td><td>—</td><td><code>exclude</code> removes from analysis. Referenced generated files are still tracked as dependencies. With <code>rebuild-required</code> and <code>from</code> (generator input globs), a change to an input selects the tests of the outputs and warns to regenerate</td></tr><tr><td><code>triggers</code></td><td><code>string[]</code></td><td>—</td><td>Extra mandatory triggers. Built-in ones (tsconfig, package.json, lockfiles, runner configs, setup files, <code>.env*</code>) cannot be removed</td></tr><tr><td><code>rules</code></td><td><code>Rule[]</code></td><td><code>[]</code></td><td>See <a href="../concepts/rules.html">Rules</a></td></tr><tr><td><code>retries</code></td><td><code>number</code></td><td><code>0</code></td><td>A pass after a retry is reported as <strong>flaky</strong></td></tr><tr><td><code>timeoutMs</code></td><td><code>number</code></td><td><code>600000</code></td><td>Per-runner timeout</td></tr><tr><td><code>workers</code></td><td><code>number</code></td><td>runner default</td><td>Passed as <code>--maxWorkers</code></td></tr><tr><td><code>reports.formats</code></td><td><code>("html" | "json" | "junit" | "markdown")[]</code></td><td><code>["html","json"]</code></td><td></td></tr><tr><td><code>reports.outputDir</code></td><td><code>string</code></td><td><code>".smarttest/reports"</code></td><td></td></tr><tr><td><code>adaptive</code></td><td><code>boolean</code></td><td><code>true</code></td><td><code>run</code> selects every test without building the graph when the last full run took less time than a typical analysis (small suites)</td></tr><tr><td><code>projects</code></td><td><code>Record&lt;dir, { tests?, mode?, rules? }&gt;</code></td><td>—</td><td>Per-project conventions. <code>tests</code> (<code>layout</code>, <code>directory</code>, <code>naming</code>, <code>path</code>) applies to generated tests in that directory; <code>mode</code> is a minimum mode for its changes; <code>rules</code> are scoped to it (paths relative to the project)</td></tr><tr><td><code>cache</code></td><td><code>boolean</code></td><td><code>true</code></td><td>Reuse passing results whose inputs are all unchanged; reported as cached, never as passed (<a href="../concepts/speed.html">details</a>)</td></tr><tr><td><code>parallelGroups</code></td><td><code>number | "auto"</code></td><td><code>"auto"</code></td><td>Runner groups run at the same time; <code>auto</code> is <code>min(groups, CPUs / 4, 4)</code>; Playwright and Cypress always run alone</td></tr><tr><td><code>storeDir</code></td><td><code>string</code></td><td><code>".smarttest"</code></td><td>Local state. Git-ignored by init</td></tr></tbody></table></div>
+<p><code>hook.checks</code> is an array of <code>{ name, run, projects?, files?, stage? }</code>. Commands run in affected project directories; <code>{files}</code> becomes quoted changed paths. <code>stage</code> is <code>pre-commit</code> (default), <code>pre-push</code> or <code>both</code>. <code>hook.budgetMs</code> defaults to <code>60000</code>; exceeding the estimate warns and still runs the full selection. See <a href="../guides/commit-hooks.html">commit and push hooks</a>.</p>
+<p>Unknown keys produce warnings instead of being silently accepted.</p>
+<h2 id="per-project-conventions">Per-project conventions <a class="anchor" href="#per-project-conventions" aria-label="Link to this section">#</a></h2>
+<pre data-lang="ts"><code>import { defineConfig } from "smarttest";
+
+export default defineConfig({
+  tests: { layout: "mirror", directory: "tests" },
+  projects: {
+    "FrontLeadsIt/app": {
+      tests: { layout: "colocated", naming: "{FileName}.server.test.{Extension}" },
+    },
+    backend: {
+      tests: { layout: "custom", path: "backend/src/__tests__/{FileName}.test.{Extension}" },
+      mode: "safe",
+    },
+  },
+});</code></pre>
+<p><code>{ProjectDir}</code> is available in <code>path</code> and <code>naming</code> templates.</p>
+    <p class="edit"><a href="https://github.com/RemiPelloux/SmarttyTest/blob/main/documentation/reference/configuration.md" rel="noopener">Edit this page on GitHub</a></p>
+  </main>
+  <div></div>
+</div>
+<script src="../../assets/docs.js" defer></script>
+
+</body>
+</html>

@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Architecture Decision Records · SmartTest</title>
+<meta name="description" content="SmartTest documentation: Architecture Decision Records">
+<link rel="icon" href="../../../assets/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../../../assets/site.css">
+<link rel="stylesheet" href="../../../assets/docs.css">
+</head>
+<body class="docs">
+<a class="skip" href="#content">Skip to content</a>
+<header class="bar">
+  <a class="wordmark" href="../../../index.html"><img src="../../../assets/logo.svg" alt="" width="22" height="22"> SmartTest</a>
+  <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="sidebar">Menu</button>
+  <nav class="bar-links" aria-label="Site">
+    <a href="../../index.html">Docs</a>
+    <a href="../../reference/cli.html">CLI</a>
+    <a href="../../planning/roadmap.html">Roadmap</a>
+    <a href="https://github.com/RemiPelloux/SmarttyTest" rel="noopener">GitHub</a>
+  </nav>
+  <label class="search"><span class="sr">Search the docs</span><input type="search" placeholder="Search" data-search data-base="../../.." autocomplete="off"><span class="search-results" data-results hidden></span></label>
+</header>
+<div class="layout">
+  <aside id="sidebar" class="sidebar"><div class="nav-group"><p class="nav-title">Start</p><ul><li><a href="../../index.html">Overview</a></li><li><a href="../../guides/getting-started.html">Getting started</a></li><li><a href="../../guides/commit-hooks.html">Commit and push hooks</a></li><li><a href="../../guides/studio.html">Studio</a></li><li><a href="../../guides/vscode.html">VS Code</a></li><li><a href="../../guides/ci.html">Running in CI</a></li></ul></div><div class="nav-group"><p class="nav-title">Concepts</p><ul><li><a href="../../concepts/how-selection-works.html">How selection works</a></li><li><a href="../../concepts/safety-model.html">Safety model</a></li><li><a href="../../concepts/runtime-evidence.html">Runtime evidence</a></li><li><a href="../../concepts/speed.html">Running less, faster</a></li><li><a href="../../concepts/change-tracking.html">Change tracking</a></li><li><a href="../../concepts/rules.html">Rules</a></li></ul></div><div class="nav-group"><p class="nav-title">Reference</p><ul><li><a href="../../reference/cli.html">CLI</a></li><li><a href="../../reference/configuration.html">Configuration</a></li><li><a href="../../benchmarks.html">Benchmarks</a></li><li><a href="../../changelog.html">Changelog</a></li></ul></div><div class="nav-group"><p class="nav-title">Results</p><ul><li><a href="../../case-studies/leadsit.html">Case study: LeadsIt</a></li><li><a href="../../case-studies/external-repositories.html">External repositories</a></li></ul></div><div class="nav-group"><p class="nav-title">Project</p><ul><li><a href="../../planning/roadmap.html">Roadmap</a></li><li><a href="../../planning/delivery.html">Delivery log</a></li><li><a href="../overview.html">Architecture</a></li><li><a href="index.html" aria-current="page">Decision records</a></li><li><a href="../../design/design-system.html">Design system</a></li><li><a href="../../design/studio.html">Studio design brief</a></li><li><a href="../../product/PRD.html">Specification</a></li></ul></div><p class="version">Version 0.9.0</p></aside>
+  <main id="content" class="prose">
+<h1 id="architecture-decision-records">Architecture Decision Records</h1>
+<p>We record significant decisions as lightweight ADRs (context → decision → consequences). An ADR is <strong>Proposed</strong> until it is accepted at a sprint review. Superseded ADRs stay in place and link to the ADR that replaces them.</p>
+<div class="table"><table><thead><tr><th>ADR</th><th>Title</th><th>Status</th></tr></thead><tbody><tr><td><a href="0001-typescript-pnpm-monorepo.html">0001</a></td><td>TypeScript pnpm monorepo, Node 22+/24 LTS</td><td>Accepted</td></tr><tr><td><a href="0002-typescript-analysis-engine.html">0002</a></td><td>TypeScript analysis engine (TS 6 API, syntactic + resolveModuleName)</td><td>Accepted</td></tr><tr><td><a href="0003-local-store-sqlite.html">0003</a></td><td>Local intelligence store (JSON store, SQLite deferred)</td><td>Accepted (amended)</td></tr><tr><td><a href="0004-deterministic-core-ai-optional.html">0004</a></td><td>Deterministic, local-first core; AI optional</td><td>Accepted</td></tr><tr><td><a href="0005-capability-declared-adapters.html">0005</a></td><td>Capability-declared adapters, never emulate</td><td>Accepted</td></tr><tr><td><a href="0006-contracts-first.html">0006</a></td><td>Contracts first, in <code>shared</code> during Sprint 0</td><td>Accepted</td></tr><tr><td><a href="0007-name-license-distribution.html">0007</a></td><td>Name, license and distribution</td><td>Proposed (decision pending)</td></tr><tr><td><a href="0008-observed-execution.html">0008</a></td><td>Observed execution may rule out tests, except in SAFE mode</td><td>Accepted (0.5.0)</td></tr><tr><td><a href="0009-validated-result-cache.html">0009</a></td><td>Validated result cache, reported as cached</td><td>Accepted (0.8.0)</td></tr></tbody></table></div>
+<p>Boundaries from ADR-0004 are enforced by <code>pnpm check:boundaries</code> (<code>scripts/check-boundaries.mjs</code>).</p>
+<p>Template: copy <a href="template.html"><code>template.md</code></a>.</p>
+    <p class="edit"><a href="https://github.com/RemiPelloux/SmarttyTest/blob/main/documentation/architecture/adr/README.md" rel="noopener">Edit this page on GitHub</a></p>
+  </main>
+  <div></div>
+</div>
+<script src="../../../assets/docs.js" defer></script>
+
+</body>
+</html>

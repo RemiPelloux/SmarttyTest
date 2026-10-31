@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Design system · SmartTest</title>
+<meta name="description" content="SmartTest documentation: Design system">
+<link rel="icon" href="../../assets/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../../assets/site.css">
+<link rel="stylesheet" href="../../assets/docs.css">
+</head>
+<body class="docs">
+<a class="skip" href="#content">Skip to content</a>
+<header class="bar">
+  <a class="wordmark" href="../../index.html"><img src="../../assets/logo.svg" alt="" width="22" height="22"> SmartTest</a>
+  <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="sidebar">Menu</button>
+  <nav class="bar-links" aria-label="Site">
+    <a href="../index.html">Docs</a>
+    <a href="../reference/cli.html">CLI</a>
+    <a href="../planning/roadmap.html">Roadmap</a>
+    <a href="https://github.com/RemiPelloux/SmarttyTest" rel="noopener">GitHub</a>
+  </nav>
+  <label class="search"><span class="sr">Search the docs</span><input type="search" placeholder="Search" data-search data-base="../.." autocomplete="off"><span class="search-results" data-results hidden></span></label>
+</header>
+<div class="layout">
+  <aside id="sidebar" class="sidebar"><div class="nav-group"><p class="nav-title">Start</p><ul><li><a href="../index.html">Overview</a></li><li><a href="../guides/getting-started.html">Getting started</a></li><li><a href="../guides/commit-hooks.html">Commit and push hooks</a></li><li><a href="../guides/studio.html">Studio</a></li><li><a href="../guides/vscode.html">VS Code</a></li><li><a href="../guides/ci.html">Running in CI</a></li></ul></div><div class="nav-group"><p class="nav-title">Concepts</p><ul><li><a href="../concepts/how-selection-works.html">How selection works</a></li><li><a href="../concepts/safety-model.html">Safety model</a></li><li><a href="../concepts/runtime-evidence.html">Runtime evidence</a></li><li><a href="../concepts/speed.html">Running less, faster</a></li><li><a href="../concepts/change-tracking.html">Change tracking</a></li><li><a href="../concepts/rules.html">Rules</a></li></ul></div><div class="nav-group"><p class="nav-title">Reference</p><ul><li><a href="../reference/cli.html">CLI</a></li><li><a href="../reference/configuration.html">Configuration</a></li><li><a href="../benchmarks.html">Benchmarks</a></li><li><a href="../changelog.html">Changelog</a></li></ul></div><div class="nav-group"><p class="nav-title">Results</p><ul><li><a href="../case-studies/leadsit.html">Case study: LeadsIt</a></li><li><a href="../case-studies/external-repositories.html">External repositories</a></li></ul></div><div class="nav-group"><p class="nav-title">Project</p><ul><li><a href="../planning/roadmap.html">Roadmap</a></li><li><a href="../planning/delivery.html">Delivery log</a></li><li><a href="../architecture/overview.html">Architecture</a></li><li><a href="../architecture/adr/index.html">Decision records</a></li><li><a href="design-system.html" aria-current="page">Design system</a></li><li><a href="studio.html">Studio design brief</a></li><li><a href="../product/PRD.html">Specification</a></li></ul></div><p class="version">Version 0.9.0</p></aside>
+  <main id="content" class="prose">
+<h1 id="design-system">Design system</h1>
+<p>One visual language for the README, the docs, the HTML report (1.0) and SmartTest Studio (roadmap 0.9.0). Tokens are defined once and mirrored in <a href="https://github.com/RemiPelloux/SmarttyTest/blob/main/scripts/brand/build-readme-assets.mjs" rel="noopener"><code>scripts/brand/build-readme-assets.mjs</code></a>. The HTML report (ST-086) reads the same values as CSS custom properties.</p>
+<p align="center"><img src="../assets/logo.svg" width="72" alt="SmartTest logo"></p>
+<h2 id="brand-idea">Brand idea <a class="anchor" href="#brand-idea" aria-label="Link to this section">#</a></h2>
+<p>"A check mark drawn as a dependency graph." SmartTest's value is the link between a change and the tests that protect it. The logo, the hero and the impact map all show that link: the edge lights up, then the test turns green.</p>
+<h2 id="color-tokens">Color tokens <a class="anchor" href="#color-tokens" aria-label="Link to this section">#</a></h2>
+<h3 id="surface-dark-first">Surface (dark-first) <a class="anchor" href="#surface-dark-first" aria-label="Link to this section">#</a></h3>
+<div class="table"><table><thead><tr><th>Token</th><th>Hex</th><th>Use</th></tr></thead><tbody><tr><td><code>--st-bg-0</code></td><td><code>#070B18</code></td><td>Page background, terminal</td></tr><tr><td><code>--st-bg-1</code></td><td><code>#0E1530</code></td><td>Gradient end, raised areas</td></tr><tr><td><code>--st-panel</code></td><td><code>#111A38</code></td><td>Cards, nodes</td></tr><tr><td><code>--st-line</code></td><td><code>#22305C</code></td><td>Borders, idle edges</td></tr><tr><td><code>--st-text</code></td><td><code>#E8ECF8</code></td><td>Primary text</td></tr><tr><td><code>--st-muted</code></td><td><code>#8C97BD</code></td><td>Secondary text</td></tr><tr><td><code>--st-dim</code></td><td><code>#56618A</code></td><td>Tertiary text, idle nodes</td></tr></tbody></table></div>
+<h3 id="brand">Brand <a class="anchor" href="#brand" aria-label="Link to this section">#</a></h3>
+<div class="table"><table><thead><tr><th>Token</th><th>Hex</th><th>Use</th></tr></thead><tbody><tr><td><code>--st-cyan</code></td><td><code>#22D3EE</code></td><td>Primary accent, focus rings, prompts</td></tr><tr><td><code>--st-violet</code></td><td><code>#8B5CF6</code></td><td>Secondary accent, "affected"</td></tr><tr><td>Brand gradient</td><td>cyan → violet, 135°</td><td>Logo, headline emphasis. Never used for status</td></tr></tbody></table></div>
+<h3 id="status-semantic-never-decorative">Status (semantic, never decorative) <a class="anchor" href="#status-semantic-never-decorative" aria-label="Link to this section">#</a></h3>
+<div class="table"><table><thead><tr><th>Status</th><th>Token</th><th>Hex</th><th>Shape cue (color is never the only signal)</th></tr></thead><tbody><tr><td>Modified / changed</td><td><code>--st-warn</code></td><td><code>#FBBF24</code></td><td>● filled circle + "MODIFIED" label</td></tr><tr><td>Affected (non-test)</td><td><code>--st-violet</code></td><td><code>#8B5CF6</code></td><td>● + "AFFECTED"</td></tr><tr><td>Selected / passed</td><td><code>--st-pass</code></td><td><code>#34D399</code></td><td>■ square + ✓</td></tr><tr><td>Failed</td><td><code>--st-fail</code></td><td><code>#FB7185</code></td><td>■ + ✕</td></tr><tr><td>Flaky</td><td><code>--st-warn</code></td><td><code>#FBBF24</code></td><td>■ + ↻</td></tr><tr><td>Skipped (not run)</td><td><code>--st-skip</code></td><td><code>#3A4567</code></td><td>dashed outline + "not run"</td></tr><tr><td>Cached</td><td><code>--st-cyan</code></td><td><code>#22D3EE</code></td><td>■ + ⧉ "cached" badge, never shown as plain "passed"</td></tr></tbody></table></div>
+<p>In the graph, circles are source symbols and squares are tests.</p>
+<h3 id="light-theme-report--studio">Light theme (report &amp; Studio) <a class="anchor" href="#light-theme-report--studio" aria-label="Link to this section">#</a></h3>
+<div class="table"><table><thead><tr><th>Token</th><th>Dark</th><th>Light</th></tr></thead><tbody><tr><td><code>--st-bg-0</code></td><td><code>#070B18</code></td><td><code>#FFFFFF</code></td></tr><tr><td><code>--st-panel</code></td><td><code>#111A38</code></td><td><code>#F5F7FC</code></td></tr><tr><td><code>--st-line</code></td><td><code>#22305C</code></td><td><code>#D9DFEE</code></td></tr><tr><td><code>--st-text</code></td><td><code>#E8ECF8</code></td><td><code>#0B1020</code></td></tr><tr><td><code>--st-muted</code></td><td><code>#8C97BD</code></td><td><code>#4A5578</code></td></tr><tr><td><code>--st-pass</code></td><td><code>#34D399</code></td><td><code>#047857</code></td></tr><tr><td><code>--st-fail</code></td><td><code>#FB7185</code></td><td><code>#BE123C</code></td></tr><tr><td><code>--st-warn</code></td><td><code>#FBBF24</code></td><td><code>#B45309</code></td></tr></tbody></table></div>
+<p>All text and status pairs must meet WCAG 2.2 AA contrast (4.5:1 for text, 3:1 for UI glyphs) in both themes.</p>
+<h2 id="typography">Typography <a class="anchor" href="#typography" aria-label="Link to this section">#</a></h2>
+<div class="table"><table><thead><tr><th>Role</th><th>Stack</th><th>Size / weight</th></tr></thead><tbody><tr><td>Display</td><td><code>ui-sans-serif, -apple-system, "Segoe UI", Inter, Roboto, Helvetica, Arial, sans-serif</code></td><td>54/800, tracking −1.5</td></tr><tr><td>Heading</td><td>same</td><td>30/700, tracking −0.5</td></tr><tr><td>Body</td><td>same</td><td>15–16/400</td></tr><tr><td>Code, paths, IDs</td><td><code>ui-monospace, SFMono-Regular, "JetBrains Mono", Menlo, Consolas, monospace</code></td><td>13–15/400</td></tr><tr><td>Labels</td><td>mono</td><td>10.5–12, tracking +1.2–2, UPPERCASE</td></tr></tbody></table></div>
+<p>System stacks only. No web fonts in assets, so nothing loads over the network and nothing can be tracked.</p>
+<h2 id="spacing--shape">Spacing &amp; shape <a class="anchor" href="#spacing--shape" aria-label="Link to this section">#</a></h2>
+<ul><li>4 px base grid. Common steps: 4, 8, 12, 16, 24, 32, 48, 72.</li><li>Radii: 4 (test squares), 12 (cards), 14–16 (panels), 24 (hero frame).</li><li>Background grid: 32 px at 4.5 % white. Purely decorative.</li></ul>
+<h2 id="cli-style-guide">CLI style guide <a class="anchor" href="#cli-style-guide" aria-label="Link to this section">#</a></h2>
+<div class="table"><table><thead><tr><th>Element</th><th>Style</th></tr></thead><tbody><tr><td>Phase line</td><td><code>◇ Changes   git · main…HEAD · 3 files</code> (cyan diamond, muted label, padded to 10)</td></tr><tr><td>Section pill</td><td>inverse label: <code>SELECTED</code> (pass bg), <code>SKIPPED</code> (skip bg), <code>FAILED</code> (fail bg)</td></tr><tr><td>Result line</td><td><code>✓</code> / <code>✕</code> / <code>↻</code> + path + right-aligned counts and duration</td></tr><tr><td>Summary</td><td>one line: <code>✓ 12 passed · 0 failed · 474 skipped (not run) · 2.1 s</code></td></tr><tr><td>Next step</td><td><code>↳ why these tests? smarttest explain</code></td></tr><tr><td>Separators</td><td><code>·</code> (middle dot), never pipes</td></tr><tr><td>Errors</td><td><code>✕ ST_CONFIG_INVALID  message</code> + indented <code>hint:</code> + docs link</td></tr></tbody></table></div>
+<p>The wording rule is that "skipped" is always followed by "(not run)" in human output.</p>
+    <p class="edit"><a href="https://github.com/RemiPelloux/SmarttyTest/blob/main/documentation/design/design-system.md" rel="noopener">Edit this page on GitHub</a></p>
+  </main>
+  <nav class="toc" aria-label="On this page"><p class="nav-title">On this page</p><ul><li><a href="#brand-idea">Brand idea</a></li><li><a href="#color-tokens">Color tokens</a></li><li><a href="#typography">Typography</a></li><li><a href="#spacing--shape">Spacing &amp; shape</a></li><li><a href="#cli-style-guide">CLI style guide</a></li></ul></nav>
+</div>
+<script src="../../assets/docs.js" defer></script>
+
+</body>
+</html>

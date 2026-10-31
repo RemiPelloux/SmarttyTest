@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>External repositories · SmartTest</title>
+<meta name="description" content="SmartTest documentation: External repositories">
+<link rel="icon" href="../../assets/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../../assets/site.css">
+<link rel="stylesheet" href="../../assets/docs.css">
+</head>
+<body class="docs">
+<a class="skip" href="#content">Skip to content</a>
+<header class="bar">
+  <a class="wordmark" href="../../index.html"><img src="../../assets/logo.svg" alt="" width="22" height="22"> SmartTest</a>
+  <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="sidebar">Menu</button>
+  <nav class="bar-links" aria-label="Site">
+    <a href="../index.html">Docs</a>
+    <a href="../reference/cli.html">CLI</a>
+    <a href="../planning/roadmap.html">Roadmap</a>
+    <a href="https://github.com/RemiPelloux/SmarttyTest" rel="noopener">GitHub</a>
+  </nav>
+  <label class="search"><span class="sr">Search the docs</span><input type="search" placeholder="Search" data-search data-base="../.." autocomplete="off"><span class="search-results" data-results hidden></span></label>
+</header>
+<div class="layout">
+  <aside id="sidebar" class="sidebar"><div class="nav-group"><p class="nav-title">Start</p><ul><li><a href="../index.html">Overview</a></li><li><a href="../guides/getting-started.html">Getting started</a></li><li><a href="../guides/commit-hooks.html">Commit and push hooks</a></li><li><a href="../guides/studio.html">Studio</a></li><li><a href="../guides/vscode.html">VS Code</a></li><li><a href="../guides/ci.html">Running in CI</a></li></ul></div><div class="nav-group"><p class="nav-title">Concepts</p><ul><li><a href="../concepts/how-selection-works.html">How selection works</a></li><li><a href="../concepts/safety-model.html">Safety model</a></li><li><a href="../concepts/runtime-evidence.html">Runtime evidence</a></li><li><a href="../concepts/speed.html">Running less, faster</a></li><li><a href="../concepts/change-tracking.html">Change tracking</a></li><li><a href="../concepts/rules.html">Rules</a></li></ul></div><div class="nav-group"><p class="nav-title">Reference</p><ul><li><a href="../reference/cli.html">CLI</a></li><li><a href="../reference/configuration.html">Configuration</a></li><li><a href="../benchmarks.html">Benchmarks</a></li><li><a href="../changelog.html">Changelog</a></li></ul></div><div class="nav-group"><p class="nav-title">Results</p><ul><li><a href="leadsit.html">Case study: LeadsIt</a></li><li><a href="external-repositories.html" aria-current="page">External repositories</a></li></ul></div><div class="nav-group"><p class="nav-title">Project</p><ul><li><a href="../planning/roadmap.html">Roadmap</a></li><li><a href="../planning/delivery.html">Delivery log</a></li><li><a href="../architecture/overview.html">Architecture</a></li><li><a href="../architecture/adr/index.html">Decision records</a></li><li><a href="../design/design-system.html">Design system</a></li><li><a href="../design/studio.html">Studio design brief</a></li><li><a href="../product/PRD.html">Specification</a></li></ul></div><p class="version">Version 0.9.0</p></aside>
+  <main id="content" class="prose">
+<h1 id="external-repositories">External repositories</h1>
+<p>The 0.6.0 adoption check: take repositories SmartTest has never seen, run <code>smarttest init --yes</code>, change nothing in the generated configuration, and replay their recent history with <code>smarttest benchmark --commits 12</code>. A failure that the selection did not include counts as a miss unless it also fails on the parent commit.</p>
+<p>The CLI was run from the packed build (<code>packages/cli/.publish/dist/bin.js</code>), since the package is not on npm yet. Dependencies were installed with each project's own lockfile.</p>
+<div class="table"><table><thead><tr><th>Repository</th><th>Runner</th><th>Test files</th><th>Commits</th><th>Full runs</th><th>SmartTest</th><th>Saved</th><th>Test files run</th><th>Full-suite fallbacks</th><th>Missed</th><th>Already failing</th></tr></thead><tbody><tr><td><a href="https://github.com/tj/commander.js" rel="noopener">tj/commander.js</a></td><td><code>node --test</code></td><td>110</td><td>12</td><td>27.1 s</td><td>18.1 s</td><td>33%</td><td>644 / 1,312</td><td>5</td><td>0</td><td>6</td></tr><tr><td><a href="https://github.com/pillarjs/path-to-regexp" rel="noopener">pillarjs/path-to-regexp</a></td><td>Vitest</td><td>3</td><td>12</td><td>61.4 s</td><td>47.3 s</td><td>23%</td><td>30 / 36</td><td>4</td><td>0</td><td>0</td></tr><tr><td><a href="https://github.com/unjs/ufo" rel="noopener">unjs/ufo</a></td><td>Vitest</td><td>13</td><td>12</td><td>9.9 s</td><td>10.9 s</td><td>−11%</td><td>99 / 156</td><td>7</td><td>0</td><td>0</td></tr><tr><td><a href="https://github.com/unjs/defu" rel="noopener">unjs/defu</a></td><td>Vitest</td><td>2</td><td>12</td><td>8.0 s</td><td>8.5 s</td><td>−6%</td><td>14 / 24</td><td>6</td><td>0</td><td>0</td></tr><tr><td><a href="leadsit.html">LeadsIt</a></td><td>Jest, Vitest, <code>node --test</code></td><td>100</td><td>40 of the last 200</td><td>240.7 s</td><td>88.3 s</td><td>63%</td><td>522 / 3,052</td><td>2</td><td>0</td><td>0</td></tr></tbody></table></div>
+<p>All five were set up by <code>init --yes</code> without configuration edits, and none had a missed failure.</p>
+<h2 id="what-the-numbers-say">What the numbers say <a class="anchor" href="#what-the-numbers-say" aria-label="Link to this section">#</a></h2>
+<ul><li>Most of these commits are dependency updates. A change to <code>package.json</code> or a lockfile is a mandatory trigger, so those commits run the full suite ("full-suite fallbacks"). That is deliberate.</li><li>On ufo and defu the whole suite takes well under a second. Analysis plus starting the runner costs more than the tests SmartTest skips, so it is slower than running everything. <code>smarttest run</code> has an adaptive policy for this case: once a full run is recorded as faster than a typical analysis, it runs everything without building the graph. <code>benchmark</code> measures selection only and does not apply that policy.</li><li>The six "already failing" tests on commander.js failed on the parent commits too; they are not misses.</li><li><code>init</code> found the right runner in every case, including commander's <code>node --test</code> and path-to-regexp's <code>vitest.config.mts</code>.</li></ul>
+<h2 id="problems-found-and-fixed-in-smarttest">Problems found and fixed in SmartTest <a class="anchor" href="#problems-found-and-fixed-in-smarttest" aria-label="Link to this section">#</a></h2>
+<div class="table"><table><thead><tr><th>Found on</th><th>Problem</th><th>Fix</th></tr></thead><tbody><tr><td><code>ts-lib-vitest</code> fixture</td><td><code>new Cache().set(…).size()</code>: a method that returns <code>this</code> hid the members called on its result, so a change to <code>size</code> selected nothing</td><td>A method that lets <code>this</code> escape makes its callers depend on the whole class</td></tr><tr><td><code>yarn-workspaces-node</code> fixture</td><td><code>node --test packages/*/test/</code>: a glob that matches directories found no test files</td><td>Directory globs are searched like directories, as Node does</td></tr><tr><td>All five</td><td>The generated hook would block commits on machines where SmartTest is not installed yet</td><td>The hook runs SmartTest when <code>node_modules/.bin/smarttest</code> exists and prints a notice otherwise</td></tr></tbody></table></div>
+<h2 id="not-covered-yet">Not covered yet <a class="anchor" href="#not-covered-yet" aria-label="Link to this section">#</a></h2>
+<ul><li>The package is not on npm, so "installed from npm" could not be checked.</li><li>Only Linux was used. macOS and Windows are not validated.</li><li>Next.js and Wasp were not among the external repositories (Wasp is covered by LeadsIt).</li></ul>
+    <p class="edit"><a href="https://github.com/RemiPelloux/SmarttyTest/blob/main/documentation/case-studies/external-repositories.md" rel="noopener">Edit this page on GitHub</a></p>
+  </main>
+  <nav class="toc" aria-label="On this page"><p class="nav-title">On this page</p><ul><li><a href="#what-the-numbers-say">What the numbers say</a></li><li><a href="#problems-found-and-fixed-in-smarttest">Problems found and fixed in SmartTest</a></li><li><a href="#not-covered-yet">Not covered yet</a></li></ul></nav>
+</div>
+<script src="../../assets/docs.js" defer></script>
+
+</body>
+</html>

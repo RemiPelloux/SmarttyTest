@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Running in CI · SmartTest</title>
+<meta name="description" content="SmartTest documentation: Running in CI">
+<link rel="icon" href="../../assets/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../../assets/site.css">
+<link rel="stylesheet" href="../../assets/docs.css">
+</head>
+<body class="docs">
+<a class="skip" href="#content">Skip to content</a>
+<header class="bar">
+  <a class="wordmark" href="../../index.html"><img src="../../assets/logo.svg" alt="" width="22" height="22"> SmartTest</a>
+  <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="sidebar">Menu</button>
+  <nav class="bar-links" aria-label="Site">
+    <a href="../index.html">Docs</a>
+    <a href="../reference/cli.html">CLI</a>
+    <a href="../planning/roadmap.html">Roadmap</a>
+    <a href="https://github.com/RemiPelloux/SmarttyTest" rel="noopener">GitHub</a>
+  </nav>
+  <label class="search"><span class="sr">Search the docs</span><input type="search" placeholder="Search" data-search data-base="../.." autocomplete="off"><span class="search-results" data-results hidden></span></label>
+</header>
+<div class="layout">
+  <aside id="sidebar" class="sidebar"><div class="nav-group"><p class="nav-title">Start</p><ul><li><a href="../index.html">Overview</a></li><li><a href="getting-started.html">Getting started</a></li><li><a href="commit-hooks.html">Commit and push hooks</a></li><li><a href="studio.html">Studio</a></li><li><a href="vscode.html">VS Code</a></li><li><a href="ci.html" aria-current="page">Running in CI</a></li></ul></div><div class="nav-group"><p class="nav-title">Concepts</p><ul><li><a href="../concepts/how-selection-works.html">How selection works</a></li><li><a href="../concepts/safety-model.html">Safety model</a></li><li><a href="../concepts/runtime-evidence.html">Runtime evidence</a></li><li><a href="../concepts/speed.html">Running less, faster</a></li><li><a href="../concepts/change-tracking.html">Change tracking</a></li><li><a href="../concepts/rules.html">Rules</a></li></ul></div><div class="nav-group"><p class="nav-title">Reference</p><ul><li><a href="../reference/cli.html">CLI</a></li><li><a href="../reference/configuration.html">Configuration</a></li><li><a href="../benchmarks.html">Benchmarks</a></li><li><a href="../changelog.html">Changelog</a></li></ul></div><div class="nav-group"><p class="nav-title">Results</p><ul><li><a href="../case-studies/leadsit.html">Case study: LeadsIt</a></li><li><a href="../case-studies/external-repositories.html">External repositories</a></li></ul></div><div class="nav-group"><p class="nav-title">Project</p><ul><li><a href="../planning/roadmap.html">Roadmap</a></li><li><a href="../planning/delivery.html">Delivery log</a></li><li><a href="../architecture/overview.html">Architecture</a></li><li><a href="../architecture/adr/index.html">Decision records</a></li><li><a href="../design/design-system.html">Design system</a></li><li><a href="../design/studio.html">Studio design brief</a></li><li><a href="../product/PRD.html">Specification</a></li></ul></div><p class="version">Version 0.9.0</p></aside>
+  <main id="content" class="prose">
+<h1 id="running-in-ci">Running in CI</h1>
+<p>SmartTest is a CLI. It works in any CI system that can run Node.js 22.12 or newer. Nothing is specific to one provider.</p>
+<h2 id="requirements">Requirements <a class="anchor" href="#requirements" aria-label="Link to this section">#</a></h2>
+<ul><li>Enough Git history to find the merge-base with the target branch. With shallow clones, fetch the base branch, for example <code>git fetch --depth=200 origin main</code>.</li><li>Dependencies installed (<code>npm ci</code>, <code>pnpm install --frozen-lockfile</code>, …) in every project SmartTest runs tests for.</li><li><code>--non-interactive</code>, which is implied when <code>CI</code> is set or stdout is not a terminal.</li></ul>
+<h2 id="commands">Commands <a class="anchor" href="#commands" aria-label="Link to this section">#</a></h2>
+<p><code>smarttest ci</code> does the CI-specific work for you: it detects the provider, decides what to compare against (merge-base with the target branch for merge requests, the previous revision for branch builds), deepens shallow clones until that history is there, and writes JUnit and Markdown reports.</p>
+<pre data-lang="bash"><code>npx smarttest ci</code></pre>
+<p>The same can be done by hand:</p>
+<pre data-lang="bash"><code># merge request / pull request: tests affected by the branch
+npx smarttest run --base origin/main --non-interactive --format junit --format html
+
+# main branch or nightly: everything, same pipeline and reports
+npx smarttest run --all --non-interactive --format junit --format html
+
+# nightly: refresh traces, then compare the selection with a full run and keep the record
+npx smarttest trace --stale --non-interactive
+npx smarttest shadow --non-interactive</code></pre>
+<p>Reports are written to <code>.smarttest/reports/</code> (<code>junit.xml</code>, <code>report.html</code>, <code>report.json</code>, <code>summary.md</code>). Publish them with your CI's artifact mechanism.</p>
+<h2 id="exit-codes">Exit codes <a class="anchor" href="#exit-codes" aria-label="Link to this section">#</a></h2>
+<div class="table"><table><thead><tr><th>Code</th><th>Meaning</th><th>Usual CI handling</th></tr></thead><tbody><tr><td>0</td><td>all selected tests passed</td><td>pass</td></tr><tr><td>1</td><td>a test failed or timed out</td><td>fail</td></tr><tr><td>2</td><td>invalid command or flag</td><td>fail, fix the pipeline</td></tr><tr><td>3</td><td>configuration problem</td><td>fail</td></tr><tr><td>4</td><td>infrastructure problem (runner missing, Git base not found)</td><td>fail or retry</td></tr><tr><td>5</td><td>policy failure (<code>validate-selection</code>, <code>shadow</code> or <code>benchmark</code> found a miss)</td><td>fail</td></tr></tbody></table></div>
+<h2 id="example-gitlab-ci">Example: GitLab CI <a class="anchor" href="#example-gitlab-ci" aria-label="Link to this section">#</a></h2>
+<pre data-lang="yaml"><code>test:
+  image: node:24
+  script:
+    - npm ci
+    - npx smarttest ci
+  artifacts:
+    when: always
+    reports:
+      junit: .smarttest/reports/junit.xml</code></pre>
+<h2 id="example-any-shell-based-ci-jenkins-buildkite-drone">Example: any shell-based CI (Jenkins, Buildkite, Drone…) <a class="anchor" href="#example-any-shell-based-ci-jenkins-buildkite-drone" aria-label="Link to this section">#</a></h2>
+<pre data-lang="bash"><code>set -e
+npm ci
+npx smarttest ci</code></pre>
+<h2 id="traces-and-shadow-mode-in-ci">Traces and Shadow Mode in CI <a class="anchor" href="#traces-and-shadow-mode-in-ci" aria-label="Link to this section">#</a></h2>
+<p>Traces live in <code>.smarttest/state/traces.json</code>. To use them on pull requests, cache that file (or the whole <code>.smarttest/state/</code> directory) between pipeline runs, keyed on the lockfile. A trace whose loaded files changed is ignored automatically, so a stale cache is harmless. <code>smarttest shadow</code> appends to <code>.smarttest/shadow/history.jsonl</code>; keep that file as an artifact or in a cache to follow drift with <code>smarttest shadow --report</code>.</p>
+<p>To check SmartTest against the full suite on your own history before relying on it in CI, run <code>npx smarttest benchmark --commits 20</code> locally.</p>
+    <p class="edit"><a href="https://github.com/RemiPelloux/SmarttyTest/blob/main/documentation/guides/ci.md" rel="noopener">Edit this page on GitHub</a></p>
+  </main>
+  <nav class="toc" aria-label="On this page"><p class="nav-title">On this page</p><ul><li><a href="#requirements">Requirements</a></li><li><a href="#commands">Commands</a></li><li><a href="#exit-codes">Exit codes</a></li><li><a href="#example-gitlab-ci">Example: GitLab CI</a></li><li><a href="#example-any-shell-based-ci-jenkins-buildkite-drone">Example: any shell-based CI (Jenkins, Buildkite, Drone…)</a></li><li><a href="#traces-and-shadow-mode-in-ci">Traces and Shadow Mode in CI</a></li></ul></nav>
+</div>
+<script src="../../assets/docs.js" defer></script>
+
+</body>
+</html>

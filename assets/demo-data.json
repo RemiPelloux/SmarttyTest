@@ -1,0 +1,749 @@
+{
+ "fixture": "fixtures/projects/nest-auth-vitest",
+ "edits": [
+  {
+   "id": "verify",
+   "label": "TokenManager.verify",
+   "file": "src/modules/auth/TokenManager.ts",
+   "find": "token.length > 8",
+   "replace": "token.length > 7"
+  },
+  {
+   "id": "issue",
+   "label": "TokenManager.issue",
+   "file": "src/modules/auth/TokenManager.ts",
+   "find": "_${userId.length}",
+   "replace": "_${userId.trim().length}"
+  },
+  {
+   "id": "isEmail",
+   "label": "isEmail",
+   "file": "src/shared/validators/EmailValidator.ts",
+   "find": "[^@\\s]+$",
+   "replace": "[^@\\s]{2,}$"
+  },
+  {
+   "id": "total",
+   "label": "CatalogService.total",
+   "file": "src/modules/catalog/CatalogService.ts",
+   "find": "sum + p.price",
+   "replace": "sum + p.price * 1"
+  }
+ ],
+ "tests": [
+  "test/routes/ProtectedRoutes.test.ts",
+  "tests/unit/modules/auth/AuthController.test.ts",
+  "tests/unit/modules/auth/AuthService.test.ts",
+  "tests/unit/modules/auth/TokenManager.test.ts",
+  "tests/unit/modules/catalog/CatalogService.test.ts",
+  "tests/unit/modules/users/UserService.test.ts",
+  "tests/unit/shared/validators/EmailValidator.test.ts"
+ ],
+ "combos": {
+  "verify": {
+   "selected": [
+    {
+     "file": "test/routes/ProtectedRoutes.test.ts",
+     "reason": "Transitively depends on src/modules/auth/TokenManager.ts#TokenManager.verify (4 hops)",
+     "path": [
+      "src/modules/auth/TokenManager.ts#TokenManager.verify",
+      "src/modules/auth/AuthService.ts#AuthService.validateToken",
+      "src/modules/auth/AuthenticationMiddleware.ts#authenticate",
+      "src/routes/protected.ts#protectedRoute",
+      "test/routes/ProtectedRoutes.test.ts"
+     ]
+    },
+    {
+     "file": "tests/unit/modules/auth/AuthService.test.ts",
+     "reason": "Transitively depends on src/modules/auth/TokenManager.ts#TokenManager.verify (2 hops)",
+     "path": [
+      "src/modules/auth/TokenManager.ts#TokenManager.verify",
+      "src/modules/auth/AuthService.ts#AuthService.validateToken",
+      "tests/unit/modules/auth/AuthService.test.ts"
+     ]
+    },
+    {
+     "file": "tests/unit/modules/auth/TokenManager.test.ts",
+     "reason": "Directly depends on src/modules/auth/TokenManager.ts#TokenManager.verify",
+     "path": [
+      "src/modules/auth/TokenManager.ts#TokenManager.verify",
+      "tests/unit/modules/auth/TokenManager.test.ts"
+     ]
+    }
+   ],
+   "ms": 211
+  },
+  "issue": {
+   "selected": [
+    {
+     "file": "tests/unit/modules/auth/AuthController.test.ts",
+     "reason": "Transitively depends on src/modules/auth/TokenManager.ts#TokenManager.issue (3 hops)",
+     "path": [
+      "src/modules/auth/TokenManager.ts#TokenManager.issue",
+      "src/modules/auth/AuthService.ts#AuthService.login",
+      "src/modules/auth/AuthController.ts#AuthController.handleLogin",
+      "tests/unit/modules/auth/AuthController.test.ts"
+     ]
+    },
+    {
+     "file": "tests/unit/modules/auth/AuthService.test.ts",
+     "reason": "Transitively depends on src/modules/auth/TokenManager.ts#TokenManager.issue (2 hops)",
+     "path": [
+      "src/modules/auth/TokenManager.ts#TokenManager.issue",
+      "src/modules/auth/AuthService.ts#AuthService.login",
+      "tests/unit/modules/auth/AuthService.test.ts"
+     ]
+    },
+    {
+     "file": "tests/unit/modules/auth/TokenManager.test.ts",
+     "reason": "Directly depends on src/modules/auth/TokenManager.ts#TokenManager.issue",
+     "path": [
+      "src/modules/auth/TokenManager.ts#TokenManager.issue",
+      "tests/unit/modules/auth/TokenManager.test.ts"
+     ]
+    }
+   ],
+   "ms": 109
+  },
+  "verify+issue": {
+   "selected": [
+    {
+     "file": "test/routes/ProtectedRoutes.test.ts",
+     "reason": "Transitively depends on src/modules/auth/TokenManager.ts#TokenManager.verify (4 hops)",
+     "path": [
+      "src/modules/auth/TokenManager.ts#TokenManager.verify",
+      "src/modules/auth/AuthService.ts#AuthService.validateToken",
+      "src/modules/auth/AuthenticationMiddleware.ts#authenticate",
+      "src/routes/protected.ts#protectedRoute",
+      "test/routes/ProtectedRoutes.test.ts"
+     ]
+    },
+    {
+     "file": "tests/unit/modules/auth/AuthController.test.ts",
+     "reason": "Transitively depends on src/modules/auth/TokenManager.ts#TokenManager.issue (3 hops)",
+     "path": [
+      "src/modules/auth/TokenManager.ts#TokenManager.issue",
+      "src/modules/auth/AuthService.ts#AuthService.login",
+      "src/modules/auth/AuthController.ts#AuthController.handleLogin",
+      "tests/unit/modules/auth/AuthController.test.ts"
+     ]
+    },
+    {
+     "file": "tests/unit/modules/auth/AuthService.test.ts",
+     "reason": "Transitively depends on src/modules/auth/TokenManager.ts#TokenManager.issue (2 hops)",
+     "path": [
+      "src/modules/auth/TokenManager.ts#TokenManager.issue",
+      "src/modules/auth/AuthService.ts#AuthService.login",
+      "tests/unit/modules/auth/AuthService.test.ts"
+     ]
+    },
+    {
+     "file": "tests/unit/modules/auth/TokenManager.test.ts",
+     "reason": "Directly depends on src/modules/auth/TokenManager.ts#TokenManager.issue",
+     "path": [
+      "src/modules/auth/TokenManager.ts#TokenManager.issue",
+      "tests/unit/modules/auth/TokenManager.test.ts"
+     ]
+    }
+   ],
+   "ms": 120
+  },
+  "isEmail": {
+   "selected": [
+    {
+     "file": "tests/unit/modules/auth/AuthController.test.ts",
+     "reason": "Transitively depends on src/shared/validators/EmailValidator.ts#isEmail (3 hops)",
+     "path": [
+      "src/shared/validators/EmailValidator.ts#isEmail",
+      "src/modules/auth/AuthService.ts#AuthService.login",
+      "src/modules/auth/AuthController.ts#AuthController.handleLogin",
+      "tests/unit/modules/auth/AuthController.test.ts"
+     ]
+    },
+    {
+     "file": "tests/unit/modules/auth/AuthService.test.ts",
+     "reason": "Transitively depends on src/shared/validators/EmailValidator.ts#isEmail (2 hops)",
+     "path": [
+      "src/shared/validators/EmailValidator.ts#isEmail",
+      "src/modules/auth/AuthService.ts#AuthService.login",
+      "tests/unit/modules/auth/AuthService.test.ts"
+     ]
+    },
+    {
+     "file": "tests/unit/modules/users/UserService.test.ts",
+     "reason": "Transitively depends on src/shared/validators/EmailValidator.ts#isEmail (2 hops)",
+     "path": [
+      "src/shared/validators/EmailValidator.ts#isEmail",
+      "src/modules/users/UserService.ts#UserService.register",
+      "tests/unit/modules/users/UserService.test.ts"
+     ]
+    },
+    {
+     "file": "tests/unit/shared/validators/EmailValidator.test.ts",
+     "reason": "Directly depends on src/shared/validators/EmailValidator.ts#isEmail",
+     "path": [
+      "src/shared/validators/EmailValidator.ts#isEmail",
+      "tests/unit/shared/validators/EmailValidator.test.ts"
+     ]
+    }
+   ],
+   "ms": 138
+  },
+  "verify+isEmail": {
+   "selected": [
+    {
+     "file": "test/routes/ProtectedRoutes.test.ts",
+     "reason": "Transitively depends on src/modules/auth/TokenManager.ts#TokenManager.verify (4 hops)",
+     "path": [
+      "src/modules/auth/TokenManager.ts#TokenManager.verify",
+      "src/modules/auth/AuthService.ts#AuthService.validateToken",
+      "src/modules/auth/AuthenticationMiddleware.ts#authenticate",
+      "src/routes/protected.ts#protectedRoute",
+      "test/routes/ProtectedRoutes.test.ts"
+     ]
+    },
+    {
+     "file": "tests/unit/modules/auth/AuthController.test.ts",
+     "reason": "Transitively depends on src/shared/validators/EmailValidator.ts#isEmail (3 hops)",
+     "path": [
+      "src/shared/validators/EmailValidator.ts#isEmail",
+      "src/modules/auth/AuthService.ts#AuthService.login",
+      "src/modules/auth/AuthController.ts#AuthController.handleLogin",
+      "tests/unit/modules/auth/AuthController.test.ts"
+     ]
+    },
+    {
+     "file": "tests/unit/modules/auth/AuthService.test.ts",
+     "reason": "Transitively depends on src/modules/auth/TokenManager.ts#TokenManager.verify (2 hops)",
+     "path": [
+      "src/modules/auth/TokenManager.ts#TokenManager.verify",
+      "src/modules/auth/AuthService.ts#AuthService.validateToken",
+      "tests/unit/modules/auth/AuthService.test.ts"
+     ]
+    },
+    {
+     "file": "tests/unit/modules/auth/TokenManager.test.ts",
+     "reason": "Directly depends on src/modules/auth/TokenManager.ts#TokenManager.verify",
+     "path": [
+      "src/modules/auth/TokenManager.ts#TokenManager.verify",
+      "tests/unit/modules/auth/TokenManager.test.ts"
+     ]
+    },
+    {
+     "file": "tests/unit/modules/users/UserService.test.ts",
+     "reason": "Transitively depends on src/shared/validators/EmailValidator.ts#isEmail (2 hops)",
+     "path": [
+      "src/shared/validators/EmailValidator.ts#isEmail",
+      "src/modules/users/UserService.ts#UserService.register",
+      "tests/unit/modules/users/UserService.test.ts"
+     ]
+    },
+    {
+     "file": "tests/unit/shared/validators/EmailValidator.test.ts",
+     "reason": "Directly depends on src/shared/validators/EmailValidator.ts#isEmail",
+     "path": [
+      "src/shared/validators/EmailValidator.ts#isEmail",
+      "tests/unit/shared/validators/EmailValidator.test.ts"
+     ]
+    }
+   ],
+   "ms": 130
+  },
+  "issue+isEmail": {
+   "selected": [
+    {
+     "file": "tests/unit/modules/auth/AuthController.test.ts",
+     "reason": "Transitively depends on src/modules/auth/TokenManager.ts#TokenManager.issue (3 hops)",
+     "path": [
+      "src/modules/auth/TokenManager.ts#TokenManager.issue",
+      "src/modules/auth/AuthService.ts#AuthService.login",
+      "src/modules/auth/AuthController.ts#AuthController.handleLogin",
+      "tests/unit/modules/auth/AuthController.test.ts"
+     ]
+    },
+    {
+     "file": "tests/unit/modules/auth/AuthService.test.ts",
+     "reason": "Transitively depends on src/modules/auth/TokenManager.ts#TokenManager.issue (2 hops)",
+     "path": [
+      "src/modules/auth/TokenManager.ts#TokenManager.issue",
+      "src/modules/auth/AuthService.ts#AuthService.login",
+      "tests/unit/modules/auth/AuthService.test.ts"
+     ]
+    },
+    {
+     "file": "tests/unit/modules/auth/TokenManager.test.ts",
+     "reason": "Directly depends on src/modules/auth/TokenManager.ts#TokenManager.issue",
+     "path": [
+      "src/modules/auth/TokenManager.ts#TokenManager.issue",
+      "tests/unit/modules/auth/TokenManager.test.ts"
+     ]
+    },
+    {
+     "file": "tests/unit/modules/users/UserService.test.ts",
+     "reason": "Transitively depends on src/shared/validators/EmailValidator.ts#isEmail (2 hops)",
+     "path": [
+      "src/shared/validators/EmailValidator.ts#isEmail",
+      "src/modules/users/UserService.ts#UserService.register",
+      "tests/unit/modules/users/UserService.test.ts"
+     ]
+    },
+    {
+     "file": "tests/unit/shared/validators/EmailValidator.test.ts",
+     "reason": "Directly depends on src/shared/validators/EmailValidator.ts#isEmail",
+     "path": [
+      "src/shared/validators/EmailValidator.ts#isEmail",
+      "tests/unit/shared/validators/EmailValidator.test.ts"
+     ]
+    }
+   ],
+   "ms": 122
+  },
+  "verify+issue+isEmail": {
+   "selected": [
+    {
+     "file": "test/routes/ProtectedRoutes.test.ts",
+     "reason": "Transitively depends on src/modules/auth/TokenManager.ts#TokenManager.verify (4 hops)",
+     "path": [
+      "src/modules/auth/TokenManager.ts#TokenManager.verify",
+      "src/modules/auth/AuthService.ts#AuthService.validateToken",
+      "src/modules/auth/AuthenticationMiddleware.ts#authenticate",
+      "src/routes/protected.ts#protectedRoute",
+      "test/routes/ProtectedRoutes.test.ts"
+     ]
+    },
+    {
+     "file": "tests/unit/modules/auth/AuthController.test.ts",
+     "reason": "Transitively depends on src/modules/auth/TokenManager.ts#TokenManager.issue (3 hops)",
+     "path": [
+      "src/modules/auth/TokenManager.ts#TokenManager.issue",
+      "src/modules/auth/AuthService.ts#AuthService.login",
+      "src/modules/auth/AuthController.ts#AuthController.handleLogin",
+      "tests/unit/modules/auth/AuthController.test.ts"
+     ]
+    },
+    {
+     "file": "tests/unit/modules/auth/AuthService.test.ts",
+     "reason": "Transitively depends on src/modules/auth/TokenManager.ts#TokenManager.issue (2 hops)",
+     "path": [
+      "src/modules/auth/TokenManager.ts#TokenManager.issue",
+      "src/modules/auth/AuthService.ts#AuthService.login",
+      "tests/unit/modules/auth/AuthService.test.ts"
+     ]
+    },
+    {
+     "file": "tests/unit/modules/auth/TokenManager.test.ts",
+     "reason": "Directly depends on src/modules/auth/TokenManager.ts#TokenManager.issue",
+     "path": [
+      "src/modules/auth/TokenManager.ts#TokenManager.issue",
+      "tests/unit/modules/auth/TokenManager.test.ts"
+     ]
+    },
+    {
+     "file": "tests/unit/modules/users/UserService.test.ts",
+     "reason": "Transitively depends on src/shared/validators/EmailValidator.ts#isEmail (2 hops)",
+     "path": [
+      "src/shared/validators/EmailValidator.ts#isEmail",
+      "src/modules/users/UserService.ts#UserService.register",
+      "tests/unit/modules/users/UserService.test.ts"
+     ]
+    },
+    {
+     "file": "tests/unit/shared/validators/EmailValidator.test.ts",
+     "reason": "Directly depends on src/shared/validators/EmailValidator.ts#isEmail",
+     "path": [
+      "src/shared/validators/EmailValidator.ts#isEmail",
+      "tests/unit/shared/validators/EmailValidator.test.ts"
+     ]
+    }
+   ],
+   "ms": 121
+  },
+  "total": {
+   "selected": [
+    {
+     "file": "tests/unit/modules/catalog/CatalogService.test.ts",
+     "reason": "Directly depends on src/modules/catalog/CatalogService.ts#CatalogService.total",
+     "path": [
+      "src/modules/catalog/CatalogService.ts#CatalogService.total",
+      "tests/unit/modules/catalog/CatalogService.test.ts"
+     ]
+    }
+   ],
+   "ms": 124
+  },
+  "verify+total": {
+   "selected": [
+    {
+     "file": "test/routes/ProtectedRoutes.test.ts",
+     "reason": "Transitively depends on src/modules/auth/TokenManager.ts#TokenManager.verify (4 hops)",
+     "path": [
+      "src/modules/auth/TokenManager.ts#TokenManager.verify",
+      "src/modules/auth/AuthService.ts#AuthService.validateToken",
+      "src/modules/auth/AuthenticationMiddleware.ts#authenticate",
+      "src/routes/protected.ts#protectedRoute",
+      "test/routes/ProtectedRoutes.test.ts"
+     ]
+    },
+    {
+     "file": "tests/unit/modules/auth/AuthService.test.ts",
+     "reason": "Transitively depends on src/modules/auth/TokenManager.ts#TokenManager.verify (2 hops)",
+     "path": [
+      "src/modules/auth/TokenManager.ts#TokenManager.verify",
+      "src/modules/auth/AuthService.ts#AuthService.validateToken",
+      "tests/unit/modules/auth/AuthService.test.ts"
+     ]
+    },
+    {
+     "file": "tests/unit/modules/auth/TokenManager.test.ts",
+     "reason": "Directly depends on src/modules/auth/TokenManager.ts#TokenManager.verify",
+     "path": [
+      "src/modules/auth/TokenManager.ts#TokenManager.verify",
+      "tests/unit/modules/auth/TokenManager.test.ts"
+     ]
+    },
+    {
+     "file": "tests/unit/modules/catalog/CatalogService.test.ts",
+     "reason": "Directly depends on src/modules/catalog/CatalogService.ts#CatalogService.total",
+     "path": [
+      "src/modules/catalog/CatalogService.ts#CatalogService.total",
+      "tests/unit/modules/catalog/CatalogService.test.ts"
+     ]
+    }
+   ],
+   "ms": 124
+  },
+  "issue+total": {
+   "selected": [
+    {
+     "file": "tests/unit/modules/auth/AuthController.test.ts",
+     "reason": "Transitively depends on src/modules/auth/TokenManager.ts#TokenManager.issue (3 hops)",
+     "path": [
+      "src/modules/auth/TokenManager.ts#TokenManager.issue",
+      "src/modules/auth/AuthService.ts#AuthService.login",
+      "src/modules/auth/AuthController.ts#AuthController.handleLogin",
+      "tests/unit/modules/auth/AuthController.test.ts"
+     ]
+    },
+    {
+     "file": "tests/unit/modules/auth/AuthService.test.ts",
+     "reason": "Transitively depends on src/modules/auth/TokenManager.ts#TokenManager.issue (2 hops)",
+     "path": [
+      "src/modules/auth/TokenManager.ts#TokenManager.issue",
+      "src/modules/auth/AuthService.ts#AuthService.login",
+      "tests/unit/modules/auth/AuthService.test.ts"
+     ]
+    },
+    {
+     "file": "tests/unit/modules/auth/TokenManager.test.ts",
+     "reason": "Directly depends on src/modules/auth/TokenManager.ts#TokenManager.issue",
+     "path": [
+      "src/modules/auth/TokenManager.ts#TokenManager.issue",
+      "tests/unit/modules/auth/TokenManager.test.ts"
+     ]
+    },
+    {
+     "file": "tests/unit/modules/catalog/CatalogService.test.ts",
+     "reason": "Directly depends on src/modules/catalog/CatalogService.ts#CatalogService.total",
+     "path": [
+      "src/modules/catalog/CatalogService.ts#CatalogService.total",
+      "tests/unit/modules/catalog/CatalogService.test.ts"
+     ]
+    }
+   ],
+   "ms": 116
+  },
+  "verify+issue+total": {
+   "selected": [
+    {
+     "file": "test/routes/ProtectedRoutes.test.ts",
+     "reason": "Transitively depends on src/modules/auth/TokenManager.ts#TokenManager.verify (4 hops)",
+     "path": [
+      "src/modules/auth/TokenManager.ts#TokenManager.verify",
+      "src/modules/auth/AuthService.ts#AuthService.validateToken",
+      "src/modules/auth/AuthenticationMiddleware.ts#authenticate",
+      "src/routes/protected.ts#protectedRoute",
+      "test/routes/ProtectedRoutes.test.ts"
+     ]
+    },
+    {
+     "file": "tests/unit/modules/auth/AuthController.test.ts",
+     "reason": "Transitively depends on src/modules/auth/TokenManager.ts#TokenManager.issue (3 hops)",
+     "path": [
+      "src/modules/auth/TokenManager.ts#TokenManager.issue",
+      "src/modules/auth/AuthService.ts#AuthService.login",
+      "src/modules/auth/AuthController.ts#AuthController.handleLogin",
+      "tests/unit/modules/auth/AuthController.test.ts"
+     ]
+    },
+    {
+     "file": "tests/unit/modules/auth/AuthService.test.ts",
+     "reason": "Transitively depends on src/modules/auth/TokenManager.ts#TokenManager.issue (2 hops)",
+     "path": [
+      "src/modules/auth/TokenManager.ts#TokenManager.issue",
+      "src/modules/auth/AuthService.ts#AuthService.login",
+      "tests/unit/modules/auth/AuthService.test.ts"
+     ]
+    },
+    {
+     "file": "tests/unit/modules/auth/TokenManager.test.ts",
+     "reason": "Directly depends on src/modules/auth/TokenManager.ts#TokenManager.issue",
+     "path": [
+      "src/modules/auth/TokenManager.ts#TokenManager.issue",
+      "tests/unit/modules/auth/TokenManager.test.ts"
+     ]
+    },
+    {
+     "file": "tests/unit/modules/catalog/CatalogService.test.ts",
+     "reason": "Directly depends on src/modules/catalog/CatalogService.ts#CatalogService.total",
+     "path": [
+      "src/modules/catalog/CatalogService.ts#CatalogService.total",
+      "tests/unit/modules/catalog/CatalogService.test.ts"
+     ]
+    }
+   ],
+   "ms": 116
+  },
+  "isEmail+total": {
+   "selected": [
+    {
+     "file": "tests/unit/modules/auth/AuthController.test.ts",
+     "reason": "Transitively depends on src/shared/validators/EmailValidator.ts#isEmail (3 hops)",
+     "path": [
+      "src/shared/validators/EmailValidator.ts#isEmail",
+      "src/modules/auth/AuthService.ts#AuthService.login",
+      "src/modules/auth/AuthController.ts#AuthController.handleLogin",
+      "tests/unit/modules/auth/AuthController.test.ts"
+     ]
+    },
+    {
+     "file": "tests/unit/modules/auth/AuthService.test.ts",
+     "reason": "Transitively depends on src/shared/validators/EmailValidator.ts#isEmail (2 hops)",
+     "path": [
+      "src/shared/validators/EmailValidator.ts#isEmail",
+      "src/modules/auth/AuthService.ts#AuthService.login",
+      "tests/unit/modules/auth/AuthService.test.ts"
+     ]
+    },
+    {
+     "file": "tests/unit/modules/catalog/CatalogService.test.ts",
+     "reason": "Directly depends on src/modules/catalog/CatalogService.ts#CatalogService.total",
+     "path": [
+      "src/modules/catalog/CatalogService.ts#CatalogService.total",
+      "tests/unit/modules/catalog/CatalogService.test.ts"
+     ]
+    },
+    {
+     "file": "tests/unit/modules/users/UserService.test.ts",
+     "reason": "Transitively depends on src/shared/validators/EmailValidator.ts#isEmail (2 hops)",
+     "path": [
+      "src/shared/validators/EmailValidator.ts#isEmail",
+      "src/modules/users/UserService.ts#UserService.register",
+      "tests/unit/modules/users/UserService.test.ts"
+     ]
+    },
+    {
+     "file": "tests/unit/shared/validators/EmailValidator.test.ts",
+     "reason": "Directly depends on src/shared/validators/EmailValidator.ts#isEmail",
+     "path": [
+      "src/shared/validators/EmailValidator.ts#isEmail",
+      "tests/unit/shared/validators/EmailValidator.test.ts"
+     ]
+    }
+   ],
+   "ms": 122
+  },
+  "verify+isEmail+total": {
+   "selected": [
+    {
+     "file": "test/routes/ProtectedRoutes.test.ts",
+     "reason": "Transitively depends on src/modules/auth/TokenManager.ts#TokenManager.verify (4 hops)",
+     "path": [
+      "src/modules/auth/TokenManager.ts#TokenManager.verify",
+      "src/modules/auth/AuthService.ts#AuthService.validateToken",
+      "src/modules/auth/AuthenticationMiddleware.ts#authenticate",
+      "src/routes/protected.ts#protectedRoute",
+      "test/routes/ProtectedRoutes.test.ts"
+     ]
+    },
+    {
+     "file": "tests/unit/modules/auth/AuthController.test.ts",
+     "reason": "Transitively depends on src/shared/validators/EmailValidator.ts#isEmail (3 hops)",
+     "path": [
+      "src/shared/validators/EmailValidator.ts#isEmail",
+      "src/modules/auth/AuthService.ts#AuthService.login",
+      "src/modules/auth/AuthController.ts#AuthController.handleLogin",
+      "tests/unit/modules/auth/AuthController.test.ts"
+     ]
+    },
+    {
+     "file": "tests/unit/modules/auth/AuthService.test.ts",
+     "reason": "Transitively depends on src/modules/auth/TokenManager.ts#TokenManager.verify (2 hops)",
+     "path": [
+      "src/modules/auth/TokenManager.ts#TokenManager.verify",
+      "src/modules/auth/AuthService.ts#AuthService.validateToken",
+      "tests/unit/modules/auth/AuthService.test.ts"
+     ]
+    },
+    {
+     "file": "tests/unit/modules/auth/TokenManager.test.ts",
+     "reason": "Directly depends on src/modules/auth/TokenManager.ts#TokenManager.verify",
+     "path": [
+      "src/modules/auth/TokenManager.ts#TokenManager.verify",
+      "tests/unit/modules/auth/TokenManager.test.ts"
+     ]
+    },
+    {
+     "file": "tests/unit/modules/catalog/CatalogService.test.ts",
+     "reason": "Directly depends on src/modules/catalog/CatalogService.ts#CatalogService.total",
+     "path": [
+      "src/modules/catalog/CatalogService.ts#CatalogService.total",
+      "tests/unit/modules/catalog/CatalogService.test.ts"
+     ]
+    },
+    {
+     "file": "tests/unit/modules/users/UserService.test.ts",
+     "reason": "Transitively depends on src/shared/validators/EmailValidator.ts#isEmail (2 hops)",
+     "path": [
+      "src/shared/validators/EmailValidator.ts#isEmail",
+      "src/modules/users/UserService.ts#UserService.register",
+      "tests/unit/modules/users/UserService.test.ts"
+     ]
+    },
+    {
+     "file": "tests/unit/shared/validators/EmailValidator.test.ts",
+     "reason": "Directly depends on src/shared/validators/EmailValidator.ts#isEmail",
+     "path": [
+      "src/shared/validators/EmailValidator.ts#isEmail",
+      "tests/unit/shared/validators/EmailValidator.test.ts"
+     ]
+    }
+   ],
+   "ms": 125
+  },
+  "issue+isEmail+total": {
+   "selected": [
+    {
+     "file": "tests/unit/modules/auth/AuthController.test.ts",
+     "reason": "Transitively depends on src/modules/auth/TokenManager.ts#TokenManager.issue (3 hops)",
+     "path": [
+      "src/modules/auth/TokenManager.ts#TokenManager.issue",
+      "src/modules/auth/AuthService.ts#AuthService.login",
+      "src/modules/auth/AuthController.ts#AuthController.handleLogin",
+      "tests/unit/modules/auth/AuthController.test.ts"
+     ]
+    },
+    {
+     "file": "tests/unit/modules/auth/AuthService.test.ts",
+     "reason": "Transitively depends on src/modules/auth/TokenManager.ts#TokenManager.issue (2 hops)",
+     "path": [
+      "src/modules/auth/TokenManager.ts#TokenManager.issue",
+      "src/modules/auth/AuthService.ts#AuthService.login",
+      "tests/unit/modules/auth/AuthService.test.ts"
+     ]
+    },
+    {
+     "file": "tests/unit/modules/auth/TokenManager.test.ts",
+     "reason": "Directly depends on src/modules/auth/TokenManager.ts#TokenManager.issue",
+     "path": [
+      "src/modules/auth/TokenManager.ts#TokenManager.issue",
+      "tests/unit/modules/auth/TokenManager.test.ts"
+     ]
+    },
+    {
+     "file": "tests/unit/modules/catalog/CatalogService.test.ts",
+     "reason": "Directly depends on src/modules/catalog/CatalogService.ts#CatalogService.total",
+     "path": [
+      "src/modules/catalog/CatalogService.ts#CatalogService.total",
+      "tests/unit/modules/catalog/CatalogService.test.ts"
+     ]
+    },
+    {
+     "file": "tests/unit/modules/users/UserService.test.ts",
+     "reason": "Transitively depends on src/shared/validators/EmailValidator.ts#isEmail (2 hops)",
+     "path": [
+      "src/shared/validators/EmailValidator.ts#isEmail",
+      "src/modules/users/UserService.ts#UserService.register",
+      "tests/unit/modules/users/UserService.test.ts"
+     ]
+    },
+    {
+     "file": "tests/unit/shared/validators/EmailValidator.test.ts",
+     "reason": "Directly depends on src/shared/validators/EmailValidator.ts#isEmail",
+     "path": [
+      "src/shared/validators/EmailValidator.ts#isEmail",
+      "tests/unit/shared/validators/EmailValidator.test.ts"
+     ]
+    }
+   ],
+   "ms": 127
+  },
+  "verify+issue+isEmail+total": {
+   "selected": [
+    {
+     "file": "test/routes/ProtectedRoutes.test.ts",
+     "reason": "Transitively depends on src/modules/auth/TokenManager.ts#TokenManager.verify (4 hops)",
+     "path": [
+      "src/modules/auth/TokenManager.ts#TokenManager.verify",
+      "src/modules/auth/AuthService.ts#AuthService.validateToken",
+      "src/modules/auth/AuthenticationMiddleware.ts#authenticate",
+      "src/routes/protected.ts#protectedRoute",
+      "test/routes/ProtectedRoutes.test.ts"
+     ]
+    },
+    {
+     "file": "tests/unit/modules/auth/AuthController.test.ts",
+     "reason": "Transitively depends on src/modules/auth/TokenManager.ts#TokenManager.issue (3 hops)",
+     "path": [
+      "src/modules/auth/TokenManager.ts#TokenManager.issue",
+      "src/modules/auth/AuthService.ts#AuthService.login",
+      "src/modules/auth/AuthController.ts#AuthController.handleLogin",
+      "tests/unit/modules/auth/AuthController.test.ts"
+     ]
+    },
+    {
+     "file": "tests/unit/modules/auth/AuthService.test.ts",
+     "reason": "Transitively depends on src/modules/auth/TokenManager.ts#TokenManager.issue (2 hops)",
+     "path": [
+      "src/modules/auth/TokenManager.ts#TokenManager.issue",
+      "src/modules/auth/AuthService.ts#AuthService.login",
+      "tests/unit/modules/auth/AuthService.test.ts"
+     ]
+    },
+    {
+     "file": "tests/unit/modules/auth/TokenManager.test.ts",
+     "reason": "Directly depends on src/modules/auth/TokenManager.ts#TokenManager.issue",
+     "path": [
+      "src/modules/auth/TokenManager.ts#TokenManager.issue",
+      "tests/unit/modules/auth/TokenManager.test.ts"
+     ]
+    },
+    {
+     "file": "tests/unit/modules/catalog/CatalogService.test.ts",
+     "reason": "Directly depends on src/modules/catalog/CatalogService.ts#CatalogService.total",
+     "path": [
+      "src/modules/catalog/CatalogService.ts#CatalogService.total",
+      "tests/unit/modules/catalog/CatalogService.test.ts"
+     ]
+    },
+    {
+     "file": "tests/unit/modules/users/UserService.test.ts",
+     "reason": "Transitively depends on src/shared/validators/EmailValidator.ts#isEmail (2 hops)",
+     "path": [
+      "src/shared/validators/EmailValidator.ts#isEmail",
+      "src/modules/users/UserService.ts#UserService.register",
+      "tests/unit/modules/users/UserService.test.ts"
+     ]
+    },
+    {
+     "file": "tests/unit/shared/validators/EmailValidator.test.ts",
+     "reason": "Directly depends on src/shared/validators/EmailValidator.ts#isEmail",
+     "path": [
+      "src/shared/validators/EmailValidator.ts#isEmail",
+      "tests/unit/shared/validators/EmailValidator.test.ts"
+     ]
+    }
+   ],
+   "ms": 127
+  }
+ }
+}

@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VS Code extension · SmartTest</title>
+<meta name="description" content="SmartTest documentation: VS Code extension">
+<link rel="icon" href="../../assets/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../../assets/site.css">
+<link rel="stylesheet" href="../../assets/docs.css">
+</head>
+<body class="docs">
+<a class="skip" href="#content">Skip to content</a>
+<header class="bar">
+  <a class="wordmark" href="../../index.html"><img src="../../assets/logo.svg" alt="" width="22" height="22"> SmartTest</a>
+  <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="sidebar">Menu</button>
+  <nav class="bar-links" aria-label="Site">
+    <a href="../index.html">Docs</a>
+    <a href="../reference/cli.html">CLI</a>
+    <a href="../planning/roadmap.html">Roadmap</a>
+    <a href="https://github.com/RemiPelloux/SmarttyTest" rel="noopener">GitHub</a>
+  </nav>
+  <label class="search"><span class="sr">Search the docs</span><input type="search" placeholder="Search" data-search data-base="../.." autocomplete="off"><span class="search-results" data-results hidden></span></label>
+</header>
+<div class="layout">
+  <aside id="sidebar" class="sidebar"><div class="nav-group"><p class="nav-title">Start</p><ul><li><a href="../index.html">Overview</a></li><li><a href="getting-started.html">Getting started</a></li><li><a href="commit-hooks.html">Commit and push hooks</a></li><li><a href="studio.html">Studio</a></li><li><a href="vscode.html" aria-current="page">VS Code</a></li><li><a href="ci.html">Running in CI</a></li></ul></div><div class="nav-group"><p class="nav-title">Concepts</p><ul><li><a href="../concepts/how-selection-works.html">How selection works</a></li><li><a href="../concepts/safety-model.html">Safety model</a></li><li><a href="../concepts/runtime-evidence.html">Runtime evidence</a></li><li><a href="../concepts/speed.html">Running less, faster</a></li><li><a href="../concepts/change-tracking.html">Change tracking</a></li><li><a href="../concepts/rules.html">Rules</a></li></ul></div><div class="nav-group"><p class="nav-title">Reference</p><ul><li><a href="../reference/cli.html">CLI</a></li><li><a href="../reference/configuration.html">Configuration</a></li><li><a href="../benchmarks.html">Benchmarks</a></li><li><a href="../changelog.html">Changelog</a></li></ul></div><div class="nav-group"><p class="nav-title">Results</p><ul><li><a href="../case-studies/leadsit.html">Case study: LeadsIt</a></li><li><a href="../case-studies/external-repositories.html">External repositories</a></li></ul></div><div class="nav-group"><p class="nav-title">Project</p><ul><li><a href="../planning/roadmap.html">Roadmap</a></li><li><a href="../planning/delivery.html">Delivery log</a></li><li><a href="../architecture/overview.html">Architecture</a></li><li><a href="../architecture/adr/index.html">Decision records</a></li><li><a href="../design/design-system.html">Design system</a></li><li><a href="../design/studio.html">Studio design brief</a></li><li><a href="../product/PRD.html">Specification</a></li></ul></div><p class="version">Version 0.9.0</p></aside>
+  <main id="content" class="prose">
+<h1 id="vs-code-extension">VS Code extension</h1>
+<p>The SmartTest extension shows which tests protect a function, explains the evidence on hover, and runs the tests a change affects. It calls the local <code>smarttest</code> executable; nothing leaves the machine.</p>
+<h2 id="build-and-install">Build and install <a class="anchor" href="#build-and-install" aria-label="Link to this section">#</a></h2>
+<p>Prerequisites: Node 22.12+ and a repository checkout. The CLI must be built before installing the extension.</p>
+<pre data-lang="bash"><code>pnpm install
+pnpm build
+pnpm extension:pack</code></pre>
+<p>This writes <code>extensions/vscode/smarttest-vscode-0.9.0.vsix</code>. Install it with VS Code's Extensions view (<strong>… → Install from VSIX…</strong>) or:</p>
+<pre data-lang="bash"><code>code --install-extension extensions/vscode/smarttest-vscode-0.9.0.vsix</code></pre>
+<p>Reload the window after installing. For extension development, run <code>pnpm --dir extensions/vscode build</code>, open <code>extensions/vscode</code> in VS Code and press F5; VS Code starts an Extension Development Host.</p>
+<p>The extension has no runtime dependencies and makes no network requests. It does not install or download <code>smarttest</code>.</p>
+<h2 id="workspace-trust-and-the-executable">Workspace trust and the executable <a class="anchor" href="#workspace-trust-and-the-executable" aria-label="Link to this section">#</a></h2>
+<p>SmartTest is disabled in Restricted Mode because it executes a local binary against workspace files. Trust the workspace (<strong>Manage Workspace Trust</strong>) to enable CodeLens, hover, commands and test runs.</p>
+<p>The executable is resolved per workspace folder, in this order:</p>
+<ol><li><code>smarttest.executablePath</code> (absolute, workspace-relative, or a command name);</li><li><code>node_modules/.bin/smarttest</code>, walking up from the folder;</li><li><code>PATH</code>.</li></ol>
+<p>In a repository built from source, <code>pnpm build</code> creates <code>packages/cli/dist/bin.js</code>; link or install the CLI so the first two lookups succeed, or set <code>smarttest.executablePath</code> explicitly. SmartTest itself requires 0.8.0+ and JSON schema v1.</p>
+<h2 id="what-you-see">What you see <a class="anchor" href="#what-you-see" aria-label="Link to this section">#</a></h2>
+<ul><li><strong>CodeLens</strong>: "Protected by N tests", "N known tests · protection uncertain", "Protection unknown", or "No test reaches this symbol".</li><li><strong>Hover</strong>: the same verdict, test files, dependency paths, recorded uncertainty and risk.</li><li><strong>SmartTest view</strong>: the last affected-test run, with <code>cached-pass</code>, skipped, timed-out, cancelled and infrastructure-error results kept distinct from passes.</li><li><strong>Status bar</strong>: a per-folder summary or the last run.</li></ul>
+<p>An unknown symbol is never labelled unprotected. Uncertainty, unresolved imports, truncated analysis and failed <code>smarttest explain</code> calls all suppress a confident claim.</p>
+<h2 id="commands">Commands <a class="anchor" href="#commands" aria-label="Link to this section">#</a></h2>
+<div class="table"><table><thead><tr><th>Command</th><th>Effect</th></tr></thead><tbody><tr><td><code>SmartTest: Show Impact of Current Change</code></td><td>Markdown report for the current symbol, or a summary of the file.</td></tr><tr><td><code>SmartTest: Explain Protection at Cursor</code></td><td>Explain the enclosing function or method.</td></tr><tr><td><code>SmartTest: Run Affected Tests</code></td><td>Run the change set's selected tests and fill the SmartTest view.</td></tr><tr><td><code>SmartTest: Run Affected Tests for This File</code></td><td>Run the whole change set (the CLI has no per-file selector) and report which selected tests reach this file.</td></tr><tr><td><code>SmartTest: Refresh Analysis</code></td><td>Drop graph/scan/explain caches and analyse again.</td></tr><tr><td><code>SmartTest: Show Output</code></td><td>Show CLI errors, stderr and timeouts.</td></tr><tr><td><code>SmartTest: Why Is SmartTest Disabled?</code></td><td>Explain Restricted Mode and open Workspace Trust.</td></tr></tbody></table></div>
+<p>Settings such as <code>smarttest.mode</code>, <code>smarttest.changeSource</code>, <code>smarttest.baseRef</code>, <code>smarttest.executablePath</code> and the analysis caps are documented in <a href="https://github.com/RemiPelloux/SmarttyTest/blob/main/extensions/vscode/README.md#settings" rel="noopener">the extension README</a>.</p>
+<p>Multi-root workspaces are supported: settings, executable lookup, caches and CLI working directories are per folder. A save in one folder does not cancel another folder's analysis.</p>
+<h2 id="runtime-validation-limit">Runtime validation limit <a class="anchor" href="#runtime-validation-limit" aria-label="Link to this section">#</a></h2>
+<p>This environment has no VS Code executable and no Extension Development Host. Automated tests cover the pure logic (contract parsing, path mapping, protection rules, result classification, scheduling) and run the <strong>real</strong> <code>smarttest</code> CLI against <code>fixtures/projects/ts-lib-vitest</code>, including a real affected Vitest run. The VS Code API adapters — CodeLens registration, hover wiring, tree view, status bar, command palette and Restricted Mode UI — have <strong>not</strong> been exercised in a host here.</p>
+<p>Manual smoke test on a machine with VS Code:</p>
+<ol><li>Open a trusted TypeScript project containing SmartTest tests; confirm a CodeLens appears above a function and its hover names the test files.</li><li>Save a source file and confirm the analysis refreshes once, without stale lenses.</li><li>Run <strong>SmartTest: Run Affected Tests</strong> and confirm the view distinguishes passes from cached, skipped or incomplete results.</li><li>Open a second workspace folder and confirm each folder resolves its own executable and settings.</li><li>Open the same project in Restricted Mode and confirm all features are disabled and the status bar explains why.</li><li>Break a selected test and confirm the run is reported as failed, never green.</li></ol>
+    <p class="edit"><a href="https://github.com/RemiPelloux/SmarttyTest/blob/main/documentation/guides/vscode.md" rel="noopener">Edit this page on GitHub</a></p>
+  </main>
+  <nav class="toc" aria-label="On this page"><p class="nav-title">On this page</p><ul><li><a href="#build-and-install">Build and install</a></li><li><a href="#workspace-trust-and-the-executable">Workspace trust and the executable</a></li><li><a href="#what-you-see">What you see</a></li><li><a href="#commands">Commands</a></li><li><a href="#runtime-validation-limit">Runtime validation limit</a></li></ul></nav>
+</div>
+<script src="../../assets/docs.js" defer></script>
+
+</body>
+</html>

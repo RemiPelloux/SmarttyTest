@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ADR-0002: TypeScript analysis engine · SmartTest</title>
+<meta name="description" content="SmartTest documentation: ADR-0002: TypeScript analysis engine">
+<link rel="icon" href="../../../assets/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../../../assets/site.css">
+<link rel="stylesheet" href="../../../assets/docs.css">
+</head>
+<body class="docs">
+<a class="skip" href="#content">Skip to content</a>
+<header class="bar">
+  <a class="wordmark" href="../../../index.html"><img src="../../../assets/logo.svg" alt="" width="22" height="22"> SmartTest</a>
+  <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="sidebar">Menu</button>
+  <nav class="bar-links" aria-label="Site">
+    <a href="../../index.html">Docs</a>
+    <a href="../../reference/cli.html">CLI</a>
+    <a href="../../planning/roadmap.html">Roadmap</a>
+    <a href="https://github.com/RemiPelloux/SmarttyTest" rel="noopener">GitHub</a>
+  </nav>
+  <label class="search"><span class="sr">Search the docs</span><input type="search" placeholder="Search" data-search data-base="../../.." autocomplete="off"><span class="search-results" data-results hidden></span></label>
+</header>
+<div class="layout">
+  <aside id="sidebar" class="sidebar"><div class="nav-group"><p class="nav-title">Start</p><ul><li><a href="../../index.html">Overview</a></li><li><a href="../../guides/getting-started.html">Getting started</a></li><li><a href="../../guides/commit-hooks.html">Commit and push hooks</a></li><li><a href="../../guides/studio.html">Studio</a></li><li><a href="../../guides/vscode.html">VS Code</a></li><li><a href="../../guides/ci.html">Running in CI</a></li></ul></div><div class="nav-group"><p class="nav-title">Concepts</p><ul><li><a href="../../concepts/how-selection-works.html">How selection works</a></li><li><a href="../../concepts/safety-model.html">Safety model</a></li><li><a href="../../concepts/runtime-evidence.html">Runtime evidence</a></li><li><a href="../../concepts/speed.html">Running less, faster</a></li><li><a href="../../concepts/change-tracking.html">Change tracking</a></li><li><a href="../../concepts/rules.html">Rules</a></li></ul></div><div class="nav-group"><p class="nav-title">Reference</p><ul><li><a href="../../reference/cli.html">CLI</a></li><li><a href="../../reference/configuration.html">Configuration</a></li><li><a href="../../benchmarks.html">Benchmarks</a></li><li><a href="../../changelog.html">Changelog</a></li></ul></div><div class="nav-group"><p class="nav-title">Results</p><ul><li><a href="../../case-studies/leadsit.html">Case study: LeadsIt</a></li><li><a href="../../case-studies/external-repositories.html">External repositories</a></li></ul></div><div class="nav-group"><p class="nav-title">Project</p><ul><li><a href="../../planning/roadmap.html">Roadmap</a></li><li><a href="../../planning/delivery.html">Delivery log</a></li><li><a href="../overview.html">Architecture</a></li><li><a href="index.html">Decision records</a></li><li><a href="../../design/design-system.html">Design system</a></li><li><a href="../../design/studio.html">Studio design brief</a></li><li><a href="../../product/PRD.html">Specification</a></li></ul></div><p class="version">Version 0.9.0</p></aside>
+  <main id="content" class="prose">
+<h1 id="adr-0002-typescript-analysis-engine">ADR-0002: TypeScript analysis engine</h1>
+<ul><li><strong>Status:</strong> Accepted (spike ST-012 closed in v0.1.0)</li><li><strong>Related:</strong> ST-012, ST-035, ST-036, PRD §4.3, §9</li></ul>
+<h2 id="context">Context <a class="anchor" href="#context" aria-label="Link to this section">#</a></h2>
+<p>The spec calls for the TypeScript Compiler API, with tree-sitter where incremental parsing helps. Two compilers coexist: TypeScript 6.x, the last JavaScript-based compiler with the classic programmatic API, and TypeScript 7.x, the native compiler whose programmatic API is still maturing. SmartTest must resolve aliases, project references, <code>exports</code> maps and type-only imports exactly as <code>tsc</code> does, and stay fast when warm.</p>
+<h2 id="decision">Decision <a class="anchor" href="#decision" aria-label="Link to this section">#</a></h2>
+<ul><li><strong><code>language-typescript</code> isolates the compiler</strong> behind the <code>Analyzer</code> / <code>ModuleResolver</code> contracts. Other than <code>config</code>, which transpiles the user's config file, no package imports <code>typescript</code>.</li><li>Analysis is <strong>syntactic per file</strong>, using <code>ts.createSourceFile</code> for symbols, imports, refs, signatures and token hashes. <strong>Module resolution</strong> uses <code>ts.resolveModuleName</code> with the nearest tsconfig/jsconfig and a shared resolution cache, plus a workspace map that sends <code>exports</code> entries pointing at <code>dist/</code> back to sources.</li><li><strong>No full type-checking program</strong> is built. This keeps cold analysis at about 1 ms per file and lets results be cached per file content hash.</li><li>JavaScript (ESM, CJS, JSX) goes through the same parser in JS mode (<code>language-javascript</code>).</li><li>Pinned to <strong>TypeScript 6.x</strong> for 1.0. Moving to TS 7's API only touches <code>language-typescript</code>.</li></ul>
+<h2 id="measured-benchmarksresultsmd">Measured (benchmarks/RESULTS.md) <a class="anchor" href="#measured-benchmarksresultsmd" aria-label="Link to this section">#</a></h2>
+<p>Cold index: ~0.26 s at 50 modules, ~0.8 s at 500, ~2.1 s at 2,000 (4,000 files including tests). Warm index with nothing changed: 5–120 ms.</p>
+<h2 id="consequences">Consequences <a class="anchor" href="#consequences" aria-label="Link to this section">#</a></h2>
+<ul><li>Precision is at the level of <strong>top-level units</strong> (class, function, variable). A change inside a method propagates through the enclosing class. This is conservative and correct.</li><li>Without type information, <code>obj.method()</code> calls are not resolved to a specific method. Selection stays at class granularity rather than guessing.</li><li>Non-literal <code>import()</code>/<code>require()</code> and unresolvable relative imports are recorded as uncertainty. They widen selection in BALANCED and trigger the full suite in SAFE.</li></ul>
+    <p class="edit"><a href="https://github.com/RemiPelloux/SmarttyTest/blob/main/documentation/architecture/adr/0002-typescript-analysis-engine.md" rel="noopener">Edit this page on GitHub</a></p>
+  </main>
+  <nav class="toc" aria-label="On this page"><p class="nav-title">On this page</p><ul><li><a href="#context">Context</a></li><li><a href="#decision">Decision</a></li><li><a href="#measured-benchmarksresultsmd">Measured (benchmarks/RESULTS.md)</a></li><li><a href="#consequences">Consequences</a></li></ul></nav>
+</div>
+<script src="../../../assets/docs.js" defer></script>
+
+</body>
+</html>

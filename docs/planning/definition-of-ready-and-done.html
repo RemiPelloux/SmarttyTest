@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Definition of Ready &amp;amp; Definition of Done · SmartTest</title>
+<meta name="description" content="SmartTest documentation: Definition of Ready &amp;amp; Definition of Done">
+<link rel="icon" href="../../assets/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../../assets/site.css">
+<link rel="stylesheet" href="../../assets/docs.css">
+</head>
+<body class="docs">
+<a class="skip" href="#content">Skip to content</a>
+<header class="bar">
+  <a class="wordmark" href="../../index.html"><img src="../../assets/logo.svg" alt="" width="22" height="22"> SmartTest</a>
+  <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="sidebar">Menu</button>
+  <nav class="bar-links" aria-label="Site">
+    <a href="../index.html">Docs</a>
+    <a href="../reference/cli.html">CLI</a>
+    <a href="roadmap.html">Roadmap</a>
+    <a href="https://github.com/RemiPelloux/SmarttyTest" rel="noopener">GitHub</a>
+  </nav>
+  <label class="search"><span class="sr">Search the docs</span><input type="search" placeholder="Search" data-search data-base="../.." autocomplete="off"><span class="search-results" data-results hidden></span></label>
+</header>
+<div class="layout">
+  <aside id="sidebar" class="sidebar"><div class="nav-group"><p class="nav-title">Start</p><ul><li><a href="../index.html">Overview</a></li><li><a href="../guides/getting-started.html">Getting started</a></li><li><a href="../guides/commit-hooks.html">Commit and push hooks</a></li><li><a href="../guides/studio.html">Studio</a></li><li><a href="../guides/vscode.html">VS Code</a></li><li><a href="../guides/ci.html">Running in CI</a></li></ul></div><div class="nav-group"><p class="nav-title">Concepts</p><ul><li><a href="../concepts/how-selection-works.html">How selection works</a></li><li><a href="../concepts/safety-model.html">Safety model</a></li><li><a href="../concepts/runtime-evidence.html">Runtime evidence</a></li><li><a href="../concepts/speed.html">Running less, faster</a></li><li><a href="../concepts/change-tracking.html">Change tracking</a></li><li><a href="../concepts/rules.html">Rules</a></li></ul></div><div class="nav-group"><p class="nav-title">Reference</p><ul><li><a href="../reference/cli.html">CLI</a></li><li><a href="../reference/configuration.html">Configuration</a></li><li><a href="../benchmarks.html">Benchmarks</a></li><li><a href="../changelog.html">Changelog</a></li></ul></div><div class="nav-group"><p class="nav-title">Results</p><ul><li><a href="../case-studies/leadsit.html">Case study: LeadsIt</a></li><li><a href="../case-studies/external-repositories.html">External repositories</a></li></ul></div><div class="nav-group"><p class="nav-title">Project</p><ul><li><a href="roadmap.html">Roadmap</a></li><li><a href="delivery.html">Delivery log</a></li><li><a href="../architecture/overview.html">Architecture</a></li><li><a href="../architecture/adr/index.html">Decision records</a></li><li><a href="../design/design-system.html">Design system</a></li><li><a href="../design/studio.html">Studio design brief</a></li><li><a href="../product/PRD.html">Specification</a></li></ul></div><p class="version">Version 0.9.0</p></aside>
+  <main id="content" class="prose">
+<h1 id="definition-of-ready--definition-of-done">Definition of Ready &amp; Definition of Done</h1>
+<h2 id="definition-of-ready-a-story-may-enter-a-sprint-when">Definition of Ready (a story may enter a sprint when…) <a class="anchor" href="#definition-of-ready-a-story-may-enter-a-sprint-when" aria-label="Link to this section">#</a></h2>
+<ul><li>[ ] It is written as <em>As a … I want … so that …</em> and has a single, testable outcome.</li><li>[ ] Acceptance criteria are concrete (Given/When/Then or checkable bullets) and agreed with the PO.</li><li>[ ] It is estimated at <strong>≤ 8 points</strong>, or it has been split.</li><li>[ ] Its dependencies are done or scheduled earlier in the same sprint (the generator enforces this).</li><li>[ ] Spec references (§ / letter codes) are listed, so the reviewer knows which requirements apply.</li><li>[ ] The fixtures it needs exist or are part of the story.</li><li>[ ] Any UX output (CLI text, report section) has a sketch or example in the story or linked doc.</li><li>[ ] Security impact is identified: does it touch FS writes, process execution, secrets or network?</li></ul>
+<h2 id="definition-of-done-story-level">Definition of Done (story level) <a class="anchor" href="#definition-of-done-story-level" aria-label="Link to this section">#</a></h2>
+<p>This is PRD §36, adapted to the repository.</p>
+<p><strong>Functionality</strong></p>
+<ul><li>[ ] All acceptance criteria are met and demonstrated against fixtures.</li><li>[ ] Errors use <code>SmartTestError</code> with a stable <code>code</code>, a <code>category</code> and an actionable <code>hint</code>.</li><li>[ ] Edge cases are covered: empty project, monorepo, Windows paths, no VCS.</li><li>[ ] Fallback behaviour is defined. Unknown input never means "safe to skip".</li></ul>
+<p><strong>Quality</strong></p>
+<ul><li>[ ] Unit tests and the relevant integration tests pass (<code>pnpm verify</code>).</li><li>[ ] The regression harness still reports 0 missed failures, and new edge types or runners come with a fixture in it.</li><li>[ ] No new <code>any</code> and no <code>// @ts-ignore</code> without a linked issue.</li><li>[ ] Performance is measured where relevant, with numbers in the PR description.</li></ul>
+<p><strong>Safety &amp; honesty</strong></p>
+<ul><li>[ ] Nothing writes outside <code>.smarttest/</code> without explicit user approval (dry-run first).</li><li>[ ] Reports and CLI output never present skipped as passed, cached as fresh, or partial as full.</li><li>[ ] Secrets are redacted in logs. No network calls (the core is local-first).</li><li>[ ] Security review checklist is done for FS / process / network changes.</li></ul>
+<p><strong>Documentation &amp; DX</strong></p>
+<ul><li>[ ] Public APIs are typed and documented (TSDoc).</li><li>[ ] The CLI reference and configuration reference are updated for new commands and options.</li><li>[ ] Examples still run.</li><li>[ ] <code>CHANGELOG.md</code> has an entry for user-visible changes.</li></ul>
+<p><strong>Review</strong></p>
+<ul><li>[ ] Changes to <code>impact-engine</code>, <code>dependency-graph</code>, <code>rules-engine</code> or the report integrity suite are checked against a real repository (<code>benchmark</code> on LeadsIt or an external repository) before release.</li><li>[ ] <code>pnpm verify</code> passes locally (the pre-push hook runs it); before a release, on Linux, macOS and Windows.</li></ul>
+<h2 id="definition-of-done-sprint-level">Definition of Done (sprint level) <a class="anchor" href="#definition-of-done-sprint-level" aria-label="Link to this section">#</a></h2>
+<ul><li>[ ] Sprint goal met, or the gap has been explained at review.</li><li>[ ] The version's gate is measured and the result written in the <a href="delivery.html">delivery log</a>, including what was not met.</li><li>[ ] <code>main</code> is releasable: <code>pnpm verify</code> passes, the version is tagged, docs and the site are rebuilt.</li><li>[ ] Risks and assumptions in <code>risks.md</code> reviewed.</li><li>[ ] Unfinished stories re-estimated and moved explicitly. Nothing carries over silently.</li></ul>
+    <p class="edit"><a href="https://github.com/RemiPelloux/SmarttyTest/blob/main/documentation/planning/definition-of-ready-and-done.md" rel="noopener">Edit this page on GitHub</a></p>
+  </main>
+  <nav class="toc" aria-label="On this page"><p class="nav-title">On this page</p><ul><li><a href="#definition-of-ready-a-story-may-enter-a-sprint-when">Definition of Ready (a story may enter a sprint when…)</a></li><li><a href="#definition-of-done-story-level">Definition of Done (story level)</a></li><li><a href="#definition-of-done-sprint-level">Definition of Done (sprint level)</a></li></ul></nav>
+</div>
+<script src="../../assets/docs.js" defer></script>
+
+</body>
+</html>
