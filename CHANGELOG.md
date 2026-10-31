@@ -39,6 +39,8 @@ All notable changes are documented here. Releases are managed with [Changesets](
 - VS Code: test results are listed in sorted order; "Refresh Analysis" reports a failure instead of claiming success; the refresh delay setting applies per folder and to every save; a second "Run Affected Tests" for the same folder waits for the first.
 - Tests resolve workspace packages from their TypeScript sources instead of a possibly stale `dist/`.
 - Run summaries count a file whose runner never started (for example a missing Vitest), which has no test records: such a run is an infrastructure error (exit 4), no longer a pass with 0 tests.
+- Hooks, after review: simple-git-hooks commands enter a project in a subdirectory; lefthook in a subdirectory is reported as needing the top-level configuration; links into the working tree from anywhere in pnpm's store are reported; cleanup unregisters only SmartTest's own checkouts, never the user's worktrees.
+- Studio: an event-stream client that stops reading is disconnected after 4 MB instead of buffering without limit; a run that finishes before the browser learns its id is caught up from the run's record.
 - Studio: a run in which no test passed (nothing selected, or every test skipped) has the verdict `no-tests`, never passed; results stream as each runner group ends instead of all at the end; a refresh that changes the source while another analysis runs analyses the new source; Refresh re-reads runs made from the terminal or a hook, and coverage and traces are re-read after each Studio run; a cancelled run is shown as cancelled; the run drawer catches up after the event stream reconnects.
 
 ### Validation limits

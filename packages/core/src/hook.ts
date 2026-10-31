@@ -10,6 +10,7 @@ import {
   mkdtemp,
   readdir,
   readFile,
+  readlink,
   realpath,
   rm,
   stat,
@@ -17,7 +18,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { availableParallelism, tmpdir } from "node:os";
-import { basename, dirname, isAbsolute, join, relative, sep } from "node:path";
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import {
   mapLimit,
   matchGlob,
@@ -205,12 +206,34 @@ async function ownerGone(tmp: string): Promise<boolean> {
 }
 
 /**
+ * Unregisters SmartTest's own temporary checkouts whose directory is gone. `git worktree prune`
+ * is not used: it would also forget the user's worktrees whose directory is only missing for now
+ * (an unmounted drive).
+ */
+async function forgetOwnCheckouts(repoRoot: string, env: NodeJS.ProcessEnv): Promise<void> {
+  const common = await git(
+    repoRoot,
+    ["rev-parse", "--path-format=absolute", "--git-common-dir"],
+    env,
+  ).catch(() => undefined);
+  if (common?.code !== 0) return;
+  const admin = join(common.stdout.trim(), "worktrees");
+  for (const name of await readdir(admin).catch(() => [] as string[])) {
+    const gitdir = (await readFile(join(admin, name, "gitdir"), "utf8").catch(() => "")).trim();
+    const wt = dirname(gitdir);
+    if (basename(wt) !== "repo" || !basename(dirname(wt)).startsWith("smarttest-hook-")) continue;
+    if (existsSync(wt)) continue;
+    await rm(join(admin, name), { recursive: true, force: true }).catch(() => undefined);
+  }
+}
+
+/**
  * Removes temporary checkouts left by a hook run that was killed before it could clean up
  * (SIGKILL, power loss). Checkouts of a run that is still alive are kept.
  */
 export async function pruneStaleCheckouts(repoRoot: string): Promise<void> {
   const env = cleanGitEnv();
-  await git(repoRoot, ["worktree", "prune"], env).catch(() => undefined);
+  await forgetOwnCheckouts(repoRoot, env);
   const list = await git(repoRoot, ["worktree", "list", "--porcelain"], env).catch(() => undefined);
   if (list?.code !== 0) return;
   let removed = false;
@@ -224,7 +247,7 @@ export async function pruneStaleCheckouts(repoRoot: string): Promise<void> {
     await rm(tmp, { recursive: true, force: true }).catch(() => undefined);
     removed = true;
   }
-  if (removed) await git(repoRoot, ["worktree", "prune"], env).catch(() => undefined);
+  if (removed) await forgetOwnCheckouts(repoRoot, env);
 }
 
 const toSlash = (p: string) => p.replace(/\\/g, "/");
@@ -290,23 +313,34 @@ async function linkNodeModules(
     });
   };
   await mirror(src, dest, true);
-  // pnpm hoists dependencies into node_modules/.pnpm/node_modules, which is linked as a whole.
-  const hoisted = join(src, ".pnpm", "node_modules");
-  const scan = async (dir: string, top: boolean): Promise<void> => {
-    for (const e of await readdir(dir, { withFileTypes: true }).catch(() => [])) {
-      const entry = join(dir, e.name);
-      if (top && e.isDirectory() && e.name.startsWith("@")) await scan(entry, false);
-      else {
-        const real = await realpath(entry).catch(() => undefined);
-        const rel = real ? inRepo(real) : undefined;
-        if (rel)
-          warnings.push(
-            `Isolation incomplete: ${shown(entry)} resolves to the working tree's ${toSlash(rel)}; unstaged edits there can affect this run`,
-          );
-      }
-    }
-  };
-  if (existsSync(hoisted)) await scan(hoisted, true);
+  // pnpm's store (node_modules/.pnpm) is linked as a whole. A link from there into the
+  // repository (a workspace package as a dependency of an installed package, or hoisted into
+  // .pnpm/node_modules) bypasses the checkout. Links are read, not resolved: cheap at thousands
+  // of installed packages.
+  const store = await realpath(join(src, ".pnpm")).catch(() => undefined);
+  if (store) {
+    const dirs = [join(store, "node_modules")];
+    for (const e of await readdir(store, { withFileTypes: true }).catch(() => []))
+      if (e.isDirectory() && e.name !== "node_modules")
+        dirs.push(join(store, e.name, "node_modules"));
+    const leaks = new Set<string>();
+    const scan = async (dir: string, top: boolean): Promise<void> => {
+      const entries = await readdir(dir, { withFileTypes: true }).catch(() => []);
+      await mapLimit(entries, 32, async (e) => {
+        const entry = join(dir, e.name);
+        if (top && e.isDirectory() && e.name.startsWith("@")) return scan(entry, false);
+        if (!e.isSymbolicLink()) return;
+        const target = await readlink(entry).catch(() => undefined);
+        const rel = target ? inRepo(resolve(dirname(entry), target)) : undefined;
+        if (rel) leaks.add(toSlash(rel));
+      });
+    };
+    await mapLimit(dirs, 16, (dir) => scan(dir, true));
+    if (leaks.size)
+      warnings.push(
+        `Isolation incomplete: installed packages in node_modules/.pnpm link to the working tree's ${[...leaks].sort().join(", ")}; unstaged edits there can affect this run`,
+      );
+  }
   // A linked workspace package's untracked build output (dist/) is not in the checkout. Link it
   // from the working tree so imports resolve, and say it may not match the source under test.
   const built: string[] = [];
@@ -365,7 +399,7 @@ export async function isolate(options: {
       ).catch(() => undefined);
       if (removed?.code !== 0)
         await rm(wt, { recursive: true, force: true }).catch(() => undefined);
-      await git(options.repoRoot, ["worktree", "prune"], clean).catch(() => undefined);
+      await forgetOwnCheckouts(options.repoRoot, clean);
     }
     await rm(tmp, { recursive: true, force: true }).catch(() => undefined);
   };

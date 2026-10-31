@@ -678,6 +678,24 @@ describe("the temporary checkout is the content under test", () => {
     expect(result.outcome?.report.summary.failed).toBeGreaterThan(0);
   }, 120_000);
 
+  it("reports a link from pnpm's store into the working tree", async () => {
+    const dir = await linkedWorkspace();
+    // An installed package depending on the workspace package: pnpm links it inside its store.
+    const nested = join(dir, "node_modules/.pnpm/consumer@1.0.0/node_modules/@demo");
+    await mkdir(nested, { recursive: true });
+    await symlink("../../../../../packages/core-lib", join(nested, "core-lib"));
+    await edit(dir, "packages/core-lib/src/price.ts", "VAT = 0.2", "VAT = 0.25");
+    git(dir, "add", "packages/core-lib/src/price.ts");
+    await writeFile(join(dir, "notes.md"), "force isolation\n");
+
+    const result = await (await SmartTest.open({ root: dir })).runHook("pre-commit", {
+      cache: false,
+    });
+    expect(result.outcome?.report.warnings.join("\n")).toContain(
+      "installed packages in node_modules/.pnpm link to the working tree's packages/core-lib",
+    );
+  }, 120_000);
+
   it("gives the checkout an index matching the staged tree", async () => {
     const dir = await materialize("ts-lib-vitest", { git: true });
     await writeConfig(dir, [
@@ -731,6 +749,10 @@ describe("the temporary checkout is the content under test", () => {
     // Registered, but its directory is already gone.
     const gone = await fake(dead);
     await rm(gone, { recursive: true, force: true });
+    // The user's own worktree on a drive that is not mounted right now: never forgotten.
+    const unmounted = join(await mkdtemp(join(tmpdir(), "st-user-wt-")), "feature");
+    git(dir, "worktree", "add", "-q", "--detach", unmounted, "HEAD");
+    await rm(unmounted, { recursive: true, force: true });
 
     await writeFile(join(dir, "notes.md"), "staged\n");
     git(dir, "add", "notes.md");
@@ -741,6 +763,7 @@ describe("the temporary checkout is the content under test", () => {
     expect(list).not.toContain(stale);
     expect(list).not.toContain(gone);
     expect(list).toContain(live);
+    expect(list).toContain(unmounted);
     expect(existsSync(stale)).toBe(false);
     git(dir, "worktree", "remove", "--force", join(live, "repo"));
   }, 120_000);

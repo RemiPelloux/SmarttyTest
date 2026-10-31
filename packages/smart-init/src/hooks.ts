@@ -233,17 +233,26 @@ function replaceBlock(text: string, fresh: string): string {
 }
 
 /** simple-git-hooks: SmartTest first, then the existing command (with the pre-push refs). */
-function composeSimple(stage: HookStage, existing: string | undefined): string {
-  if (!existing) return HOOK_COMMANDS[stage];
-  if (stage === "pre-commit") return `${HOOK_COMMANDS[stage]} && ${existing}`;
-  return `${REFS}=$(cat); ${PIPE_REFS}${HOOK_COMMANDS[stage]} && ${PIPE_REFS}{ ${existing}; }`;
+function composeSimple(stage: HookStage, existing: string | undefined, prefix = ""): string {
+  // simple-git-hooks runs at the top-level of the worktree: a project in a subdirectory is
+  // entered in a subshell, so the user's own command keeps its directory.
+  const own = prefix
+    ? `(cd ${shellQuote(prefix)} && ${HOOK_COMMANDS[stage]})`
+    : HOOK_COMMANDS[stage];
+  if (!existing) return own;
+  if (stage === "pre-commit") return `${own} && ${existing}`;
+  return `${REFS}=$(cat); ${PIPE_REFS}${own} && ${PIPE_REFS}{ ${existing}; }`;
 }
+
+/** SmartTest's subshell for a project in a subdirectory, reduced to the bare command. */
+const ENTERED = /\(cd '(?:[^']|'\\'')*' && (npx --no-install smarttest run[^&|;)\n]*)\)/;
 
 const SIMPLE_PUSH =
   /^smarttest_refs=\$\(cat\); printf '%s\\n' "\$smarttest_refs" \| npx --no-install smarttest run[^&|;)\n]*&& printf '%s\\n' "\$smarttest_refs" \| \{ ([\s\S]*); \}$/;
 
 /** The user's own command in a simple-git-hooks value, without SmartTest's part. */
-function simpleExisting(value: string): string | undefined {
+function simpleExisting(entered: string): string | undefined {
+  const value = entered.replace(ENTERED, "$1");
   const wrapped = SIMPLE_PUSH.exec(value);
   if (wrapped) return wrapped[1];
   const cmd = ANY_SMARTTEST.exec(value)?.[0]?.trim();
@@ -426,7 +435,7 @@ export async function planHookInstall(
   const section = target.manager === "lefthook" ? hookSection(current, stage) : current;
   const script = target.manager === "husky" || target.manager === "git";
   // Git runs hooks at the top-level of the worktree; the block enters the project first.
-  const prefix = script ? projectPrefix(root) : "";
+  const prefix = target.manager === "lefthook" ? "" : projectPrefix(root);
   const steps = (options.testCommands ?? []).filter(
     (c) =>
       c.source === target.file &&
@@ -455,7 +464,7 @@ export async function planHookInstall(
       const pkg = JSON.parse(current) as Record<string, unknown>;
       const hooks = pkg["simple-git-hooks"] as Record<string, string>;
       const value = hooks[stage] ?? "";
-      const wanted = composeSimple(stage, simpleExisting(value));
+      const wanted = composeSimple(stage, simpleExisting(value), prefix);
       if (wanted !== value) {
         hooks[stage] = wanted;
         upgrade = `${JSON.stringify(pkg, null, /^\{\n(\s+)/.exec(current)?.[1] ?? "  ")}\n`;
@@ -508,6 +517,10 @@ export async function planHookInstall(
   let replaced = options.replace ? safeListed : [];
   if (target.manager === "lefthook") {
     after = installLefthook(current, stage);
+    if (projectPrefix(root))
+      notes.push(
+        "lefthook reads its configuration at the top-level of the repository; this project is in a subdirectory, so add the smarttest command to the top-level lefthook.yml with `root:` set to this directory",
+      );
     if (listed.length)
       notes.push(
         "lefthook steps that run whole suites are listed, not changed; remove them by hand",
@@ -518,7 +531,7 @@ export async function planHookInstall(
     const pkg = JSON.parse(pkgText) as Record<string, unknown>;
     const hooks = (pkg["simple-git-hooks"] as Record<string, string> | undefined) ?? {};
     const existing = hooks[stage];
-    hooks[stage] = composeSimple(stage, existing);
+    hooks[stage] = composeSimple(stage, existing, prefix);
     pkg["simple-git-hooks"] = hooks;
     const indent = /^\{\n(\s+)/.exec(pkgText)?.[1] ?? "  ";
     after = `${JSON.stringify(pkg, null, indent)}\n`;

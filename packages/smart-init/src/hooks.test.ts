@@ -182,6 +182,35 @@ describe("where the hook lives", () => {
     expect(await fake.pwd()).toBe(app);
   });
 
+  it("simple-git-hooks: enters a project in a subdirectory, and uninstall restores the command", async () => {
+    const existing = 'while read a b c d; do echo "$c" >> pushed.txt; done';
+    const pkg = `${JSON.stringify({ "simple-git-hooks": { "pre-push": existing } }, null, 2)}\n`;
+    const top = await repo({ "app/package.json": pkg });
+    const app = join(top, "app");
+    const fake = await fakeSmartTest(app);
+    const plan = await planHookInstall(app, { stage: "pre-push" });
+    const value = (JSON.parse(plan.plan.after as string) as Record<string, Record<string, string>>)[
+      "simple-git-hooks"
+    ]?.["pre-push"] as string;
+    // simple-git-hooks runs the command at the top-level of the worktree.
+    const r = spawnSync("sh", ["-c", value], { cwd: top, input: REFS, env: fake.env });
+    expect(r.status, r.stderr.toString()).toBe(0);
+    expect(await fake.pwd()).toBe(app);
+    expect(await fake.stdin()).toBe(REFS);
+    expect(await readFile(join(top, "pushed.txt"), "utf8")).toBe("refs/heads/protected\n");
+
+    await writeFile(join(app, "package.json"), plan.plan.after as string);
+    expect((await planHookInstall(app, { stage: "pre-push" })).plan.action).toBe("skip");
+    const undo = await planHookUninstall(app, "simple-git-hooks", ["pre-push"]);
+    expect(undo[0]?.after).toBe(pkg);
+  });
+
+  it("lefthook: says the top-level configuration is needed for a project in a subdirectory", async () => {
+    const top = await repo({ "app/lefthook.yml": "pre-commit:\n  commands: {}\n" });
+    const plan = await planHookInstall(join(top, "app"), { stage: "pre-commit" });
+    expect(plan.notes.join("\n")).toContain("top-level of the repository");
+  });
+
   it("installs into the shared hooks of a linked worktree, and Git runs it there", async () => {
     const main = await repo({ "package.json": "{}", "a.txt": "a\n" });
     git(main, "add", "-A");

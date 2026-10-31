@@ -592,6 +592,9 @@ async function run(scope, file) {
     setRunResults([]);
     state.runSummary = null;
     render();
+    // Events streamed before this response arrived were dropped (the run id was not known yet);
+    // a short run can even finish first. Replaying the run's record is safe: duplicates are ignored.
+    void resyncRun(started.run.id);
   } catch (error) {
     handleApiError(error);
   }

@@ -98,6 +98,9 @@ const EMPTY_LAST: LastRunFacts = {
   flaky: [],
 };
 
+/** Bytes a stream client may leave unread before it is disconnected. */
+const MAX_STREAM_BUFFER = 4 * 1024 * 1024;
+
 function sameSource(a: ChangeSource | null, b: ChangeSource | null): boolean {
   return JSON.stringify(a) === JSON.stringify(b);
 }
@@ -262,6 +265,13 @@ class Studio {
     if (!this.clients.size) return;
     const payload = `data: ${JSON.stringify(event)}\n\n`;
     for (const client of this.clients) {
+      // A reader that stopped draining would buffer without limit: drop it. The browser
+      // reconnects and catches up from the run's record.
+      if (client.writableLength > MAX_STREAM_BUFFER) {
+        this.clients.delete(client);
+        client.destroy();
+        continue;
+      }
       try {
         client.write(payload);
       } catch {
