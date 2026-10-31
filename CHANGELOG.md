@@ -47,6 +47,7 @@ All notable changes are documented here. Releases are managed with [Changesets](
 - The pre-push and subdirectory hook blocks are tested under dash, the `/bin/sh` of Debian and Ubuntu, as well as the system shell.
 - Studio: a refresh that waited behind another analysis analysed whichever source was selected last, so a request for the staged change could answer with the working tree. Each request now gets the source it asked for, and only the current source replaces the shared view.
 - Studio accessibility (WCAG 2.2 AA audit, `pnpm studio:a11y`: axe-core plus keyboard, live-region, reflow and target-size checks in Chromium, Firefox and WebKit, light and dark; 39–41 failures per combination before, 0 after): run progress and verdicts are announced; focus moves into the run drawer and returns to its opener; single-key shortcuts can be turned off; Studio works at 320 px without sideways scrolling; scrollable code and run regions are keyboard accessible; tabs, table actions, headings and landmarks are named.
+- Windows: an atomic write (the index, run state) failed with EPERM when another process had the file open; the rename is retried for up to about two seconds.
 - VS Code: `smarttest.executablePath` may point at a JavaScript entry (`bin.js`) on Linux and macOS; it is started with `node` and needs no executable bit. On Windows, a cancelled or timed-out run no longer waits for a test runner left behind by an exited CLI, and the extension's own unit tests run.
 
 ### Validation limits

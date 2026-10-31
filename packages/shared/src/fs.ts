@@ -31,6 +31,23 @@ export async function readJson<T = unknown>(path: string): Promise<T | undefined
 }
 
 /**
+ * Windows refuses to replace a file while another process has it open (EPERM, EACCES, EBUSY);
+ * the lock is brief, so the rename is retried for up to about two seconds.
+ */
+async function renameReplacing(from: string, to: string): Promise<void> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await rename(from, to);
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (attempt >= 12 || !(code === "EPERM" || code === "EACCES" || code === "EBUSY"))
+        throw error;
+      await new Promise((resolve) => setTimeout(resolve, Math.min(20 * 2 ** attempt, 250)));
+    }
+  }
+}
+
+/**
  * Atomic write: write to a sibling temp file, then rename over the target.
  * Readers never observe a partially written file (spec §30.2).
  */
@@ -48,7 +65,7 @@ export async function writeFileAtomic(path: string, data: string | Uint8Array): 
     await writeFile(tmp, data);
     // A rename replaces the inode: retain executable and private-file permissions.
     if (mode !== undefined) await chmod(tmp, mode);
-    await rename(tmp, path);
+    await renameReplacing(tmp, path);
   } catch (error) {
     await rm(tmp, { force: true });
     throw error;

@@ -23,6 +23,8 @@ Thumbs.db
 .env
 .env.*
 !.env.example
+# Fixture inputs, not secrets.
+!fixtures/projects/**/.env.test
 
 # Editors
 .idea/

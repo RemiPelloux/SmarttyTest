@@ -591,6 +591,11 @@ describe("a real pre-commit hook with an alternate index", () => {
       ...process.env,
       GIT_INDEX_FILE: alt,
       SMARTTEST_TEST_ALT_INDEX: alt,
+      // CI machines have no Git identity.
+      GIT_AUTHOR_NAME: "t",
+      GIT_AUTHOR_EMAIL: "t@t",
+      GIT_COMMITTER_NAME: "t",
+      GIT_COMMITTER_EMAIL: "t@t",
     };
     const testFile = "test/hook-env.test.ts";
     await writeFile(
