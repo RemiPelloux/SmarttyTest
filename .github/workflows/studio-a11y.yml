@@ -62,12 +62,17 @@ jobs:
       - run: pnpm build
       - run: npm ci --no-audit --no-fund
         working-directory: scripts/studio-a11y/real
-      # guidepup/setup-action 0.21.0: enables AppleScript control of VoiceOver.
-      - uses: guidepup/setup-action@acf1a64cc26292ebe0db6a28d1341bd1bae93c65
-        with:
-          record: true
+      # @guidepup/setup (pinned in scripts/studio-a11y/real/package.json): enable AppleScript
+      # control of VoiceOver, then install the VoiceOver assets that this @guidepup/guidepup needs.
+      - name: Set up VoiceOver automation
+        working-directory: scripts/studio-a11y/real
+        run: |
+          npx --no-install guidepup setup --ci --macos-record
+          npx --no-install guidepup install voiceover
       - name: Studio with VoiceOver
         working-directory: scripts/studio-a11y/real
+        env:
+          DEBUG: guidepup*
         run: node screen-reader.mjs --out "$RUNNER_TEMP/studio-voiceover"
       - if: always()
         uses: actions/upload-artifact@v4
@@ -75,7 +80,7 @@ jobs:
           name: studio-voiceover-spoken-log
           path: |
             ${{ runner.temp }}/studio-voiceover
-            recordings
+            scripts/studio-a11y/real/recordings
           if-no-files-found: ignore
 
   nvda:
@@ -95,10 +100,19 @@ jobs:
       - run: pnpm build
       - run: npm ci --no-audit --no-fund
         working-directory: scripts/studio-a11y/real
-      # guidepup/setup-action 0.21.0: installs a portable NVDA with the Guidepup add-on.
-      - uses: guidepup/setup-action@acf1a64cc26292ebe0db6a28d1341bd1bae93c65
+      # @guidepup/setup (pinned in scripts/studio-a11y/real/package.json): prepare Windows, then
+      # install the portable NVDA (with the Guidepup add-on) that this @guidepup/guidepup expects.
+      # One command per step: PowerShell only checks the exit code of the last line.
+      - name: Set up Windows for screen reader automation
+        working-directory: scripts/studio-a11y/real
+        run: npx --no-install guidepup setup --ci
+      - name: Install NVDA
+        working-directory: scripts/studio-a11y/real
+        run: npx --no-install guidepup install nvda
       - name: Studio with NVDA
         working-directory: scripts/studio-a11y/real
+        env:
+          DEBUG: guidepup*
         run: node screen-reader.mjs --out "${{ runner.temp }}/studio-nvda"
       - if: always()
         uses: actions/upload-artifact@v4

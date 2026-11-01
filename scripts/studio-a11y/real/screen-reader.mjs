@@ -157,6 +157,36 @@ async function tabTo(pattern, { back = false, max = 40 } = {}) {
   return false;
 }
 
+/** Prints why the screen reader could not start: the error causes and the machine's state. */
+async function diagnose(error) {
+  console.log("\n── Screen reader start failed: diagnostics ──");
+  for (let e = error, depth = 0; e && depth < 6; e = e.cause, depth++)
+    console.log(`${"  ".repeat(depth)}${depth ? "caused by: " : ""}${e.stack ?? String(e)}`);
+  const probes = MAC
+    ? [
+        ["sw_vers", []],
+        ["uname", ["-a"]],
+        ["defaults", ["read", "com.apple.VoiceOver4/default", "SCREnableAppleScript"]],
+        ["defaults", ["read", "com.apple.VoiceOverUtility"]],
+        ["pgrep", ["-lf", "VoiceOver"]],
+        ["ls", ["-la", "/System/Library/CoreServices/VoiceOver.app/Contents/MacOS"]],
+        ["csrutil", ["status"]],
+      ]
+    : [
+        ["cmd", ["/c", "ver"]],
+        ["reg", ["query", "HKCU\\Software\\Guidepup\\Nvda"]],
+        ["tasklist", ["/fi", "imagename eq nvda.exe"]],
+      ];
+  for (const [cmd, rest] of probes) {
+    const out = await run(cmd, rest, { timeout: 15_000 }).then(
+      (r) => `${r.stdout}${r.stderr}`,
+      (e) => `(${e.code ?? "error"}) ${e.stdout ?? ""}${e.stderr ?? e.message}`,
+    );
+    console.log(`$ ${cmd} ${rest.join(" ")}\n${out.trim()}`);
+  }
+  console.log("── end of diagnostics ──\n");
+}
+
 async function main() {
   await mkdir(OUT, { recursive: true });
   const studio = await startStudioOnFixture();
@@ -165,7 +195,12 @@ async function main() {
   let listener = { stop() {} };
   try {
     step = "start";
-    await sr.start({ capture: "initial" });
+    try {
+      await sr.start({ capture: "initial" });
+    } catch (error) {
+      await diagnose(error);
+      throw error;
+    }
     listener = await listen();
     step = "load";
     browser = await openBrowser(studio.url("/overview", { theme: "dark" }));

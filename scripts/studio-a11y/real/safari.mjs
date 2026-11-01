@@ -83,7 +83,15 @@ class Session {
       },
       { what: `the ${screen.title} screen`, arg: screen.title },
     );
-    await sleep(200);
+    // Parts of a screen load after its heading (the Impact screen's code peek): wait until the
+    // set of focusable controls stops changing, or the Tab walk sees the page change under it.
+    let last = "";
+    for (let stable = 0, i = 0; stable < 3 && i < 40; i++) {
+      await sleep(200);
+      const now = (await this.page(() => window.__a11y.expected())).join("\n");
+      stable = now === last ? stable + 1 : 0;
+      last = now;
+    }
   }
 
   async axe(state) {
@@ -187,12 +195,24 @@ class Session {
       stops.push(info.key);
       if (!info.focusVisible)
         fail(state, "focus-visible", `${info.desc} does not match :focus-visible`);
-      if (info.obscured === "entirely" && info.obscuredBy !== "run drawer")
+      // As in ../audit.mjs: WebKit can apply :focus styles (the skip link's move on screen) a
+      // little late, so an entirely hidden stop is measured again before it counts.
+      let obscured = info;
+      for (let retry = 0; retry < 4 && obscured.obscured === "entirely"; retry++) {
+        await sleep(200);
+        obscured = await this.focusInfo();
+      }
+      if (obscured.obscured === "entirely" && obscured.obscuredBy !== "run drawer") {
+        const where = await this.page(() => {
+          const r = document.activeElement.getBoundingClientRect();
+          return `rect ${Math.round(r.left)},${Math.round(r.top)} ${Math.round(r.width)}x${Math.round(r.height)}, scrollY ${Math.round(scrollY)}, viewport ${innerWidth}x${innerHeight}`;
+        });
         fail(
           state,
           "focus-obscured",
-          `${info.desc} is hidden behind ${info.obscuredBy ?? "the edge"}`,
+          `${info.desc} is hidden behind ${obscured.obscuredBy ?? "the edge"} (${where})`,
         );
+      }
       if (i === max - 1) fail(state, "keyboard-trap", `no wrap after ${max} Tab presses`);
     }
     if (!within) {
