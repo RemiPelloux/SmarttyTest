@@ -21,7 +21,7 @@ describe("edges-vitest", () => {
 
   it("environment: a key no code reads keeps the mandatory trigger", async () => {
     const s = await selectedAfter(".env.test", "FEATURE=1", "FEATURE=1\nUNUSED=1");
-    expect(s.length).toBe(17);
+    expect(s.length).toBe(19);
   });
 
   it("assets: a template read through fs selects its reader", async () => {
@@ -78,6 +78,18 @@ describe("edges-vitest", () => {
       "export function mean(xs: number[], w = 1)",
     );
     expect(s).toEqual(["tests/report.test.ts", "tests/stats.test.ts"]);
+  });
+
+  it("child processes: a module imported by a script run with node selects its caller's test", async () => {
+    expect(await selectedAfter("scripts/lib/math.mjs", "n * 2", "n * 3")).toEqual([
+      "tests/jobs.test.ts",
+    ]);
+  });
+
+  it("workers: a worker script selects the test of the code starting it", async () => {
+    expect(
+      await selectedAfter("src/workers/square.mjs", "workerData * workerData", "workerData + 1"),
+    ).toEqual(["tests/squares.test.ts"]);
   });
 
   it("generated code: a generator input stands for its outputs", async () => {

@@ -1,3 +1,4 @@
+// biome-ignore-all lint/suspicious/noTemplateCurlyInString: these strings are source code under test
 import { describe, expect, it } from "vitest";
 import { analyzeSource } from "./analyze.js";
 
@@ -151,5 +152,125 @@ module.exports.c = function () {};
     expect(
       evaluating("b.js", `module.exports = { a: 1, b: compute(), c() {}, d: () => 1 };\n`),
     ).toEqual(["b"]);
+  });
+});
+
+describe("token hashes read the parsed tree", () => {
+  const hashOf = (path: string, code: string, name: string) =>
+    analyzeSource(path, code).symbols.find((s) => s.qualifiedName === name);
+
+  it("sees template text after a substitution", () => {
+    const a = hashOf("a.ts", "export const f = (a: string, b: string) => `${a}, ${b}`;\n", "f");
+    const b = hashOf("a.ts", "export const f = (a: string, b: string) => `${a},${b}`;\n", "f");
+    expect(b?.tokenHash).not.toBe(a?.tokenHash);
+    const c = hashOf("a.ts", "export const u = (host: string) => `${host}/a//b`;\n", "u");
+    const d = hashOf("a.ts", "export const u = (host: string) => `${host}/a//c`;\n", "u");
+    expect(d?.tokenHash).not.toBe(c?.tokenHash);
+  });
+
+  it("sees regular expressions and JSX text, and ignores JSDoc", () => {
+    const r1 = hashOf("a.ts", "export const re = /a[/*]b/;\n", "re");
+    const r2 = hashOf("a.ts", "export const re = /a[/*]c/;\n", "re");
+    expect(r2?.tokenHash).not.toBe(r1?.tokenHash);
+    const j1 = hashOf("a.tsx", "export const A = () => <p>see http://x.dev/a</p>;\n", "A");
+    const j2 = hashOf("a.tsx", "export const A = () => <p>see http://x.dev/b</p>;\n", "A");
+    expect(j2?.tokenHash).not.toBe(j1?.tokenHash);
+    const j3 = hashOf(
+      "a.tsx",
+      "export const A = () => (\n  <p>\n    Hello,   world\n  </p>\n);\n",
+      "A",
+    );
+    const j4 = hashOf(
+      "a.tsx",
+      "export const A = () => (\n  <p>\n      Hello,   world\n</p>\n);\n",
+      "A",
+    );
+    expect(j4?.tokenHash).toBe(j3?.tokenHash);
+    const d1 = hashOf("a.ts", "/** one */\nexport function f() { return 1; }\n", "f");
+    const d2 = hashOf("a.ts", "/** two */\nexport function f() {\n  return 1;\n}\n", "f");
+    expect(d2?.tokenHash).toBe(d1?.tokenHash);
+  });
+
+  it("reads JSX structure, attributes and nested code, and ignores its layout", () => {
+    const h = (code: string) => hashOf("a.tsx", code, "A")?.tokenHash;
+    const base =
+      'export const A = ({ x }) => <p title="a">{x ? <b>one, two</b> : `${x}, y`}</p>;\n';
+    const relaid =
+      'export const A = ({ x }) =>\n  <p\n    title="a"\n  >\n    {x ? <b>one, two</b> : `${x}, y` /* c */}\n  </p>;\n';
+    expect(h(relaid)).toBe(h(base));
+    for (const [from, to] of [
+      ['"a"', '"b"'],
+      ["one, two", "one,two"],
+      ["`${x}, y`", "`${x},y`"],
+      ["x ?", "!x ?"],
+      ["<b>", "<i>"],
+    ] as const)
+      expect(
+        h(base.replace(from, to).replace("</b>", to === "<i>" ? "</i>" : "</b>")),
+        to,
+      ).not.toBe(h(base));
+  });
+
+  it("module-level code, evaluation hashes and class shells see template text too", () => {
+    const top = (s: string) => analyzeSource("a.ts", s).topLevelHash;
+    expect(top("log(`${a}, ${b}`);\n")).not.toBe(top("log(`${a},${b}`);\n"));
+    const ev = (s: string) => hashOf("a.ts", s, "x")?.evalHash;
+    expect(ev("export const x = make(`${a}, ${b}`);\n")).not.toBe(
+      ev("export const x = make(`${a},${b}`);\n"),
+    );
+    const shell = (s: string) => hashOf("a.ts", s, "C")?.shellHash;
+    expect(shell("export class C { static p = `${a}, x`; m() { return `${a}, y`; } }\n")).not.toBe(
+      shell("export class C { static p = `${a},x`; m() { return `${a}, y`; } }\n"),
+    );
+    expect(shell("export class C { m() { return `${a}, y`; } }\n")).toBe(
+      shell("export class C { m() { return `${a},z`; } }\n"),
+    );
+  });
+});
+
+describe("mock calls", () => {
+  const mocks = (code: string) =>
+    analyzeSource("t.test.ts", code)
+      .imports.filter((i) => i.kind === "mock")
+      .map((i) => `${i.specifier}:${i.mock}`);
+
+  it("doMock is not hoisted: it never hides the file's static imports", () => {
+    expect(mocks('vi.doMock("./m", () => ({ f: () => 42 }));\n')).toEqual(["./m:auto"]);
+    expect(mocks('jest.doMock("./m", () => ({ f: () => 42 }));\n')).toEqual(["./m:auto"]);
+    // A mock nested in a block runs after the static imports.
+    expect(mocks('beforeEach(() => { jest.mock("./m", () => ({})); });\n')).toEqual(["./m:auto"]);
+    expect(mocks('vi.mock("./m", () => ({ f: vi.fn() }));\n')).toEqual(["./m:factory"]);
+  });
+
+  it("recognises the calls that restore the real module", () => {
+    expect(
+      mocks(
+        'vi.doUnmock("./a");\njest.dontMock("./b");\njest.deepUnmock("./c");\nvi.unmock("./d");\n',
+      ),
+    ).toEqual(["./a:unmock", "./b:unmock", "./c:unmock", "./d:unmock"]);
+    expect(mocks('const m = await vi.importMock("./m");\n')).toEqual(["./m:auto"]);
+  });
+
+  it("a factory calling a helper or importing may reach the real module", () => {
+    expect(mocks('vi.mock("./m", () => makeMock());\n')).toEqual(["./m:actual"]);
+    expect(mocks('vi.mock("./m", () => ({ f: (x) => real(x) }));\n')).toEqual(["./m:actual"]);
+    expect(mocks('vi.mock("./m", async () => ({ ...(await import("./m-real")) }));\n')).toEqual([
+      "./m:actual",
+    ]);
+    expect(mocks('vi.mock("./m", () => new Fake());\n')).toEqual(["./m:actual"]);
+  });
+
+  it("a factory built from the mocking API, builtins and hoisted values stays a pure factory", () => {
+    const code = `const mocks = vi.hoisted(() => ({ find: vi.fn() }));
+const mockSave = jest.fn();
+vi.mock("./a", () => ({ find: mocks.find, all: (...a) => mocks.find(...a) }));
+jest.mock("./b", () => ({ save: (x) => mockSave(x), at: () => new Date(0), p: Promise.resolve(1) }));
+vi.mock("./c", () => { const local = () => 1; return { f: vi.fn(() => local()) }; });
+`;
+    expect(mocks(code)).toEqual(["./a:factory", "./b:factory", "./c:factory"]);
+    const unsafe = `const mocks = vi.hoisted(async () => await import("./x"));
+vi.mock("./a", () => ({ find: () => mocks.find() }));
+`;
+    expect(mocks(unsafe)).toEqual(["./a:actual"]);
   });
 });

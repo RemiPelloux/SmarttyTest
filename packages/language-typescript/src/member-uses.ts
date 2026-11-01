@@ -22,8 +22,12 @@ export interface MemberUses {
   thisEscapes?: boolean;
 }
 
-/** name -> class name, or null for a local whose type is unknown (shadows outer names). */
-type Scope = Map<string, string | null>;
+/**
+ * name -> the classes its value may be an instance of, or null for a local whose type is unknown
+ * (shadows outer names). `const r: Repo = new MemRepo()` is both: the runtime class (`MemRepo`)
+ * and the declared type (`Repo`, whose implementers the graph links to).
+ */
+type Scope = Map<string, string[] | null>;
 
 export function classOfNew(expr: ts.Expression | undefined): string | undefined {
   if (!expr) return undefined;
@@ -40,6 +44,16 @@ export function classOfType(type: ts.TypeNode | undefined): string | undefined {
   return undefined;
 }
 
+/** Classes a declaration's value is known to be: the `new X()` initializer, then the declared type. */
+export function classesOf(
+  type: ts.TypeNode | undefined,
+  init: ts.Expression | undefined,
+): string[] {
+  const out: string[] = [];
+  for (const c of [classOfNew(init), classOfType(type)]) if (c && !out.includes(c)) out.push(c);
+  return out;
+}
+
 function boundNames(name: ts.BindingName, out: string[]): void {
   if (ts.isIdentifier(name)) out.push(name.text);
   else for (const el of name.elements) if (ts.isBindingElement(el)) boundNames(el.name, out);
@@ -52,20 +66,20 @@ export function moduleScope(sf: ts.SourceFile): Scope {
     if (!ts.isVariableStatement(stmt)) continue;
     for (const d of stmt.declarationList.declarations) {
       if (!ts.isIdentifier(d.name)) continue;
-      const cls = classOfType(d.type) ?? classOfNew(d.initializer);
-      if (cls) scope.set(d.name.text, cls);
+      const cls = classesOf(d.type, d.initializer);
+      if (cls.length) scope.set(d.name.text, cls);
     }
   }
   return scope;
 }
 
 /** `this.p` types inside a class: property declarations and constructor parameter properties. */
-export function thisScope(cls: ts.ClassLikeDeclaration): Map<string, string> {
-  const out = new Map<string, string>();
+export function thisScope(cls: ts.ClassLikeDeclaration): Map<string, string[]> {
+  const out = new Map<string, string[]>();
   for (const m of cls.members) {
     if (ts.isPropertyDeclaration(m) && ts.isIdentifier(m.name)) {
-      const c = classOfType(m.type) ?? classOfNew(m.initializer);
-      if (c) out.set(m.name.text, c);
+      const c = classesOf(m.type, m.initializer);
+      if (c.length) out.set(m.name.text, c);
     }
     if (ts.isConstructorDeclaration(m)) {
       for (const p of m.parameters) {
@@ -80,8 +94,8 @@ export function thisScope(cls: ts.ClassLikeDeclaration): Map<string, string> {
             ].includes(mod.kind),
           );
         if (isProperty && ts.isIdentifier(p.name)) {
-          const c = classOfType(p.type) ?? classOfNew(p.initializer);
-          if (c) out.set(p.name.text, c);
+          const c = classesOf(p.type, p.initializer);
+          if (c.length) out.set(p.name.text, c);
         }
       }
     }
@@ -95,10 +109,8 @@ function functionScope(fn: ts.SignatureDeclaration): Scope {
   for (const p of fn.parameters) {
     const names: string[] = [];
     boundNames(p.name, names);
-    const cls = ts.isIdentifier(p.name)
-      ? (classOfType(p.type) ?? classOfNew(p.initializer))
-      : undefined;
-    for (const n of names) scope.set(n, cls ?? null);
+    const cls = ts.isIdentifier(p.name) ? classesOf(p.type, p.initializer) : [];
+    for (const n of names) scope.set(n, cls.length ? cls : null);
   }
   const body = (fn as { body?: ts.Node }).body;
   if (!body) return scope;
@@ -107,10 +119,8 @@ function functionScope(fn: ts.SignatureDeclaration): Scope {
     if (ts.isVariableDeclaration(n)) {
       const names: string[] = [];
       boundNames(n.name, names);
-      const cls = ts.isIdentifier(n.name)
-        ? (classOfType(n.type) ?? classOfNew(n.initializer))
-        : undefined;
-      for (const name of names) scope.set(name, cls ?? null);
+      const cls = ts.isIdentifier(n.name) ? classesOf(n.type, n.initializer) : [];
+      for (const name of names) scope.set(name, cls.length ? cls : null);
     } else if (ts.isCatchClause(n) && n.variableDeclaration) {
       const names: string[] = [];
       boundNames(n.variableDeclaration.name, names);
@@ -184,7 +194,7 @@ function isBoundNew(n: ts.NewExpression): boolean {
 export function collectMemberUses(
   root: ts.Node,
   module: Scope,
-  thisTypes?: Map<string, string>,
+  thisTypes?: Map<string, string[]>,
 ): MemberUses {
   const uses = new Set<string>();
   const escapes = new Set<string>();
@@ -192,17 +202,17 @@ export function collectMemberUses(
   const superUses = new Set<string>();
   let thisEscapes = false;
   const scopes: Scope[] = [module];
-  const lookup = (name: string): string | null | undefined => {
+  const lookup = (name: string): string[] | null | undefined => {
     for (let i = scopes.length - 1; i >= 0; i--) {
       const s = scopes[i] as Scope;
-      if (s.has(name)) return s.get(name) as string | null;
+      if (s.has(name)) return s.get(name) as string[] | null;
     }
     return undefined;
   };
   const memberOf = (obj: ts.Expression, member: string): boolean => {
     if (ts.isIdentifier(obj)) {
       const t = lookup(obj.text);
-      if (typeof t === "string") uses.add(`${t}.${member}`);
+      if (Array.isArray(t)) for (const c of t) uses.add(`${c}.${member}`);
       else if (t === undefined) uses.add(`${obj.text}.${member}`);
       return true;
     }
@@ -220,7 +230,7 @@ export function collectMemberUses(
       thisTypes?.has(obj.name.text)
     ) {
       thisUses.add(obj.name.text);
-      uses.add(`${thisTypes.get(obj.name.text)}.${member}`);
+      for (const c of thisTypes.get(obj.name.text) ?? []) uses.add(`${c}.${member}`);
       return true;
     }
     if (ts.isNewExpression(obj) && ts.isIdentifier(obj.expression)) {
@@ -240,6 +250,16 @@ export function collectMemberUses(
       return;
     }
     if (ts.isPropertyAccessExpression(n)) {
+      // `this.repo` used as a value (passed, returned, stored): any member of its class is reachable.
+      if (
+        n.expression.kind === ts.SyntaxKind.ThisKeyword &&
+        !(
+          ts.isBinaryExpression(n.parent) &&
+          n.parent.left === n &&
+          n.parent.operatorToken.kind === ts.SyntaxKind.EqualsToken
+        )
+      )
+        for (const c of thisTypes?.get(n.name.text) ?? []) escapes.add(c);
       if (memberOf(n.expression, n.name.text)) return;
       visit(n.expression);
       return;
@@ -266,7 +286,7 @@ export function collectMemberUses(
     if (ts.isIdentifier(n)) {
       if (isDeclarationName(n)) return;
       const t = lookup(n.text);
-      if (typeof t === "string") escapes.add(t);
+      if (Array.isArray(t)) for (const c of t) escapes.add(c);
       else if (t === undefined) escapes.add(n.text);
       return;
     }
