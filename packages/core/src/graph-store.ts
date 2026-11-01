@@ -15,10 +15,10 @@
  * A file whose content changed while its surface did not is patched into the restored graph
  * (the same incremental patch watch mode uses); anything else means a full rebuild.
  */
-import { readFileSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { DependencyGraph, GRAPH_FORMAT, type GraphOptions } from "@smarttest/dependency-graph";
-import { sha256, VERSION, writeFileAtomic } from "@smarttest/shared";
+import { readStateFileSync, sha256, VERSION, writeStateFile } from "@smarttest/shared";
 import type { FileAnalysis } from "@smarttest/source-parser";
 
 /** Version of the header layout and of the keys below. */
@@ -91,12 +91,11 @@ export class GraphStore {
 
   /** Restores (and patches) the persisted graph for these analyses, or says why it cannot. */
   load(files: ReadonlyMap<string, FileAnalysis>, isTest: (path: string) => boolean): GraphLoad {
-    let text: string;
-    try {
-      text = readFileSync(this.path, "utf8");
-    } catch {
-      return { status: "missing", reason: "no stored graph" };
-    }
+    if (!existsSync(this.path)) return { status: "missing", reason: "no stored graph" };
+    // The checks below are all against public data (content hashes): only the MAC proves this
+    // machine (or a CI job holding its key) wrote the graph. A planted graph could drop edges.
+    const text = readStateFileSync(this.path);
+    if (text === undefined) return { status: "corrupt", reason: "not written by this machine" };
     const nl = text.indexOf("\n");
     let header: Header;
     try {
@@ -173,6 +172,6 @@ export class GraphStore {
       files: entries,
       body: sha256(body),
     };
-    await writeFileAtomic(this.path, `${JSON.stringify(header)}\n${body}`);
+    await writeStateFile(this.path, `${JSON.stringify(header)}\n${body}`);
   }
 }

@@ -171,6 +171,14 @@ export function validateConfig(raw: unknown): { errors: ConfigIssue[]; warnings:
       "plugins",
       "must be an array of module paths (relative to the project root) or package names",
     );
+  else if (Array.isArray(c.plugins))
+    for (const [i, p] of (c.plugins as string[]).entries()) {
+      const why =
+        p.startsWith(".") || p.startsWith("/") || /^[A-Za-z]:|^\\/.test(p)
+          ? outsideProject(p)
+          : undefined;
+      if (why) err(`plugins[${i}]`, why);
+    }
   if (c.mode !== undefined && !MODES.includes(c.mode as string))
     err("mode", `must be one of ${MODES.join(", ")}`);
   if (

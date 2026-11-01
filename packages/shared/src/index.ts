@@ -22,6 +22,7 @@ export * from "./logger.js";
 export * from "./paths.js";
 export * from "./primitives.js";
 export * from "./proc.js";
+export * from "./state.js";
 export * from "./text.js";
 
 export const VERSION = "0.9.0";

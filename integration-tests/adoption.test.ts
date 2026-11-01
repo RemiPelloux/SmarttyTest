@@ -231,6 +231,33 @@ describe("per-project conventions", () => {
     expect(targetPath("src/x.ts", undefined, opts)).toBe("tests/unit/x.test.ts");
   });
 
+  it.each([
+    ["inside node_modules", "node_modules/@borderless/ts-scripts/configs/husky/node", "dependency"],
+    ["outside the repository", "", "outside the repository"],
+  ])(
+    "init skips a Git hook it must not edit (core.hooksPath %s) and keeps the rest of the setup",
+    async (_label, hooksDir, reason) => {
+      const dir = await repo({
+        "package.json":
+          '{"name":"p","type":"module","scripts":{"test":"vitest run"},"devDependencies":{"vitest":"5"}}\n',
+        "src/a.ts": "export const a = 1;\n",
+        "src/a.test.ts": "import { a } from './a';\n",
+      });
+      const hooks = hooksDir ? join(dir, hooksDir) : await mkdtemp(join(tmpdir(), "st-shared-"));
+      await mkdir(hooks, { recursive: true });
+      await writeFile(join(hooks, "pre-commit"), "#!/bin/sh\nnpx lint-staged\n");
+      git(dir, "config", "core.hooksPath", hooks);
+      git(dir, "add", "-A");
+      git(dir, "commit", "-qm", "init");
+      const plan = await (await SmartTest.open({ root: dir })).initPlan();
+      expect(plan.files.map((f) => f.path)).toContain("smarttest.config.ts");
+      expect(plan.files.some((f) => f.path.endsWith("pre-commit"))).toBe(false);
+      expect(plan.warnings.join("\n")).toContain(`Git hook not installed`);
+      expect(plan.warnings.join("\n")).toContain(reason);
+    },
+    120_000,
+  );
+
   it("init proposes per-project conventions when sub-projects differ", async () => {
     const dir = await repo({
       "backend/package.json":

@@ -282,10 +282,14 @@ export function mapJson(map, view, filters) {
   )}\n`;
 }
 
+// biome-ignore lint/suspicious/noControlCharactersInRegex: removing control characters is the point
+const oneLine = (s) => String(s).replace(/[\u0000-\u001f\u007f\u2028\u2029]+/g, " ");
+
 export function mapDot(map, view, filters) {
   const q = (s) => JSON.stringify(String(s));
   const lines = [
-    `// SmartTest impact map · ${map.change}${filterWords(filters).length ? ` · ${filterWords(filters).join(" · ")}` : ""}`,
+    // A comment ends at a line break: repository text in it (refs, --only paths) is one line.
+    `// SmartTest impact map · ${oneLine(map.change)}${filterWords(filters).length ? ` · ${oneLine(filterWords(filters).join(" · "))}` : ""}`,
     "digraph impact {",
     "  rankdir=LR;",
     '  node [fontname="monospace", fontsize=10];',

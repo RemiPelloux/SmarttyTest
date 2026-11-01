@@ -6,10 +6,17 @@
 
 import { randomUUID } from "node:crypto";
 import { statSync } from "node:fs";
-import { readFile, rm } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { join, posix } from "node:path";
 import type { SourceRange } from "@smarttest/shared";
-import { exists, matchGlob, readJson, sha256, writeFileAtomic } from "@smarttest/shared";
+import {
+  exists,
+  matchGlob,
+  readStateJson,
+  removeStateFile,
+  sha256,
+  writeStateFile,
+} from "@smarttest/shared";
 import type {
   Analyzer,
   FileAnalysis,
@@ -108,7 +115,8 @@ export class SymbolIndex {
     const path = join(storeDir, "state", "index.json");
     const idx = new SymbolIndex(path);
     if (await exists(path)) {
-      const data = await readJson<IndexFile>(path);
+      // Authenticated (state.ts): a planted or foreign index reads as corrupt and is rebuilt.
+      const data = await readStateJson<IndexFile>(path);
       if (data && data.schemaVersion === INDEX_SCHEMA_VERSION && data.files) {
         for (const [k, v] of Object.entries(data.files)) idx.files.set(k, v);
         for (const [k, v] of Object.entries(data.stats ?? {})) idx.fileStats.set(k, v);
@@ -127,7 +135,7 @@ export class SymbolIndex {
   /** Applies the delta written against this base, if any (a delta for another base is ignored). */
   private async applyDelta(baseId: string): Promise<void> {
     const path = this.deltaPath;
-    const delta = path ? await readJson<IndexDelta>(path) : undefined;
+    const delta = path ? await readStateJson<IndexDelta>(path) : undefined;
     if (
       !delta ||
       delta.schemaVersion !== INDEX_SCHEMA_VERSION ||
@@ -175,7 +183,7 @@ export class SymbolIndex {
         delta.files[p] = this.files.get(p) ?? null;
         delta.stats[p] = this.fileStats.get(p) ?? null;
       }
-      await writeFileAtomic(deltaPath, JSON.stringify(delta));
+      await writeStateFile(deltaPath, JSON.stringify(delta));
       this.dirty = false;
       return;
     }
@@ -188,9 +196,9 @@ export class SymbolIndex {
       files: Object.fromEntries([...this.files].sort(([a], [b]) => a.localeCompare(b))),
     };
     // Compact JSON: the index is a cache, not a document meant for humans.
-    await writeFileAtomic(this.storePath, JSON.stringify(data));
+    await writeStateFile(this.storePath, JSON.stringify(data));
     // The new base makes any delta stale (it names the old base); remove it.
-    await rm(deltaPath, { force: true });
+    await removeStateFile(deltaPath);
     this.baseId = baseId;
     this.changedPaths.clear();
     this.fullyDirty = false;

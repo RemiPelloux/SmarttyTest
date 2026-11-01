@@ -3,7 +3,14 @@
  * validated result cache.
  */
 import { join } from "node:path";
-import { readJson, sha256, type TestExecution, writeJson } from "@smarttest/shared";
+import {
+  readJson,
+  readStateJson,
+  sha256,
+  type TestExecution,
+  writeJson,
+  writeStateJson,
+} from "@smarttest/shared";
 
 // ── History ─────────────────────────────────────────────────────────────────────────────────
 
@@ -177,12 +184,13 @@ export interface ResultCache {
 }
 
 export async function loadResultCache(storeDir: string): Promise<ResultCache> {
-  const s = await readJson<ResultCache>(join(storeDir, "cache", "results.json"));
+  // Authenticated: a planted cache must never turn a test into a cached pass.
+  const s = await readStateJson<ResultCache>(join(storeDir, "cache", "results.json"));
   return s?.version === 1 ? s : { version: 1, files: {} };
 }
 
 export async function saveResultCache(storeDir: string, cache: ResultCache): Promise<void> {
-  await writeJson(join(storeDir, "cache", "results.json"), cache);
+  await writeStateJson(join(storeDir, "cache", "results.json"), cache);
 }
 
 export function cacheGet(cache: ResultCache, file: string, key: string): CachedResult | undefined {

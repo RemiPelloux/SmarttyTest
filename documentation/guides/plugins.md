@@ -72,6 +72,7 @@ With this plugin, editing `sql/find-user.sql` selects only the tests that reach 
 - **Unresolved is uncertainty.** Report what you saw but could not resolve in `unresolved`. In BALANCED and SAFE mode the tests that reach those files are selected; FAST mode skips them and says so in a warning (the same as dynamic imports).
 - **A broken provider stops the run.** If `provideEdges` throws, or returns an edge with an absolute or `..` path, an unknown `kind` or `confidence`, the analysis fails with `ST_PLUGIN_FAILED` (exit 4). SmartTest never treats a failure as "no edges".
 - **Plugin changes widen.** A change to a plugin file inside the project selects the full suite, because the edges it computes may have changed.
+- **A plugin is code.** Loading it runs it with your permissions, like loading `smarttest.config.ts`, including in CI on a pull request that adds it. A path plugin must be a file inside the project: an absolute path, `../`, or a link that leaves the project is refused (`ST_PLUGIN_OUTSIDE_PROJECT`, exit 3). A package name resolves from the project's `node_modules`.
 - **Provenance is kept.** Provided edges appear in `smarttest graph --format json` with `"provenance": "plugin"`.
 
 ### Contract

@@ -6,7 +6,7 @@
 import { readdir, readFile, rm } from "node:fs/promises";
 import { join, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
-import { readJson, sha256, writeJson } from "@smarttest/shared";
+import { readStateJson, sha256, writeStateJson } from "@smarttest/shared";
 import type { FileAnalysis } from "@smarttest/source-parser";
 
 export const TRACE_STORE_VERSION = 1;
@@ -79,12 +79,13 @@ export async function readV8Coverage(
 }
 
 export async function loadTraces(storeDir: string): Promise<TraceStore | undefined> {
-  const s = await readJson<TraceStore>(join(storeDir, "state", "traces.json"));
+  // Authenticated: outside SAFE mode a fresh trace can rule a test out.
+  const s = await readStateJson<TraceStore>(join(storeDir, "state", "traces.json"));
   return s?.version === TRACE_STORE_VERSION ? s : undefined;
 }
 
 export async function saveTraces(storeDir: string, store: TraceStore): Promise<void> {
-  await writeJson(join(storeDir, "state", "traces.json"), store);
+  await writeStateJson(join(storeDir, "state", "traces.json"), store);
 }
 
 export async function hashFile(root: string, file: string): Promise<string | undefined> {

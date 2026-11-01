@@ -23,7 +23,9 @@ describe("--only scope", () => {
   it("normalises project-relative paths and refuses paths outside the project", () => {
     expect(normalizeScopePath("./src/a.ts")).toBe("src/a.ts");
     expect(normalizeScopePath("src\\util\\")).toBe("src/util");
-    for (const bad of ["", ".", "..", "../x.ts", "/etc/passwd", "C:/x.ts"])
+    expect(normalizeScopePath("src/./x/../a.ts")).toBe("src/a.ts");
+    // SR-18: a path that leaves the project only after normalisation.
+    for (const bad of ["", ".", "..", "../x.ts", "/etc/passwd", "C:/x.ts", "src/../../x", "a/.."])
       expect(() => normalizeScopePath(bad), bad).toThrow(/not a path inside the project/);
   });
 

@@ -56,4 +56,26 @@ describe("history benchmark", () => {
     expect(b.totals.missed).toBe(0);
     expect(b.totals.smarttestMs).toBeGreaterThan(0);
   }, 180_000);
+
+  // OpenPro's front end: vitest.config.ts next to vitest.stryker.config.ts made the project-gated
+  // baseline count the one Vitest group twice (226 s gated for a 113 s full run).
+  it("times a project with two configs of one runner once in the project-gated baseline", async () => {
+    const dir = await materialize("nest-auth-vitest", { git: true });
+    await writeFile(
+      join(dir, "vitest.mutation.config.ts"),
+      'import { defineConfig } from "vitest/config";\nexport default defineConfig({ test: { include: ["tests/never/**/*.test.ts"] } });\n',
+    );
+    git(dir, "add", "-A");
+    git(dir, "commit", "-qm", "mutation config");
+    await edit(dir, "src/modules/catalog/CatalogService.ts", "sum + p.price", "p.price + sum");
+    git(dir, "commit", "-qam", "catalog");
+    const st = await SmartTest.open({ root: dir });
+    expect((await st.runnerRoots()).filter((r) => r.adapter === "vitest")).toHaveLength(2);
+    const b = await benchmarkHistory(st, { commits: 1 });
+    const [c] = b.commits;
+    expect(c?.projectGatedTests).toBe(c?.totalTests);
+    // One group ran; the gated time is that group's time, never more than the whole full run.
+    expect(c?.projectGatedMs).toBeLessThanOrEqual(c?.fullMs as number);
+    expect(b.totals.missed).toBe(0);
+  }, 180_000);
 });

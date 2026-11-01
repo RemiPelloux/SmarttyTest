@@ -275,6 +275,21 @@ describe("where the hook lives", () => {
       category: "usage",
     });
   });
+
+  // pillarjs/path-to-regexp: @borderless/ts-scripts points core.hooksPath at its own husky folder.
+  it("refuses a core.hooksPath inside node_modules", async () => {
+    const hooks = "node_modules/@borderless/ts-scripts/configs/husky/node";
+    const root = await repo({ "package.json": "{}", [`${hooks}/pre-commit`]: "#!/bin/sh\n" });
+    git(root, "config", "core.hooksPath", join(root, hooks));
+    await expect(planHookInstall(root)).rejects.toMatchObject({
+      code: "ST_HOOK_PATH_IN_DEPENDENCY",
+      category: "usage",
+    });
+    git(root, "config", "core.hooksPath", hooks);
+    await expect(planHookInstall(root)).rejects.toMatchObject({
+      code: "ST_HOOK_PATH_IN_DEPENDENCY",
+    });
+  });
 });
 
 describe("existing hook scripts", () => {

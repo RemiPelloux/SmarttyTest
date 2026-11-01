@@ -335,7 +335,10 @@ export async function ingestBrowserV8(
           );
           continue;
         }
-        const rel = relPosixReported(root, file) ?? file;
+        // `file` is a real path: relative to the root's real path (the root may sit below a
+        // link), and never reported as an absolute path.
+        const rel = relPosix(await realpath(root), file);
+        if (rel === undefined) continue;
         unmapped.delete(entry.url);
         const detail = v8Lines(entry.source, entry.functions);
         const prev = merged.get(rel);

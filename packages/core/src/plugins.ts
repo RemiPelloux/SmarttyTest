@@ -8,6 +8,7 @@
  * Safety: provided edges only add dependents. A provider that throws or returns malformed output
  * fails the analysis (never "no edges"), and what it reports as unresolved becomes uncertainty.
  */
+import { realpathSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { isAbsolute, join, relative, resolve } from "node:path";
@@ -107,11 +108,28 @@ export async function loadPlugins(root: string, specs: readonly string[]): Promi
   for (const spec of specs) {
     let path: string;
     try {
-      path =
-        spec.startsWith(".") || isAbsolute(spec)
-          ? resolve(root, spec)
-          : createRequire(join(root, "package.json")).resolve(spec);
+      if (spec.startsWith(".") || isAbsolute(spec) || /^[A-Za-z]:/.test(spec)) {
+        path = resolve(root, spec);
+        // The list is repository content: a path plugin is a file of this project, reached
+        // without leaving it (no `../`, no absolute path, no link out). Packages resolve from
+        // the project's own node_modules, like any import of the project.
+        const [realRoot, real] = [realpathSync(root), realpathSync(path)];
+        const rel = relative(realRoot, real);
+        if (
+          isAbsolute(spec) ||
+          /^[A-Za-z]:/.test(spec) ||
+          !rel ||
+          rel.startsWith("..") ||
+          isAbsolute(rel)
+        )
+          throw new SmartTestError(`Plugin ${spec} is outside the project`, {
+            code: "ST_PLUGIN_OUTSIDE_PROJECT",
+            category: "configuration",
+            hint: "List a file inside the project (./tools/plugin.mjs) or an installed package name.",
+          });
+      } else path = createRequire(join(root, "package.json")).resolve(spec);
     } catch (error) {
+      if (error instanceof SmartTestError) throw error;
       throw new SmartTestError(`Plugin ${spec} cannot be found from ${root}`, {
         code: "ST_PLUGIN_LOAD_FAILED",
         category: "configuration",

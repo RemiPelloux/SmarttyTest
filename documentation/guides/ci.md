@@ -67,6 +67,8 @@ npx smarttest ci
 
 ## Traces and Shadow Mode in CI
 
-Traces live in `.smarttest/state/traces.json`. To use them on pull requests, cache that file (or the whole `.smarttest/state/` directory) between pipeline runs, keyed on the lockfile. A trace whose loaded files changed is ignored automatically, so a stale cache is harmless. `smarttest shadow` appends to `.smarttest/shadow/history.jsonl`; keep that file as an artifact or in a cache to follow drift with `smarttest shadow --report`.
+Traces live in `.smarttest/state/traces.json`. To use them on pull requests, cache that file (or the whole `.smarttest/state/` directory) between pipeline runs, keyed on the lockfile. A trace whose loaded files changed is ignored automatically, so a stale cache is harmless.
+
+State that decides what runs is authenticated with a key outside the project: the index, the graph, test discovery, cached passes and traces. By default every runner has its own key, so a restored cache is rebuilt. To reuse it, set the same `SMARTTEST_STATE_KEY` secret (32 characters or more) in the jobs that save and restore the cache. Fork pull requests do not receive secrets, so state they write or restore is never trusted ([security review](../architecture/security-review.md), SR-16). `smarttest shadow` appends to `.smarttest/shadow/history.jsonl`; keep that file as an artifact or in a cache to follow drift with `smarttest shadow --report`.
 
 To check SmartTest against the full suite on your own history before relying on it in CI, run `npx smarttest benchmark --commits 20` locally.

@@ -1,3 +1,4 @@
+import { posix } from "node:path";
 import type { ImpactResult } from "@smarttest/impact-engine";
 import type { ChangeScope, Completeness, FileChange, SafetyMode } from "@smarttest/shared";
 import { SmartTestError } from "@smarttest/shared";
@@ -11,8 +12,9 @@ import type { ChangeAnalysisInput } from "@smarttest/vcs-core";
 
 /** Normalises a project-relative path: forward slashes, no `./` prefix, no trailing slash. */
 export function normalizeScopePath(path: string): string {
-  const p = path
-    .replace(/\\/g, "/")
+  // Normalised first: `src/../../x` must not slip past the `../` check below.
+  const p = posix
+    .normalize(path.replace(/\\/g, "/"))
     .replace(/^(\.\/)+/, "")
     .replace(/\/+$/, "");
   if (
