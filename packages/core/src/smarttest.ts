@@ -420,6 +420,10 @@ async function staticDefaultDiscovery(
     /\b(include|exclude|testMatch|testRegex|roots|rootDir|projects|workspace|dir|root|preset|testPathIgnorePatterns|mergeConfig|extends)\b/;
   if (root.adapter === "vitest") {
     if (settings.test(cfg)) return undefined;
+    // In-source tests (`includeSource`), type tests (`typecheck`) and workspace files: only Vitest
+    // knows which files it collects.
+    if (/\b(includeSource|typecheck)\b/.test(cfg) || isVitestWorkspaceFile(root.configFile))
+      return undefined;
     if (!root.configFile)
       for (const v of ["vite.config.ts", "vite.config.js", "vite.config.mjs", "vite.config.mts"])
         if (await exists(join(projectRoot, root.dir, v))) return undefined;
@@ -436,6 +440,14 @@ async function staticDefaultDiscovery(
   }
   return undefined;
 }
+
+/** `vitest.workspace.ts` & co.: a list of projects (Vitest 3 and earlier), not a config file. */
+function isVitestWorkspaceFile(file: string | undefined): boolean {
+  return !!file && /(?:^|\/)vitest\.workspace\.[cm]?[jt]s(?:on)?$/.test(file);
+}
+
+/** Vitest type tests by default `typecheck.include` (`*.test-d.ts`, `*.spec-d.ts`). */
+const VITEST_TYPE_TEST = /\.(?:test|spec)-d\.[cm]?[jt]sx?$/;
 
 const timed = async <T>(
   timings: Record<string, number>,
@@ -908,6 +920,7 @@ export class SmartTest {
     const analysedSet = new Set(analysed);
     const looksLikeTest = (f: string, root?: RunnerRoot) => {
       if (this.isTest(f)) return true;
+      if (root?.adapter === "vitest") return VITEST_TYPE_TEST.test(f);
       if (root?.adapter !== "node") return false;
       const rel = root.dir ? f.slice(root.dir.length + 1) : f;
       return matchGlob(rel, expandNodePatterns(root.patterns));
@@ -970,10 +983,20 @@ export class SmartTest {
     // asked at all: its default patterns are applied here (no process start).
     const listed = await Promise.all(
       roots.map(async (root) => {
-        const candidates = analysed.filter((f) => inRoot(f, root) && looksLikeTest(f, root)).sort();
         const cfg = root.configFile
           ? ((await readText(join(this.root, root.configFile))) ?? "")
           : "";
+        const candidates = analysed.filter((f) => inRoot(f, root) && looksLikeTest(f, root));
+        // In-source tests (`if (import.meta.vitest)`) are tests of that runner: they are candidates,
+        // so adding or removing one asks Vitest again.
+        if (root.adapter === "vitest" && /\bincludeSource\b/.test(cfg)) {
+          const known = new Set(candidates);
+          for (const f of analysed)
+            if (!known.has(f) && inRoot(f, root) && /\.[cm]?[jt]sx?$/.test(f))
+              if ((await readText(join(this.root, f)))?.includes("import.meta.vitest"))
+                candidates.push(f);
+        }
+        candidates.sort();
         const pkg = (await readText(join(this.root, root.dir, "package.json"))) ?? "";
         const key = sha256(
           [rootKey(root), (root.patterns ?? []).join(","), cfg, pkg, candidates.join("\n")].join(
@@ -1111,7 +1134,7 @@ export class SmartTest {
         .map(([t]) => t),
     );
     const graph = await timed(timings, "graph build", () => this.analysisGraph(index, e2eTests));
-    graph.setHelpers(helpers);
+    graph.setDiscovery({ tests, helpers });
     const graphDiff: { file: string; added: string[]; removed: string[] }[] = [];
     const resources = new Map<string, ResourceChange>();
     const diffs = await timed(timings, "semantic diff", () =>
@@ -2241,7 +2264,7 @@ export class SmartTest {
         : "fresh analysis";
     const { index } = await this.loadIndex();
     const graph = this.buildGraph(index);
-    graph.setHelpers((await this.discoverTests(index)).helpers);
+    graph.setDiscovery(await this.discoverTests(index));
     if (
       graph.isTestFile(target) ||
       decision.selectedTests.some((t) => t.filePath === target) ||
@@ -2321,7 +2344,7 @@ export class SmartTest {
     const { index } = await this.loadIndex();
     const graph = this.buildGraph(index);
     const { tests, helpers } = await this.discoverTests(index);
-    graph.setHelpers(helpers);
+    graph.setDiscovery({ tests, helpers });
     return { graph, tests };
   }
 
@@ -2332,8 +2355,9 @@ export class SmartTest {
   }) {
     const { index } = await this.loadIndex();
     const graph = this.buildGraph(index);
+    // Exports mark test files too: what a runner collects, not only what is named like a test.
+    graph.setDiscovery(await this.discoverTests(index));
     if (!options.from) return { graph, stats: graph.stats };
-    graph.setHelpers((await this.discoverTests(index)).helpers);
     const [file, unit] = options.from.includes("#")
       ? (options.from.split("#") as [string, string])
       : [options.from, "*"];
@@ -2479,7 +2503,9 @@ export class SmartTest {
     const { index } = await this.loadIndex();
     const graph = this.buildGraph(index);
     const { tests } = await this.discoverTests(index);
-    const sources = [...index.entries().keys()].filter((f) => !this.isTest(f));
+    // A file a runner collects is a test whatever its name (`test/math.js` under `node --test`).
+    const testSet = new Set(tests);
+    const sources = [...index.entries().keys()].filter((f) => !testSet.has(f) && !this.isTest(f));
     const tested = new Set(tests.flatMap((t) => [...graph.dependenciesOf(t)]));
     // Only source files inside projects that run tests, excluding assets and tooling.
     const roots = await this.runnerRoots();

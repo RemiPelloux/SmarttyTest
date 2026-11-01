@@ -64,9 +64,11 @@ export class VitestAdapter implements TestAdapter {
    * config next to the main one) collects other files than the default config does.
    */
   private configArgs(): string[] {
-    return this.options.configFile
-      ? ["--config", join(this.options.projectRoot, this.options.configFile)]
-      : [];
+    const file = this.options.configFile;
+    // A workspace file lists projects, it is not a config: Vitest 3 finds it on its own, and
+    // Vitest 4+ no longer reads it (projects live in `test.projects`). Never pass it as --config.
+    if (!file || /(?:^|\/)vitest\.workspace\.[cm]?[jt]s(?:on)?$/.test(file)) return [];
+    return ["--config", join(this.options.projectRoot, file)];
   }
 
   async discover(): Promise<TestCase[]> {

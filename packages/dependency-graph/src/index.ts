@@ -102,7 +102,7 @@ interface Dep {
 type LocalTarget = { file: string; unit: string } | { file: string; namespace: true };
 
 /** Version of `serialize()` output; bump on any change to it or to how the graph is built. */
-export const GRAPH_FORMAT = 1;
+export const GRAPH_FORMAT = 2;
 
 interface SerializedGraph {
   format: number;
@@ -159,6 +159,8 @@ export class DependencyGraph {
   private waspOps = new Map<string, Map<string, { file: string; unit: string }>>();
   /** Test-named files no runner collects that other files import: helpers, walked through. */
   private helpers = new Set<string>();
+  /** Files a runner collects, whatever their name (`test/math.js`, `checks/a.ts`, `*.setup.js`). */
+  private collected = new Set<string>();
 
   constructor(
     private readonly files: ReadonlyMap<string, FileAnalysis>,
@@ -680,13 +682,13 @@ export class DependencyGraph {
     }
 
     const kind: GraphEdge["kind"] = test ? "TESTS" : "REFERENCES";
+    // A test file's own symbols keep their units like any file's: a test can export a helper
+    // another test imports, and the walk through it follows the same symbol rules.
     for (const s of a.symbols) {
-      const from = test
-        ? key(file, WHOLE)
-        : key(file, s.parent ? `${s.parent}.${s.name}` : s.qualifiedName);
+      const from = key(file, s.parent ? `${s.parent}.${s.name}` : s.qualifiedName);
       this.link(file, from, s.refs, s.uses ?? [], s.escapes ?? [], kind);
       this.linkResources(from, s.resources);
-      if (s.parent && !test) {
+      if (s.parent) {
         if (s.thisEscapes)
           this.addDep(key(file, s.parent), {
             from,
@@ -719,7 +721,7 @@ export class DependencyGraph {
           });
         }
       }
-      if (s.kind === "class" && !s.parent && s.extends && !test) {
+      if (s.kind === "class" && !s.parent && s.extends) {
         const t = this.localTarget(file, s.extends.split(/[<(]/)[0] as string);
         const target =
           t &&
@@ -1129,9 +1131,13 @@ export class DependencyGraph {
       const [file, unit] = splitKey(k);
       affectedFiles.add(file);
       if (!firstKeyOfFile.has(file)) firstKeyOfFile.set(file, k);
-      if (this.isTestFile(file)) {
+      const isTest = this.isTestFile(file);
+      if (isTest) {
         if (!tests.has(file)) {
           const path = pathOfKey(k);
+          // A path ends at the test file, whichever of its units it entered by.
+          if (path.length > 1 && path[path.length - 1]?.startsWith(`${file}#`))
+            path[path.length - 1] = file;
           const files: string[] = [];
           for (let c = parent.get(k)?.from; c !== undefined; c = parent.get(c)?.from)
             files.push(c.slice(0, c.indexOf("#")));
@@ -1144,10 +1150,11 @@ export class DependencyGraph {
           });
           if (stopAtFirstTest) break;
         }
-        continue;
+        // A test another file imports (a helper exported from a spec, `import { check } from
+        // "./shared.test"`) protects its importers too: keep walking, with the same unit rules.
       }
       if (blocked.has(file)) continue;
-      affectedUnits.add(k);
+      if (!isTest) affectedUnits.add(k);
       const a = this.files.get(file);
       if (file === RESOURCE) {
         pushDeps(k, k);
@@ -1195,16 +1202,23 @@ export class DependencyGraph {
   // ── queries ─────────────────────────────────────────────────────────────────────────────
 
   /**
-   * Files named like tests that no runner collects but other files import (`__tests__/render.tsx`).
-   * They never run, so a traversal goes through them to the tests that import them.
+   * What test discovery found. `tests`: the files a runner collects, which are tests whatever
+   * their name (Node runs `test/math.js`, a Vitest `include` can name `checks/*.ts`).
+   * `helpers`: files named like tests that no runner collects but other files import
+   * (`__tests__/render.tsx`); they never run, so a traversal goes through them to the tests that
+   * import them.
    */
-  setHelpers(files: Iterable<string>): void {
-    this.helpers = new Set(files);
+  setDiscovery(discovery: { tests?: Iterable<string>; helpers?: Iterable<string> }): void {
+    this.collected = new Set(discovery.tests ?? []);
+    this.helpers = new Set(discovery.helpers ?? []);
   }
 
-  /** A test file, as traversals see it: named like a test and not a helper. */
+  /**
+   * A test file, as traversals see it: a file a runner collects, or (where no runner said) a file
+   * named like a test, and never a helper.
+   */
   isTestFile(path: string): boolean {
-    return this.isTest(path) && !this.helpers.has(path);
+    return (this.collected.has(path) || this.isTest(path)) && !this.helpers.has(path);
   }
 
   /** Shortest dependency path from a changed unit (`file` or `file#Unit`) to another file. */
@@ -1263,7 +1277,7 @@ export class DependencyGraph {
     for (const [file, a] of this.files) {
       nodes.push({
         id: file,
-        kind: this.isTest(file) ? "test-suite" : "file",
+        kind: this.isTestFile(file) ? "test-suite" : "file",
         label: file,
         filePath: file,
       });

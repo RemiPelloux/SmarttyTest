@@ -233,3 +233,100 @@ describe("DependencyGraph persistence", () => {
     expect(restored.stats).toEqual(g.stats);
   });
 });
+
+describe("test files as traversals see them", () => {
+  const shared = {
+    "src/numbers.ts":
+      "export const clamp = (v: number) => Math.min(v, 10);\nexport const double = (v: number) => v * 2;\n",
+    "test/shared.test.ts":
+      'import { clamp, double } from "../src/numbers";\nexport const checkClamp = (v: number) => clamp(v);\nexport const checkDouble = (v: number) => double(v);\nit("self", () => 1);\n',
+    "test/strings.test.ts":
+      'import { checkClamp } from "./shared.test";\nit("uses shared", () => checkClamp(12));\n',
+    "test/other.test.ts":
+      'import { checkDouble } from "./shared.test";\nit("uses double", () => checkDouble(2));\n',
+  };
+  const sharedResolve = {
+    "test/shared.test.ts:../src/numbers": "src/numbers.ts",
+    "test/strings.test.ts:./shared.test": "test/shared.test.ts",
+    "test/other.test.ts:./shared.test": "test/shared.test.ts",
+  };
+
+  it("keeps walking from a test to the tests that import it, at symbol granularity", () => {
+    const g = graph(shared, sharedResolve);
+    const r = g.dependentsOf([{ file: "src/numbers.ts", units: ["clamp"] }]);
+    // checkClamp only: other.test.ts imports checkDouble, which does not use clamp.
+    expect([...r.tests.keys()].sort()).toEqual(["test/shared.test.ts", "test/strings.test.ts"]);
+    expect(r.tests.get("test/strings.test.ts")?.path).toEqual([
+      "src/numbers.ts#clamp",
+      "test/shared.test.ts#checkClamp",
+      "test/strings.test.ts",
+    ]);
+    // A path ends at the test file, whichever unit it entered by.
+    expect(r.tests.get("test/shared.test.ts")?.path).toEqual([
+      "src/numbers.ts#clamp",
+      "test/shared.test.ts",
+    ]);
+    // Test units are not reported as affected source symbols.
+    expect([...r.affectedUnits].some((u) => u.startsWith("test/"))).toBe(false);
+  });
+
+  it("a test whose own top level reaches the change reaches every importer", () => {
+    const g = graph(
+      {
+        ...shared,
+        "test/shared.test.ts":
+          'import { clamp, double } from "../src/numbers";\nexport const checkClamp = (v: number) => clamp(v);\nexport const checkDouble = (v: number) => double(v);\nit("self", () => checkClamp(1));\n',
+      },
+      sharedResolve,
+    );
+    const r = g.dependentsOf([{ file: "src/numbers.ts", units: ["clamp"] }]);
+    // Importing a test runs its top level (it registers tests in the importer): all importers.
+    expect([...r.tests.keys()].sort()).toEqual([
+      "test/other.test.ts",
+      "test/shared.test.ts",
+      "test/strings.test.ts",
+    ]);
+  });
+
+  it("files a runner collects are tests whatever their name; helpers are not", () => {
+    const g = graph(
+      {
+        "src/math.js": "export const add = (a, b) => a + b;\n",
+        "test/math.js": 'import { add } from "../src/math.js";\nadd(1, 2);\n',
+        "checks/numbers.ts": 'import { add } from "../src/math.js";\nadd(1, 2);\n',
+        "lib/__tests__/fixture.test.js":
+          'import { add } from "../../src/math.js";\nexport const f = () => add(1, 1);\n',
+        "test/uses-fixture.test.js":
+          'import { f } from "../lib/__tests__/fixture.test.js";\nf();\n',
+      },
+      {
+        "test/math.js:../src/math.js": "src/math.js",
+        "checks/numbers.ts:../src/math.js": "src/math.js",
+        "lib/__tests__/fixture.test.js:../../src/math.js": "src/math.js",
+        "test/uses-fixture.test.js:../lib/__tests__/fixture.test.js":
+          "lib/__tests__/fixture.test.js",
+      },
+    );
+    const seed = [{ file: "src/math.js", units: ["add"] }];
+    // Without discovery, names decide: test/math.js and checks/numbers.ts are plain files.
+    expect([...g.dependentsOf(seed).tests.keys()].sort()).toEqual([
+      "lib/__tests__/fixture.test.js",
+      "test/uses-fixture.test.js",
+    ]);
+    g.setDiscovery({
+      tests: ["test/math.js", "checks/numbers.ts", "test/uses-fixture.test.js"],
+      helpers: ["lib/__tests__/fixture.test.js"],
+    });
+    expect(g.isTestFile("test/math.js")).toBe(true);
+    expect(g.isTestFile("lib/__tests__/fixture.test.js")).toBe(false);
+    expect([...g.dependentsOf(seed).tests.keys()].sort()).toEqual([
+      "checks/numbers.ts",
+      "test/math.js",
+      "test/uses-fixture.test.js",
+    ]);
+    expect(g.orphans(["test/math.js", "checks/numbers.ts"])).not.toContain("test/math.js");
+    const kinds = new Map(g.toGraph().nodes.map((n) => [n.id, n.kind]));
+    expect(kinds.get("checks/numbers.ts")).toBe("test-suite");
+    expect(kinds.get("lib/__tests__/fixture.test.js")).toBe("file");
+  });
+});

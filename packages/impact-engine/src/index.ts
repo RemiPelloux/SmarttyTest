@@ -100,6 +100,16 @@ export function decideImpact(input: ImpactInput): ImpactResult {
   let partial = changeSet.completeness !== "complete";
   const allTests = [...input.testFiles].sort();
   let lastTraversal: ReturnType<DependencyGraph["dependentsOf"]> | undefined;
+  let imported: Set<string> | undefined;
+  /** Files another analysed file imports (computed on first use). */
+  const importedFiles = (): Set<string> => {
+    if (!imported) {
+      imported = new Set();
+      for (const [file, a] of input.files)
+        for (const i of a.imports) if (i.resolved && i.resolved !== file) imported.add(i.resolved);
+    }
+    return imported;
+  };
 
   const selectAll = (reason: SelectionReason) => {
     fallback = true;
@@ -225,7 +235,8 @@ export function decideImpact(input: ImpactInput): ImpactResult {
         select(path, { kind: "test-file-changed", message: `Test file ${change.type}` });
       if (change.previousPath && change.type === "renamed")
         details.ignored.push(`${change.previousPath} (renamed test)`);
-      continue;
+      // A test other files import (a helper exported from a spec) also seeds its importers.
+      if (!importedFiles().has(change.previousPath ?? path)) continue;
     }
     if (change.type === "deleted" || change.type === "renamed") {
       const old = change.type === "renamed" ? (change.previousPath as string) : path;
@@ -299,10 +310,32 @@ export function decideImpact(input: ImpactInput): ImpactResult {
 
   // 4b. Observed evidence. Code seeds only: traces do not see env, catalogs or assets.
   // Translation catalogs are read by key, so loading one says nothing about which keys ran.
-  const codeSeeds = details.seeds.filter(
-    (s) => s.file !== RESOURCE && input.files.has(s.file) && !s.referencesOnly,
-  );
-  const nonCodeSeeds = details.seeds.filter((s) => !codeSeeds.includes(s));
+  // Types never run either: a trace cannot show that a test (a Vitest type test above all) did not
+  // depend on an interface or a type alias, so those units are not ruled out by traces.
+  const isTypeUnit = (file: string, unit: string) =>
+    !!input.files
+      .get(file)
+      ?.symbols.some(
+        (s) =>
+          !s.parent && s.qualifiedName === unit && (s.kind === "interface" || s.kind === "type"),
+      );
+  const codeSeeds: typeof details.seeds = [];
+  const typeSeeds: typeof details.seeds = [];
+  const nonCodeSeeds: typeof details.seeds = [];
+  for (const s of details.seeds) {
+    if (s.file === RESOURCE || !input.files.has(s.file) || s.referencesOnly) {
+      nonCodeSeeds.push(s);
+      continue;
+    }
+    const types = s.units.filter((u) => isTypeUnit(s.file, u));
+    if (!types.length) codeSeeds.push(s);
+    else {
+      typeSeeds.push({ ...s, units: types });
+      const rest = s.units.filter((u) => !types.includes(u));
+      if (rest.length) codeSeeds.push({ ...s, units: rest });
+    }
+  }
+  nonCodeSeeds.push(...typeSeeds);
   const nonCodeTests = nonCodeSeeds.length ? graph.dependentsOf(nonCodeSeeds).tests : new Map();
   const traces = input.traces;
   const ranChange = (test: string) =>
@@ -457,7 +490,9 @@ export function decideImpact(input: ImpactInput): ImpactResult {
     );
 
   // 7. Changed code that no test reaches (statically or in a fresh trace).
-  const unitList = codeSeeds.flatMap((s) => s.units.map((u) => ({ file: s.file, unit: u })));
+  const unitList = [...codeSeeds, ...typeSeeds].flatMap((s) =>
+    s.units.map((u) => ({ file: s.file, unit: u })),
+  );
   if (!fallback && unitList.length && unitList.length <= 200) {
     const unprotected: string[] = [];
     for (const { file, unit } of unitList) {
