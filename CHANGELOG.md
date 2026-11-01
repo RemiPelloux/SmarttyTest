@@ -48,6 +48,23 @@ All notable changes are documented here. Releases are managed with [Changesets](
 - Config validation now checks project rules, `snapshots.*`, `reports.outputDir`, rule `generate`, `execution.retries`, `execution.alwaysRunOnAffected` and `match.visibility`.
 - Playwright's filename fallback no longer claims files that a working runner collects.
 - Watch mode rebuilds its graph after a tsconfig change.
+- Pre-publication audit, on a real project (Galdia) and in fresh installs:
+  - **Missed failure:** a new or changed export whose code runs at import (an IIFE, a call, a static block, a decorator, a top-level statement) now affects every importer of the file. It used to reach only the export's users, so a test importing the file was skipped even in SAFE mode.
+  - **Duplicate test names:** two tests with the same name in one attempt, the first failing and the second passing, were reported as one flaky test and the run passed. A test is flaky only when a later retry passes.
+  - **Sharded runs:** `--shard` no longer advances the native baseline, so the other shards' tests still run. Coverage from a shard is labelled `selected`, never `full`.
+  - **`validate-selection`:** infrastructure errors and files no runner collects count as failures.
+  - **Watch mode and Studio:** a plugin is reloaded when its file changes.
+  - **`--only`:** a path with the wrong letter case matches its file, and a path that is neither changed nor on disk is a usage error (exit 2).
+  - **`init --dry-run`:** it writes nothing to the project. `doctor --fix` and `init` explain how to untrack a committed `.smarttest/`.
+  - **`explain`:** it re-analyses when the change or mode moved since the last run, and says which decision it shows.
+  - **`init --rollback` and `uninstall`:** rollback undoes only init's own steps. `uninstall` removes SmartTest's hook blocks.
+  - **`init` formatting:** `init` formats the generated config with the project's Prettier or Biome.
+  - **Imports with bundler queries:** imports such as `./icon.svg?raw` or `#web/a.css?inline` resolve, relative or through a path alias.
+  - **State key:** a damaged `state.key` is repaired under a lock, and `doctor` reports it. A `SMARTTEST_STATE_KEY` shorter than 32 characters is ignored with a warning.
+  - **Piped output:** piping to `head` no longer prints an EPIPE stack trace, and the exit code is kept.
+  - **`run --hook --json`:** a skipped hook (`SMARTTEST_SKIP=1`) or a push that only deletes refs prints a documented hook-only document.
+  - **New error code:** `hook install` without `--yes` reports `ST_HOOK_CONFIRMATION_REQUIRED`.
+  - **Packaging and docs:** `smarttest/studio` exports `startStudio`. Help lists every flag, and schema `$id`s point to the docs site. The npm README is user-facing.
 - macOS and Windows: results were lost when the runner reported a path spelled differently from SmartTest's (`/var` vs `/private/var`, Windows short names like `RUNNER~1`); Studio returned 404 for reports there. pnpm's relative symlinks in the hook checkout and fixtures broke behind a Windows junction.
 - Cypress, found on a real install: test ids, missing skipped tests, failure text in CDATA, and specs that fail to load are now reported correctly.
 - `init --yes` no longer writes its hook into a dependency when Git's hooks path points into `node_modules` (`ST_HOOK_PATH_IN_DEPENDENCY`); a hook it must not edit is a warning, not a failure.
