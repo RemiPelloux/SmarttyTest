@@ -106,8 +106,9 @@ async function poll(ms, until) {
   while (Date.now() < end) {
     if (MAC) hear(await sr.lastSpokenPhrase().catch(() => ""), "poll");
     if (until?.()) return true;
-    // Each AppleScript round trip already takes ~100 ms: poll VoiceOver back to back.
-    if (!MAC) await sleep(250);
+    // Yield between AppleScript round trips: polling VoiceOver back to back starved this process,
+    // which also serves Studio and runs its analysis (a 0.4 s run took minutes; /api/runs hung).
+    await sleep(MAC ? 200 : 250);
   }
   return false;
 }
@@ -118,6 +119,7 @@ const runTrace = [];
 async function studioApi(studio, path) {
   const res = await fetch(`${studio.origin}${path}`, {
     headers: { authorization: `Bearer ${studio.handle.token}` },
+    signal: AbortSignal.timeout(10_000),
   });
   if (!res.ok) throw new Error(`${path}: HTTP ${res.status}`);
   return res.json();
