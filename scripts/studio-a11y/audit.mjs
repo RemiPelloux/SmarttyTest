@@ -13,6 +13,9 @@
  *   - skip link, landmarks and heading order;
  *   - a live run: progress and the final verdict are announced through a live region that was
  *     already in the page (a region inserted with its text is not reliably announced);
+ *   - the impact map (view switch, filters, live result count, Clear filters) and the source
+ *     viewer's observed coverage marks (spoken in words, switchable off), after one real coverage
+ *     run of the change;
  *   - prefers-reduced-motion: no animation or transition longer than 10 ms;
  *   - reflow at 320 px and 640 px wide (400% and 200% zoom of a 1280 px window): no horizontal
  *     page scroll, and no focused control hidden behind the fixed navigation;
@@ -34,16 +37,28 @@
  * them). Run it through a machine guard on shared machines: it launches one browser at a time.
  * Exit code 0 when every gated check passes, 1 when one fails, 2 when the audit itself broke.
  */
-import { chmod, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { execFileSync } from "node:child_process";
+import { chmod, cp, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
 import AxeBuilder from "@axe-core/playwright";
 import { chromium, firefox, webkit } from "playwright-core";
-import { pageHelpers } from "./page-helpers.mjs";
-import { ROOT, SCREENS, startStudioOnFixture, WCAG_TAGS } from "./studio-server.mjs";
 
+const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
+const FIXTURE = join(ROOT, "fixtures/projects/ts-lib-vitest");
+const WCAG_TAGS = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"];
 const ENGINES = { chromium, firefox, webkit };
+const SCREENS = [
+  { id: "overview", path: "/overview", title: "Overview" },
+  { id: "impact", path: "/impact", title: "Impact" },
+  { id: "impact-map", path: "/impact?view=map", title: "Impact", ready: ".map__svg" },
+  { id: "tests", path: "/tests", title: "Tests" },
+  { id: "trust", path: "/trust", title: "Trust" },
+  // The fixture's coverage run marks the changed file's lines.
+  { id: "source", path: "/source", title: "Source", ready: ".code--coverage" },
+];
 
 const { values: args } = parseArgs({
   options: {
@@ -61,6 +76,363 @@ const themes = args.themes.split(",").map((t) => t.trim());
 const OUT = resolve(args.out);
 for (const name of browsers)
   if (!ENGINES[name]) throw new Error(`Unknown browser "${name}" (chromium, firefox, webkit)`);
+
+// ── Page-side helpers, installed before Studio's own scripts ──────────────────────────────
+
+function pageHelpers() {
+  const FOCUSABLE =
+    'a[href], button, input:not([type="hidden"]), select, textarea, summary, [tabindex]';
+  const LIVE = '[aria-live]:not([aria-live="off"]), [role="status"], [role="alert"], [role="log"]';
+  const text = (s) => (s ?? "").replace(/\s+/g, " ").trim();
+  const desc = (el) => {
+    if (!el || el === document.body || el === document.documentElement) return "body";
+    const tag = el.tagName.toLowerCase();
+    const role = el.getAttribute("role");
+    const id = el.dataset?.fk ? `{${el.dataset.fk}}` : el.id ? `#${el.id}` : "";
+    const name = text(
+      el.getAttribute("aria-label") || el.textContent || el.getAttribute("title") || el.value,
+    ).slice(0, 60);
+    return `${tag}${role ? `[role=${role}]` : ""}${id} "${name}"`;
+  };
+  const visible = (el) =>
+    el.isConnected &&
+    !el.closest("[inert]") &&
+    (el.checkVisibility ? el.checkVisibility({ visibilityProperty: true }) : true) &&
+    el.getClientRects().length > 0;
+  const focusables = () =>
+    [...document.querySelectorAll(FOCUSABLE)].filter(
+      (el) => !el.disabled && el.tabIndex >= 0 && visible(el),
+    );
+  const keyOf = (el) => {
+    const list = focusables();
+    return `${desc(el)}@${list.indexOf(el)}`;
+  };
+  const hitsElement = (el, x, y) => {
+    if (x < 0 || y < 0 || x >= innerWidth || y >= innerHeight) return { ok: false, by: null };
+    const hit = document.elementFromPoint(x, y);
+    if (!hit) return { ok: false, by: null };
+    if (hit === el || el.contains(hit)) return { ok: true, by: null };
+    // A <label> wrapping the control, or an ancestor hit through pointer-events: none.
+    if (hit.contains(el) && !hit.matches(".drawer, .rail, .toast, .dialog")) return { ok: true };
+    return { ok: false, by: hit };
+  };
+  window.__a11y = {
+    desc,
+    expected: () => focusables().map((el) => `${desc(el)}@${focusables().indexOf(el)}`),
+    focusInfo() {
+      const el = document.activeElement;
+      if (!el || el === document.body || el === document.documentElement || !document.hasFocus())
+        return { key: "body", desc: "body" };
+      const r = el.getBoundingClientRect();
+      const points = [
+        [r.left + r.width / 2, r.top + r.height / 2],
+        [r.left + 2, r.top + 2],
+        [r.right - 2, r.top + 2],
+        [r.left + 2, r.bottom - 2],
+        [r.right - 2, r.bottom - 2],
+      ];
+      const hits = points.map(([x, y]) => hitsElement(el, x, y));
+      const shown = hits.filter((h) => h.ok).length;
+      const blocker = hits.find((h) => !h.ok && h.by)?.by ?? null;
+      return {
+        key: keyOf(el),
+        desc: desc(el),
+        rect: { x: r.left, y: r.top, width: r.width, height: r.height },
+        inDrawer: Boolean(el.closest("#run")),
+        inDialog: Boolean(el.closest('[role="dialog"]')),
+        obscured: shown === 0 ? "entirely" : shown < points.length ? "partly" : null,
+        obscuredBy: blocker
+          ? blocker.closest("#run")
+            ? "run drawer"
+            : blocker.closest(".rail")
+              ? "navigation rail"
+              : desc(blocker)
+          : null,
+        focusVisible: el.matches(":focus-visible"),
+      };
+    },
+    focusFirst() {
+      focusables()[0]?.focus();
+    },
+    isLast() {
+      const list = focusables();
+      return list.at(-1) === document.activeElement;
+    },
+    focusKey(key) {
+      const el = focusables().find((e) => keyOf(e) === key);
+      el?.focus();
+      return Boolean(el);
+    },
+    blur() {
+      document.activeElement?.blur?.();
+    },
+    async pixelDiff(a, b) {
+      const load = async (b64) => {
+        const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+        return createImageBitmap(new Blob([bytes], { type: "image/png" }));
+      };
+      const [ia, ib] = await Promise.all([load(a), load(b)]);
+      const w = Math.min(ia.width, ib.width);
+      const h = Math.min(ia.height, ib.height);
+      const read = (img) => {
+        const canvas = document.createElement("canvas");
+        canvas.width = w;
+        canvas.height = h;
+        const c = canvas.getContext("2d");
+        c.drawImage(img, 0, 0);
+        return c.getImageData(0, 0, w, h).data;
+      };
+      const da = read(ia);
+      const db = read(ib);
+      let changed = 0;
+      for (let i = 0; i < da.length; i += 4) {
+        const d =
+          Math.abs(da[i] - db[i]) +
+          Math.abs(da[i + 1] - db[i + 1]) +
+          Math.abs(da[i + 2] - db[i + 2]);
+        if (d > 60) changed++;
+      }
+      return changed;
+    },
+    structure() {
+      const issues = [];
+      const mains = document.querySelectorAll('main, [role="main"]');
+      if (mains.length !== 1) issues.push(`${mains.length} main landmarks (expected 1)`);
+      const headings = [...document.querySelectorAll("h1, h2, h3, h4, h5, h6, [role=heading]")]
+        .filter(visible)
+        .map((el) => ({
+          level: Number(el.getAttribute("aria-level") ?? el.tagName.slice(1)),
+          text: text(el.textContent).slice(0, 50),
+        }));
+      const h1 = headings.filter((h) => h.level === 1);
+      if (h1.length !== 1) issues.push(`${h1.length} h1 headings (expected 1)`);
+      if (headings.length && headings[0].level !== 1)
+        issues.push(`first heading is h${headings[0].level} "${headings[0].text}"`);
+      for (let i = 1; i < headings.length; i++)
+        if (headings[i].level > headings[i - 1].level + 1)
+          issues.push(
+            `heading jumps from h${headings[i - 1].level} to h${headings[i].level} at "${headings[i].text}"`,
+          );
+      const labelled = (sel) =>
+        [...document.querySelectorAll(sel)].filter(visible).map((el) => ({
+          el,
+          name: text(
+            el.getAttribute("aria-label") ||
+              document.getElementById(el.getAttribute("aria-labelledby") ?? "")?.textContent,
+          ),
+        }));
+      for (const role of ["nav, [role=navigation]", "aside, [role=complementary]"]) {
+        const items = labelled(role);
+        if (items.length > 1 && items.some((i) => !i.name))
+          issues.push(`several ${role.split(",")[0]} landmarks and one has no label`);
+        const names = items.map((i) => i.name);
+        if (new Set(names).size !== names.length)
+          issues.push(`duplicate ${role.split(",")[0]} labels`);
+      }
+      const outside = [...document.body.children].filter(
+        (el) =>
+          visible(el) &&
+          !el.matches(
+            "main, nav, aside, header, footer, [role], .skip-link, script, noscript, #toast",
+          ) &&
+          !el.querySelector("main, [role=main]") &&
+          text(el.textContent),
+      );
+      for (const el of outside) issues.push(`content outside any landmark: ${desc(el)}`);
+      return { issues, headings };
+    },
+    targets() {
+      const sel =
+        'a[href], button, input:not([type="hidden"]), select, textarea, summary, [role="tab"], [role="button"], [tabindex]:not([tabindex="-1"])';
+      const all = [...document.querySelectorAll(sel)].filter(
+        (el) => visible(el) && !el.matches(".skip-link"),
+      );
+      const rects = all.map((el) => ({ el, r: el.getBoundingClientRect() }));
+      const small = rects.filter(({ el, r }) => {
+        if (r.width >= 23.5 && r.height >= 23.5) return false;
+        // Inline links inside a sentence are exempt (WCAG 2.5.8 "inline").
+        if (
+          el.tagName === "A" &&
+          el.parentElement &&
+          text(el.parentElement.textContent) !== text(el.textContent)
+        )
+          return false;
+        return true;
+      });
+      const issues = [];
+      const circle = ({ r }) => ({ x: r.left + r.width / 2, y: r.top + r.height / 2, rad: 12 });
+      const hitsRect = (c, r) => {
+        const nx = Math.max(r.left, Math.min(c.x, r.right));
+        const ny = Math.max(r.top, Math.min(c.y, r.bottom));
+        return (nx - c.x) ** 2 + (ny - c.y) ** 2 < c.rad ** 2;
+      };
+      for (const s of small) {
+        const c = circle(s);
+        const clash = rects.find(
+          (o) =>
+            o !== s &&
+            !o.el.contains(s.el) &&
+            !s.el.contains(o.el) &&
+            (hitsRect(c, o.r) ||
+              (small.includes(o) &&
+                (() => {
+                  const d = circle(o);
+                  return (d.x - c.x) ** 2 + (d.y - c.y) ** 2 < (c.rad + d.rad) ** 2;
+                })())),
+        );
+        if (clash)
+          issues.push(
+            `${desc(s.el)} is ${Math.round(s.r.width)}x${Math.round(s.r.height)} px and too close to ${desc(clash.el)}`,
+          );
+      }
+      return issues;
+    },
+    motion() {
+      const seconds = (list) =>
+        Math.max(
+          0,
+          ...list.split(",").map((v) => {
+            const n = Number.parseFloat(v);
+            return v.trim().endsWith("ms") ? n / 1000 : n;
+          }),
+        );
+      const issues = [];
+      for (const el of document.querySelectorAll("*")) {
+        for (const pseudo of [null, "::before", "::after"]) {
+          const cs = getComputedStyle(el, pseudo);
+          if (cs.animationName !== "none" && seconds(cs.animationDuration) > 0.01)
+            issues.push(`${desc(el)}${pseudo ?? ""} animates for ${cs.animationDuration}`);
+          if (
+            cs.transitionProperty !== "none" &&
+            seconds(cs.transitionDuration) > 0.01 &&
+            !(cs.transitionProperty === "all" && cs.transitionDuration === "0s")
+          )
+            issues.push(`${desc(el)}${pseudo ?? ""} transitions for ${cs.transitionDuration}`);
+        }
+      }
+      if (getComputedStyle(document.documentElement).scrollBehavior === "smooth")
+        issues.push("html scrolls smoothly");
+      return [...new Set(issues)].slice(0, 20);
+    },
+    reflow() {
+      const doc = document.scrollingElement ?? document.documentElement;
+      const vw = document.documentElement.clientWidth;
+      const issues = [];
+      if (doc.scrollWidth > vw + 1)
+        issues.push(
+          `page scrolls horizontally: ${doc.scrollWidth}px content in a ${vw}px viewport`,
+        );
+      const scrollsX = (el) => {
+        for (let p = el.parentElement; p && p !== document.body; p = p.parentElement) {
+          const cs = getComputedStyle(p);
+          if (cs.position === "fixed") return "fixed";
+          if (["auto", "scroll"].includes(cs.overflowX)) return "scroll";
+          if (["hidden", "clip"].includes(cs.overflowX)) return "clip";
+        }
+        return null;
+      };
+      const offenders = [];
+      for (const el of document.querySelectorAll("#app *, #run *")) {
+        if (!visible(el) || el.closest("[inert]")) continue;
+        const r = el.getBoundingClientRect();
+        if (r.width === 0 || r.height === 0) continue;
+        if (r.right <= vw + 1 && r.left >= -1) continue;
+        const how = scrollsX(el);
+        // A control in a fixed bar that sticks out of the viewport cannot be scrolled into view.
+        if (how === "fixed" && el.matches("a[href], button, input, select, textarea")) {
+          offenders.push(`${desc(el)} sits off screen in a fixed bar`);
+          continue;
+        }
+        if (how === "scroll" || how === "fixed" || how === "clip") continue;
+        if ([...el.children].some((c) => c.getBoundingClientRect().right > vw + 1)) continue;
+        offenders.push(`${desc(el)} spans ${Math.round(r.left)}–${Math.round(r.right)}px`);
+      }
+      return [...issues, ...offenders.slice(0, 8)];
+    },
+    installLive() {
+      const seen = new WeakMap();
+      const log = [];
+      window.__live = log;
+      for (const r of document.querySelectorAll(LIVE)) seen.set(r, -1);
+      const observer = new MutationObserver((mutations) => {
+        const now = performance.now();
+        const touched = new Set();
+        for (const m of mutations) {
+          for (const n of m.addedNodes) {
+            if (n.nodeType !== 1) continue;
+            const regions = [...(n.matches(LIVE) ? [n] : []), ...n.querySelectorAll(LIVE)];
+            for (const r of regions)
+              if (!seen.has(r)) {
+                seen.set(r, now);
+                const t = text(r.textContent);
+                if (t) log.push({ kind: "inserted", region: desc(r), text: t.slice(0, 200) });
+              }
+          }
+          const target = m.target.nodeType === 1 ? m.target : m.target.parentElement;
+          const region = target?.closest?.(LIVE);
+          if (region) touched.add(region);
+        }
+        for (const r of touched) {
+          const born = seen.get(r);
+          if (born === undefined || born === now || !r.isConnected) continue;
+          const t = text(r.textContent);
+          if (!t) continue;
+          const hidden = Boolean(r.closest('[aria-hidden="true"], [inert]'));
+          log.push({
+            kind: hidden ? "hidden" : "announced",
+            region: desc(r),
+            text: t.slice(0, 200),
+          });
+        }
+      });
+      observer.observe(document.body, { subtree: true, childList: true, characterData: true });
+    },
+  };
+}
+
+// ── Fixture and server ────────────────────────────────────────────────────────────────────
+
+function git(cwd, ...rest) {
+  execFileSync(
+    "git",
+    [
+      "-c",
+      "user.name=SmartTest",
+      "-c",
+      "user.email=ci@smarttest.dev",
+      "-c",
+      "commit.gpgsign=false",
+      ...rest,
+    ],
+    { cwd, stdio: "pipe" },
+  );
+}
+
+async function makeFixture() {
+  const dir = await mkdtemp(join(tmpdir(), "st-studio-a11y-"));
+  await cp(FIXTURE, dir, {
+    recursive: true,
+    filter: (p) => !p.includes("node_modules") && !p.includes(".smarttest"),
+  });
+  await symlink(join(FIXTURE, "node_modules"), join(dir, "node_modules"), "dir");
+  await writeFile(join(dir, ".gitignore"), "node_modules\n.smarttest/\n");
+  git(dir, "init", "-q", "-b", "main");
+  git(dir, "add", "-A");
+  git(dir, "commit", "-q", "-m", "initial");
+  // One real change that a selected test catches, so the run drawer shows a failure.
+  const file = join(dir, "src/util/strings.ts");
+  const source = await readFile(file, "utf8");
+  await writeFile(file, source.replace("s.charAt(0).toUpperCase()", "s.charAt(0)"));
+  return dir;
+}
+
+function buildStudio() {
+  execFileSync(
+    process.execPath,
+    [join(ROOT, "node_modules/typescript/bin/tsc"), "-b", "packages/studio/tsconfig.json"],
+    { cwd: ROOT, stdio: "inherit" },
+  );
+}
 
 // ── One browser and theme ─────────────────────────────────────────────────────────────────
 
@@ -108,6 +480,7 @@ class Combo {
       screen.title,
       { timeout: 90_000 },
     );
+    if (screen.ready) await page.waitForSelector(screen.ready, { timeout: 90_000 });
     await page.waitForTimeout(200);
   }
 
@@ -409,7 +782,79 @@ class Combo {
       await this.walk(page, screen.id);
       if (screen.id === "tests") await this.testsScreen(page);
       if (screen.id === "impact") await this.impactScreen(page);
+      if (screen.id === "impact-map") await this.mapScreen(page);
+      if (screen.id === "source") await this.coverageScreen(page);
     }
+  }
+
+  /** The map's view switch, filters and live result count, all from the keyboard. */
+  async mapScreen(page) {
+    await this.open(
+      page,
+      SCREENS.find((s) => s.id === "impact"),
+    );
+    const toMap = page.locator('[data-fk="seg:Impact view:map"]');
+    await toMap.focus();
+    await page.keyboard.press("Enter");
+    try {
+      await page.waitForSelector(".map__svg", { timeout: 30_000 });
+    } catch {
+      return this.fail("impact-map", "keyboard", "Enter on the Map switch does not show the map");
+    }
+    const kept = await page.evaluate(() => document.activeElement?.dataset?.fk ?? "");
+    if (kept !== "seg:Impact view:map")
+      this.fail("impact-map", "focus-management", `switching to the map moves focus to "${kept}"`);
+    await page.evaluate(() => window.__a11y.installLive());
+    const kind = page.locator("#map-kind");
+    await kind.focus();
+    const options = await kind.locator("option").count();
+    if (options < 2) return this.advise("impact-map", "filters", "only one edge kind to filter by");
+    await kind.selectOption({ index: 1 });
+    await page.waitForTimeout(900);
+    const focused = await page.evaluate(() => document.activeElement?.id ?? "");
+    if (focused !== "map-kind")
+      this.fail("impact-map", "focus-management", `a filter change moves focus to "${focused}"`);
+    const said = (await page.evaluate(() => window.__live))
+      .filter((e) => e.kind === "announced")
+      .map((e) => e.text);
+    if (!said.some((t) => /path|No path/.test(t)))
+      this.fail("impact-map", "aria-live", "filtering the map does not announce the result count");
+    await this.axe(page, "impact-map-filtered");
+    await this.snapshot(page, "impact-map-filtered");
+    await this.targets(page, "impact-map-filtered");
+    const clear = page.locator('[data-fk="map-clear"]');
+    if (!(await clear.count()))
+      return this.fail("impact-map", "filters", "no Clear filters control while a filter is set");
+    await clear.focus();
+    await page.keyboard.press("Enter");
+    await page.waitForTimeout(200);
+    const after = await page.evaluate(() => document.activeElement?.id ?? "");
+    if (after !== "map-change")
+      this.fail("impact-map", "focus-management", `Clear filters leaves focus on "${after}"`);
+  }
+
+  /** Observed coverage marks are spoken in words and can be switched off from the keyboard. */
+  async coverageScreen(page) {
+    const words = await page.evaluate(
+      () =>
+        [...document.querySelectorAll(".code__line .visually-hidden")]
+          .map((el) => el.textContent)
+          .filter((t) => /covered|not covered|branches/.test(t)).length,
+    );
+    if (!words)
+      this.fail("source", "coverage", "covered and uncovered lines are not announced in words");
+    const off = page.locator('[data-fk="seg:Coverage shown:off"]');
+    if (!(await off.count())) return this.fail("source", "coverage", "no way to turn marks off");
+    await off.focus();
+    await page.keyboard.press("Enter");
+    await page.waitForTimeout(200);
+    if (await page.locator(".code--coverage").count())
+      this.fail("source", "coverage", "Off does not remove the coverage marks");
+    await this.axe(page, "source-coverage-off");
+    const on = page.locator('[data-fk="seg:Coverage shown:istanbul"]');
+    await on.focus();
+    await page.keyboard.press("Enter");
+    await page.waitForTimeout(200);
   }
 
   async impactScreen(page) {
@@ -423,7 +868,10 @@ class Combo {
   }
 
   async testsScreen(page) {
-    await this.open(page, SCREENS[2]);
+    await this.open(
+      page,
+      SCREENS.find((s) => s.id === "tests"),
+    );
     await page.evaluate(() => window.__a11y.installLive());
     const tab = page.locator('[role="tab"][aria-selected="true"]');
     await tab.focus();
@@ -647,9 +1095,24 @@ async function main() {
   await rm(OUT, { recursive: true, force: true });
   await mkdir(OUT, { recursive: true });
   console.log("Building @smarttest/studio…");
-  const studio = await startStudioOnFixture({ assets: args.assets });
-  const { handle, fixture } = studio;
-  console.log(`Studio on ${studio.origin} for ${fixture}`);
+  buildStudio();
+  const { startStudio } = await import(
+    pathToFileURL(join(ROOT, "packages/studio/dist/index.js")).href
+  );
+  const fixture = await makeFixture();
+  // One real coverage run of the change, so the source viewer has observed lines to mark.
+  const { SmartTest } = await import(pathToFileURL(join(ROOT, "packages/core/dist/index.js")).href);
+  const st = await SmartTest.open({ root: fixture, storeDir: join(fixture, ".smarttest") });
+  const covered = await st.run({ coverage: true, formats: ["json"] });
+  if (!covered.report.coverage) throw new Error("The fixture's coverage run wrote no coverage");
+  const handle = await startStudio({
+    root: fixture,
+    port: 0,
+    watch: false,
+    storeDir: join(fixture, ".smarttest"),
+    ...(args.assets ? { assetDir: resolve(args.assets) } : {}),
+  });
+  console.log(`Studio on http://127.0.0.1:${handle.port} for ${fixture}`);
   const results = [];
   try {
     for (const name of browsers)
@@ -662,7 +1125,8 @@ async function main() {
         );
       }
   } finally {
-    await studio.close();
+    await handle.close();
+    await rm(fixture, { recursive: true, force: true });
   }
   await writeFile(join(OUT, "results.json"), `${JSON.stringify(results, null, 2)}\n`);
   const summary = summarise(results);

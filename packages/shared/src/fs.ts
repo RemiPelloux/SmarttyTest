@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { constants } from "node:fs";
+import { constants, lstatSync } from "node:fs";
 import {
   access,
   chmod,
@@ -14,7 +14,8 @@ import {
   symlink,
   writeFile,
 } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { SmartTestError } from "./errors.js";
 
 export async function exists(path: string): Promise<boolean> {
   try {
@@ -60,11 +61,71 @@ async function renameReplacing(from: string, to: string): Promise<void> {
   }
 }
 
+// ── Write confinement ───────────────────────────────────────────────────────────────────────
+
+/** Directories SmartTest owns (its store, its report directory), mapped to their project root. */
+const confined = new Map<string, string>();
+
+const unsafePath = (path: string, why: string) =>
+  new SmartTestError(`Refusing to write ${path}: ${why}`, {
+    code: "ST_UNSAFE_PATH",
+    category: "configuration",
+    hint: "SmartTest writes its state and reports only through real directories inside the project. Remove the symbolic link (it may come from the repository content), or point storeDir/reports.outputDir at a directory inside the project.",
+  });
+
+/**
+ * Throws unless `target` is inside `root` and no existing component below `root` (including
+ * `target` itself) is a symbolic link or junction. Components that do not exist yet are fine:
+ * they are created as real directories. `root` itself may be a link (`/home` → `/var/home`).
+ *
+ * This stops repository content from redirecting SmartTest's writes with a committed link such
+ * as `.smarttest/state -> ~/.ssh` (spec §30.2). It does not defend against a local process that
+ * swaps directories while SmartTest writes.
+ */
+export function assertNoSymlinkBelow(root: string, target: string): void {
+  const base = resolve(root);
+  const rel = relative(base, resolve(target));
+  if (rel.startsWith("..") || isAbsolute(rel)) throw unsafePath(target, `it is outside ${root}`);
+  let current = base;
+  for (const part of rel.split(sep).filter(Boolean)) {
+    current = join(current, part);
+    let link: boolean;
+    try {
+      link = lstatSync(current).isSymbolicLink();
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") return;
+      throw error;
+    }
+    if (link) throw unsafePath(target, `${current} is a symbolic link`);
+  }
+}
+
+/**
+ * Marks `dir` as SmartTest-owned: every later write under it (through `writeFileAtomic`,
+ * `writeJson` or `assertConfinedWrite`) is refused when a link below `root` would redirect it.
+ * A directory outside `root` (an explicit command-line path) is not registered.
+ */
+export function confineWrites(root: string, dir: string): void {
+  const r = resolve(root);
+  const d = resolve(dir);
+  const rel = relative(r, d);
+  if (rel === "" || rel.startsWith("..") || isAbsolute(rel)) return;
+  confined.set(d, r);
+}
+
+/** Throws when `path` is under a confined directory and a link would redirect the write. */
+export function assertConfinedWrite(path: string): void {
+  const abs = resolve(path);
+  for (const [dir, root] of confined)
+    if (abs === dir || abs.startsWith(`${dir}${sep}`)) assertNoSymlinkBelow(root, abs);
+}
+
 /**
  * Atomic write: write to a sibling temp file, then rename over the target.
  * Readers never observe a partially written file (spec §30.2).
  */
 export async function writeFileAtomic(path: string, data: string | Uint8Array): Promise<void> {
+  assertConfinedWrite(path);
   await mkdir(dirname(path), { recursive: true });
   const tmp = `${path}.${randomBytes(6).toString("hex")}.tmp`;
   try {
@@ -75,7 +136,8 @@ export async function writeFileAtomic(path: string, data: string | Uint8Array): 
         throw error;
       },
     );
-    await writeFile(tmp, data);
+    // "wx": never follow a link planted at the temporary name.
+    await writeFile(tmp, data, { flag: "wx" });
     // A rename replaces the inode: retain executable and private-file permissions.
     if (mode !== undefined) await chmod(tmp, mode);
     await renameReplacing(tmp, path);

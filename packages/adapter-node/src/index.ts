@@ -97,6 +97,7 @@ export function parseNodeJUnit(xml: string, projectRoot: string): TestExecution[
 }
 
 export class NodeTestAdapter implements TestAdapter {
+  readonly apiVersion = 1;
   readonly id = "node";
   constructor(private readonly options: NodeTestAdapterOptions) {}
 

@@ -13,7 +13,7 @@ export interface SourceRange {
  * Where a piece of evidence came from. SmartTest never mixes evidence
  * without keeping its provenance (spec §10.6).
  */
-export type Provenance = "static" | "dynamic" | "rule" | "heuristic" | "user";
+export type Provenance = "static" | "dynamic" | "rule" | "heuristic" | "user" | "plugin";
 
 /** Explicit confidence. "unknown" must never be treated as "unrelated" (spec §32.2). */
 export type Confidence = "high" | "medium" | "low" | "unknown";

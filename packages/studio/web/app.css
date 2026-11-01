@@ -504,6 +504,11 @@ h1 {
   background: var(--st-bg-1);
 }
 
+/* The group clips its corners: draw the focus ring inside the button. */
+.seg__btn:focus-visible {
+  outline-offset: -3px;
+}
+
 .seg__btn[aria-pressed="true"] {
   color: var(--st-text);
   background: var(--st-bg-1);
@@ -2554,6 +2559,304 @@ table.data tbody tr[data-dim="true"] .row-btn {
 
   .run-summary b {
     font-size: 16px;
+  }
+}
+
+/* ── Impact map ───────────────────────────────────────────────────────────────────────── */
+
+.view-switch {
+  display: flex;
+  margin-top: 4px;
+}
+
+.map {
+  margin-top: 16px;
+}
+
+.map__controls {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr)) auto;
+  gap: 10px 12px;
+  align-items: end;
+  margin-bottom: 12px;
+}
+
+.map__field {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.map__field-label {
+  color: var(--st-muted);
+  font-family: var(--st-mono);
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.select {
+  height: 34px;
+  width: 100%;
+  min-width: 0;
+  padding: 0 8px;
+  border: 1px solid var(--st-control);
+  border-radius: var(--radius-small);
+  background: var(--st-bg-0);
+  color: var(--st-text);
+  font-family: var(--st-mono);
+  font-size: 13px;
+  text-overflow: ellipsis;
+}
+
+.select:focus-visible {
+  outline: 2px solid var(--st-cyan);
+  outline-offset: -1px;
+  border-color: transparent;
+}
+
+.map__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+.map__canvas {
+  max-height: calc(100vh - 330px);
+  min-height: 140px;
+  overflow: auto;
+  border: 1px solid var(--st-line-soft);
+  border-radius: var(--radius);
+  background: var(--st-bg-0);
+  overscroll-behavior: contain;
+}
+
+.map__svg {
+  display: block;
+  font-family: var(--st-mono);
+  font-size: 11px;
+}
+
+.map__box {
+  fill: var(--st-panel);
+  stroke: var(--st-line);
+  stroke-width: 1;
+}
+
+.map__node--changed .map__box {
+  stroke: var(--st-warn);
+}
+
+.map__node--test .map__box {
+  stroke: var(--st-text);
+}
+
+.map__node--evidence .map__box {
+  stroke-dasharray: 4 3;
+}
+
+.map__text {
+  fill: var(--st-text);
+}
+
+.map__mark {
+  fill: var(--st-muted);
+}
+
+.map__node--changed .map__mark {
+  fill: var(--st-warn);
+}
+
+.map__node--test .map__mark {
+  fill: var(--st-text);
+}
+
+.map__edge path {
+  fill: none;
+  stroke: var(--st-muted);
+  stroke-width: 1.2;
+}
+
+.map__edge--evidence path {
+  stroke-dasharray: 5 4;
+}
+
+.map__edge--unclassified path,
+.map__edge--contains path {
+  stroke-dasharray: 2 3;
+}
+
+.map__edge--match path {
+  stroke: var(--st-cyan);
+  stroke-width: 2;
+}
+
+.map__edge-label {
+  fill: var(--st-muted);
+  font-size: 9px;
+}
+
+.map__legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  margin-top: 8px;
+  color: var(--st-muted);
+  font-family: var(--st-mono);
+  font-size: 13px;
+}
+
+.map__legend > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.map-key {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+}
+
+.map-key--changed {
+  border-radius: 50%;
+  background: var(--st-warn);
+}
+
+.map-key--affected {
+  border-radius: 50%;
+  background: var(--st-muted);
+}
+
+.map-key--test {
+  border-radius: 1px;
+  background: var(--st-text);
+}
+
+.map-key--evidence {
+  transform: rotate(45deg) scale(0.8);
+  background: var(--st-muted);
+}
+
+.map-key--dotted {
+  width: 16px;
+  height: 0;
+  border-top: 2px dotted var(--st-muted);
+}
+
+.map__route {
+  font-family: var(--st-mono);
+  font-size: 12.5px;
+  overflow-wrap: anywhere;
+}
+
+.map__hop-kind {
+  color: var(--st-muted);
+  font-size: 12px;
+}
+
+/* ── Observed coverage in the source viewer ───────────────────────────────────────────── */
+
+.source__coverage {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 6px;
+  padding: 8px 14px 10px;
+  border-bottom: 1px solid var(--st-line-soft);
+}
+
+.source__coverage--empty {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+}
+
+.source__coverage-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+
+.source__coverage-label {
+  flex: 1 1 auto;
+  color: var(--st-muted);
+  font-family: var(--st-mono);
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.source__coverage-text {
+  color: var(--st-text);
+  font-size: 13px;
+}
+
+.source__coverage-text--note {
+  color: var(--st-muted);
+}
+
+.code--coverage .code__line {
+  grid-template-columns: 52px 64px minmax(0, 1fr);
+}
+
+.code__cov {
+  padding-right: 10px;
+  color: var(--st-muted);
+  font-size: 12px;
+  text-align: right;
+  white-space: nowrap;
+  user-select: none;
+}
+
+.code__cov--miss {
+  color: var(--st-fail);
+  font-weight: 600;
+}
+
+.code__cov--partial {
+  color: var(--st-warn);
+}
+
+.legend-text {
+  font-size: 12px;
+}
+
+.legend-text--hit {
+  color: var(--st-muted);
+}
+
+.legend-text--miss {
+  color: var(--st-fail);
+  font-weight: 600;
+}
+
+.legend-text--partial {
+  color: var(--st-warn);
+}
+
+@media (max-width: 1180px) {
+  .map__controls {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .map__actions {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 640px) {
+  .map__controls {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .select {
+    font-size: 16px;
+  }
+
+  .source__coverage--empty {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 

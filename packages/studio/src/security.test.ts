@@ -86,6 +86,13 @@ describe("Host header", () => {
     expect(checkHost("127.0.0.1:9999", 4173)).toMatchObject({ ok: false, status: 403 });
     expect(checkHost(undefined, 4173)).toMatchObject({ ok: false, status: 400 });
   });
+
+  it("refuses a Host whose port is not a plain number instead of skipping the port check", () => {
+    for (const host of ["127.0.0.1:4173@evil.example", "localhost:abc", "[::1]x", "[::1:4173"])
+      expect(checkHost(host, 4173)).toMatchObject({ ok: false, code: "ST_STUDIO_HOST" });
+    expect(portOf("127.0.0.1:4173@evil")).toBeNaN();
+    expect(portOf("[::1]")).toBeUndefined();
+  });
 });
 
 describe("origins", () => {

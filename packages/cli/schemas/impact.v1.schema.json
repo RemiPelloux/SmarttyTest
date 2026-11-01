@@ -28,6 +28,41 @@
         "warnings",
         "fallbackApplied"
       ]
+    },
+    "only": {
+      "description": "Present only with --only: the change set was restricted to these paths before selection. The dependency analysis was not restricted.",
+      "type": "object",
+      "required": ["paths", "matched", "unchanged", "excluded"],
+      "properties": {
+        "paths": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Requested project-relative files or directories."
+        },
+        "matched": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Changed files kept for selection."
+        },
+        "unchanged": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Requested paths with no change: no test is selected for them."
+        },
+        "excluded": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Other changed files, left out: tests affected only by them were not selected."
+        }
+      }
     }
   }
 }

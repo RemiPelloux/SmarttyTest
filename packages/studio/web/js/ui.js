@@ -410,6 +410,8 @@ export function segmented({ items, active, onSelect, label: ariaLabel }) {
         {
           class: "seg__btn",
           type: "button",
+          // A focus key lets a re-render put keyboard focus back on the pressed button.
+          "data-fk": `seg:${ariaLabel}:${item.id}`,
           "aria-pressed": String(item.id === active),
           onClick: () => onSelect(item.id),
         },
@@ -432,9 +434,12 @@ export function copyText(text) {
   return Promise.resolve();
 }
 
-function csvCell(value) {
-  const text = value === null || value === undefined ? "" : String(value);
-  return /[",\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+export function csvCell(value) {
+  let text = value === null || value === undefined ? "" : String(value);
+  // Test names and paths come from the repository: a cell starting with = + - @ (or a tab or
+  // carriage return) would run as a formula when the export is opened in a spreadsheet.
+  if (/^[=+\-@\t\r]/.test(text)) text = `'${text}`;
+  return /[",\n\r]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
 }
 
 export function toCsv(rows) {

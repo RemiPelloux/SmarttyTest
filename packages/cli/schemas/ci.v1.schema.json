@@ -1,0 +1,69 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://smarttest.dev/schemas/ci.v1.json",
+  "title": "smarttest ci --dry-run --json (v1)",
+  "description": "The plan printed by `smarttest ci --dry-run --json`. Without --dry-run, `smarttest ci --json` runs the tests and prints a run document (run.v1.schema.json).",
+  "type": "object",
+  "required": ["schemaVersion", "command", "ci", "all", "steps", "warnings"],
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "command": {
+      "const": "ci"
+    },
+    "ci": {
+      "type": "object",
+      "required": ["provider", "isPullRequest"],
+      "properties": {
+        "provider": {
+          "enum": [
+            "github",
+            "gitlab",
+            "jenkins",
+            "circleci",
+            "azure",
+            "bitbucket",
+            "generic",
+            "none"
+          ]
+        },
+        "isPullRequest": {
+          "type": "boolean"
+        },
+        "targetBranch": {
+          "type": "string"
+        },
+        "defaultBranch": {
+          "type": "string"
+        },
+        "branch": {
+          "type": "string"
+        }
+      }
+    },
+    "base": {
+      "description": "What the run compares against; absent with all=true.",
+      "type": "string"
+    },
+    "direct": {
+      "description": "Compare directly with base, not with the merge-base.",
+      "type": "boolean"
+    },
+    "all": {
+      "type": "boolean"
+    },
+    "steps": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "warnings": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  }
+}

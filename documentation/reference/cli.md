@@ -64,6 +64,16 @@ Reserved for later versions ([roadmap](../planning/roadmap.md)): `ai …` and `a
 | `--uncommitted`                        | HEAD → working tree, including untracked files                                                         |
 | `--since-snapshot` / `--snapshot <id>` | latest (or given) native snapshot → working tree (hybrid mode works with Git too)                      |
 
+### Scoping to one file: `--only <path>` (`run`, `impact`)
+
+`--only src/cart.ts` keeps only the changes to that file (repeatable; a directory keeps every change under it; a rename matches its old or new path) and selects the tests those changes affect. It restricts the **changed set**, never the dependency analysis: a test that cannot be ruled out for the kept change, for example because an unresolved or dynamic import could reach it, is still selected.
+
+- Other changed files are left out, and a warning names them: tests affected only by them are neither selected nor run. Run without `--only` for the whole change set.
+- A path with no change selects no test and says so (`src/cart.ts has no change …`). That is not a pass. To see which tests protect an unchanged file, use `smarttest explain src/cart.ts`.
+- With no baseline (first native snapshot), SmartTest cannot tell whether the file changed and keeps its full-suite fallback.
+- A scoped run never advances the native snapshot baseline. `--only` cannot be combined with `--all` or `--hook`.
+- With `--json`, `impact` adds `only` and `run` adds `report.change.only`: `{ paths, matched, unchanged, excluded }` (requested paths, kept changes, requested paths with no change, left-out changes). The description ends with `· only <paths>`.
+
 ## `run`
 
 | Flag             | Meaning                                                                       |
@@ -167,18 +177,18 @@ Watches the project and, after each batch of saves, runs the tests those saves c
 
 ## JSON output
 
-Every `--json` document has `schemaVersion` and `command`. Schemas ship with the package in [`packages/cli/schemas/`](../../packages/cli/schemas): `run`, `impact`, `scan`, `explain` and `error`. `trace`, `shadow`, `benchmark` and `graph` also accept `--json`; their documents are not versioned by a schema yet. Breaking a schema requires a major version.
+Every `--json` call prints one document with `schemaVersion` and `command` (or the error document). Schemas ship with the package in [`packages/cli/schemas/`](../../packages/cli/schemas): `run`, `impact`, `scan`, `explain`, `ci`, `doctor`, `shard`, `flaky`, `validate-selection`, `hook`, `sync` and `error`, plus `config` for the configuration file. Other commands that accept `--json` are experimental. [Public contracts](contracts.md) lists what is frozen and the semver policy; breaking a schema requires a major version.
 
 ## Exit codes
 
-These are versioned and part of the public contract (locked by a test in `@smarttest/shared`).
+These are versioned and part of the public contract (locked by tests in `@smarttest/shared` and `integration-tests/contracts.test.ts`; see [Public contracts](contracts.md)).
 
-| Code | Category                | Examples                                                                                |
-| ---- | ----------------------- | --------------------------------------------------------------------------------------- |
-| 0    | Success                 | All selected tests passed                                                               |
-| 1    | Test failure            | A test failed, timed out or was cancelled                                               |
-| 2    | Invalid usage           | Unknown command or flag, bad argument                                                   |
-| 3    | Configuration failure   | Invalid config, rule conflict, confirmation required in non-interactive mode            |
-| 4    | Infrastructure failure  | Runner crashed or missing, Git base missing in a shallow clone                          |
-| 5    | Safety / policy failure | `validate-selection`, `shadow` or `benchmark` found a missed failure, rollback conflict |
-| 70   | Internal error          | A SmartTest bug (e.g. a report integrity violation)                                     |
+| Code | Category                | Examples                                                                                                                 |
+| ---- | ----------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| 0    | Success                 | All selected tests passed                                                                                                |
+| 1    | Test failure            | A test failed, timed out or was cancelled                                                                                |
+| 2    | Invalid usage           | Unknown command or flag, bad argument                                                                                    |
+| 3    | Configuration failure   | Invalid config, rule conflict, confirmation required in non-interactive mode                                             |
+| 4    | Infrastructure failure  | Runner crashed or missing, a selected test no runner executes, Git base missing in a shallow clone, edge provider failed |
+| 5    | Safety / policy failure | `validate-selection`, `shadow` or `benchmark` found a missed failure, rollback conflict                                  |
+| 70   | Internal error          | A SmartTest bug (e.g. a report integrity violation)                                                                      |

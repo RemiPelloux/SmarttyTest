@@ -9,6 +9,7 @@ export { ANALYZER_VERSION, analyzeSource, tokenHash } from "./analyze.js";
 export { TypeScriptResolver, type WorkspaceEntry } from "./resolve.js";
 
 export const typescriptAnalyzer: Analyzer = {
+  apiVersion: 1,
   id: "typescript",
   version: ANALYZER_VERSION,
   supports: (path) => /\.(?:[cm]?ts|tsx)$/.test(path) && !path.endsWith(".d.ts"),

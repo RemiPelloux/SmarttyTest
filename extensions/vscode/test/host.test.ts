@@ -41,6 +41,7 @@ function project(commands: Readonly<Record<string, FakeCommand>>): string {
     `const fs = require("node:fs");
 const path = require("node:path");
 const command = process.argv[2];
+fs.appendFileSync(path.join(${JSON.stringify(dir)}, "calls.log"), JSON.stringify(process.argv.slice(2)) + "\\n");
 const spec = JSON.parse(fs.readFileSync(path.join(${JSON.stringify(dir)}, "commands.json"), "utf8"))[command] ?? {};
 if (spec.hang) {
   fs.writeFileSync(path.join(${JSON.stringify(dir)}, command + ".pid"), String(process.pid));
@@ -68,6 +69,38 @@ async function until(condition: () => boolean, timeoutMs = 10_000): Promise<void
     if (Date.now() - started > timeoutMs) throw new Error("condition not met in time");
     await new Promise((resolve) => setTimeout(resolve, 20));
   }
+}
+
+/** Every argv the fake CLI received, in order. */
+function calls(dir: string): string[][] {
+  if (!existsSync(join(dir, "calls.log"))) return [];
+  return readFileSync(join(dir, "calls.log"), "utf8")
+    .trim()
+    .split("\n")
+    .map((line) => JSON.parse(line) as string[]);
+}
+
+const LABELER = "src/core/Labeler.ts";
+
+/** `impact --only` output: the fixture with a scope, optionally selecting nothing. */
+function scopedImpact(
+  scope: { matched: string[]; unchanged: string[]; excluded: string[] },
+  selected = true,
+): string {
+  const envelope = JSON.parse(fixture("impact.json")) as {
+    description: string;
+    decision: { selectedTests: unknown[] };
+  };
+  envelope.description += ` · only ${LABELER}`;
+  if (!selected) envelope.decision.selectedTests = [];
+  return JSON.stringify({ ...envelope, only: { paths: [LABELER], ...scope } });
+}
+
+/** `run --only` output: the fixture run with a scope. */
+function scopedRun(excluded: string[], stdout = fixture("run.json")): string {
+  const envelope = JSON.parse(stdout) as { report: { change: Record<string, unknown> } };
+  envelope.report.change.only = { paths: [LABELER], matched: [LABELER], unchanged: [], excluded };
+  return JSON.stringify(envelope);
 }
 
 function pidOf(dir: string, command: string): number {
@@ -130,15 +163,8 @@ afterEach(() => {
 describe.skipIf(process.platform === "win32")("extension host", () => {
   it("shows the report of a run that exited 4 and does not call it passed", async () => {
     const dir = project({
-      impact: { stdout: fixture("impact.json") },
-      explain: {
-        stdout: JSON.stringify({
-          schemaVersion: 1,
-          error: { code: "ST_INTERNAL", category: "internal", message: "explain crashed" },
-        }),
-        exitCode: 70,
-      },
-      run: { stdout: infrastructureRun(), exitCode: 4 },
+      impact: { stdout: scopedImpact({ matched: [LABELER], unchanged: [], excluded: [] }) },
+      run: { stdout: scopedRun([], infrastructureRun()), exitCode: 4 },
     });
     const { file, item, results, run } = host(dir);
     await run("smarttest.runAffectedForFile", file);
@@ -149,9 +175,7 @@ describe.skipIf(process.platform === "win32")("extension host", () => {
     expect(item.text).not.toContain("passed");
     const announced = stub.messages.at(-1);
     expect(announced?.level).toBe("warning");
-    // The explain failure is "could not determine", not "no static path".
-    expect(announced?.text).toContain("could not determine which tests reach this file");
-    expect(announced?.text).not.toContain("no direct static path");
+    expect(announced?.text).toContain(`selected for the changes in ${LABELER}`);
     expect(stub.output.join("\n")).toContain("exited with code 4");
   });
 
@@ -167,15 +191,61 @@ describe.skipIf(process.platform === "win32")("extension host", () => {
     );
   });
 
-  it("intersects the file's tests with the run's selection", async () => {
+  it("scopes impact and run to the file with --only", async () => {
     const dir = project({
-      impact: { stdout: fixture("impact.json") },
-      explain: { stdout: fixture("explain-file.json") },
+      impact: {
+        stdout: scopedImpact({ matched: [LABELER], unchanged: [], excluded: ["src/util/a.ts"] }),
+      },
+      run: { stdout: scopedRun(["src/util/a.ts"]), exitCode: 0 },
+    });
+    const { file, run } = host(dir);
+    await run("smarttest.runAffectedForFile", file);
+    expect(calls(dir).map((argv) => [argv[0], argv.find((a) => a.startsWith("--only"))])).toEqual([
+      ["impact", `--only=${LABELER}`],
+      ["run", `--only=${LABELER}`],
+    ]);
+    expect(stub.messages.at(-1)?.text).toContain(
+      `2 test(s) selected for the changes in ${LABELER}. 1 other changed file(s) were not considered`,
+    );
+  });
+
+  it("says the file has no change, runs nothing and offers its protection", async () => {
+    const dir = project({
+      impact: {
+        stdout: scopedImpact({ matched: [], unchanged: [LABELER], excluded: ["src/a.ts"] }, false),
+      },
+      run: { stdout: fixture("run.json"), exitCode: 0 },
+    });
+    const { file, item, results, run } = host(dir);
+    await run("smarttest.runAffectedForFile", file);
+    expect(calls(dir).map((argv) => argv[0])).toEqual(["impact"]);
+    const announced = stub.messages.at(-1);
+    expect(announced?.text).toBe(
+      `SmartTest: ${LABELER} has no change in git · HEAD…working tree, so no test was selected. Nothing was run; this is not a pass.`,
+    );
+    expect(announced?.items).toEqual(["Show Protection"]);
+    expect(results.getChildren()).toEqual([]);
+    expect(item.text).not.toContain("passed");
+  });
+
+  it("never widens to the whole change set when the CLI has no --only", async () => {
+    const dir = project({
+      impact: {
+        stdout: JSON.stringify({
+          schemaVersion: 1,
+          error: { code: "ST_USAGE", category: "usage", message: "Unknown option '--only'" },
+        }),
+        exitCode: 2,
+      },
       run: { stdout: fixture("run.json"), exitCode: 0 },
     });
     const { file, run } = host(dir);
     await run("smarttest.runAffectedForFile", file);
-    expect(stub.messages.at(-1)?.text).toMatch(/of the \d+ selected test\(s\) reach this file/);
+    expect(calls(dir).map((argv) => argv[0])).toEqual(["impact"]);
+    expect(stub.messages.at(-1)).toMatchObject({
+      level: "error",
+      text: expect.stringContaining("`--only` needs SmartTest 1.0.0 or later"),
+    });
   });
 
   it("marks the last run out of date when its folder is invalidated", async () => {

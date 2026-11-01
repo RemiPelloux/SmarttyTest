@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://smarttest.dev/schemas/sync.v1.json",
+  "title": "smarttest sync --json (v1)",
+  "type": "object",
+  "required": ["schemaVersion", "command", "drift", "manual", "changes"],
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "command": {
+      "const": "sync"
+    },
+    "drift": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["key", "current", "proposed", "reason"],
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "current": {
+            "type": "string"
+          },
+          "proposed": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "manual": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "changes": {
+      "type": "boolean"
+    }
+  }
+}

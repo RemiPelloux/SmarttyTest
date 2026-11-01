@@ -6,6 +6,7 @@ Guides
 - [Studio](guides/studio.md)
 - [VS Code extension](../extensions/vscode/README.md)
 - [Running in CI](guides/ci.md)
+- [Plugins](guides/plugins.md)
 
 Concepts
 - [How selection works](concepts/how-selection-works.md)
@@ -18,11 +19,13 @@ Concepts
 Reference
 - [CLI](reference/cli.md)
 - [Configuration](reference/configuration.md)
+- [Public contracts and semver policy](reference/contracts.md)
 - [Benchmarks](../benchmarks/RESULTS.md)
 
 Architecture and design
 - [Architecture overview](architecture/overview.md)
 - [Decision records](architecture/adr/README.md)
+- [Security review (1.0.0)](architecture/security-review.md)
 - [Design system](design/design-system.md), [motion](design/motion.md), [Studio design brief](design/studio.md)
 
 Product and planning

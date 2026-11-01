@@ -1,5 +1,6 @@
 import { appendFileSync, mkdirSync, renameSync, statSync } from "node:fs";
 import { dirname } from "node:path";
+import { assertConfinedWrite } from "./fs.js";
 
 export type LogLevel = "silent" | "error" | "warn" | "info" | "debug";
 
@@ -104,6 +105,8 @@ export function fileSink(path: string, maxBytes = 1024 * 1024): LogSink {
   // Sync I/O keeps log ordering deterministic and works inside exit paths.
   return (record) => {
     try {
+      // A link planted in the store (`logs/smarttest.log -> ~/.bashrc`) must not receive log lines.
+      assertConfinedWrite(path);
       mkdirSync(dirname(path), { recursive: true });
       try {
         if (statSync(path).size > maxBytes) renameSync(path, `${path}.1`);

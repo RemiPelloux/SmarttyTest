@@ -36,6 +36,9 @@ export const GIT_HOOK_ENV = [
   "GIT_WORK_TREE",
   "GIT_PREFIX",
   "GIT_OBJECT_DIRECTORY",
+  "GIT_COMMON_DIR",
+  "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+  "GIT_NAMESPACE",
 ] as const;
 
 /** A copy of `env` without the variables Git sets for a hook (never mutates `process.env`). */
@@ -251,6 +254,18 @@ export async function pruneStaleCheckouts(repoRoot: string): Promise<void> {
 }
 
 const toSlash = (p: string) => p.replace(/\\/g, "/");
+
+/**
+ * True when `dir` (in the temporary checkout `wt`) resolves outside it. The checkout holds the
+ * content under test: a project directory committed as a link must not make the node_modules
+ * mirror (and the `.modules.yaml` written into it) land elsewhere on disk.
+ */
+export async function escapesCheckout(wt: string, dir: string): Promise<boolean> {
+  const real = await realpath(dir).catch(() => undefined);
+  if (!real) return false; // missing: nothing is mirrored there
+  const rel = relative(await realpath(wt), real);
+  return rel.startsWith("..") || isAbsolute(rel);
+}
 
 /**
  * Mirrors an installed `node_modules` directory into the checkout. Each entry links to the
@@ -475,6 +490,12 @@ export async function isolate(options: {
     for (const d of options.nodeModulesDirs) {
       const src = join(options.projectRoot, d, "node_modules");
       const dest = join(root, d, "node_modules");
+      if (await escapesCheckout(wt, join(root, d))) {
+        warnings.push(
+          `Isolation: ${d || "."} is a link out of the temporary checkout; its node_modules were not mirrored`,
+        );
+        continue;
+      }
       if (
         existsSync(src) &&
         !(await lstat(dest).catch(() => undefined)) &&
@@ -648,6 +669,61 @@ export async function runChecks(
   });
 }
 
+// ── Hook scope ─────────────────────────────────────────────────────────────────────────────
+
+/** `hook.runners` / `hook.exclude`: which selected tests the hook itself executes. */
+export interface HookScope {
+  /** Runners the hook executes; undefined: every runner. */
+  runners?: readonly string[];
+  /** Test files (project-relative globs) the hook does not execute. */
+  exclude?: readonly string[];
+}
+
+/** A selected test file the hook does not run: it is left to CI, never reported as passed. */
+export interface LeftToCi {
+  file: string;
+  /** Runner that would run it ("unknown" when no runner collected it). */
+  adapter: string;
+  /** The scope rule that removed it from the hook, e.g. `hook.exclude "e2e/**"`. */
+  rule: string;
+}
+
+/** True when the scope removes nothing (no option set). */
+export const scopeIsEmpty = (scope: HookScope | undefined): boolean =>
+  !scope?.runners && !scope?.exclude?.length;
+
+/** The scope as shown in `hook status`, `doctor` and the hook output. */
+export function describeScope(scope: HookScope | undefined): string[] {
+  const out: string[] = [];
+  if (scope?.runners) out.push(`hook.runners [${scope.runners.join(", ")}]`);
+  if (scope?.exclude?.length)
+    out.push(`hook.exclude [${scope.exclude.map((g) => `"${g}"`).join(", ")}]`);
+  return out;
+}
+
+/**
+ * Selected test files outside the hook scope. A file whose runner is unknown is kept in the hook
+ * (run and reported by the normal path) unless an `exclude` glob names it: a scope never hides a
+ * test that has no runner.
+ */
+export function outsideHookScope(
+  files: readonly { file: string; adapter?: string | undefined }[],
+  scope: HookScope | undefined,
+): LeftToCi[] {
+  if (scopeIsEmpty(scope)) return [];
+  const out: LeftToCi[] = [];
+  for (const { file, adapter } of files) {
+    const glob = scope?.exclude?.find((g) => matchGlob(file, g));
+    if (glob) {
+      out.push({ file, adapter: adapter ?? "unknown", rule: `hook.exclude "${glob}"` });
+      continue;
+    }
+    if (scope?.runners && adapter && !scope.runners.includes(adapter))
+      out.push({ file, adapter, rule: `hook.runners [${scope.runners.join(", ")}]` });
+  }
+  return out;
+}
+
 // ── Records ────────────────────────────────────────────────────────────────────────────────
 
 export interface HookRecord {
@@ -660,6 +736,10 @@ export interface HookRecord {
   tree?: string;
   /** A push that only deleted remote refs: there was no content to test. */
   nothingPushed?: boolean;
+  /** Selected test files the hook scope left to CI (not run, not passed). */
+  leftToCi?: number;
+  /** The scope rules in force, when any. */
+  scope?: string[];
 }
 
 export interface HookRecords {

@@ -2,6 +2,12 @@
  * @smarttest/core — orchestration API used by the CLI (and later Studio).
  */
 
+export type {
+  BranchCoverage,
+  LineCoverageFile,
+  LineCoverageOrigin,
+  LineCoverageReport,
+} from "@smarttest/coverage-engine";
 export type { ProjectProfile } from "@smarttest/project-detector";
 export type { FileExecution, RunReport, RunSummary } from "@smarttest/report-engine";
 export { ExitCode, SmartTestError, toExitCode, VERSION } from "@smarttest/shared";
@@ -15,6 +21,13 @@ export {
   type CommitBenchmark,
   type HistoryBenchmark,
 } from "./history.js";
+export {
+  assertPlugin,
+  type LoadedPlugin,
+  loadPlugins,
+  PLUGIN_API_VERSION,
+  runEdgeProviders,
+} from "./plugins.js";
 export * from "./smarttest.js";
 export { type FlakyEntry, flakyReport, parseShard, shardFiles } from "./speed.js";
 export { type Drift, detectDrift, patchConfig, type SyncResult } from "./sync.js";

@@ -1,5 +1,18 @@
 import { describe, expect, it } from "vitest";
-import { previewDiff } from "./index.js";
+import { previewDiff, suggestHookRunners } from "./index.js";
+
+describe("suggestHookRunners", () => {
+  it("proposes the unit runners when browser runners sit next to them", () => {
+    expect(suggestHookRunners(["vitest", "playwright"])).toEqual(["vitest"]);
+    expect(suggestHookRunners(["jest", "cypress", "node", "jest"])).toEqual(["jest", "node"]);
+  });
+
+  it("proposes nothing when there is nothing to separate", () => {
+    expect(suggestHookRunners(["vitest"])).toBeUndefined();
+    expect(suggestHookRunners(["playwright"])).toBeUndefined();
+    expect(suggestHookRunners([])).toBeUndefined();
+  });
+});
 
 const modify = (before: string, after: string) =>
   previewDiff({ path: "hook", action: "modify", reason: "", risk: "low", before, after });

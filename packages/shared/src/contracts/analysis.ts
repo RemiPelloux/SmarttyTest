@@ -1,0 +1,135 @@
+/**
+ * Language analysis contract (Plugin SDK v1, frozen at 1.0.0): what a language analyzer returns
+ * for one file. Defined here (ADR-0006: contracts live in `shared`), re-exported by
+ * `@smarttest/source-parser` and, as `LanguageAnalyzer`, by `@smarttest/plugin-sdk`.
+ *
+ * Every field marked optional is an enrichment: an analyzer that omits it makes selection coarser,
+ * never wrong. Unresolved or dynamic imports must be reported (`unresolved`, `dynamicUnresolved`):
+ * SmartTest turns them into uncertainty, so the tests that reach them cannot be ruled out.
+ */
+import type { SourceRange } from "../primitives.js";
+import type { SymbolKind } from "./symbols.js";
+
+export type ImportKind =
+  | "named"
+  | "namespace"
+  | "side-effect"
+  | "require"
+  | "dynamic"
+  | "mock"
+  | "reexport"
+  | "reexport-all";
+
+export interface ImportBinding {
+  /** Exported name in the target module ("default", "*" for namespaces). */
+  imported: string;
+  /** Local name in the importing module (for re-exports: the exported alias). */
+  local: string;
+}
+
+export interface ImportRecord {
+  specifier: string;
+  kind: ImportKind;
+  bindings: ImportBinding[];
+  typeOnly: boolean;
+  line: number;
+  /** Project-relative POSIX path when the import resolves inside the project. */
+  resolved?: string;
+  /** True when the import targets a package / builtin outside the project. */
+  external?: boolean;
+  /** Present when resolution failed for an import that should be internal. */
+  unresolved?: string;
+  /** The resolved target used to exist but was deleted. */
+  missing?: boolean;
+  /** For `vi.mock` / `jest.mock` family calls. */
+  mock?: "factory" | "auto" | "actual" | "unmock";
+}
+
+export interface SymbolRecord {
+  /** `<file>#<qualifiedName>` */
+  id: string;
+  name: string;
+  qualifiedName: string;
+  kind: SymbolKind;
+  /** Names under which the symbol is exported directly ("default" for default exports). */
+  exportNames: string[];
+  parent?: string;
+  range: SourceRange;
+  signature: string;
+  tokenHash: string;
+  textHash: string;
+  /** Identifiers referenced inside the declaration. */
+  refs: string[];
+  decorators: string[];
+  /** "Name.member" uses (member-level precision); see language-typescript/member-uses. */
+  uses?: string[];
+  /** Names referenced as a whole (class-level / unit-level dependency). */
+  escapes?: string[];
+  /** Members reached through this. and super. (class members only). */
+  thisUses?: string[];
+  superUses?: string[];
+  /** Methods: `this` leaves the method (fluent APIs), so callers can reach any member. */
+  thisEscapes?: boolean;
+  /** Classes: token hash of the class with method/constructor bodies removed. */
+  shellHash?: string;
+  /** Non-code resources read: "env:NAME", "env:*", "model:Name", "i18n:key". */
+  resources?: string[];
+  visibility?: "public" | "protected" | "private";
+  extends?: string;
+  implements?: string[];
+}
+
+export interface FileAnalysis {
+  path: string;
+  hash: string;
+  language: "typescript" | "javascript";
+  moduleKind: "esm" | "cjs" | "unknown";
+  imports: ImportRecord[];
+  symbols: SymbolRecord[];
+  localExports: { exported: string; local: string }[];
+  topLevelRefs: string[];
+  /** Member-level uses and escapes of module-level code. */
+  topLevelUses?: string[];
+  topLevelEscapes?: string[];
+  topLevelResources?: string[];
+  topLevelHash: string;
+  importsHash: string;
+  /** Descriptions of non-literal dynamic imports/requires — sources of uncertainty. */
+  dynamicUnresolved: string[];
+  /** Computed import paths evaluated statically (relative to the file's dir; may contain *). */
+  dynamicHints?: { pattern: string; line: number; expr: string }[];
+  /** Files read through fs with a path built from the file's location (relative to its directory). */
+  assetReads?: { pattern: string; line: number; unit: string }[];
+  /** Translation catalogs: flattened key path → value hash. */
+  catalogKeys?: Record<string, string>;
+  /** Derived at resolution time: project files the hints point to. */
+  dynamicTargets?: string[];
+  /** Derived at resolution time: hints that matched no project file (still uncertainty). */
+  dynamicUnmatched?: string[];
+  parseErrors: number;
+  analyzerVersion: string;
+}
+
+/**
+ * A language analyzer (Plugin SDK v1 `LanguageAnalyzer`). Replaces the whole-project
+ * `LanguageAdapter` sketch of spec §27.4, which was never implemented (ADR-0010).
+ */
+export interface Analyzer {
+  /** Plugin API version this analyzer implements. */
+  readonly apiVersion: 1;
+  readonly id: string;
+  /** Changes whenever the analysis output can change, so cached analyses are recomputed. */
+  readonly version: string;
+  supports(path: string): boolean;
+  analyze(path: string, content: string): FileAnalysis;
+}
+
+export interface ResolveResult {
+  resolved?: string;
+  external?: boolean;
+  reason?: string;
+}
+
+export interface ModuleResolver {
+  resolve(fromFile: string, specifier: string): ResolveResult;
+}

@@ -11,7 +11,7 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import { dirname, join, normalize, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { type Analysis, SmartTest, VERSION } from "@smarttest/core";
-import { type SafetyMode, SmartTestError } from "@smarttest/shared";
+import { assertNoSymlinkBelow, type SafetyMode, SmartTestError } from "@smarttest/shared";
 import type { ChangeSource } from "@smarttest/vcs-core";
 import { STUDIO_SCHEMA_VERSION, type StudioSessionInfo } from "./contracts.js";
 import {
@@ -19,6 +19,7 @@ import {
   contentTypeOf,
   isRecord,
   readJsonBody,
+  SECURITY_HEADERS,
   sendError,
   sendFile,
   sendJson,
@@ -26,6 +27,7 @@ import {
   sseWrite,
   stringField,
 } from "./http.js";
+import { impactMapOf } from "./impact-map.js";
 import { RunManager } from "./runs.js";
 import {
   assertLoopbackHost,
@@ -41,8 +43,10 @@ import {
   fileIndexOf,
   isIndexedFile,
   type LastRunFacts,
+  type LineCoverageSet,
   loadCoverage,
   loadLastRun,
+  NO_LINE_COVERAGE,
   overviewOf,
   readLastRunReport,
   type Snapshot,
@@ -111,6 +115,9 @@ class Studio {
   private inflight: { source: ChangeSource | null; promise: Promise<Snapshot> } | null = null;
   private last: LastRunFacts = EMPTY_LAST;
   private coverage: Snapshot["coverage"] = null;
+  private lineCoverage: LineCoverageSet = NO_LINE_COVERAGE;
+  /** Modification times the line coverage was read at; unchanged files are not parsed again. */
+  private lineCoverageStamp = "";
   private source: ChangeSource | null = null;
   private readonly clients = new Set<ServerResponse>();
   private heartbeat: NodeJS.Timeout | null = null;
@@ -158,6 +165,7 @@ class Studio {
       },
       flaky,
     };
+    await this.loadLineCoverage();
     if (coverage) this.coverage = coverage;
     else if (run?.coverage)
       this.coverage = {
@@ -171,6 +179,22 @@ class Studio {
           files: run.coverage.files,
         },
       };
+  }
+
+  private async loadLineCoverage(): Promise<void> {
+    const runs = join(this.st.storeDir, "runs");
+    const stamps = await Promise.all(
+      ["coverage-lines.json", "browser-coverage-lines.json"].map((name) =>
+        stat(join(runs, name)).then(
+          (info) => `${info.mtimeMs}:${info.size}`,
+          () => "-",
+        ),
+      ),
+    );
+    const stamp = stamps.join("|");
+    if (stamp === this.lineCoverageStamp) return;
+    this.lineCoverage = await this.st.lineCoverage().catch(() => NO_LINE_COVERAGE);
+    this.lineCoverageStamp = stamp;
   }
 
   async ensureSnapshot(): Promise<Snapshot> {
@@ -200,7 +224,13 @@ class Studio {
       const view = await this.st.traceView(analysis.input, analysis.index);
       // Runs started outside Studio (terminal, commit hook) change the last run and coverage.
       await this.loadRunState();
-      const snapshot = await buildSnapshot(this.st, view, this.coverage, analysis);
+      const snapshot = await buildSnapshot(
+        this.st,
+        view,
+        this.coverage,
+        analysis,
+        this.lineCoverage,
+      );
       // An analysis of a source that was replaced meanwhile answers its caller only.
       if (!sameSource(wanted, this.source)) return snapshot;
       this.snapshot = snapshot;
@@ -377,6 +407,27 @@ interface ApiRoute {
   handler: Handler;
 }
 
+/**
+ * Revision names reach `git`/`hg`/`svn` as arguments. A leading `-` would be read as an option
+ * (`--output=…`), and control characters have no place in a ref, so both are refused here even
+ * though the VCS adapters also guard their own argument lists.
+ */
+function revisionField(body: Record<string, unknown>, name: string): string | undefined {
+  const value = stringField(body, name)?.trim();
+  if (!value) return undefined;
+  // biome-ignore lint/suspicious/noControlCharactersInRegex: refusing control characters is the point.
+  if (value.startsWith("-") || value.length > 256 || /[\u0000-\u001f\u007f]/.test(value))
+    throw new SmartTestError(`Invalid revision ${JSON.stringify(value.slice(0, 80))}`, {
+      code: "ST_STUDIO_SOURCE",
+      category: "usage",
+      hint: "Use a branch, tag or commit name such as main or origin/main.",
+    });
+  return value;
+}
+
+/** Snapshot ids name a file in the store: no separators, no traversal. */
+const SNAPSHOT_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
+
 function originSources(body: unknown): ChangeSource | null {
   if (body === undefined || body === null) return null;
   if (!isRecord(body))
@@ -388,17 +439,22 @@ function originSources(body: unknown): ChangeSource | null {
   if (kind === "staged" || kind === "push" || kind === "uncommitted") return { kind };
   if (kind === "snapshot") {
     const id = stringField(body, "id");
+    if (id && (!SNAPSHOT_ID.test(id) || id.includes("..")))
+      throw new SmartTestError("Invalid snapshot id", {
+        code: "ST_STUDIO_SOURCE",
+        category: "usage",
+      });
     return id ? { kind: "snapshot", id } : { kind: "snapshot" };
   }
   if (kind === "base") {
-    const ref = stringField(body, "ref")?.trim();
+    const ref = revisionField(body, "ref");
     if (!ref)
       throw new SmartTestError("A base comparison needs a ref", {
         code: "ST_STUDIO_SOURCE",
         category: "usage",
         hint: "For example main or origin/main.",
       });
-    const target = stringField(body, "target");
+    const target = revisionField(body, "target");
     const direct = booleanField(body, "direct");
     return {
       kind: "base",
@@ -511,6 +567,14 @@ function apiRoutes(studio: Studio): ApiRoute[] {
       handler: async (_req, res) => {
         const { snapshot } = await studio.current();
         sendJson(res, 200, snapshot.impact);
+      },
+    },
+    {
+      pattern: /^\/api\/impact\/map$/,
+      methods: ["GET"],
+      handler: async (_req, res) => {
+        const { snapshot } = await studio.current();
+        sendJson(res, 200, impactMapOf(snapshot));
       },
     },
     {
@@ -665,9 +729,22 @@ function apiRoutes(studio: Studio): ApiRoute[] {
           "last-run.md": "summary.md",
         };
         const abs = join(studio.st.storeDir, "reports", reportAliases[name] ?? name);
-        const sent = await sendFile(res, abs, "no-store", {
-          "Content-Disposition": `inline; filename="${name}"`,
-        });
+        // The store can be repository content: a committed `reports/junit.xml -> ~/.ssh/id_rsa`
+        // (or a linked `reports/` or store directory) must not turn the download into a reader.
+        let linked = false;
+        try {
+          assertNoSymlinkBelow(studio.st.root, abs);
+        } catch {
+          linked = true;
+        }
+        const sent =
+          !linked &&
+          (await sendFile(res, abs, "no-store", {
+            "Content-Disposition": `inline; filename="${name}"`,
+            // Reports embed repository text (test names, errors). Rendered on their own they get
+            // an opaque origin and no scripts, never Studio's origin and its token.
+            "Content-Security-Policy": `${SECURITY_HEADERS["Content-Security-Policy"]}; sandbox`,
+          }));
         if (!sent)
           sendError(
             res,

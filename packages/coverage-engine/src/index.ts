@@ -103,3 +103,18 @@ export async function ingestIstanbul(
 export function describeScope(report: CoverageReport): string {
   return report.scope === "full" ? "full suite" : "selected tests only — not project coverage";
 }
+
+export {
+  type BranchCoverage,
+  type BrowserCoverageDump,
+  ingestBrowserV8,
+  ingestIstanbulLines,
+  istanbulLines,
+  LINE_COVERAGE_SCHEMA,
+  type LineCoverageFile,
+  type LineCoverageOrigin,
+  type LineCoverageReport,
+  sha256,
+  type V8ScriptCoverage,
+  v8Lines,
+} from "./lines.js";

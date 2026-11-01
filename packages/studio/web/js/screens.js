@@ -2,6 +2,7 @@
  * Overview and Impact screens. Both read the same snapshot as the server, so the strip on the
  * overview and the detail behind a row can never disagree about a count.
  */
+import { renderMap } from "./map.js";
 import { onlyCached, runVerdict, scopeLabel } from "./run.js";
 import {
   duration,
@@ -14,6 +15,7 @@ import {
   pct,
   plural,
   relativeTime,
+  segmented,
   selectionMark,
   statusMark,
 } from "./ui.js";
@@ -750,6 +752,22 @@ export function renderImpact(ctx) {
       }),
     );
 
+  const viewSwitch = h(
+    "div",
+    { class: "view-switch" },
+    segmented({
+      label: "Impact view",
+      active: state.impactView,
+      items: [
+        { id: "files", label: "By file" },
+        { id: "map", label: "Map" },
+      ],
+      onSelect: (id) => ctx.actions.setImpactView(id),
+    }),
+  );
+  if (state.impactView === "map")
+    return h("div", { class: "screen" }, head, viewSwitch, renderMap(ctx));
+
   const list = h(
     "div",
     { class: "list" },
@@ -912,6 +930,7 @@ export function renderImpact(ctx) {
     "div",
     { class: "screen" },
     head,
+    viewSwitch,
     riskLines.length ? notice("Unresolved or observed risk", riskLines.slice(0, 6), "info") : null,
     h(
       "div",

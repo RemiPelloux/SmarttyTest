@@ -129,6 +129,7 @@ export function cypressUnreportedFailures(
 }
 
 export class CypressAdapter implements TestAdapter {
+  readonly apiVersion = 1;
   readonly id = "cypress";
   constructor(private readonly options: CypressAdapterOptions) {}
 

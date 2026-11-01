@@ -1,0 +1,126 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://smarttest.dev/schemas/hook.v1.json",
+  "title": "smarttest hook --json (v1)",
+  "description": "One of three documents: `hook status`, `hook install` and `hook uninstall`.",
+  "type": "object",
+  "required": ["schemaVersion", "command"],
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "command": {
+      "const": "hook"
+    }
+  },
+  "oneOf": [
+    {
+      "description": "hook status",
+      "required": ["status", "other", "history"],
+      "properties": {
+        "status": {
+          "$ref": "#/$defs/hookPlan"
+        },
+        "other": {
+          "$ref": "#/$defs/hookPlan"
+        },
+        "history": {
+          "type": "object",
+          "required": [
+            "runs",
+            "medianMs",
+            "slowestMs",
+            "failures",
+            "bypasses",
+            "withoutHook",
+            "installedLocally"
+          ]
+        }
+      }
+    },
+    {
+      "description": "hook install",
+      "required": ["plan", "applied"],
+      "properties": {
+        "plan": {
+          "$ref": "#/$defs/hookPlan"
+        },
+        "applied": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "description": "hook uninstall",
+      "required": ["removed"],
+      "properties": {
+        "removed": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "hookPlan": {
+      "type": "object",
+      "required": [
+        "manager",
+        "file",
+        "evidence",
+        "stage",
+        "installed",
+        "plan",
+        "replaced",
+        "remaining",
+        "notes"
+      ],
+      "properties": {
+        "manager": {
+          "enum": ["husky", "lefthook", "simple-git-hooks", "git"]
+        },
+        "file": {
+          "type": "string"
+        },
+        "evidence": {
+          "type": "string"
+        },
+        "stage": {
+          "enum": ["pre-commit", "pre-push"]
+        },
+        "installed": {
+          "type": "boolean"
+        },
+        "plan": {
+          "type": "object",
+          "required": ["path", "action", "reason"]
+        },
+        "replaced": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["line", "command"]
+          }
+        },
+        "remaining": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["line", "command"]
+          }
+        },
+        "notes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}

@@ -3,6 +3,7 @@
  * area: `--staged` and `--uncommitted` both mean "working directory against the parent".
  */
 import {
+  assertSafeRevision,
   type ChangeSet,
   type FileChange,
   type RevisionRef,
@@ -25,6 +26,15 @@ import {
 
 const HG_ENV = { HGPLAIN: "1" };
 
+/**
+ * `hg cat` arguments for one repository-relative file. File names come from the repository: `--`
+ * ends option parsing (a file named `--config=…` is not an option) and the `path:` prefix makes
+ * Mercurial match the exact file, not a glob or another pattern kind.
+ */
+export function catArgs(revision: string, repoPath: string): string[] {
+  return ["cat", "-r", revision, "--", `path:${repoPath}`];
+}
+
 /** Parses `hg status` output (M/A/R/!/?). */
 export function parseHgStatus(output: string): FileChange[] {
   const out: FileChange[] = [];
@@ -40,6 +50,7 @@ export function parseHgStatus(output: string): FileChange[] {
 }
 
 export class HgAdapter implements VersionControlAdapter, ChangeProvider {
+  readonly apiVersion = 1;
   readonly id = "hg";
   private repoRoot: string | undefined;
   constructor(private readonly projectRoot: string) {}
@@ -110,7 +121,7 @@ export class HgAdapter implements VersionControlAdapter, ChangeProvider {
     const prefix = await this.prefix();
     const r = await runProcess(
       "hg",
-      ["cat", "-r", revision.ref, prefix ? `${prefix}/${path}` : path],
+      catArgs(assertSafeRevision(revision.ref), prefix ? `${prefix}/${path}` : path),
       {
         cwd: await this.root(),
         env: { ...process.env, ...HG_ENV },
@@ -121,6 +132,7 @@ export class HgAdapter implements VersionControlAdapter, ChangeProvider {
 
   /** The common ancestor of `ref` and the working directory parent (direct: `ref` itself). */
   async resolveBase(ref: string, direct = false): Promise<string> {
+    assertSafeRevision(ref, "Base");
     const node = (
       await this.hg(["log", "-r", direct ? ref : `ancestor(${ref}, .)`, "-T", "{node}"], true)
     ).trim();
@@ -190,7 +202,7 @@ export class HgAdapter implements VersionControlAdapter, ChangeProvider {
     const prefix = await this.prefix();
     const root = await this.root();
     const readBefore = async (path: string): Promise<string | undefined> => {
-      const r = await runProcess("hg", ["cat", "-r", before, prefix ? `${prefix}/${path}` : path], {
+      const r = await runProcess("hg", catArgs(before, prefix ? `${prefix}/${path}` : path), {
         cwd: root,
         env: { ...process.env, ...HG_ENV },
       });

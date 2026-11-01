@@ -28,6 +28,7 @@ export interface VitestAdapterOptions {
 }
 
 export class VitestAdapter implements TestAdapter {
+  readonly apiVersion = 1;
   readonly id = "vitest";
   constructor(private readonly options: VitestAdapterOptions) {}
 
@@ -108,6 +109,8 @@ export class VitestAdapter implements TestAdapter {
         ? [
             "--coverage.enabled=true",
             "--coverage.reporter=json",
+            // A failing test still ran code: record what it observed (Jest does by default).
+            "--coverage.reportOnFailure=true",
             `--coverage.reportsDirectory=${this.options.coverageDir}`,
           ]
         : []),

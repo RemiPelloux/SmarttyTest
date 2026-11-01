@@ -1,5 +1,6 @@
+import { createHash } from "node:crypto";
 import { realpathSync } from "node:fs";
-import { mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { request as httpRequest } from "node:http";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -7,6 +8,8 @@ import { edit, materialize } from "../../../integration-tests/helpers.js";
 import type {
   StudioApiError,
   StudioFileIndex,
+  StudioImpact,
+  StudioImpactMap,
   StudioOverview,
   StudioSource,
   StudioTests,
@@ -339,6 +342,56 @@ describe("read models", () => {
     expect((traversal.json as StudioApiError).error.code).toBe("ST_STUDIO_FILE");
   });
 
+  it("does not follow a report symlink out of the store and sandboxes served reports", async () => {
+    const reports = join(root, ".smarttest/reports");
+    await mkdir(reports, { recursive: true });
+    await writeFile(join(root, "secret.txt"), "PRIVATE-KEY-MATERIAL\n");
+    await rm(join(reports, "junit.xml"), { force: true });
+    await symlink(join(root, "secret.txt"), join(reports, "junit.xml"));
+    const leaked = await api("/api/reports/last-run.junit.xml");
+    expect(leaked.res.status).toBe(404);
+    expect(JSON.stringify(leaked.json)).not.toContain("PRIVATE-KEY-MATERIAL");
+    await rm(join(reports, "junit.xml"), { force: true });
+    // A linked reports directory is refused too, not only a linked file.
+    await mkdir(join(root, "elsewhere"), { recursive: true });
+    await writeFile(join(root, "elsewhere", "summary.md"), "PRIVATE-KEY-MATERIAL\n");
+    await rm(reports, { recursive: true, force: true });
+    await symlink(join(root, "elsewhere"), reports, "junction");
+    const viaDir = await api("/api/reports/last-run.md");
+    expect(viaDir.res.status).toBe(404);
+    expect(JSON.stringify(viaDir.json)).not.toContain("PRIVATE-KEY-MATERIAL");
+    await rm(reports, { force: true });
+    await rm(join(root, "elsewhere"), { recursive: true, force: true });
+    await mkdir(reports, { recursive: true });
+    await rm(join(root, "secret.txt"), { force: true });
+
+    await writeFile(join(reports, "report.html"), "<p>report</p>");
+    const html = await api("/api/reports/last-run.html");
+    expect(html.res.status).toBe(200);
+    expect(html.res.headers.get("content-security-policy")).toMatch(/; sandbox$/);
+    await rm(join(reports, "report.html"), { force: true });
+  });
+
+  it("refuses option-like revisions and traversing snapshot ids as change sources", async () => {
+    for (const source of [
+      { kind: "base", ref: "--output=/tmp/pwned" },
+      { kind: "base", ref: "main", target: "-c core.pager=sh" },
+      { kind: "base", ref: "main\nHEAD" },
+      { kind: "snapshot", id: "../../package" },
+      { kind: "snapshot", id: "a/b" },
+    ]) {
+      for (const path of ["/api/refresh", "/api/run"]) {
+        const { res, json } = await api(path, {
+          method: "POST",
+          body: path === "/api/run" ? { scope: "affected", source } : { source },
+          headers: { origin: origin() },
+        });
+        expect(res.status, `${path} ${JSON.stringify(source)}`).toBe(400);
+        expect((json as StudioApiError).error.code).toBe("ST_STUDIO_SOURCE");
+      }
+    }
+  });
+
   it("keeps the Studio run id when the core report finishes under its own id", async () => {
     const started = await api("/api/run", {
       method: "POST",
@@ -398,6 +451,154 @@ describe("read models", () => {
     expect(res.status).toBe(200);
     expect(json).toMatchObject({ ok: true, counts: { files: 1 } });
   });
+});
+
+describe("impact map", () => {
+  it("draws one path per selection reason, every hop a named edge", async () => {
+    const impact = (await api("/api/impact")).json as StudioImpact;
+    const { res, json } = await api("/api/impact/map");
+    expect(res.status).toBe(200);
+    const map = json as StudioImpactMap;
+    expect(map.truncated).toBe(false);
+    expect(map.totalPaths).toBe(impact.selected.reduce((n, t) => n + t.reasons.length, 0));
+    expect(new Set(map.paths.map((p) => p.test))).toEqual(
+      new Set(impact.selected.map((t) => t.filePath)),
+    );
+    const nodes = new Map(map.nodes.map((n) => [n.id, n]));
+    const edges = new Map(map.edges.map((e) => [e.id, e]));
+    for (const path of map.paths) {
+      expect(path.nodes.at(-1)).toBe(path.test);
+      expect(nodes.get(path.test)?.role).toBe("test");
+      expect(path.edges).toHaveLength(path.nodes.length - 1);
+      path.edges.forEach((id, i) => {
+        const edge = edges.get(id);
+        expect(edge?.from).toBe(path.nodes[i]);
+        expect(edge?.to).toBe(path.nodes[i + 1]);
+        expect(edge?.tests).toContain(path.test);
+        expect(map.edgeKinds).toContain(edge?.kind);
+      });
+    }
+    // The change is a node, and the graph names the edges that leave it.
+    expect(map.changed.some((c) => c.file === "src/util/strings.ts")).toBe(true);
+    expect(map.nodes.some((n) => n.role === "changed" && n.file === "src/util/strings.ts")).toBe(
+      true,
+    );
+    expect(map.edgeKinds.some((k) => k !== "UNCLASSIFIED")).toBe(true);
+    expect(map.confidences.length).toBeGreaterThan(0);
+  });
+
+  it("needs the session token like every API route", async () => {
+    const { res } = await api("/api/impact/map", { token: null });
+    expect(res.status).toBe(401);
+  });
+});
+
+describe("observed line coverage", () => {
+  const path = "src/util/strings.ts";
+  const writeLines = async (text: string, lines: [number, number][]) => {
+    await mkdir(join(root, ".smarttest/runs"), { recursive: true });
+    await writeFile(
+      join(root, ".smarttest/runs/coverage-lines.json"),
+      JSON.stringify({
+        schemaVersion: 1,
+        origin: "istanbul",
+        scope: "selected",
+        runId: "run_cov",
+        collectedAt: new Date().toISOString(),
+        files: {
+          [path]: {
+            sha256: createHash("sha256").update(text).digest("hex"),
+            lines,
+            branches: [{ line: lines[0]?.[0] ?? 1, type: "if", arms: [1, 0] }],
+          },
+        },
+        unmapped: [],
+      }),
+    );
+    await api("/api/refresh", { method: "POST", body: {}, headers: { origin: origin() } });
+  };
+
+  it("marks covered and uncovered lines only on the file that was measured", async () => {
+    const text = await readFile(join(root, path), "utf8");
+    const before = (await api(`/api/source?path=${path}`)).json as StudioSource;
+    expect(before.coverage).toEqual([]);
+    const changed = before.changedLines;
+    expect(changed.length).toBeGreaterThan(0);
+    const measured: [number, number][] = changed.map((n, i) => [n, i === 0 ? 0 : 2]);
+    await writeLines(text, measured);
+
+    const source = (await api(`/api/source?path=${path}`)).json as StudioSource;
+    const [coverage] = source.coverage;
+    expect(source.coverage).toHaveLength(1);
+    expect(coverage).toMatchObject({ origin: "istanbul", scope: "selected", state: "current" });
+    expect(coverage?.lines).toEqual(measured.map(([n, hits]) => ({ n, hits })));
+    expect(coverage?.branches).toEqual([
+      { line: measured[0]?.[0], type: "if", covered: 1, total: 2 },
+    ]);
+    expect(coverage?.changed).toEqual({
+      lines: changed.length,
+      covered: changed.length - 1,
+      uncovered: 1,
+      notMeasured: 0,
+      branches: 2,
+      branchesCovered: 1,
+    });
+    expect(coverage?.note).toMatch(/selected tests only/);
+
+    // A file the run never loaded is absent, not uncovered.
+    const other = (await api("/api/source?path=test/strings.test.ts")).json as StudioSource;
+    expect(other.coverage[0]?.state).toBe("absent");
+    expect(other.coverage[0]?.lines).toEqual([]);
+  });
+
+  it("marks nothing once the file changed after the measurement", async () => {
+    const text = await readFile(join(root, path), "utf8");
+    await writeLines(text, [[1, 1]]);
+    await writeFile(join(root, path), `${text}\n// edited after coverage\n`);
+    try {
+      const source = (await api(`/api/source?path=${path}`)).json as StudioSource;
+      expect(source.coverage[0]?.state).toBe("stale");
+      expect(source.coverage[0]?.lines).toEqual([]);
+      expect(source.coverage[0]?.changed).toBeNull();
+    } finally {
+      await writeFile(join(root, path), text);
+      await rm(join(root, ".smarttest/runs/coverage-lines.json"), { force: true });
+      await api("/api/refresh", { method: "POST", body: {}, headers: { origin: origin() } });
+    }
+  });
+
+  it("reads the lines a real coverage run measured, even when a selected test failed", async () => {
+    const started = await api("/api/run", {
+      method: "POST",
+      body: { scope: "affected", coverage: true },
+      headers: { origin: origin() },
+    });
+    expect(started.res.status).toBe(202);
+    const runId = (started.json as { runId: string }).runId;
+    for (let attempt = 0; attempt < 160; attempt++) {
+      await new Promise((resolve) => setTimeout(resolve, 250));
+      const polled = (await api(`/api/runs/${runId}`)).json as { run: { state: string } };
+      if (polled.run.state === "done" || polled.run.state === "failed") break;
+    }
+    // The run's own refresh reads the new coverage; wait for the snapshot that carries it.
+    let source: StudioSource | null = null;
+    for (let attempt = 0; attempt < 40; attempt++) {
+      source = (await api(`/api/source?path=${path}`)).json as StudioSource;
+      if (source.coverage.length) break;
+      await new Promise((resolve) => setTimeout(resolve, 250));
+    }
+    const coverage = source?.coverage[0];
+    expect(coverage).toMatchObject({ origin: "istanbul", scope: "selected", state: "current" });
+    expect(coverage?.lines.length).toBeGreaterThan(0);
+    expect(coverage?.lines.some((line) => line.hits > 0)).toBe(true);
+    const changed = coverage?.changed;
+    expect(changed?.lines).toBe(source?.changedLines.length);
+    expect((changed?.covered ?? 0) + (changed?.uncovered ?? 0) + (changed?.notMeasured ?? 0)).toBe(
+      changed?.lines,
+    );
+    // The changed line is in capitalize, which the selected test called.
+    expect(changed?.covered).toBeGreaterThan(0);
+  }, 90_000);
 });
 
 describe("shutdown", () => {
