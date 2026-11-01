@@ -6,6 +6,7 @@ import {
   readStateFile,
   readStateFileSync,
   readStateJson,
+  stateKey,
   stateKeyFile,
   writeStateFile,
   writeStateJson,
@@ -58,6 +59,21 @@ describe("authenticated state (SR-16)", () => {
     expect(await readStateJson(path)).toEqual({ k: ["test/a.test.ts"] });
     vi.stubEnv("SMARTTEST_STATE_KEY", "b".repeat(40));
     expect(await readStateJson(path)).toBeUndefined();
+  });
+
+  it("warns once when SMARTTEST_STATE_KEY is too short to be used", () => {
+    const write = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    try {
+      vi.stubEnv("SMARTTEST_STATE_KEY", "too-short");
+      stateKey();
+      stateKey();
+      const warnings = write.mock.calls.map((c) => String(c[0]));
+      expect(warnings).toHaveLength(1);
+      expect(warnings[0]).toContain("SMARTTEST_STATE_KEY");
+      expect(warnings[0]).toContain("at least 32");
+    } finally {
+      write.mockRestore();
+    }
   });
 
   it("keeps the per-user key outside every project", () => {

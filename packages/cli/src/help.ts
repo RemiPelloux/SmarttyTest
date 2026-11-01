@@ -55,6 +55,7 @@ export const COMMANDS: Record<string, { summary: string; usage: string; flags?: 
     usage: "smarttest explain <test | file | file#Symbol> [--units A,B.method] [--fresh] [--json]",
     flags: [
       "--units A,B  for a source file: also list the tests protecting each named unit (one analysis)",
+      "--fresh  analyse the current change instead of reusing the last run's decision (automatic when the change or mode moved)",
     ],
   },
   "validate-selection": {

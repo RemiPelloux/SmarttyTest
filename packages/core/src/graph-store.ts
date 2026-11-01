@@ -21,6 +21,13 @@ import { DependencyGraph, GRAPH_FORMAT, type GraphOptions } from "@smarttest/dep
 import { readStateFileSync, sha256, VERSION, writeStateFile } from "@smarttest/shared";
 import type { FileAnalysis } from "@smarttest/source-parser";
 
+/**
+ * The stored graph has no valid MAC under this machine's state key: written on another machine,
+ * under another key (a new `SMARTTEST_STATE_KEY`, a recreated per-user key) or by an earlier
+ * version. Routine, not damage: it is rebuilt.
+ */
+export const FOREIGN_STATE = "state from another machine or an earlier version: rebuilt";
+
 /** Version of the header layout and of the keys below. */
 export const GRAPH_STORE_VERSION = 1;
 /** A patched graph is written back once more files than this differ from the stored one. */
@@ -95,7 +102,7 @@ export class GraphStore {
     // The checks below are all against public data (content hashes): only the MAC proves this
     // machine (or a CI job holding its key) wrote the graph. A planted graph could drop edges.
     const text = readStateFileSync(this.path);
-    if (text === undefined) return { status: "corrupt", reason: "not written by this machine" };
+    if (text === undefined) return { status: "corrupt", reason: FOREIGN_STATE };
     const nl = text.indexOf("\n");
     let header: Header;
     try {

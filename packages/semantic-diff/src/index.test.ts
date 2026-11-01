@@ -65,3 +65,77 @@ describe("semantic diff", () => {
     expect(d.changes[0]?.kind).toBe("unclassifiable");
   });
 });
+
+describe("module-evaluation code", () => {
+  const src = `import { dep } from "./dep";
+export const LIMIT = 10;
+export const fmt = (s: string) => s.trim();
+export const config = { retries: 3, run: () => dep(1), dep };
+export const cached = dep(2);
+export function upper(s: string) { return s.toUpperCase(); }
+export class Plain { static label = "p"; m() { return 1; } }
+`;
+  const d = (after: string, before = src) =>
+    diffFile({
+      path: "a.ts",
+      before: analyzeSource("a.ts", before),
+      after: analyzeSource("a.ts", after),
+      beforeText: before,
+      afterText: after,
+    });
+
+  it("seeds the whole file for a new export whose initializer throws at import", () => {
+    const r = d(`${src}export const X = (() => { throw new Error("boom"); })();\n`);
+    expect(r.units).toEqual(["*"]);
+    expect(r.changes.some((c) => c.notes?.includes("module load"))).toBe(true);
+  });
+
+  it("seeds the whole file when an export's initializer starts to run other code", () => {
+    expect(d(src.replace("LIMIT = 10", "LIMIT = boom()")).units).toEqual(["*"]);
+    expect(d(src.replace("cached = dep(2)", "cached = dep(3)")).units).toEqual(["*"]);
+  });
+
+  it("seeds the whole file when module-evaluation code is removed", () => {
+    expect(d(src.replace("export const cached = dep(2);\n", "")).units).toEqual(["*"]);
+  });
+
+  it("seeds the whole file for static initializers, static blocks and decorators", () => {
+    expect(d(src.replace('static label = "p";', "static label = make();")).units).toEqual(["*"]);
+    expect(d(src.replace("m() {", "static { boom(); } m() {")).units).toEqual(["*"]);
+    expect(d(src.replace("export class Plain", "@sealed\nexport class Plain")).units).toEqual([
+      "*",
+    ]);
+  });
+
+  it("seeds the whole file for top-level statements and side-effect imports", () => {
+    expect(d(`${src}dep(4);\n`).units).toEqual(["*"]);
+    expect(d(`import "./setup";\n${src}`).units).toEqual(["*"]);
+  });
+
+  it("keeps declarations that cannot run code at load member-level", () => {
+    expect(d(src.replace("LIMIT = 10", "LIMIT = 11")).units).toEqual(["LIMIT"]);
+    expect(d(src.replace("s.trim()", "s.trimEnd()")).units).toEqual(["fmt"]);
+    expect(d(src.replace("retries: 3", "retries: 4")).units).toEqual(["config"]);
+    expect(d(src.replace("toUpperCase", "toLowerCase")).units).toEqual(["upper"]);
+    expect(d(src.replace("return 1;", "return 2;")).units).toEqual(["Plain.m"]);
+    expect(d(`${src}export const Z = { a: [1, -2, "x"], f() {} } as const;\n`).units).toEqual([
+      "Z",
+    ]);
+  });
+
+  it("treats a name read before its declaration as code that can throw", () => {
+    const before = "export const A = 1;\nexport const B = 2;\n";
+    expect(d("export const A = B;\nexport const B = 2;\n", before).units).toEqual(["*"]);
+    expect(d("export const A = 1;\nexport const B = A;\n", before).units).toEqual(["B"]);
+  });
+
+  it("seeds the whole file for changed lines in load-time code without a previous version", () => {
+    const line = src.split("\n").findIndex((l) => l.includes("cached"));
+    const r = diffFile({
+      path: "a.ts",
+      after: analyzeSource("a.ts", src),
+      ranges: [{ start: { line, column: 0 }, end: { line, column: 5 } }],
+    });
+    expect(r.units).toEqual(["*"]);
+  });
+});

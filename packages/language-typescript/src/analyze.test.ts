@@ -96,3 +96,60 @@ describe("analyzeSource", () => {
     });
   });
 });
+
+describe("module-evaluation code (evalHash)", () => {
+  const evaluating = (path: string, src: string) =>
+    analyzeSource(path, src)
+      .symbols.filter((s) => s.evalHash)
+      .map((s) => s.qualifiedName);
+
+  it("marks declarations whose evaluation can run code", () => {
+    const src = `import { make } from "./m";
+export const a = 1, b = [1, { c: "x", d: () => 2 }], e = make;
+export const f = make();
+export const g = new Map();
+export const { h } = { h: 1 };
+export const i = \`\${a}\`;
+export default make();
+export enum Flags { A = 1, B = -2 }
+export enum Computed { A = make() }
+export namespace Types { export type T = 1; export function f() {} }
+export namespace Runtime { export const x = make(); }
+declare const ambient: number;
+export class Plain extends Base { static n = 1; m() { return make(); } }
+export class Static { static s = make(); }
+export class Block { static { make(); } }
+@dec export class Decorated {}
+export class Member { @dec m() {} }
+export class Mixed extends mix(Base) {}
+`;
+    expect(evaluating("a.ts", src).sort()).toEqual(
+      [
+        "f",
+        "g",
+        "h",
+        "i",
+        "default",
+        "Computed",
+        "Runtime",
+        "Static",
+        "Block",
+        "Decorated",
+        "Member",
+        "Mixed",
+      ].sort(),
+    );
+  });
+
+  it("marks CommonJS exports whose value runs code", () => {
+    const src = `const lib = require("./lib");
+exports.a = 1;
+exports.b = lib.make();
+module.exports.c = function () {};
+`;
+    expect(evaluating("a.js", src)).toEqual(["b"]);
+    expect(
+      evaluating("b.js", `module.exports = { a: 1, b: compute(), c() {}, d: () => 1 };\n`),
+    ).toEqual(["b"]);
+  });
+});
