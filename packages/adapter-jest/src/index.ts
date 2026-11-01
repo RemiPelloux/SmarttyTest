@@ -157,6 +157,10 @@ export class JestAdapter implements TestAdapter {
         timedOut: res.timedOut,
         cancelled: res.cancelled,
         stderr: report ? "" : (res.stderr || res.stdout).slice(-4000),
+        ...(report?.runExecError
+          ? { runErrors: [report.runExecError.message || "Jest reported a run error"] }
+          : {}),
+        output: (res.stderr || res.stdout).slice(0, 3000),
       };
       return result;
     } finally {

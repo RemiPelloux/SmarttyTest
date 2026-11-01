@@ -1,5 +1,48 @@
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { parseNodeJUnit } from "./index.js";
+import { NodeTestAdapter, nodeTestFileArg, parseNodeJUnit } from "./index.js";
+
+describe("file arguments to node --test", () => {
+  it("escapes glob characters, which Node 21+ expands in every argument", () => {
+    expect(nodeTestFileArg("/p/test/[id].test.js", 22)).toBe("/p/test/[[]id[]].test.js");
+    expect(nodeTestFileArg("/p/a*b?.test.js", 26)).toBe("/p/a[*]b[?].test.js");
+    expect(nodeTestFileArg("/p/@(x).test.js", 26)).toBe("/p/@[(]x[)].test.js");
+    // Brace expansion runs before classes: the comma and `..` that would trigger it become `?`.
+    expect(nodeTestFileArg("/p/{x,y}.test.js", 26)).toBe("/p/[{]x?y[}].test.js");
+    expect(nodeTestFileArg("/p/{1..2}.test.js", 26)).toBe("/p/[{]1.?2[}].test.js");
+    expect(nodeTestFileArg("/p/a,b.test.js", 26)).toBe("/p/a,b.test.js");
+    // Before Node 21 arguments are plain paths.
+    expect(nodeTestFileArg("/p/test/[id].test.js", 20)).toBe("/p/test/[id].test.js");
+  });
+
+  it("runs the selected file, not the files its name matches as a glob", async () => {
+    const root = await mkdtemp(join(tmpdir(), "smarttest-node-glob-"));
+    try {
+      await mkdir(join(root, "test"));
+      await writeFile(join(root, "package.json"), '{"type":"module"}');
+      for (const [name, body] of [
+        ["[id]", "throw new Error('bracket')"],
+        ["i", ""],
+        ["{x,y}", "throw new Error('brace')"],
+        ["x", ""],
+      ])
+        await writeFile(
+          join(root, "test", `${name}.test.js`),
+          `import test from "node:test"; test(${JSON.stringify(name)}, () => { ${body} });\n`,
+        );
+      const adapter = new NodeTestAdapter({ projectRoot: root, cwd: root });
+      const run = await adapter.execute({ files: ["test/[id].test.js", "test/{x,y}.test.js"] }, {});
+      expect(run.executions.map((e) => [e.testId, e.status]).sort()).toEqual([
+        ["test/[id].test.js::[id]", "failed"],
+        ["test/{x,y}.test.js::{x,y}", "failed"],
+      ]);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+});
 
 const xml = `<?xml version="1.0" encoding="utf-8"?>
 <testsuites>

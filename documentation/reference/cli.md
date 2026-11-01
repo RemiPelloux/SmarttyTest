@@ -104,6 +104,8 @@ Reserved for a later release: `ai …` and `autopilot`. They exit with `ST_NOT_A
 
 Ctrl-C cancels the runner cleanly and reports `cancelled`.
 
+A run the runner failed outside any test (a failing `beforeAll`/`afterAll`, an unhandled error, a failing global teardown or setup project, a non-zero exit with no failed test) is a test failure: the file gets a `(suite)` failure, or, when the runner cannot say which file, each file of that run gets a `(run)` failure quoting the runner's error. The command exits 1, and nothing from it is cached as a pass. Tests the runner did not run because of it are `cancelled`, not skipped.
+
 ## `init`
 
 | Flag                          | Meaning                                                                                  |

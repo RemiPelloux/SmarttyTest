@@ -68,6 +68,9 @@ const RANK: TestStatus[] = [
   "infrastructure-error",
 ];
 
+/** Statuses that fail a run. */
+const FAILING = new Set<TestStatus>(["failed", "timed-out", "cancelled", "infrastructure-error"]);
+
 export function aggregateStatus(tests: readonly TestExecution[]): TestStatus {
   if (!tests.length) return "skipped";
   let worst: TestStatus = "passed";
@@ -115,6 +118,10 @@ export async function executeGroups(
           timedOut?: boolean;
           cancelled?: boolean;
           stderr?: string;
+          /** Errors the runner reported outside every test (Playwright `errors`, Jest `runExecError`). */
+          runErrors?: string[];
+          /** The tail of the runner's console output, quoted when the run failed outside any test. */
+          output?: string;
         };
       };
       try {
@@ -149,9 +156,15 @@ export async function executeGroups(
       // the same id inside ONE attempt are two tests, never a retry. Merge them
       // worst-first so a failing instance can't be hidden by a passing namesake.
       const thisAttempt = new Map<string, TestExecution>();
+      // Failures in files the runner ran beyond the selection (a Playwright setup project, a file
+      // its config adds): they are not this selection's tests, but the run failed, so they block it.
+      const outside: TestExecution[] = [];
       for (const exec of run.executions) {
         const file = fileOfTestId(exec.testId);
-        if (!pending.includes(file)) continue; // ignore files the runner matched beyond the selection
+        if (!pending.includes(file)) {
+          if (FAILING.has(exec.status) && exec.status !== "cancelled") outside.push(exec);
+          continue; // a passing result of a file beyond the selection is not reported
+        }
         seenFiles.add(file);
         const same = thisAttempt.get(exec.testId);
         if (!same) {
@@ -169,17 +182,19 @@ export async function executeGroups(
       for (const exec of thisAttempt.values()) {
         // Only a pass in a LATER attempt of the same test turns a failure into flaky.
         const previous = byId.get(exec.testId);
-        if (
-          previous &&
-          (previous.status === "failed" || previous.status === "timed-out") &&
-          exec.status === "passed"
-        ) {
+        const previousFailed =
+          previous && (previous.status === "failed" || previous.status === "timed-out");
+        if (previousFailed && (exec.status === "passed" || exec.status === "flaky")) {
           byId.set(exec.testId, {
             ...exec,
             status: "flaky",
             attempts: attempt,
             ...(previous.error ? { error: previous.error } : {}),
           });
+        } else if (previousFailed && RANK.indexOf(exec.status) < RANK.indexOf(previous.status)) {
+          // A retry that skips the test or does not run it (a hook failed, the test skipped
+          // itself) proves nothing: the failure stands.
+          byId.set(exec.testId, { ...previous, attempts: attempt });
         } else {
           byId.set(exec.testId, { ...exec, attempts: attempt });
         }
@@ -205,6 +220,49 @@ export async function executeGroups(
         });
         if (status === "infrastructure-error" && attempt === 1)
           infra.push(`${group.adapter}: no result for ${f}`);
+      }
+      // A run that failed outside every test (an unhandled error, a failing global teardown or
+      // setup project, a non-zero exit with nothing failed) fails each file of this attempt: none
+      // of them can be reported as passed (§32.2).
+      const runFailures = outside.map((e) => {
+        const at = e.testId.indexOf("::");
+        const where = at === -1 ? e.testId : `${e.testId.slice(0, at)} › ${e.testId.slice(at + 2)}`;
+        const detail = e.error?.message ? `:\n${e.error.message}` : "";
+        return `${where} failed in this run (not selected, but the runner ran it: a setup project, a dependency or a file its config adds)${detail}`;
+      });
+      const failedInAttempt =
+        outside.length > 0 ||
+        pending.some((f) => !seenFiles.has(f)) ||
+        [...thisAttempt.values()].some((e) => FAILING.has(e.status));
+      if (!meta.timedOut && !meta.cancelled && !failedInAttempt) {
+        const errors = (meta.runErrors ?? []).map((e) => e.trim()).filter(Boolean);
+        if (errors.length)
+          runFailures.push(
+            `${group.adapter} reported an error outside any test:\n${errors.join("\n")}`,
+          );
+        else if (typeof meta.exitCode === "number" && meta.exitCode !== 0)
+          runFailures.push(
+            `${group.adapter} exited with code ${meta.exitCode} although no test failed: an error outside any test (an unhandled error, a failing hook, global setup or teardown)`,
+          );
+      }
+      const output = meta.output?.trim();
+      for (const f of pending) {
+        if (!seenFiles.has(f)) continue;
+        const id = `${f}::(run)`;
+        const previous = byId.get(id);
+        if (runFailures.length) {
+          const message = `${runFailures.join("\n\n")}${output ? `\n\nRunner output:\n${output}` : ""}`;
+          byId.set(id, {
+            testId: id,
+            status: "failed",
+            durationMs: 0,
+            attempts: attempt,
+            error: { message: message.slice(0, 4000) },
+          });
+        } else if (previous?.status === "failed") {
+          // The run-level failure did not come back on the retry.
+          byId.set(id, { ...previous, status: "flaky", attempts: attempt });
+        }
       }
       if (meta.cancelled || meta.timedOut) break;
       pending = [
