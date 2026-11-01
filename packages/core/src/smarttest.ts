@@ -1763,11 +1763,14 @@ export class SmartTest {
     }
     options.onAnalysis?.(analysis);
     if (!analysis.runnerRoots.length && analysis.decision.selectedTests.length) {
-      throw new SmartTestError("No Jest or Vitest setup found", {
-        code: "ST_NO_RUNNER",
-        category: "infrastructure",
-        hint: "Install vitest or jest in the project, or set `adapters` in smarttest.config.",
-      });
+      throw new SmartTestError(
+        "No test runner setup found (Jest, Vitest, node --test, Playwright or Cypress)",
+        {
+          code: "ST_NO_RUNNER",
+          category: "infrastructure",
+          hint: 'Install Vitest or Jest, add a `"test": "node --test"` script, or set `adapters` in smarttest.config; `smarttest doctor` shows what was detected.',
+        },
+      );
     }
     const durationsPath = join(this.storeDir, "state", "durations.json");
     const durations = (await readJson<Record<string, number>>(durationsPath)) ?? {};
