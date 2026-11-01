@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
-import { existsSync, realpathSync } from "node:fs";
-import { availableParallelism } from "node:os";
+import { existsSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
+import { availableParallelism, tmpdir } from "node:os";
 import { isAbsolute, join, relative } from "node:path";
 import { CypressAdapter } from "@smarttest/adapter-cypress";
 import { JestAdapter } from "@smarttest/adapter-jest";
@@ -122,7 +122,7 @@ import type { ChangeAnalysisInput, ChangeSource } from "@smarttest/vcs-core";
 import { GitAdapter } from "@smarttest/vcs-git";
 import { HgAdapter } from "@smarttest/vcs-hg";
 import { SvnAdapter } from "@smarttest/vcs-svn";
-import { GraphStore, surfaceOf } from "./graph-store.js";
+import { FOREIGN_STATE, GraphStore, surfaceOf } from "./graph-store.js";
 import {
   assertPushIsHead,
   type CheckResult,
@@ -197,6 +197,58 @@ export interface OpenOptions {
   storeDir?: string;
   /** Temporary checkouts: the working tree they mirror (see `UpdateOptions.mirror`). */
   mirror?: { root: string; differs: ReadonlySet<string> };
+  /**
+   * Keep state in a temporary directory removed when the process exits: nothing is written to the
+   * project (dry runs).
+   */
+  ephemeralStore?: boolean;
+  /**
+   * A store committed to Git is not refused (`ST_STORE_TRACKED`): its state is still never read
+   * (the instance works in a temporary store) and `trackedStore` describes it, so `doctor` and
+   * `init` can repair it.
+   */
+  tolerateTrackedStore?: boolean;
+}
+
+/**
+ * The store holds caches that decide what runs: cached passes, the symbol index, traces. Its
+ * content is trusted only because SmartTest wrote it on this machine. A store committed to the
+ * repository (for example by a pull request from a fork) could claim passes or hide
+ * dependencies and so reduce the selection. Such a store is refused, never read.
+ */
+async function trackedStoreFiles(
+  root: string,
+  storeDir: string,
+): Promise<{ dir: string; files: string[] } | undefined> {
+  const rel = relative(root, storeDir).split("\\").join("/");
+  if (!rel || rel.startsWith("..") || isAbsolute(rel)) return undefined;
+  const res = await runProcess(
+    "git",
+    ["-c", "core.quotePath=false", "ls-files", "-z", "--", `${rel}/`],
+    { cwd: root },
+  ).catch(() => undefined);
+  if (res?.code !== 0) return undefined; // not a Git repository, or Git is unavailable
+  const files = res.stdout.split("\0").filter(Boolean);
+  return files.length ? { dir: rel, files } : undefined;
+}
+
+export function storeTrackedError(tracked: { dir: string; files: string[] }): SmartTestError {
+  const rel = tracked.dir;
+  return new SmartTestError(
+    `${rel}/ is committed to the repository (${tracked.files.length} tracked file(s), e.g. ${tracked.files[0]}). SmartTest will not trust local state that comes from the repository content.`,
+    {
+      code: "ST_STORE_TRACKED",
+      category: "configuration",
+      hint: `Remove it from version control and ignore it: \`git rm -r --cached ${rel}\`, then add \`${rel}/\` to .gitignore (\`smarttest doctor --fix\` adds the entry and offers to run the command). In CI, do not run SmartTest on a pull request that commits it.`,
+    },
+  );
+}
+
+/** A temporary state directory, removed when the process exits. */
+function temporaryStore(): string {
+  const dir = mkdtempSync(join(tmpdir(), "smarttest-store-"));
+  process.once("exit", () => rmSync(dir, { recursive: true, force: true }));
+  return dir;
 }
 
 export interface AnalyzeOptions {
@@ -411,6 +463,8 @@ export class SmartTest {
   private profileCache: ProjectProfile | undefined;
   private resolver: TypeScriptResolver | undefined;
   readonly storeDir: string;
+  /** The project's store is committed to Git (opened with `tolerateTrackedStore`). */
+  trackedStore: { dir: string; files: string[] } | undefined;
 
   private constructor(
     readonly root: string,
@@ -436,42 +490,37 @@ export class SmartTest {
       return rel.startsWith("..") || isAbsolute(rel) ? p : join(root, rel);
     };
     const loaded = await loadConfig(root, rebase(options.configPath));
+    const projectStore = rebase(options.storeDir) ?? join(root, loaded.config.storeDir);
+    const tracked = await trackedStoreFiles(root, projectStore);
+    if (tracked && !options.tolerateTrackedStore) throw storeTrackedError(tracked);
+    // A dry run writes nothing to the project, and state committed to the repository is never
+    // read: both work in a temporary store.
     const st = new SmartTest(
       root,
       loaded,
       options.logger ?? silentLogger,
-      rebase(options.storeDir),
+      options.ephemeralStore || tracked ? temporaryStore() : projectStore,
       options.mirror,
     );
-    await st.assertStoreUntracked();
+    st.trackedStore = tracked;
     return st;
   }
 
-  /**
-   * The store holds caches that decide what runs: cached passes, the symbol index, traces. Its
-   * content is trusted only because SmartTest wrote it on this machine. A store committed to the
-   * repository (for example by a pull request from a fork) could claim passes or hide
-   * dependencies and so reduce the selection. Such a store is refused, never read.
-   */
-  private async assertStoreUntracked(): Promise<void> {
-    const rel = relative(this.root, this.storeDir).split("\\").join("/");
-    if (!rel || rel.startsWith("..") || isAbsolute(rel)) return;
-    const res = await runProcess(
-      "git",
-      ["-c", "core.quotePath=false", "ls-files", "-z", "--", `${rel}/`],
-      { cwd: this.root },
-    ).catch(() => undefined);
-    if (res?.code !== 0) return; // not a Git repository, or Git is unavailable
-    const tracked = res.stdout.split("\0").filter(Boolean);
-    if (!tracked.length) return;
-    throw new SmartTestError(
-      `${rel}/ is committed to the repository (${tracked.length} tracked file(s), e.g. ${tracked[0]}). SmartTest will not trust local state that comes from the repository content.`,
-      {
-        code: "ST_STORE_TRACKED",
-        category: "configuration",
-        hint: `Remove it from version control and ignore it: \`git rm -r --cached ${rel}\`, then add \`${rel}/\` to .gitignore. In CI, do not run SmartTest on a pull request that commits it.`,
-      },
-    );
+  /** Untracks the committed store (`git rm -r --cached`), keeping its files on disk. */
+  async untrackStore(): Promise<string | undefined> {
+    const dir = this.trackedStore?.dir;
+    if (!dir) return undefined;
+    const res = await runProcess("git", ["rm", "-r", "-q", "--cached", "--", dir], {
+      cwd: this.root,
+    });
+    if (res.code !== 0)
+      throw new SmartTestError(`git rm -r --cached ${dir} failed: ${res.stderr.trim()}`, {
+        code: "ST_VCS_COMMAND_FAILED",
+        category: "infrastructure",
+        hint: `Run \`git rm -r --cached ${dir}\` yourself.`,
+      });
+    this.trackedStore = undefined;
+    return `git rm -r --cached ${dir}`;
   }
 
   useLogger(logger: Logger): this {
@@ -814,7 +863,9 @@ export class SmartTest {
       graph = new DependencyGraph(index.entries(), this.isTest, options);
       this.lastGraphBuild = "built";
       this.lastGraphStoreMiss = `${loaded.status}: ${loaded.reason}`;
-      this.logger.debug("graph store not used", { status: loaded.status, reason: loaded.reason });
+      if (loaded.reason === FOREIGN_STATE) this.logger.debug(`graph store: ${FOREIGN_STATE}`);
+      else
+        this.logger.debug("graph store not used", { status: loaded.status, reason: loaded.reason });
     }
     if (GraphStore.shouldSave(loaded))
       await store
@@ -1081,7 +1132,7 @@ export class SmartTest {
     // Compact: with thousands of selected tests and their dependency paths this file is large.
     await writeFileAtomic(
       join(this.storeDir, "runs", "last-decision.json"),
-      `${JSON.stringify({ createdAt: new Date().toISOString(), description: input.description, decision })}\n`,
+      `${JSON.stringify({ createdAt: new Date().toISOString(), description: input.description, fingerprint: await this.changeFingerprint(input), decision })}\n`,
     );
     this.logger.info("impact decision", {
       source: input.description,
@@ -2120,13 +2171,35 @@ export class SmartTest {
       units?: readonly string[];
     } = {},
   ) {
-    const saved = options.fresh
+    let saved = options.fresh
       ? undefined
-      : await readJson<{ decision: ImpactResult; description: string }>(
-          join(this.storeDir, "runs", "last-decision.json"),
-        );
+      : await readJson<{
+          decision: ImpactResult;
+          description: string;
+          createdAt?: string;
+          fingerprint?: string;
+        }>(join(this.storeDir, "runs", "last-decision.json"));
+    // The last decision explains the last run only while the change and the mode are the same:
+    // after an edit (or with another mode or source) it would explain a selection that no longer
+    // applies, so the change is analysed again.
+    let moved: string | undefined;
+    if (saved) {
+      const mode = options.mode ?? this.config.mode;
+      const fingerprint = await this.changeFingerprint(await this.changeInput(options.source));
+      if (
+        saved.fingerprint !== fingerprint ||
+        (saved.decision.requestedMode ?? saved.decision.safetyMode) !== mode
+      ) {
+        moved = saved.createdAt ?? "an earlier run";
+        saved = undefined;
+      }
+    }
     const decision = saved?.decision ?? (await this.analyze(options)).decision;
-    const description = saved?.description ?? "fresh analysis";
+    const description = saved
+      ? `${saved.description} · decision of the run at ${saved.createdAt ?? "an earlier time"}`
+      : moved
+        ? `fresh analysis (the change or mode moved since the run at ${moved})`
+        : "fresh analysis";
     if (
       this.isTest(target) ||
       decision.selectedTests.some((t) => t.filePath === target) ||
@@ -2187,6 +2260,20 @@ export class SmartTest {
       rules: policy.matched.map((m) => m.rule.name),
       risk: policy.risk,
     };
+  }
+
+  /**
+   * Identifies a change: its source, revisions, and each changed path with its current content.
+   * Two analyses with the same fingerprint decide on the same change.
+   */
+  private async changeFingerprint(input: ChangeAnalysisInput): Promise<string> {
+    const cs = input.changeSet;
+    const parts: string[] = [input.description, cs.baseRevision ?? "", cs.targetRevision ?? ""];
+    for (const c of [...cs.changes].sort((a, b) => a.path.localeCompare(b.path)))
+      parts.push(
+        `${c.type}:${c.previousPath ?? ""}:${c.path}:${c.type === "deleted" ? "" : ((await hashFile(this.root, c.path)) ?? "missing")}`,
+      );
+    return createHash("sha256").update(parts.join("\n")).digest("hex");
   }
 
   /** Shortest dependency path, import cycles and untested files (`smarttest graph why|cycles|orphans`). */
@@ -2428,10 +2515,14 @@ export class SmartTest {
     return planHookUninstall(this.root, manager, stages);
   }
 
-  /** Applies hook file changes (recorded in the init journal, so `init --rollback` undoes them too). */
-  async applyFiles(files: FilePlan[]): Promise<string[]> {
+  /**
+   * Applies file changes. `journal` (default true) records them in the init journal, so
+   * `init --rollback` undoes them too (`migrate`); hook installs and removals are not init's steps
+   * and pass false (`smarttest hook uninstall` undoes them).
+   */
+  async applyFiles(files: FilePlan[], options: { journal?: boolean } = {}): Promise<string[]> {
     const plan = { summary: "", recommendations: [], warnings: [], files, config: {} } as SetupPlan;
-    const journal = await applyPlan(this.root, this.storeDir, plan);
+    const journal = await applyPlan(this.root, this.storeDir, plan, options);
     return files
       .filter((f) => f.action !== "skip" && journal.entries.some((e) => e.path === f.path))
       .map((f) => f.path);
@@ -2730,23 +2821,30 @@ export class SmartTest {
   }
 
   /** `doctor --fix`: safe repairs only (ignore file, unreadable local state, configuration drift). */
+  /** Adds the store to `.gitignore` (Git projects); returns what was done, if anything. */
+  async ignoreStore(): Promise<string | undefined> {
+    const { readFile, writeFile: wf } = await import("node:fs/promises");
+    const gi = join(this.root, ".gitignore");
+    const storeRel =
+      this.trackedStore?.dir ?? relative(this.root, this.storeDir).split("\\").join("/");
+    if ((await this.provider()) !== "git" || !storeRel || storeRel.startsWith(".."))
+      return undefined;
+    const text = await readFile(gi, "utf8").catch(() => "");
+    if (
+      text.split(/\r?\n/).some((l) => l.trim().replace(/^\//, "").replace(/\/$/, "") === storeRel)
+    )
+      return undefined;
+    assertNoSymlinkBelow(this.root, gi); // a committed `.gitignore` link must not be followed
+    await wf(gi, `${text}${text && !text.endsWith("\n") ? "\n" : ""}${storeRel}/\n`);
+    return `.gitignore: ignore ${storeRel}/`;
+  }
+
   async doctorFix(): Promise<string[]> {
     const fixed: string[] = [];
-    const { readFile, readdir, rm, writeFile: wf } = await import("node:fs/promises");
-    const gi = join(this.root, ".gitignore");
+    const { readFile, readdir, rm } = await import("node:fs/promises");
     const storeRel = relative(this.root, this.storeDir).split("\\").join("/");
-    if ((await this.provider()) === "git" && storeRel && !storeRel.startsWith("..")) {
-      const text = await readFile(gi, "utf8").catch(() => "");
-      if (
-        !text
-          .split(/\r?\n/)
-          .some((l) => l.trim().replace(/^\//, "").replace(/\/$/, "") === storeRel)
-      ) {
-        assertNoSymlinkBelow(this.root, gi); // a committed `.gitignore` link must not be followed
-        await wf(gi, `${text}${text && !text.endsWith("\n") ? "\n" : ""}${storeRel}/\n`);
-        fixed.push(`.gitignore: ignore ${storeRel}/`);
-      }
-    }
+    const ignored = await this.ignoreStore();
+    if (ignored) fixed.push(ignored);
     const stateDir = join(this.storeDir, "state");
     for (const f of await readdir(stateDir).catch(() => [] as string[])) {
       if (!f.endsWith(".json")) continue;
@@ -2765,6 +2863,15 @@ export class SmartTest {
 
   async doctor(): Promise<DoctorFinding[]> {
     const out: DoctorFinding[] = [];
+    if (this.trackedStore) {
+      const e = storeTrackedError(this.trackedStore);
+      out.push({
+        severity: "error",
+        check: "store",
+        message: e.message,
+        hint: `Run \`git rm -r --cached ${this.trackedStore.dir}\` and ignore ${this.trackedStore.dir}/ (\`smarttest doctor --fix\` adds the entry and offers to run the command).`,
+      });
+    }
     const profile = await this.profile();
     {
       const drift = detectDrift(this.config, this.loaded.raw, profile);

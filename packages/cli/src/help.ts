@@ -89,7 +89,7 @@ export const COMMANDS: Record<string, CommandHelp> = {
       "smarttest explain <test | file | file#Symbol> [--units A,B.method] [--fresh] [--mode m] [--json]",
     flags: [
       "--units A,B  for a source file: also list the tests protecting each named unit (one analysis)",
-      "--fresh  analyse the change again instead of reading the last decision",
+      "--fresh  analyse the current change instead of reusing the last run's decision (automatic when the change or mode moved)",
       "--mode fast|balanced|safe  safety mode of that analysis",
     ],
     changes: true,

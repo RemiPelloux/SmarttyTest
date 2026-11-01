@@ -59,7 +59,11 @@ export function diffFile(input: DiffInput): FileSemanticDiff {
       const outside = input.ranges.some(
         (r) => !topLevelSymbols(after).some((s) => rangesOverlap(s.range, r)),
       );
-      const units = outside ? [WHOLE_FILE] : hit.map((s) => s.qualifiedName);
+      // Changed lines inside code that runs when the module loads affect every importer.
+      const units =
+        outside || hit.some((s) => s.evalHash !== undefined)
+          ? [WHOLE_FILE]
+          : hit.map((s) => s.qualifiedName);
       return {
         path,
         changes: hit.map((s) => ({
@@ -165,6 +169,20 @@ export function diffFile(input: DiffInput): FileSemanticDiff {
       ),
   );
 
+  // Module-evaluation code (a call in an initializer, a decorator, a static block…) runs for
+  // every importer: adding, changing or removing it seeds the whole file, not only its users.
+  const evalChanged = [...new Set([...beforeBy.keys(), ...afterBy.keys()])].filter(
+    (name) => beforeBy.get(name)?.evalHash !== afterBy.get(name)?.evalHash,
+  );
+  if (evalChanged.length) {
+    filtered.push({
+      filePath: path,
+      kind: "potential-behavioral",
+      confidence: "high",
+      notes: `code run at module load changed (${evalChanged.slice(0, 3).join(", ")}${evalChanged.length > 3 ? "…" : ""})`,
+    });
+    units.add(WHOLE_FILE);
+  }
   if (before.topLevelHash !== after.topLevelHash) {
     filtered.push({
       filePath: path,

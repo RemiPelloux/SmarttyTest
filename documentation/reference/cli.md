@@ -74,6 +74,16 @@ Reserved for a later release: `ai …` and `autopilot`. They exit with `ST_NOT_A
 - A scoped run never advances the native snapshot baseline. `--only` cannot be combined with `--all` or `--hook`.
 - With `--json`, `impact` adds `only` and `run` adds `report.change.only`: `{ paths, matched, unchanged, excluded }` (requested paths, kept changes, requested paths with no change, left-out changes). The description ends with `· only <paths>`.
 
+## `explain`
+
+`smarttest explain <test>` explains the decision of the last `run` or `impact` while it still applies: same change (the same changed files with the same content, from the same source) and same mode. The output then ends with `decision of the run at <time>`. When the working tree or the index has moved since, or the mode differs (`--mode`, or the configured mode when the run used another), SmartTest analyses the change again and says so: `fresh analysis (the change or mode moved since the run at <time>)`. A test reported as skipped by an older run is never shown as skipped for a newer change.
+
+| Flag          | Meaning                                                             |
+| ------------- | ------------------------------------------------------------------- |
+| `--fresh`     | Always analyse the current change; ignore the last run's decision   |
+| `--units A,B` | For a source file: also list the tests that protect each named unit |
+| `--mode <m>`  | Explain the decision in this mode (default: the configured mode)    |
+
 ## `run`
 
 | Flag             | Meaning                                                                       |
@@ -98,12 +108,16 @@ Ctrl-C cancels the runner cleanly and reports `cancelled`.
 
 | Flag                          | Meaning                                                                                  |
 | ----------------------------- | ---------------------------------------------------------------------------------------- |
-| `--dry-run`                   | Print the plan and a diff of every file. Writes nothing                                  |
+| `--dry-run`                   | Print the plan and a diff of every file. Writes nothing, not even `.smarttest/`          |
 | `--yes`                       | Apply all planned changes                                                                |
 | `--auto`                      | Apply low-risk changes only (config file, `.gitignore`). Leaves `package.json` alone     |
 | `--advanced`                  | Choose layout and mode interactively                                                     |
 | `--layout <l>` / `--mode <m>` | Override recommendations                                                                 |
 | `--rollback`                  | Undo what init changed. Files edited since init are reported and left untouched (exit 5) |
+
+`--rollback` undoes only init's own steps (and `migrate`'s): a hook added later with `smarttest hook install` stays (remove it with `smarttest hook uninstall`). When a file was edited since init, rollback still undoes every other step, leaves that file as it is, lists it and exits 5. The journal then keeps only the steps left, so after you restore or remove the file yourself, `init --rollback` finishes them.
+
+If `.smarttest/` was committed to the repository, `init` adds it to `.gitignore` (with `--yes`, `--auto` or after confirmation) and offers to run `git rm -r --cached .smarttest` interactively; otherwise it prints that command and exits 3 (`ST_STORE_TRACKED`). `doctor --fix` does the same.
 
 In a Git repository, `init` also plans the pre-commit hook (see `hook`): it adds a marked block that runs `smarttest run --staged`, and comments out the hook's existing full-suite test steps (`jest`, `vitest`, `node --test`). The plan lists them; `smarttest hook uninstall` restores them. `--auto` leaves hooks alone.
 

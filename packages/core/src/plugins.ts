@@ -147,6 +147,18 @@ export async function loadPlugins(root: string, specs: readonly string[]): Promi
       } else path = createRequire(join(root, "package.json")).resolve(spec);
     } catch (error) {
       if (error instanceof SmartTestError) throw error;
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+        const file = spec
+          .replace(/^\.[\\/]/, "")
+          .split("\\")
+          .join("/");
+        throw new SmartTestError(`Plugin ${spec}: file not found: ${file}`, {
+          code: "ST_PLUGIN_LOAD_FAILED",
+          category: "configuration",
+          hint: `Create ${file}, or remove "${spec}" from \`plugins\` in the SmartTest config.`,
+          cause: error,
+        });
+      }
       throw new SmartTestError(`Plugin ${spec} cannot be found from ${root}`, {
         code: "ST_PLUGIN_LOAD_FAILED",
         category: "configuration",

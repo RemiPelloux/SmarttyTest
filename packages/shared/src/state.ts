@@ -116,13 +116,22 @@ export function loadStateKey(file: string): { key: Buffer; source: StateKeySourc
 export function stateKeySource(): StateKeySource | undefined {
   return keySource;
 }
+/** Minimum length of `SMARTTEST_STATE_KEY`; a shorter value is ignored (with a warning). */
+export const MIN_STATE_KEY_LENGTH = 32;
+let shortKeyWarned = false;
 
 /** The key state files are authenticated with. */
 export function stateKey(): Buffer {
   const fromEnv = process.env.SMARTTEST_STATE_KEY;
-  if (fromEnv && fromEnv.length >= 32) {
+  if (fromEnv && fromEnv.length >= MIN_STATE_KEY_LENGTH) {
     keySource ??= "env";
     return Buffer.from(fromEnv, "utf8");
+  }
+  if (fromEnv && !shortKeyWarned) {
+    shortKeyWarned = true;
+    process.stderr.write(
+      `▲ SMARTTEST_STATE_KEY is ignored: it has ${fromEnv.length} characters, at least ${MIN_STATE_KEY_LENGTH} are required. State is authenticated with the per-user key instead, so jobs sharing a cache rebuild it.\n`,
+    );
   }
   if (userKey) return userKey;
   const loaded = loadStateKey(stateKeyFile());

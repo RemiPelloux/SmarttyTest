@@ -38,7 +38,52 @@ interface Ctx {
   out(line?: string): void;
   err(line?: string): void;
   json(command: string, data: unknown): void;
-  open(): Promise<SmartTest>;
+  open(options?: OpenFlags): Promise<SmartTest>;
+}
+
+interface OpenFlags {
+  /** Write nothing to the project: state goes to a temporary directory (dry runs). */
+  ephemeralStore?: boolean;
+  /** Open even when Git tracks the store (repair commands), without reading it. */
+  tolerateTrackedStore?: boolean;
+  /** Open again (after the store was repaired). */
+  reopen?: boolean;
+}
+
+/**
+ * A store committed to Git: adds the ignore entry and, after an interactive confirmation, runs
+ * `git rm -r --cached <store>` (the files stay on disk). Returns true when the store is no longer
+ * tracked. `approved`: the ignore entry may be written without asking (`--yes`, `--fix`).
+ */
+async function repairTrackedStore(ctx: Ctx, st: SmartTest, approved: boolean): Promise<boolean> {
+  const { t } = ctx;
+  const tracked = st.trackedStore;
+  if (!tracked) return true;
+  const command = `git rm -r --cached ${tracked.dir}`;
+  const say = (line: string) => (ctx.flags.json ? ctx.err(line) : ctx.out(line));
+  say(
+    `${t.yellow("▲")} ${tracked.dir}/ is committed to the repository (${tracked.files.length} tracked file(s)); SmartTest does not read state that comes from the repository.`,
+  );
+  const ask = ctx.interactive && !ctx.flags.json;
+  if (approved || (ask && (await confirm(ctx.io, ctx.t, `Add ${tracked.dir}/ to .gitignore?`)))) {
+    const done = await st.ignoreStore();
+    if (done) say(`${t.green("✓")} ${done}`);
+  }
+  if (
+    ask &&
+    (await confirm(
+      ctx.io,
+      ctx.t,
+      `Run \`${command}\` now? (the files stay on disk; the removal is staged for your next commit)`,
+      false,
+    ))
+  ) {
+    await st.untrackStore();
+    say(`${t.green("✓")} ran ${command}`);
+    return true;
+  }
+  say(`  Untrack it with: ${t.cyan(command)}`);
+  return false;
 }
 
 const MODES: SafetyMode[] = ["fast", "balanced", "safe"];
@@ -945,12 +990,15 @@ async function cmdSync(ctx: Ctx): Promise<number> {
 
 async function cmdDoctor(ctx: Ctx): Promise<number> {
   const { t } = ctx;
-  const st = await ctx.open();
+  // A committed store is reported (and repaired with --fix), not refused.
+  let st = await ctx.open({ tolerateTrackedStore: true });
+  const repairing = !!ctx.flags.fix && !!st.trackedStore;
+  if (repairing && (await repairTrackedStore(ctx, st, true))) st = await ctx.open({ reopen: true });
   if (ctx.flags.fix) {
     const fixed = await st.doctorFix();
     if (!ctx.flags.json) {
       for (const f of fixed) ctx.out(`${t.green("✓")} fixed: ${f}`);
-      if (!fixed.length) ctx.out(t.dim("Nothing to fix."));
+      if (!fixed.length && !repairing) ctx.out(t.dim("Nothing to fix."));
     }
   }
   const findings = await st.doctor();
@@ -964,14 +1012,33 @@ async function cmdDoctor(ctx: Ctx): Promise<number> {
   }
   const errors = findings.filter((f) => f.severity === "error");
   if (!errors.length) return ExitCode.Success;
-  return errors.some((e) => e.check === "config" || e.check === "rules")
+  // Exit codes follow the error categories: configuration problems (the config, rules, plugins,
+  // a committed store) exit 3, the environment 4.
+  return errors.some((e) => ["config", "rules", "plugins", "store"].includes(e.check))
     ? ExitCode.ConfigurationFailure
     : ExitCode.InfrastructureFailure;
 }
 
 async function cmdInit(ctx: Ctx): Promise<number> {
   const { t, flags } = ctx;
-  const st = await ctx.open();
+  // A dry run writes nothing to the project, not even the state its analysis builds.
+  const dryRun = !!flags["dry-run"] && !flags.rollback;
+  let st = await ctx.open({
+    tolerateTrackedStore: !flags.rollback,
+    ...(dryRun ? { ephemeralStore: true } : {}),
+  });
+  if (st.trackedStore && !dryRun) {
+    const approved = !!flags.yes || !!flags.auto;
+    if (!approved && (!ctx.interactive || flags.json)) {
+      const { storeTrackedError } = await import("@smarttest/core");
+      throw storeTrackedError(st.trackedStore);
+    }
+    if (!(await repairTrackedStore(ctx, st, approved))) {
+      const { storeTrackedError } = await import("@smarttest/core");
+      throw storeTrackedError(st.trackedStore);
+    }
+    st = await ctx.open({ reopen: true });
+  }
   if (flags.rollback) {
     const r = await st.rollbackInit({ dryRun: !!flags["dry-run"] });
     if (flags.json) ctx.json("init", { rollback: r });
@@ -982,6 +1049,12 @@ async function cmdInit(ctx: Ctx): Promise<number> {
       for (const p of r.removed) ctx.out(`${t.green("−")} ${p} ${would}removed`);
       for (const p of r.restored) ctx.out(`${t.green("↺")} ${p} ${would}restored`);
       for (const p of r.conflicts) ctx.out(`${t.yellow("▲")} ${p}`);
+      if (r.conflicts.length)
+        ctx.out(
+          t.dim(
+            `${r.removed.length + r.restored.length} step(s) ${flags["dry-run"] ? "would be " : ""}undone, ${r.conflicts.length} left as they are (exit 5). Restore or remove them yourself; the journal is kept, so a later \`init --rollback\` finishes the remaining steps.`,
+          ),
+        );
     }
     return r.conflicts.length ? ExitCode.PolicyFailure : ExitCode.Success;
   }
@@ -1225,7 +1298,8 @@ async function cmdHook(ctx: Ctx): Promise<number> {
         });
       if (!(await confirm(ctx.io, t, `Write ${plan.file}?`))) return ExitCode.Success;
     }
-    const applied = await st.applyFiles([plan.plan]);
+    // Not init's step: `init --rollback` leaves it, `hook uninstall` removes it.
+    const applied = await st.applyFiles([plan.plan], { journal: false });
     if (flags.json) ctx.json("hook", { plan, applied });
     else {
       for (const p of applied) ctx.out(`${t.green("✓")} wrote ${p}`);
@@ -1254,7 +1328,7 @@ async function cmdHook(ctx: Ctx): Promise<number> {
       });
     if (!flags.yes && !(await confirm(ctx.io, t, "Remove the SmartTest block?")))
       return ExitCode.Success;
-    const applied = await st.applyFiles(files);
+    const applied = await st.applyFiles(files, { journal: false });
     if (flags.json) ctx.json("hook", { removed: applied });
     else for (const p of applied) ctx.out(`${t.green("✓")} restored ${p}`);
     return ExitCode.Success;
@@ -1292,7 +1366,12 @@ async function cmdUninstall(ctx: Ctx): Promise<number> {
   }
   const { done } = await st.uninstall();
   if (flags.json) ctx.json("uninstall", { plan, done });
-  else for (const d of done) ctx.out(`${t.green("✓")} removed ${d}`);
+  else
+    for (const d of done) {
+      // Files SmartTest only edited (package.json, .gitignore, hooks) are kept, minus its part.
+      const edited = plan.files.some((f) => f.path === d && f.after !== undefined);
+      ctx.out(`${t.green("✓")} ${edited ? "edited" : "removed"} ${d}`);
+    }
   ctx.out(t.dim("Remove the package itself with your package manager (e.g. npm rm smarttest)."));
   return ExitCode.Success;
 }
@@ -1962,19 +2041,24 @@ export async function main(
         io.stdout.write(
           `${JSON.stringify({ schemaVersion: 1, command: cmd, ...((data && typeof data === "object" && !Array.isArray(data) ? data : { data }) as object) }, null, 2)}\n`,
         ),
-      open: async () => {
-        if (!opened) {
+      open: async (options = {}) => {
+        if (!opened || options.reopen) {
           const { SmartTest } = await import("@smarttest/core");
           opened = await SmartTest.open({
             root,
             ...(flags.config ? { configPath: flags.config } : {}),
+            ...(options.ephemeralStore ? { ephemeralStore: true } : {}),
+            ...(options.tolerateTrackedStore ? { tolerateTrackedStore: true } : {}),
           });
           opened.useLogger(
             createLogger({
               level: flags.verbose ? "debug" : "info",
               scope: command ?? "menu",
               sinks: [
-                fileSink(join(opened.storeDir, "logs", "smarttest.log")),
+                // The log lives in the store; a dry run writes nothing to the project.
+                ...(options.ephemeralStore
+                  ? []
+                  : [fileSink(join(opened.storeDir, "logs", "smarttest.log"))]),
                 ...(flags.verbose && !jsonMode
                   ? [
                       (_r: unknown, formatted: string) =>

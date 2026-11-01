@@ -18,7 +18,7 @@ import {
   writeFileAtomic,
   writeJson,
 } from "@smarttest/shared";
-import { detectHookTarget } from "./hooks.js";
+import { detectHookTarget, planHookUninstall } from "./hooks.js";
 
 export * from "./hooks.js";
 export * from "./migrate.js";
@@ -550,14 +550,19 @@ export interface Journal {
 
 const journalPath = (storeDir: string) => join(storeDir, "state", "init-journal.json");
 
-/** Applies file changes atomically and records a journal for rollback (spec §5.7). */
+/**
+ * Applies file changes atomically and records a journal for rollback (spec §5.7). With
+ * `journal: false` (changes that are not init's, such as `hook install`) nothing is recorded, so
+ * `init --rollback` never undoes them; the returned entries list what was written.
+ */
 export async function applyPlan(
   root: string,
   storeDir: string,
   plan: SetupPlan,
-  options: { onlyLowRisk?: boolean; onWarning?: (message: string) => void } = {},
+  options: { onlyLowRisk?: boolean; journal?: boolean; onWarning?: (message: string) => void } = {},
 ): Promise<Journal> {
-  const previous = await readJson<Journal>(journalPath(storeDir));
+  const record = options.journal !== false;
+  const previous = record ? await readJson<Journal>(journalPath(storeDir)) : undefined;
   const entries: JournalEntry[] = [...(previous?.entries ?? [])];
   for (const fp of plan.files) {
     if (fp.action === "skip" || fp.after === undefined) continue;
@@ -595,7 +600,7 @@ export async function applyPlan(
     createdAt: previous?.createdAt ?? new Date().toISOString(),
     entries,
   };
-  if (entries.length) await writeJson(journalPath(storeDir), journal);
+  if (record && entries.length) await writeJson(journalPath(storeDir), journal);
   return journal;
 }
 
@@ -638,19 +643,26 @@ export async function rollback(
   const journal = await readJson<Journal>(journalPath(storeDir));
   const result: RollbackResult = { restored: [], removed: [], conflicts: [] };
   if (!journal) return result;
+  // Steps left as they are stay in the journal: a later rollback finishes only those.
+  const remaining: JournalEntry[] = [];
   for (const e of [...journal.entries].reverse()) {
     if (typeof e.path !== "string" || !(await journalTargetAllowed(root, e.path))) {
       result.conflicts.push(`${String(e.path)} (not a file SmartTest set up — left untouched)`);
+      remaining.unshift(e);
       continue;
     }
     const abs = join(root, e.path);
     const current = await readText(abs);
     if (current === undefined) {
-      if (e.action === "modify") result.conflicts.push(`${e.path} (deleted since init)`);
+      if (e.action === "modify") {
+        result.conflicts.push(`${e.path} (deleted since init)`);
+        remaining.unshift(e);
+      }
       continue;
     }
     if (sha256(current) !== e.afterHash) {
       result.conflicts.push(`${e.path} (edited since init — left untouched)`);
+      remaining.unshift(e);
       continue;
     }
     if (e.action === "create") {
@@ -661,7 +673,10 @@ export async function rollback(
       result.restored.push(e.path);
     }
   }
-  if (!options.dryRun && !result.conflicts.length) await rm(journalPath(storeDir), { force: true });
+  if (!options.dryRun) {
+    if (!remaining.length) await rm(journalPath(storeDir), { force: true });
+    else await writeJson(journalPath(storeDir), { ...journal, entries: remaining });
+  }
   return result;
 }
 
@@ -717,6 +732,25 @@ export async function planUninstall(root: string, storeDir: string): Promise<Uni
         .join("\n"),
       risk: "low",
     });
+  }
+  // SmartTest's blocks in the commit and push hooks (between its markers; the rest of each hook
+  // stays): left in place, the next commit would run SmartTest and recreate the store.
+  for (const hook of await planHookUninstall(root).catch(() => [] as FilePlan[])) {
+    const same = files.find((f) => f.path === hook.path);
+    if (!same) {
+      files.push(hook);
+      continue;
+    }
+    // simple-git-hooks lives in package.json: drop our scripts from the hook-free version too.
+    if (same.path === "package.json" && hook.after !== undefined) {
+      const pkg = JSON.parse(hook.after) as { scripts?: Record<string, string> };
+      if (pkg.scripts)
+        pkg.scripts = Object.fromEntries(
+          Object.entries(pkg.scripts).filter(([k, v]) => SCRIPTS[k] !== v),
+        );
+      same.after = `${JSON.stringify(pkg, null, detectIndent(hook.after))}\n`;
+      same.reason = `${same.reason}; ${hook.reason}`;
+    }
   }
   return { files, storeDir, keep: ["all test files (including generated scaffolds)"] };
 }

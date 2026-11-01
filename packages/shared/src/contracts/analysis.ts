@@ -72,6 +72,12 @@ export interface SymbolRecord {
   thisEscapes?: boolean;
   /** Classes: token hash of the class with method/constructor bodies removed. */
   shellHash?: string;
+  /**
+   * Present when evaluating the declaration while the module loads can run user code (a call in
+   * an initializer, a decorator, a static initializer or block, a namespace body…): the token hash
+   * of that code. A change to it affects every importer, not only the symbol's users.
+   */
+  evalHash?: string;
   /** Non-code resources read: "env:NAME", "env:*", "model:Name", "i18n:key". */
   resources?: string[];
   visibility?: "public" | "protected" | "private";

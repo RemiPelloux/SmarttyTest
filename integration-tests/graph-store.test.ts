@@ -120,7 +120,7 @@ describe("persisted dependency graph", () => {
       ],
       ["garbage", "not json at all", /^corrupt/],
       // The same good content, but not written by this machine (no valid MAC, SR-16).
-      ["written elsewhere", good, /^corrupt: not written by this machine/],
+      ["written elsewhere", good, /^corrupt: state from another machine or an earlier version/],
       ["empty", "", /^corrupt/],
       ["truncated", good.slice(0, Math.floor(good.length * 0.7)), /^corrupt/],
       [

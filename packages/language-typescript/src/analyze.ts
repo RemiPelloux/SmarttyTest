@@ -7,7 +7,7 @@ import { collectMemberUses, type MemberUses, moduleScope, thisScope } from "./me
 import { catalogKeys, collectResources, MODEL_MODULES } from "./resources.js";
 import { StaticPathEvaluator } from "./static-path.js";
 
-export const ANALYZER_VERSION = "ts-10";
+export const ANALYZER_VERSION = "ts-11";
 
 function scriptKind(path: string): ts.ScriptKind {
   if (path.endsWith(".tsx")) return ts.ScriptKind.TSX;
@@ -143,6 +143,118 @@ function classShellHash(cls: ts.ClassDeclaration, sf: ts.SourceFile, jsx: boolea
   return tokenHash(text, jsx);
 }
 
+/**
+ * Whether evaluating `e` while the module loads cannot run user code or throw: literals, function
+ * and arrow expressions, object and array literals of those, and names bound before (imports,
+ * hoisted functions, earlier declarations). Anything else (a call, `new`, a getter read through a
+ * property access, a template that converts a value, a spread) may run code. When unsure: false.
+ */
+function isInert(e: ts.Expression | undefined, bound: ReadonlySet<string>): boolean {
+  if (!e) return true;
+  if (
+    ts.isParenthesizedExpression(e) ||
+    ts.isAsExpression(e) ||
+    ts.isSatisfiesExpression(e) ||
+    ts.isTypeAssertionExpression(e) ||
+    ts.isNonNullExpression(e)
+  )
+    return isInert(e.expression, bound);
+  if (
+    ts.isStringLiteral(e) ||
+    ts.isNumericLiteral(e) ||
+    ts.isBigIntLiteral(e) ||
+    ts.isNoSubstitutionTemplateLiteral(e) ||
+    ts.isRegularExpressionLiteral(e) ||
+    ts.isArrowFunction(e) ||
+    ts.isFunctionExpression(e)
+  )
+    return true;
+  switch (e.kind) {
+    case ts.SyntaxKind.TrueKeyword:
+    case ts.SyntaxKind.FalseKeyword:
+    case ts.SyntaxKind.NullKeyword:
+      return true;
+  }
+  if (ts.isIdentifier(e)) return e.text === "undefined" || bound.has(e.text);
+  if (ts.isPrefixUnaryExpression(e))
+    return ts.isNumericLiteral(e.operand) || ts.isBigIntLiteral(e.operand);
+  if (ts.isVoidExpression(e)) return isInert(e.expression, bound);
+  if (ts.isArrayLiteralExpression(e))
+    return e.elements.every(
+      (el) => ts.isOmittedExpression(el) || (!ts.isSpreadElement(el) && isInert(el, bound)),
+    );
+  if (ts.isObjectLiteralExpression(e))
+    return e.properties.every((p) => {
+      if (p.name && ts.isComputedPropertyName(p.name) && !isInert(p.name.expression, bound))
+        return false;
+      if (ts.isPropertyAssignment(p)) return isInert(p.initializer, bound);
+      if (ts.isShorthandPropertyAssignment(p))
+        return !p.objectAssignmentInitializer && bound.has(p.name.text);
+      return (
+        ts.isMethodDeclaration(p) ||
+        ts.isGetAccessorDeclaration(p) ||
+        ts.isSetAccessorDeclaration(p)
+      );
+    });
+  if (ts.isClassExpression(e)) return !classRunsCode(e, bound);
+  return false;
+}
+
+/**
+ * Whether defining the class runs user code: decorators, static blocks, static field initializers
+ * and computed member names that are not inert, or a heritage clause that is not a plain name.
+ */
+function classRunsCode(cls: ts.ClassLikeDeclaration, bound: ReadonlySet<string>): boolean {
+  if (ts.getDecorators(cls)?.length) return true;
+  for (const h of cls.heritageClauses ?? [])
+    if (h.token === ts.SyntaxKind.ExtendsKeyword)
+      for (const t of h.types)
+        if (!ts.isIdentifier(t.expression) && !ts.isPropertyAccessExpression(t.expression))
+          return true;
+  for (const m of cls.members) {
+    if (ts.isClassStaticBlockDeclaration(m)) return true;
+    if (ts.canHaveDecorators(m) && ts.getDecorators(m)?.length) return true;
+    for (const p of ts.isMethodDeclaration(m) || ts.isConstructorDeclaration(m) ? m.parameters : [])
+      if (ts.getDecorators(p)?.length) return true;
+    if (m.name && ts.isComputedPropertyName(m.name) && !isInert(m.name.expression, bound))
+      return true;
+    if (
+      ts.isPropertyDeclaration(m) &&
+      hasModifier(m, ts.SyntaxKind.StaticKeyword) &&
+      !isInert(m.initializer, bound)
+    )
+      return true;
+  }
+  return false;
+}
+
+/** Whether a namespace body or an enum runs user code when the module loads. */
+function declarationRunsCode(stmt: ts.Statement, bound: ReadonlySet<string>): boolean {
+  if (hasModifier(stmt, ts.SyntaxKind.DeclareKeyword)) return false;
+  if (ts.isEnumDeclaration(stmt))
+    return stmt.members.some(
+      (m) =>
+        !!m.initializer &&
+        !ts.isStringLiteral(m.initializer) &&
+        !ts.isNumericLiteral(m.initializer) &&
+        !(ts.isPrefixUnaryExpression(m.initializer) && ts.isNumericLiteral(m.initializer.operand)),
+    );
+  if (ts.isModuleDeclaration(stmt)) {
+    const body = stmt.body;
+    if (!body) return false;
+    if (ts.isModuleDeclaration(body)) return declarationRunsCode(body as ts.Statement, bound);
+    if (!ts.isModuleBlock(body)) return true;
+    return body.statements.some(
+      (s) =>
+        !ts.isInterfaceDeclaration(s) &&
+        !ts.isTypeAliasDeclaration(s) &&
+        !(ts.isFunctionDeclaration(s) && !!s.body) &&
+        !(ts.isModuleDeclaration(s) && !declarationRunsCode(s, bound)),
+    );
+  }
+  return true;
+}
+
 export function analyzeSource(path: string, content: string): FileAnalysis {
   const kind = scriptKind(path);
   const sf = ts.createSourceFile(path, content, ts.ScriptTarget.Latest, true, kind);
@@ -260,7 +372,8 @@ export function analyzeSource(path: string, content: string): FileAnalysis {
             const k = ts.isMethodDeclaration(p)
               ? "function"
               : kindOf((p as ts.PropertyAssignment).initializer);
-            addSymbol(p, p.name.text, k, { exportNames: [p.name.text] });
+            const rec = addSymbol(p, p.name.text, k, { exportNames: [p.name.text] });
+            if (ts.isPropertyAssignment(p) && !isInert(p.initializer, bound)) evaluates(rec, p);
           } else return false; // spread or computed keys: keep as module code (whole file)
         }
         return true;
@@ -269,7 +382,8 @@ export function analyzeSource(path: string, content: string): FileAnalysis {
         localExports.push({ exported: "default", local: right.text });
         return true;
       }
-      addSymbol(stmt, "default", kindOf(right), { exportNames: ["default"] });
+      const rec = addSymbol(stmt, "default", kindOf(right), { exportNames: ["default"] });
+      if (!isInert(right, bound)) evaluates(rec, stmt);
       return true;
     }
     const target =
@@ -280,13 +394,35 @@ export function analyzeSource(path: string, content: string): FileAnalysis {
         : undefined;
     if (!target) return false;
     if (ts.isIdentifier(right)) localExports.push({ exported: target, local: right.text });
-    else addSymbol(stmt, target, kindOf(right), { exportNames: [target] });
+    else {
+      const rec = addSymbol(stmt, target, kindOf(right), { exportNames: [target] });
+      if (!isInert(right, bound)) evaluates(rec, stmt);
+    }
     return true;
   };
 
   const exportNamesFor = (node: ts.Node, name: string): string[] => {
     if (!hasModifier(node, ts.SyntaxKind.ExportKeyword)) return [];
     return hasModifier(node, ts.SyntaxKind.DefaultKeyword) ? ["default"] : [name];
+  };
+
+  // Names an initializer can read without running code or hitting the temporal dead zone: imports
+  // and hoisted functions, then each declaration once it has been evaluated.
+  const bound = new Set<string>();
+  for (const stmt of sf.statements) {
+    if (ts.isFunctionDeclaration(stmt) && stmt.name) bound.add(stmt.name.text);
+    else if (ts.isImportEqualsDeclaration(stmt)) bound.add(stmt.name.text);
+    else if (ts.isImportDeclaration(stmt) && stmt.importClause) {
+      const c = stmt.importClause;
+      if (c.name) bound.add(c.name.text);
+      if (c.namedBindings && ts.isNamespaceImport(c.namedBindings))
+        bound.add(c.namedBindings.name.text);
+      else if (c.namedBindings) for (const el of c.namedBindings.elements) bound.add(el.name.text);
+    }
+  }
+  /** Records the module-evaluation code of a declaration (see `SymbolRecord.evalHash`). */
+  const evaluates = (rec: SymbolRecord, node: ts.Node) => {
+    rec.evalHash = tokenHash(node.getText(sf), jsx);
   };
 
   for (const stmt of sf.statements) {
@@ -383,8 +519,8 @@ export function analyzeSource(path: string, content: string): FileAnalysis {
       esm = true;
       if (ts.isIdentifier(stmt.expression))
         localExports.push({ exported: "default", local: stmt.expression.text });
-      else
-        addSymbol(
+      else {
+        const rec = addSymbol(
           stmt,
           "default",
           ts.isArrowFunction(stmt.expression) || ts.isFunctionExpression(stmt.expression)
@@ -392,6 +528,8 @@ export function analyzeSource(path: string, content: string): FileAnalysis {
             : "property",
           { exportNames: ["default"] },
         );
+        if (!isInert(stmt.expression, bound)) evaluates(rec, stmt);
+      }
       continue;
     }
     if (ts.isFunctionDeclaration(stmt)) {
@@ -432,6 +570,10 @@ export function analyzeSource(path: string, content: string): FileAnalysis {
         },
       });
       classRec.shellHash = classShellHash(stmt, sf, jsx);
+      // Decorators, static initializers and blocks run when the module loads: the class shell
+      // (bodies of methods removed) is that code.
+      if (classRunsCode(stmt, bound)) classRec.evalHash = classRec.shellHash;
+      if (stmt.name) bound.add(stmt.name.text);
       const thisTypes = thisScope(stmt);
       if (hasModifier(stmt, ts.SyntaxKind.ExportKeyword)) esm = true;
       for (const m of stmt.members) {
@@ -476,17 +618,23 @@ export function analyzeSource(path: string, content: string): FileAnalysis {
       ts.isEnumDeclaration(stmt)
     ) {
       const name = stmt.name.text;
-      addSymbol(stmt, name, ts.isInterfaceDeclaration(stmt) ? "interface" : "type", {
+      const rec = addSymbol(stmt, name, ts.isInterfaceDeclaration(stmt) ? "interface" : "type", {
         exportNames: exportNamesFor(stmt, name),
         signature: ts.isEnumDeclaration(stmt) ? "enum" : "",
       });
+      if (ts.isEnumDeclaration(stmt)) {
+        if (declarationRunsCode(stmt, bound)) evaluates(rec, stmt);
+        bound.add(name);
+      }
       if (hasModifier(stmt, ts.SyntaxKind.ExportKeyword)) esm = true;
       continue;
     }
     if (ts.isModuleDeclaration(stmt) && ts.isIdentifier(stmt.name)) {
-      addSymbol(stmt, stmt.name.text, "module", {
+      const rec = addSymbol(stmt, stmt.name.text, "module", {
         exportNames: exportNamesFor(stmt, stmt.name.text),
       });
+      if (declarationRunsCode(stmt, bound)) evaluates(rec, stmt);
+      bound.add(stmt.name.text);
       continue;
     }
     if (ts.isVariableStatement(stmt)) {
@@ -519,6 +667,7 @@ export function analyzeSource(path: string, content: string): FileAnalysis {
               typeOnly: false,
               line: lineOf(decl),
             });
+            for (const b of bindings) bound.add(b.local);
             continue;
           }
         }
@@ -542,8 +691,18 @@ export function analyzeSource(path: string, content: string): FileAnalysis {
               : decl.type
                 ? norm(decl.type.getText(sf))
                 : "";
-          addSymbol(decl, name, symKind, { exportNames: exported ? [name] : [], signature: sig });
+          const rec = addSymbol(decl, name, symKind, {
+            exportNames: exported ? [name] : [],
+            signature: sig,
+          });
+          // Destructuring reads properties (getters) and iterators: only a plain name is inert.
+          if (
+            !hasModifier(stmt, ts.SyntaxKind.DeclareKeyword) &&
+            (!isInert(init, bound) || (!!init && !ts.isIdentifier(decl.name)))
+          )
+            evaluates(rec, decl);
         }
+        for (const name of names) bound.add(name);
       }
       continue;
     }
