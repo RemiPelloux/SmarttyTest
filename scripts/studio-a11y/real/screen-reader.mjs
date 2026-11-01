@@ -447,7 +447,9 @@ async function main() {
 
       step = "results";
       mark = spoken.length;
-      for (let i = 0; i < 30; i++) {
+      // VoiceOver's cursor sometimes stays on the page behind the drawer after the run (seen on
+      // hosted runners): walk on, past the page, until the drawer's results are read.
+      for (let i = 0; i < 90; i++) {
         await command(() => sr.next());
         if (heardSince(mark).some((t) => /capitaliz|strings\.test|labeler/i.test(t))) break;
       }

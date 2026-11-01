@@ -106,9 +106,15 @@ describe("authenticated state (SR-16)", () => {
     const worker = new Worker(
       `const fs = require("node:fs");
        const { file, key } = require("node:worker_threads").workerData;
+       const sleep = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
        setTimeout(() => {
          fs.writeFileSync(file + ".w.tmp", key);
-         fs.renameSync(file + ".w.tmp", file);
+         // Windows refuses to replace a file the other side is reading at that moment: retry, as
+         // SmartTest's own writer does.
+         for (let i = 0; ; i++) {
+           try { fs.renameSync(file + ".w.tmp", file); break; }
+           catch (e) { if (i > 50 || !["EPERM", "EACCES", "EBUSY"].includes(e.code)) throw e; sleep(10); }
+         }
          fs.rmSync(file + ".lock");
        }, 150);`,
       { eval: true, workerData: { file, key: theirs } },

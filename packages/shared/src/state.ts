@@ -55,6 +55,24 @@ function readKey(file: string): { key?: Buffer; exists: boolean } {
 const pause = (ms: number) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 
 /**
+ * `rename` that retries while Windows refuses to replace a file another process has open (EPERM,
+ * EACCES, EBUSY), like `writeFileAtomic`; false when it never succeeds.
+ */
+function renameRetrying(from: string, to: string): boolean {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      renameSync(from, to);
+      return true;
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (attempt >= 12 || !(code === "EPERM" || code === "EACCES" || code === "EBUSY"))
+        return false;
+      pause(Math.min(20 * 2 ** attempt, 250));
+    }
+  }
+}
+
+/**
  * Reads the key file, or creates or repairs it. Writers take `<file>.lock` (exclusive create) and
  * replace the file atomically (temporary file + rename), so a reader never sees a half-written
  * key and two processes cannot end up with different keys: whoever does not hold the lock waits
@@ -87,9 +105,7 @@ export function loadStateKey(file: string): { key: Buffer; source: StateKeySourc
         const fresh = randomBytes(32);
         const tmp = `${file}.${process.pid}.${randomBytes(4).toString("hex")}.tmp`;
         writeFileSync(tmp, fresh, { flag: "wx", mode: 0o600 });
-        try {
-          renameSync(tmp, file);
-        } catch {
+        if (!renameRetrying(tmp, file)) {
           rmSync(tmp, { force: true });
           return { key: fresh, source: "ephemeral" };
         }
