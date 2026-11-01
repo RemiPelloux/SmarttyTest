@@ -2,7 +2,7 @@
 
 > SmartTest is an intelligent layer **on top of** existing test runners. It works out what changed, what depends on it and which tests protect it, then lets Jest, Vitest, `node --test`, Playwright or Cypress do the running.
 
-This document describes the architecture as of 0.9.0, including the local Studio server and the VS Code CLI client. The full long-term architecture (AI and Cloud) is in [PRD §4](../product/PRD.md#4-system-architecture). Decisions are recorded in [ADRs](adr/README.md).
+This document describes the architecture of SmartTest 1.0.0, including the local Studio server and the VS Code CLI client. The full long-term architecture (AI and Cloud) is in [PRD §4](../product/PRD.md#4-system-architecture). Decisions are recorded in [ADRs](adr/README.md).
 
 ## Layers
 

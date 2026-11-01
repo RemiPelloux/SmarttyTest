@@ -15,7 +15,7 @@ import {
   writeFileAtomic,
 } from "@smarttest/shared";
 import { type Flags, intFlag, parse } from "./args.js";
-import { COMMANDS, commandHelp, rootHelp } from "./help.js";
+import { COMMANDS, commandHelp, LATER, rootHelp } from "./help.js";
 import {
   colorEnabled,
   confirm,
@@ -122,9 +122,14 @@ function onlyOf(ctx: Ctx): string[] | undefined {
 async function cmdHookRun(ctx: Ctx): Promise<number> {
   const { flags } = ctx;
   const source = sourceOf(flags);
+  if (flags.shard)
+    throw new SmartTestError("--hook cannot be combined with --shard", {
+      code: "ST_USAGE",
+      category: "usage",
+      hint: "A hook checks the whole staged or pushed change. Shard in CI with smarttest run --shard i/n or smarttest ci.",
+    });
   if (
     flags.all ||
-    flags.shard ||
     flags.only?.length ||
     (source && source.kind !== "staged" && source.kind !== "push")
   )
@@ -270,10 +275,12 @@ async function cmdRun(ctx: Ctx): Promise<number> {
         ? (await import("@smarttest/core")).parseShard(flags.shard)
         : undefined;
     if (flags.shard !== undefined && !shard)
-      throw new SmartTestError("--shard must look like 2/4 (index/total)", {
-        code: "ST_USAGE",
-        category: "usage",
-      });
+      throw new SmartTestError(
+        /^\s*\d+\/\d+\s*$/.test(flags.shard)
+          ? `--shard ${flags.shard}: the index must be between 1 and the total`
+          : "--shard must look like 2/4 (index/total)",
+        { code: "ST_USAGE", category: "usage" },
+      );
     const outcome = await st.run({
       ...(source ? { source } : {}),
       ...(mode ? { mode } : {}),
@@ -1212,7 +1219,7 @@ async function cmdHook(ctx: Ctx): Promise<number> {
     if (!flags.yes) {
       if (!ctx.interactive)
         throw new SmartTestError("hook install needs confirmation", {
-          code: "ST_INIT_CONFIRMATION_REQUIRED",
+          code: "ST_HOOK_CONFIRMATION_REQUIRED",
           category: "configuration",
           hint: "Re-run with --yes, or --dry-run to preview.",
         });
@@ -1241,7 +1248,7 @@ async function cmdHook(ctx: Ctx): Promise<number> {
     if (flags["dry-run"]) return ExitCode.Success;
     if (!flags.yes && !ctx.interactive)
       throw new SmartTestError("hook uninstall needs confirmation", {
-        code: "ST_INIT_CONFIRMATION_REQUIRED",
+        code: "ST_HOOK_CONFIRMATION_REQUIRED",
         category: "configuration",
         hint: "Re-run with --yes.",
       });
@@ -1661,10 +1668,14 @@ async function cmdGraph(ctx: Ctx): Promise<number> {
     if (sub === "why") {
       const [from, to] = ctx.positionals.slice(1);
       if (!from || !to)
-        throw new SmartTestError("Usage: smarttest graph why <from file[#Symbol]> <to file>", {
-          code: "ST_USAGE",
-          category: "usage",
-        });
+        throw new SmartTestError(
+          "Usage: smarttest graph why <dependency file[#Symbol]> <dependent file>",
+          {
+            code: "ST_USAGE",
+            category: "usage",
+            hint: "For example `smarttest graph why src/math.ts src/math.test.ts`: how the test depends on src/math.ts.",
+          },
+        );
       const path = graph.why(from, to);
       if (flags.json) ctx.json("graph", { why: { from, to, path: path ?? null } });
       else if (!path) ctx.out(`${to} does not depend on ${from} (statically).`);
@@ -1883,11 +1894,6 @@ const HANDLERS: Record<string, (ctx: Ctx) => Promise<number>> = {
   shadow: cmdShadow,
   coverage: cmdCoverage,
   report: cmdReport,
-};
-
-const LATER: Record<string, string> = {
-  ai: "AI features are planned after 1.0.0. SmartTest never requires them.",
-  autopilot: "Autopilot is planned after 1.0.0.",
 };
 
 export async function main(

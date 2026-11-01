@@ -1,6 +1,6 @@
 # Studio guide
 
-Studio is a local browser interface for the current project's real SmartTest analysis. Start it through `smarttest studio`, or import `startStudio` from `@smarttest/studio`. Open the exact printed URL, including its session token fragment. Tokens are kept in session storage and removed from the address bar after pairing.
+Studio is a local browser interface for the current project's real SmartTest analysis. Start it through `smarttest studio`, or import `startStudio` from `smarttest/studio` ([embedding](#embedding-and-assets)). Open the exact printed URL, including its session token fragment. Tokens are kept in session storage and removed from the address bar after pairing.
 
 The server defaults to `127.0.0.1:4173`. If that port is occupied it falls back to an OS-assigned ephemeral port. `port: 0` requests an ephemeral port immediately. Use the returned URL rather than assuming a port. Non-loopback bind addresses are refused.
 
@@ -74,17 +74,20 @@ Studio targets WCAG 2.2 AA in Chromium, Firefox and WebKit, light and dark. Open
 
 ## Embedding and assets
 
+With `smarttest` installed in the project, another Node process (a dev server, a custom tool) can start Studio itself:
+
 ```ts
-import { startStudio } from "@smarttest/studio";
+import { startStudio } from "smarttest/studio";
+
 const studio = await startStudio({ root: process.cwd(), port: 4173 });
-console.log(studio.url);
-// On CLI termination:
+console.log(studio.url); // open this exact URL: the session token is in its fragment
+// When your process stops:
 await studio.close();
 ```
 
-Options: `root` required; `configPath`, `port`, `host`, `storeDir`, `assetDir`, `watch` optional. Watch defaults to true. The handle exposes `url`, `port`, `token`, `root`, and idempotent `close()`.
+Options: `root` required; `configPath`, `port`, `host` (loopback only), `storeDir`, `assetDir`, `watch` optional. Watch defaults to true. The handle exposes `url`, `port`, `token`, `root`, and an idempotent `close()`. Types ship with the package.
 
-Asset resolution tries explicit `assetDir`, `SMARTTEST_STUDIO_ASSETS`, package-relative web directories, checkout `packages/studio/web`, then installed `node_modules/@smarttest/studio/web`. The CLI bundle must copy `packages/studio/web` to `dist/web`; the release bundle includes these assets.
+The browser assets ship in the package (`dist/web`) and are found next to the server code. To serve another copy, pass `assetDir` or set `SMARTTEST_STUDIO_ASSETS` to a directory that holds Studio's `index.html`. In this repository, `packages/studio/web` is used.
 
 ## Security and operational limits
 

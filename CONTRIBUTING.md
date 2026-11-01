@@ -9,7 +9,7 @@ pnpm hooks:install       # pre-push runs `pnpm verify`
 pnpm verify              # lint, package boundaries, typecheck, tests, planning consistency
 ```
 
-Node 22.12 or newer (24 recommended, see `.nvmrc`). This repository has no hosted CI: `pnpm verify` is the gate, locally and in the pre-push hook. Before a release, run it on Linux, macOS and Windows.
+Node 22.12 or newer (24 recommended, see `.nvmrc`). `pnpm verify` is the gate: it runs in the pre-push hook and in GitHub Actions on Linux, Windows and macOS (`.github/workflows/ci.yml`).
 
 ## Picking work
 

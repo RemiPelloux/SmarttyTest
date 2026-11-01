@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://smarttest.dev/schemas/error.v1.json",
+  "$id": "https://remipelloux.github.io/SmarttyTest/schemas/error.v1.schema.json",
   "title": "smarttest --json error (v1)",
   "description": "Printed on stdout instead of the command's document when a command fails with --json. The process exit code follows the category (see documentation/reference/contracts.md).",
   "type": "object",

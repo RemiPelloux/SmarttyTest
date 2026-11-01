@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://smarttest.dev/schemas/impact.v1.json",
+  "$id": "https://remipelloux.github.io/SmarttyTest/schemas/impact.v1.schema.json",
   "title": "smarttest impact --json (v1)",
   "type": "object",
   "required": ["schemaVersion", "command", "description", "changeSet", "decision", "timings"],

@@ -60,7 +60,7 @@ Install it in a project with `npm install -D smarttest` (or `pnpm add -D smartte
 ```text
 $ npx smarttest explain src/catalog/CatalogService.test.ts
 
-SKIPPED (not run)  src/catalog/CatalogService.test.ts
+[SKIPPED (not run)]  src/catalog/CatalogService.test.ts
 Reasons
   • No static dependency path from changed code
   • No mandatory trigger matched
@@ -85,7 +85,7 @@ Four public repositories (commander.js, path-to-regexp, ufo, defu) set up with `
 
 SmartTest saved 63% of the full-run time. It was 6% slower than the previous hook over these commits: on single-project commits the hook runs one small suite, and SmartTest's analysis time counts in full. On the 12 most recent commits, with `--traces`, it also found 0 missed failures. Details and caveats: [case study](documentation/case-studies/leadsit.md).
 
-## Features in 0.9.0
+## Features
 
 | Area      | What it does                                                                                                                                                              | Commands                                                        |
 | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------- |
@@ -127,14 +127,14 @@ The same pages are published at [remipelloux.github.io/SmarttyTest](https://remi
 - [How selection works](documentation/concepts/how-selection-works.md), [runtime evidence](documentation/concepts/runtime-evidence.md), [running less, faster](documentation/concepts/speed.md), [safety model](documentation/concepts/safety-model.md), [change tracking](documentation/concepts/change-tracking.md), [rules](documentation/concepts/rules.md)
 - [CLI reference](documentation/reference/cli.md), [configuration](documentation/reference/configuration.md)
 - [Architecture](documentation/architecture/overview.md), [decision records](documentation/architecture/adr/README.md)
-- [Roadmap to 1.0.0](documentation/planning/roadmap.md) (next: stable contracts and validation in 1.0.0), [delivery log](documentation/planning/delivery.md), [changelog](CHANGELOG.md), [case study: LeadsIt](documentation/case-studies/leadsit.md), [external repositories](documentation/case-studies/external-repositories.md), [specification](documentation/product/PRD.md)
+- [Roadmap](documentation/planning/roadmap.md), [delivery log](documentation/planning/delivery.md), [changelog](CHANGELOG.md), [case study: LeadsIt](documentation/case-studies/leadsit.md), [external repositories](documentation/case-studies/external-repositories.md), [specification](documentation/product/PRD.md)
 
 ## Development
 
 ```bash
 corepack enable
 pnpm install
-pnpm hooks:install     # pre-push runs `pnpm verify`; this repository has no hosted CI
+pnpm hooks:install     # pre-push runs `pnpm verify`; GitHub Actions runs it on Linux, Windows and macOS
 pnpm verify            # lint, package boundaries, typecheck, tests, planning consistency
 pnpm build             # compile all packages
 pnpm release:pack      # self-contained `smarttest` tarball in packages/cli/.publish

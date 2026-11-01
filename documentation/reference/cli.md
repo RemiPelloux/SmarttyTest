@@ -33,21 +33,21 @@
 
 `smarttest studio [--port n] [--open]` starts the local Studio interface. `smarttest open` is an alias. The server binds to loopback and prints a session URL; Ctrl-C stops it. See [Studio](../guides/studio.md).
 
-Reserved for later versions ([roadmap](../planning/roadmap.md)): `ai …` and `autopilot` (after 1.0.0). They exit with `ST_NOT_AVAILABLE`.
+Reserved for a later release: `ai …` and `autopilot`. They exit with `ST_NOT_AVAILABLE`.
 
 ## Global flags
 
-| Flag                          | Meaning                                                                         |
-| ----------------------------- | ------------------------------------------------------------------------------- |
-| `--config <path>`             | Use a specific config file                                                      |
-| `--mode fast\|balanced\|safe` | Safety mode (default `balanced`). For `generate`, `--mode scaffold`             |
-| `--json`                      | One JSON document on stdout ([schemas](#json-output)). Logs go to stderr        |
-| `-q, --quiet` / `--verbose`   | Less / more output. `--verbose` mirrors debug logs to stderr                    |
-| `--non-interactive`           | Never prompt. Missing confirmation exits 3. Also implied by `CI` or a non-TTY   |
-| `--dry-run`                   | Show changes, write nothing (`init`, `generate`, `snapshot prune`, `uninstall`) |
-| `-y, --yes`                   | Accept the plan without prompting (`init`, `uninstall`)                         |
-| `-o, --output <path>`         | Report directory (`run`, `report`) or export file (`graph`)                     |
-| `-h, --help`, `-v, --version` |                                                                                 |
+| Flag                          | Meaning                                                                            |
+| ----------------------------- | ---------------------------------------------------------------------------------- |
+| `--config <path>`             | Use a specific config file                                                         |
+| `--mode fast\|balanced\|safe` | Safety mode (default `balanced`). For `generate`, `--mode scaffold`                |
+| `--json`                      | One JSON document on stdout ([schemas](#json-output)). Logs go to stderr           |
+| `-q, --quiet` / `--verbose`   | Less / more output. `--verbose` mirrors debug logs to stderr                       |
+| `--non-interactive`           | Never prompt. Missing confirmation exits 3. Also implied by `CI` or a non-TTY      |
+| `--dry-run`                   | Show changes, write nothing (`init`, `generate`, `snapshot prune`, `uninstall`)    |
+| `-y, --yes`                   | Accept the plan without prompting (`init`, `hook`, `sync`, `migrate`, `uninstall`) |
+| `-o, --output <path>`         | Report directory (`run`, `ci`, `report`) or output file (`graph`, `benchmark`)     |
+| `-h, --help`, `-v, --version` |                                                                                    |
 
 `NO_COLOR` and `FORCE_COLOR` are respected. When stdout is not a TTY, output has no colours or spinners and there are no prompts.
 
@@ -167,7 +167,7 @@ Watches the project and, after each batch of saves, runs the tests those saves c
 
 ## `graph`
 
-`graph why <from> <to>` prints the shortest dependency path (from a file or `file#Symbol` to a file), `graph cycles` lists import cycles, `graph orphans` lists source files no test reaches.
+`graph why <dependency> <dependent>` prints the shortest path by which the dependent file depends on the dependency (a file or `file#Symbol`): `graph why src/math.ts src/math.test.ts` shows how the test reaches `src/math.ts`, and prints that it does not depend on it when no static path exists. `graph cycles` lists import cycles, `graph orphans` lists source files no test reaches.
 
 `--from <file | file#Symbol>`, `--direction dependents|dependencies`, `--depth <n>`, `--format json|dot`, `-o <file>`. Without `--from` the whole graph is exported.
 

@@ -61,7 +61,7 @@ npx smarttest explain <file>          # which tests cover a file
 npx smarttest validate-selection      # run selection and full suite, compare
 npx smarttest benchmark --commits 20  # replay history: full run vs SmartTest, misses re-checked
 npx smarttest shadow                  # full suite next to the selection, recorded over time
-npx smarttest graph why <from> <to>   # shortest dependency path between two places
+npx smarttest graph why <dependency> <dependent>  # how a file depends on another
 npx smarttest doctor                  # runners, discovery, index, configuration
 ```
 
@@ -85,7 +85,7 @@ npx smarttest hook install --replace  # add SmartTest, comment out the full-suit
 npx smarttest hook uninstall          # remove it and restore those steps
 ```
 
-It works with husky, lefthook, simple-git-hooks and plain `.git/hooks`. The hook runs `npx --no-install smarttest run --staged --non-interactive`.
+It works with husky, lefthook, simple-git-hooks and plain `.git/hooks`. The pre-commit hook runs `npx --no-install smarttest run --staged --hook || exit 1` when `node_modules/.bin/smarttest` exists, and prints a notice instead when it does not. See [commit and push hooks](commit-hooks.md).
 
 ## Use it in CI
 

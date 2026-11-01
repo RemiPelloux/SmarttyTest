@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://smarttest.dev/schemas/flaky.v1.json",
+  "$id": "https://remipelloux.github.io/SmarttyTest/schemas/flaky.v1.schema.json",
   "title": "smarttest flaky --json (v1)",
   "type": "object",
   "required": ["schemaVersion", "command", "minRate", "tests"],
