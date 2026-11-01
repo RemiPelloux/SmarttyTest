@@ -67,6 +67,14 @@
             "type": "object",
             "required": ["file", "adapter", "status", "durationMs", "tests"]
           }
+        },
+        "leftToCi": {
+          "description": "Hook runs only: selected test files the hook scope (hook.runners, hook.exclude) did not run. Never passed; summary.leftToCi counts them.",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["file", "adapter", "rule"]
+          }
         }
       }
     },

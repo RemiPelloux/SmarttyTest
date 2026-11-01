@@ -932,8 +932,9 @@ describe("a hook scope keeps browser specs in CI and out of the hook", () => {
   const unitTest = "test/format.test.js";
 
   /**
-   * next-playwright (node --test + Playwright) plus a spec whose import SmartTest cannot resolve
-   * (a non-literal dynamic import): it is selected by any change, as uncertainty must be.
+   * next-playwright (node --test + Playwright) plus a spec importing a helper that only exists in
+   * the deployed environment: the import is unresolved, so the spec is selected by any change (as
+   * uncertainty must be), and it breaks `playwright test --list`, so Playwright's discovery fails.
    */
   async function setup(scope: Record<string, unknown>): Promise<string> {
     const dir = await materialize("next-playwright", { git: true });
@@ -941,10 +942,9 @@ describe("a hook scope keeps browser specs in CI and out of the hook", () => {
       join(dir, spec),
       [
         'import { expect, test } from "@playwright/test";',
+        'import { seedCart } from "../support/seed-cart.js";',
         "",
         'test("checkout", async ({ request }) => {',
-        "  // Loaded from the deployed environment's helpers: SmartTest cannot resolve this import.",
-        "  const { seedCart } = await import(process.env.CART_HELPERS);",
         "  await seedCart(request);",
         '  expect((await request.get("/")).ok()).toBe(true);',
         "});",
@@ -996,6 +996,9 @@ describe("a hook scope keeps browser specs in CI and out of the hook", () => {
     expect(commit.status, output).toBe(0);
     expect(output).toContain("selected, not run in the hook (left to CI) by hook.runners [node]");
     expect(output).toContain(`${spec} (playwright)`);
+    // The broken listing is still reported, with Playwright's own first lines.
+    expect(output).toContain("playwright (.) discovery failed");
+    expect(output).toContain("seed-cart");
     expect(output).toMatch(/[1-9]\d* passed/);
     expect(output).toMatch(/[1-9]\d* left to CI \(not run\)/);
 

@@ -167,6 +167,9 @@ async function cmdHookRun(ctx: Ctx): Promise<number> {
           .filter((e) => !["passed", "cached-pass", "skipped", "flaky"].includes(e.status))
           .slice(0, 4)) {
           ctx.out(`${e.file}: ${e.status}`);
+          // A file that never reached a runner has no test records, only its own error.
+          if (!e.tests.length && e.error)
+            for (const l of e.error.split("\n").slice(0, 6)) ctx.out(`  ${l.slice(0, 180)}`);
           for (const test of e.tests.filter((t) => t.error).slice(0, 2))
             ctx.out(`  ${test.error?.message.split("\n")[0]?.slice(0, 180)}`);
         }
@@ -373,6 +376,10 @@ function printRun(ctx: Ctx, report: RunReport, written: Record<string, string>):
       e.status !== "skipped" &&
       e.status !== "cached-pass"
     ) {
+      // A file that never reached a runner has no test records, only its own error.
+      if (!tests.length && e.error)
+        for (const l of e.error.split("\n").slice(0, 6))
+          ctx.out(`      ${t.red("›")} ${l.slice(0, 200)}`);
       for (const f of tests
         .filter((x) => x.status !== "passed" && x.status !== "skipped" && x.status !== "pending")
         .slice(0, 3)) {

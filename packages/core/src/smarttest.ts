@@ -725,6 +725,7 @@ export class SmartTest {
           ),
         );
         let files = cache[key];
+        let failed = false;
         if (!files) files = await staticDefaultDiscovery(this.root, root, cfg, pkg, candidates);
         if (!files) {
           try {
@@ -738,23 +739,40 @@ export class SmartTest {
               } as Group).discover()
             ).map((t) => t.filePath);
           } catch (error) {
+            // The first lines of the runner's own error say which file broke the listing.
             warnings.push(
-              `${root.adapter} (${root.dir || "."}) discovery failed — using filename patterns: ${(error as Error).message.split("\n")[0]}`,
+              `${root.adapter} (${root.dir || "."}) discovery failed — using filename patterns: ${(
+                error as Error
+              ).message
+                .split("\n")
+                .slice(0, 6)
+                .join("\n")}`,
             );
             files = candidates;
+            failed = true;
           }
         }
-        return { root, key, files };
+        return { root, key, files, failed };
       }),
     );
-    for (const { root, key, files } of listed) {
-      nextCache[key] = files;
+    // Runners whose listing worked claim their files first. A runner whose listing failed falls
+    // back to filename patterns and only takes files no working runner collects: a broken
+    // Playwright listing must not take the unit tests away from their own runner.
+    const ordered = [...listed.filter((l) => !l.failed), ...listed.filter((l) => l.failed)];
+    const listedBy = new Map<string, boolean>();
+    for (const { root, key, files, failed } of ordered) {
+      // A fallback is not cached: the failure must be reported again until it is fixed.
+      if (!failed) nextCache[key] = files;
       let count = 0;
       for (const f of files) {
         if (!analysedSet.has(f)) continue; // excluded by smarttest config
-        // Several runners may collect the same file: the deepest project owns it.
         const prev = assignment.get(f);
-        if (!prev || root.dir.length > prev.dir.length) assignment.set(f, root);
+        if (failed && prev && listedBy.get(f)) continue;
+        // Several runners may collect the same file: the deepest project owns it.
+        if (!prev || root.dir.length > prev.dir.length) {
+          assignment.set(f, root);
+          listedBy.set(f, !failed);
+        }
         count++;
       }
       perRoot.set(rootKey(root), count);
@@ -1576,6 +1594,33 @@ export class SmartTest {
       analysis.assignment,
     );
     for (const g of plan.groups) g.files.sort((a, b) => (rank.get(a) ?? 0) - (rank.get(b) ?? 0));
+    // A selected test that no runner collects cannot run. It is never dropped: it gets an
+    // infrastructure-error record, so the run fails (exit 4) and names the file and the cause.
+    const discoveryFailures = analysis.decision.warnings.filter((w) =>
+      w.includes("discovery failed"),
+    );
+    const uncollected: FileExecution[] = plan.unassigned.map((file) => ({
+      file,
+      adapter: "none",
+      status: "infrastructure-error",
+      durationMs: 0,
+      tests: [],
+      error: `Selected, but no runner collects this file, so it was not run.${
+        discoveryFailures.length
+          ? ` Cause: ${discoveryFailures.join("; ")}`
+          : " Add it to a runner's include patterns (or declare `runners`); if it is not meant to run, add it to `exclude` in the SmartTest config."
+      }`,
+    }));
+    if (uncollected.length) {
+      warnings.push(
+        `${uncollected.length} selected test file(s) were not run because no runner collects them: ${uncollected
+          .slice(0, 5)
+          .map((u) => u.file)
+          .join(", ")}${uncollected.length > 5 ? "…" : ""} — the run cannot pass`,
+      );
+    }
+    // A runner whose listing failed is shown with every run, hook runs included, until fixed.
+    warnings.push(...discoveryFailures);
     plan.groups.sort(
       (a, b) => (rank.get(a.files[0] ?? "") ?? 0) - (rank.get(b.files[0] ?? "") ?? 0),
     );
@@ -1640,6 +1685,7 @@ export class SmartTest {
     const executions: FileExecution[] = [
       ...summary.files.map((f) => ({ ...f })),
       ...cachedExecutions,
+      ...uncollected,
     ].sort((a, b) => a.file.localeCompare(b.file));
     // Record fresh passing results in the cache and every fresh result in the history.
     if (resultCache) {

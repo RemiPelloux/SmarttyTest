@@ -173,12 +173,12 @@ Every `--json` document has `schemaVersion` and `command`. Schemas ship with the
 
 These are versioned and part of the public contract (locked by a test in `@smarttest/shared`).
 
-| Code | Category                | Examples                                                                                |
-| ---- | ----------------------- | --------------------------------------------------------------------------------------- |
-| 0    | Success                 | All selected tests passed                                                               |
-| 1    | Test failure            | A test failed, timed out or was cancelled                                               |
-| 2    | Invalid usage           | Unknown command or flag, bad argument                                                   |
-| 3    | Configuration failure   | Invalid config, rule conflict, confirmation required in non-interactive mode            |
-| 4    | Infrastructure failure  | Runner crashed or missing, Git base missing in a shallow clone                          |
-| 5    | Safety / policy failure | `validate-selection`, `shadow` or `benchmark` found a missed failure, rollback conflict |
-| 70   | Internal error          | A SmartTest bug (e.g. a report integrity violation)                                     |
+| Code | Category                | Examples                                                                                           |
+| ---- | ----------------------- | -------------------------------------------------------------------------------------------------- |
+| 0    | Success                 | All selected tests passed                                                                          |
+| 1    | Test failure            | A test failed, timed out or was cancelled                                                          |
+| 2    | Invalid usage           | Unknown command or flag, bad argument                                                              |
+| 3    | Configuration failure   | Invalid config, rule conflict, confirmation required in non-interactive mode                       |
+| 4    | Infrastructure failure  | Runner crashed or missing, a selected test no runner executes, Git base missing in a shallow clone |
+| 5    | Safety / policy failure | `validate-selection`, `shadow` or `benchmark` found a missed failure, rollback conflict            |
+| 70   | Internal error          | A SmartTest bug (e.g. a report integrity violation)                                                |

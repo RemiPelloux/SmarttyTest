@@ -64,6 +64,8 @@ export default defineConfig({
 
 Exit code: the hook succeeds when everything it ran passed (tests and checks), and prints the left-to-CI list. Tests left to CI are not a pass by omission: they are named as not run, and CI must run them. If the scope leaves every selected test to CI, the hook runs no test, exits 0 on passing checks and still prints the list. A test that no runner collects is not affected by `hook.runners` (only an `exclude` glob can name it).
 
+A selected test that no runner executes is different: it was not left out on purpose, so `run`, `ci` and the hook fail with exit code 4 (infrastructure failure). This happens when a file looks like a test but no runner collects it, or when a runner's listing breaks; for example a Playwright spec with a missing static import makes `playwright test --list` fail. The file gets an `infrastructure-error` execution record (`adapter: "none"` when no runner takes it) with the cause, the runner's first error lines are shown with every run until the listing works again (a failed listing is never cached), and the other runners keep their own files. Studio shows such a run as an error. A file left to CI by the scope is the only selected file allowed to have no execution record.
+
 `smarttest run`, `smarttest ci`, `impact`, Studio runs and the editor ignore the scope. `smarttest init` proposes `hook: { runners: [...] }` (the unit runners) in its previewed configuration when it finds Playwright or Cypress next to a unit runner; `smarttest hook install` and `hook status` print the same suggestion when no scope is set, and `doctor` mentions it when a hook is installed.
 
 ## Project checks
