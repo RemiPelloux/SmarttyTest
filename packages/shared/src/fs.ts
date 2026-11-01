@@ -1,7 +1,20 @@
 import { randomBytes } from "node:crypto";
 import { constants } from "node:fs";
-import { access, chmod, mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
-import { dirname } from "node:path";
+import {
+  access,
+  chmod,
+  copyFile,
+  mkdir,
+  readdir,
+  readFile,
+  realpath,
+  rename,
+  rm,
+  stat,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
+import { dirname, join } from "node:path";
 
 export async function exists(path: string): Promise<boolean> {
   try {
@@ -74,6 +87,34 @@ export async function writeFileAtomic(path: string, data: string | Uint8Array): 
 
 export async function writeJson(path: string, value: unknown): Promise<void> {
   await writeFileAtomic(path, `${JSON.stringify(value, null, 2)}\n`);
+}
+
+/**
+ * Makes an installed `node_modules` directory available at `dest` (another checkout, a temp copy).
+ *
+ * POSIX: one directory symlink. Windows: pnpm links packages with *relative* symlinks
+ * (`..\..\node_modules\.pnpm\...`), and Windows resolves those against the path they were reached
+ * through, so behind a single junction from elsewhere every package is missing. There, `dest` is a
+ * real directory whose entries (and `@scope` entries) are junctions to their resolved targets.
+ */
+export async function linkNodeModules(src: string, dest: string): Promise<void> {
+  if (process.platform !== "win32") {
+    await symlink(src, dest, "dir");
+    return;
+  }
+  await mkdir(dest, { recursive: true });
+  for (const e of await readdir(src, { withFileTypes: true })) {
+    const from = join(src, e.name);
+    const to = join(dest, e.name);
+    if (e.name.startsWith("@") && e.isDirectory()) {
+      await linkNodeModules(from, to);
+      continue;
+    }
+    const real = await realpath(from).catch(() => undefined);
+    if (!real) continue; // a dangling link stays missing, as it is in the source
+    if ((await stat(real)).isDirectory()) await symlink(real, to, "junction");
+    else await copyFile(real, to);
+  }
 }
 
 /** Detects the indentation used by a JSON/text document (defaults to two spaces). */

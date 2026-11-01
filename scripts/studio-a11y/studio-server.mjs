@@ -4,7 +4,7 @@
  * fixtures/projects/ts-lib-vitest with one change that a selected test catches.
  */
 import { execFileSync } from "node:child_process";
-import { cp, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { cp, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -42,11 +42,11 @@ export async function makeFixture() {
     recursive: true,
     filter: (p) => !p.includes("node_modules") && !p.includes(".smarttest"),
   });
-  await symlink(
-    join(FIXTURE, "node_modules"),
-    join(dir, "node_modules"),
-    process.platform === "win32" ? "junction" : "dir",
+  // Windows: pnpm's relative package links break behind one junction (see linkNodeModules).
+  const { linkNodeModules } = await import(
+    pathToFileURL(join(ROOT, "packages/shared/dist/index.js")).href
   );
+  await linkNodeModules(join(FIXTURE, "node_modules"), join(dir, "node_modules"));
   await writeFile(join(dir, ".gitignore"), "node_modules\n.smarttest/\n");
   vcs(dir, "init", "-q", "-b", "main");
   vcs(dir, "add", "-A");

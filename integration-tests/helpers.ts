@@ -1,7 +1,8 @@
 import { execFileSync } from "node:child_process";
-import { cp, mkdtemp, readFile, symlink, writeFile } from "node:fs/promises";
+import { cp, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { linkNodeModules } from "../packages/shared/src/fs.js";
 
 export const FIXTURES = resolve(import.meta.dirname, "../fixtures/projects");
 
@@ -13,11 +14,7 @@ export async function materialize(name: string, options: { git?: boolean } = {})
     recursive: true,
     filter: (p) => !p.includes("node_modules") && !p.includes(".smarttest"),
   });
-  await symlink(
-    join(src, "node_modules"),
-    join(dir, "node_modules"),
-    process.platform === "win32" ? "junction" : "dir",
-  );
+  await linkNodeModules(join(src, "node_modules"), join(dir, "node_modules"));
   if (options.git) {
     await writeFile(join(dir, ".gitignore"), "node_modules\n.smarttest/\n");
     git(dir, "init", "-q", "-b", "main");
