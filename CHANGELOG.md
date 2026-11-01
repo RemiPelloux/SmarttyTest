@@ -2,6 +2,12 @@
 
 All notable changes are documented here. Releases are managed with [Changesets](https://github.com/changesets/changesets). The project follows [Semantic Versioning](https://semver.org/).
 
+## Unreleased
+
+### Fixed
+
+- `ST_NO_RUNNER` names all five runners and how to set one up; it said "No Jest or Vitest setup found".
+
 ## [1.0.0] — stable
 
 1.0.0 is the first release on npm, as [`@tkmremi/smarttest`](https://www.npmjs.com/package/@tkmremi/smarttest) (`npm install -D @tkmremi/smarttest`; the command is `smarttest`). npm refused the bare name `smarttest` as too similar to `smart-test`. 1.0.0 freezes SmartTest's public contracts. From this release, the config schema, exit codes and `--json` schemas of the frozen commands only change in a major version ([contracts](documentation/reference/contracts.md)).
