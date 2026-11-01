@@ -2,6 +2,7 @@
  * @smarttest/vcs-git — Git adapter (spec §7.5). Spawns `git` without a shell.
  */
 import {
+  assertSafeRevision,
   type ChangeSet,
   type FileChange,
   type RevisionRef,
@@ -128,6 +129,7 @@ export class GitAdapter implements VersionControlAdapter, ChangeProvider {
   }
 
   async resolveBase(ref: string, direct = false): Promise<string> {
+    assertSafeRevision(ref, "Base");
     const exists = (
       await this.git(["rev-parse", "--verify", "-q", `${ref}^{commit}`], true)
     ).trim();
@@ -139,7 +141,8 @@ export class GitAdapter implements VersionControlAdapter, ChangeProvider {
       });
     }
     if (direct) return exists;
-    const mb = (await this.git(["merge-base", ref, "HEAD"], true)).trim();
+    // The verified commit id, not the user's text, reaches the next command.
+    const mb = (await this.git(["merge-base", exists, "HEAD"], true)).trim();
     if (!mb) {
       throw new SmartTestError(`No merge-base between "${ref}" and HEAD`, {
         code: "ST_GIT_NO_MERGE_BASE",
@@ -151,6 +154,8 @@ export class GitAdapter implements VersionControlAdapter, ChangeProvider {
   }
 
   async getChanges(base: RevisionRef, target?: RevisionRef): Promise<ChangeSet> {
+    assertSafeRevision(base.ref, "Base");
+    if (target) assertSafeRevision(target.ref, "Target");
     const range = target ? [base.ref, target.ref] : [base.ref];
     return this.diff(range, !target, base.ref);
   }
@@ -203,6 +208,7 @@ export class GitAdapter implements VersionControlAdapter, ChangeProvider {
     } else if (source.kind === "base") {
       beforeRev = await this.resolveBase(source.ref, source.direct);
       if (source.target) {
+        assertSafeRevision(source.target, "Target");
         // Revision-to-revision (history replay): untracked files in the working tree don't count.
         changeSet = await this.diff([beforeRev, source.target], false, beforeRev);
         changeSet.targetRevision = source.target;

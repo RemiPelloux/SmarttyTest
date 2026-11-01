@@ -1,3 +1,5 @@
+import { posix } from "node:path";
+
 export interface ConfigIssue {
   path: string;
   message: string;
@@ -48,6 +50,21 @@ const TOP_KEYS: Record<string, string[] | null> = {
   reports: ["formats", "outputDir"],
   storeDir: null,
 };
+
+/**
+ * Why a configured path is not a safe project-relative path, or undefined when it is. The
+ * configuration is repository content: it must not send SmartTest's writes (store, reports,
+ * generated tests) or the runners' working directory outside the project (spec §30.2).
+ * A command-line flag such as `--output` is the user's own choice and is not checked here.
+ */
+export function outsideProject(value: string): string | undefined {
+  if (value.includes("\0")) return "must not contain NUL characters";
+  const p = value.replace(/\\/g, "/");
+  if (p.startsWith("/") || /^[A-Za-z]:/.test(p))
+    return "must be a path relative to the project, not an absolute path";
+  if (posix.normalize(p).split("/")[0] === "..") return "must stay inside the project (no ../)";
+  return undefined;
+}
 
 const isObj = (v: unknown): v is Record<string, unknown> =>
   typeof v === "object" && v !== null && !Array.isArray(v);
@@ -252,6 +269,12 @@ export function validateConfig(raw: unknown): { errors: ConfigIssue[]; warnings:
   }
   if (c.storeDir !== undefined && typeof c.storeDir !== "string")
     err("storeDir", "must be a string");
+  else if (typeof c.storeDir === "string") {
+    const why = outsideProject(c.storeDir);
+    if (why) err("storeDir", why);
+    else if (posix.normalize(c.storeDir.replace(/\\/g, "/")).replace(/\/+$/, "") === ".")
+      err("storeDir", "must be a subdirectory, not the project root (uninstall removes it)");
+  }
   if (c.vcs !== undefined) {
     if (!isObj(c.vcs)) err("vcs", "must be an object");
     else {
@@ -276,6 +299,10 @@ export function validateConfig(raw: unknown): { errors: ConfigIssue[]; warnings:
       for (const k of ["directory", "naming", "templates"])
         if (c.tests[k] !== undefined && typeof c.tests[k] !== "string")
           err(`tests.${k}`, "must be a string");
+      for (const k of ["directory", "templates"]) {
+        const why = typeof c.tests[k] === "string" ? outsideProject(c.tests[k] as string) : "";
+        if (why) err(`tests.${k}`, why);
+      }
     }
   }
   if (
@@ -296,8 +323,11 @@ export function validateConfig(raw: unknown): { errors: ConfigIssue[]; warnings:
         }
         if (!ADAPTERS.includes(r.adapter as string))
           err(`${p}.adapter`, `must be one of ${ADAPTERS.join(", ")}`);
-        for (const k of ["dir", "config"])
+        for (const k of ["dir", "config"]) {
           if (r[k] !== undefined && typeof r[k] !== "string") err(`${p}.${k}`, "must be a string");
+          const why = typeof r[k] === "string" ? outsideProject(r[k] as string) : undefined;
+          if (why) err(`${p}.${k}`, why);
+        }
         if (r.patterns !== undefined && !isStrArr(r.patterns))
           err(`${p}.patterns`, "must be an array of globs");
       }
@@ -310,8 +340,13 @@ export function validateConfig(raw: unknown): { errors: ConfigIssue[]; warnings:
         !(isStrArr(c.reports.formats) && c.reports.formats.every((f) => FORMATS.includes(f)))
       )
         err("reports.formats", `must be an array of: ${FORMATS.join(", ")}`);
-      if (c.reports.outputDir !== undefined && typeof c.reports.outputDir !== "string")
-        err("reports.outputDir", "must be a string");
+      if (c.reports.outputDir !== undefined) {
+        const why =
+          typeof c.reports.outputDir === "string"
+            ? outsideProject(c.reports.outputDir)
+            : "must be a string";
+        if (why) err("reports.outputDir", why);
+      }
     }
   }
   if (c.snapshots !== undefined) {

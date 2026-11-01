@@ -29,7 +29,10 @@
   "capabilities": {
     "untrustedWorkspaces": {
       "supported": "limited",
-      "description": "SmartTest runs a local executable and reads project files. In Restricted Mode every SmartTest feature is disabled: no analysis, no CodeLens, no test runs."
+      "description": "SmartTest runs a local executable and reads project files. In Restricted Mode every SmartTest feature is disabled: no analysis, no CodeLens, no test runs.",
+      "restrictedConfigurations": [
+        "smarttest.executablePath"
+      ]
     },
     "virtualWorkspaces": {
       "supported": false,

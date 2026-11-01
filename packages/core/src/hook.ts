@@ -36,6 +36,9 @@ export const GIT_HOOK_ENV = [
   "GIT_WORK_TREE",
   "GIT_PREFIX",
   "GIT_OBJECT_DIRECTORY",
+  "GIT_COMMON_DIR",
+  "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+  "GIT_NAMESPACE",
 ] as const;
 
 /** A copy of `env` without the variables Git sets for a hook (never mutates `process.env`). */
@@ -251,6 +254,18 @@ export async function pruneStaleCheckouts(repoRoot: string): Promise<void> {
 }
 
 const toSlash = (p: string) => p.replace(/\\/g, "/");
+
+/**
+ * True when `dir` (in the temporary checkout `wt`) resolves outside it. The checkout holds the
+ * content under test: a project directory committed as a link must not make the node_modules
+ * mirror (and the `.modules.yaml` written into it) land elsewhere on disk.
+ */
+export async function escapesCheckout(wt: string, dir: string): Promise<boolean> {
+  const real = await realpath(dir).catch(() => undefined);
+  if (!real) return false; // missing: nothing is mirrored there
+  const rel = relative(await realpath(wt), real);
+  return rel.startsWith("..") || isAbsolute(rel);
+}
 
 /**
  * Mirrors an installed `node_modules` directory into the checkout. Each entry links to the
@@ -475,6 +490,12 @@ export async function isolate(options: {
     for (const d of options.nodeModulesDirs) {
       const src = join(options.projectRoot, d, "node_modules");
       const dest = join(root, d, "node_modules");
+      if (await escapesCheckout(wt, join(root, d))) {
+        warnings.push(
+          `Isolation: ${d || "."} is a link out of the temporary checkout; its node_modules were not mirrored`,
+        );
+        continue;
+      }
       if (
         existsSync(src) &&
         !(await lstat(dest).catch(() => undefined)) &&

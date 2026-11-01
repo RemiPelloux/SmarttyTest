@@ -1,4 +1,4 @@
-import { mkdtemp, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -80,5 +80,47 @@ describe("loadConfig", () => {
       code: "ST_CONFIG_INVALID",
       exitCode: 3,
     });
+  });
+
+  it("does not write the transpiled config through a committed .smarttest/tmp link (SR-01)", async () => {
+    const base = await mkdtemp(join(tmpdir(), "st-cfg-link-"));
+    const root = join(base, "repo");
+    const outside = join(base, "outside");
+    await mkdir(join(root, ".smarttest"), { recursive: true });
+    await mkdir(outside);
+    await symlink(outside, join(root, ".smarttest", "tmp"), "junction");
+    await writeFile(join(root, "smarttest.config.ts"), 'export default { mode: "safe" };\n');
+    await expect(loadConfig(root)).rejects.toMatchObject({ code: "ST_UNSAFE_PATH" });
+    expect(await readdir(outside)).toEqual([]);
+  });
+});
+
+describe("configured paths stay inside the project (SR-02)", () => {
+  const paths = (raw: unknown) => validateConfig(raw).errors.map((e) => e.path);
+
+  it("refuses absolute and ../ paths for the store, reports, runners and generated tests", () => {
+    expect(paths({ storeDir: "../../home/u/.ssh" })).toEqual(["storeDir"]);
+    expect(paths({ storeDir: "/tmp/x" })).toEqual(["storeDir"]);
+    expect(paths({ storeDir: "." })).toEqual(["storeDir"]);
+    expect(paths({ storeDir: "a/../.." })).toEqual(["storeDir"]);
+    expect(paths({ reports: { outputDir: "C:\\Users\\u" } })).toEqual(["reports.outputDir"]);
+    expect(paths({ reports: { outputDir: "../reports" } })).toEqual(["reports.outputDir"]);
+    expect(paths({ reports: { outputDir: 3 } })).toEqual(["reports.outputDir"]);
+    expect(paths({ tests: { directory: "../../.config/autostart" } })).toEqual(["tests.directory"]);
+    expect(paths({ runners: [{ adapter: "vitest", dir: "/" }] })).toEqual(["runners[0].dir"]);
+    expect(paths({ runners: [{ adapter: "vitest", config: "../x.ts" }] })).toEqual([
+      "runners[0].config",
+    ]);
+  });
+
+  it("accepts ordinary project-relative paths", () => {
+    expect(
+      paths({
+        storeDir: ".cache/smarttest",
+        reports: { outputDir: "reports" },
+        tests: { directory: "test" },
+        runners: [{ adapter: "vitest", dir: "packages/app", config: "vitest.config.ts" }],
+      }),
+    ).toEqual([]);
   });
 });

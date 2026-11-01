@@ -135,6 +135,14 @@ export async function prepareCi(
 ): Promise<CiPlan> {
   const steps: string[] = [];
   const warnings: string[] = [];
+  // CI variables reach `git fetch` and `git merge-base`: an option-like value runs everything.
+  for (const value of [ci.targetBranch, ci.baseSha])
+    if (value !== undefined && (value.startsWith("-") || /[\s\p{Cc}]/u.test(value))) {
+      warnings.push(
+        `unsafe ref "${value.slice(0, 80)}" from the CI environment; running the full suite`,
+      );
+      return { ci, all: true, steps, warnings };
+    }
   const shallow = (await git(root, ["rev-parse", "--is-shallow-repository"])).out === "true";
   if (shallow) steps.push("shallow clone detected");
   if (ci.targetBranch) {

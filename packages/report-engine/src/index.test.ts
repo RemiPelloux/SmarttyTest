@@ -173,4 +173,20 @@ describe("report engine", () => {
     expect(md).toContain("1 skipped (not run)");
     expect(md.length).toBeLessThan(65_000);
   });
+
+  it("keeps repository names from injecting markdown into the CI summary (SR-11)", () => {
+    const r = report();
+    const evil = "a`](https://evil.example)![x](https://t.example/p.png)|b.test.ts";
+    r.executions[0] = { ...(r.executions[0] as (typeof r.executions)[number]), file: evil };
+    const selected = r.decision.selectedTests[0] as (typeof r.decision.selectedTests)[number];
+    selected.filePath = evil;
+    selected.reasons = [{ kind: "direct-dependency", message: "[click](https://evil.example)" }];
+    const md = toMarkdown(r);
+    // The file name stays inside one code span (a longer fence) and cannot split the table row.
+    expect(md).toContain(
+      "| `` a`](https://evil.example)![x](https://t.example/p.png)\\|b.test.ts `` | failed |",
+    );
+    expect(md).toContain("\\[click\\]\\(https://evil.example\\)");
+    expect(md).not.toMatch(/(^|[^\\])\[click\]\(/m);
+  });
 });

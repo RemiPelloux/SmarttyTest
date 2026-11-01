@@ -56,3 +56,22 @@ export function changedLineRange(
   }
   return { start, end: Math.max(endB, start) };
 }
+
+/** SGR parameters SmartTest's own colours use; anything else (conceal, blink…) is dropped. */
+const SAFE_SGR = new Set("/0/1/2/22/30/31/32/33/35/36/37/39/41/42/43/100".split("/"));
+
+const TERMINAL_ESCAPES =
+  // biome-ignore lint/suspicious/noControlCharactersInRegex: matching control characters is the point
+  /\u001b\[([0-9;]*)m|\u001b\[[0-?]*[ -/]*[@-~]|\u001b\][\s\S]*?(?:\u0007|\u001b\\|$)|\u001b[PX^_][\s\S]*?(?:\u001b\\|$)|\u001b[\s\S]?|[\u0000-\u0008\u000b-\u001f\u007f-\u009f]/g;
+
+/**
+ * Makes text safe to print to a terminal. Test names, file paths, branch names and runner output
+ * come from the repository: an escape sequence in them could move the cursor over a failure,
+ * set the window title, write the clipboard (OSC 52) or forge a link. Keeps tab, newline and the
+ * colour sequences SmartTest emits itself; removes every other escape and control character.
+ */
+export function terminalSafe(text: string): string {
+  return text.replace(TERMINAL_ESCAPES, (match, sgr: string | undefined) =>
+    sgr?.split(";").every((p) => SAFE_SGR.has(p)) ? match : "",
+  );
+}

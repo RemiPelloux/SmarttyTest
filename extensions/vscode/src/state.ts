@@ -115,6 +115,14 @@ export class ExtensionState implements vscode.Disposable {
   }
 
   resolveFolder(folder: vscode.WorkspaceFolder): ResolvedFolder {
+    // Every CLI start goes through here: one gate, whatever feature asks. In Restricted Mode the
+    // workspace (its settings, node_modules/.bin, config) is not trusted to choose a program.
+    if (!this.#trusted)
+      throw new SmartTestExtensionError("SmartTest does not run in Restricted Mode.", {
+        code: "ST_EXT_UNTRUSTED",
+        category: "configuration",
+        hint: "Trust this workspace (Manage Workspace Trust) to enable SmartTest.",
+      });
     const settings = this.settingsFor(folder);
     const state = this.#folderState(folder);
     // Resolution stats the filesystem; it is cached until settings, trust or

@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { walkFiles } from "@smarttest/shared";
@@ -56,5 +56,30 @@ describe("SnapshotStore", () => {
     const removed = await store.prune({ keep: 1 });
     expect(removed).not.toContain(first.id);
     expect(removed).toHaveLength(1);
+  });
+
+  it("never takes a file path from a crafted snapshot's id or hash (SR-04)", async () => {
+    const { root, store } = await project();
+    await writeFile(join(root, "package.json"), "{}\n");
+    const dir = join(root, ".smarttest", "state", "snapshots");
+    await mkdir(dir, { recursive: true });
+    // `prune` deleted `${id}.json` and `markVerified` rewrote it, with the id from the content.
+    await writeFile(
+      join(dir, "snap_0_aa.json"),
+      JSON.stringify({
+        id: "../../../package",
+        createdAt: "2000-01-01T00:00:00.000Z",
+        storeContent: true,
+        files: { "src/a.ts": { hash: "../../../../etc/passwd", size: 1, mtimeMs: 1 } },
+      }),
+    );
+    expect(await store.list()).toEqual([]);
+    await store.create();
+    await store.create();
+    await store.prune({ keep: 0, force: true });
+    expect(await readFile(join(root, "package.json"), "utf8")).toBe("{}\n");
+    await expect(store.inspect("../../../package")).rejects.toMatchObject({
+      code: "ST_SNAPSHOT_NOT_FOUND",
+    });
   });
 });
