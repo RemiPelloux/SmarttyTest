@@ -34,6 +34,31 @@ jobs:
       - run: pnpm build
       - run: pnpm verify
 
+  cypress:
+    # The Cypress adapter against a real Cypress (fixtures/projects/cypress-e2e). `pnpm install`
+    # does not download Cypress's binary (pnpm-workspace.yaml#allowBuilds); this job does.
+    name: cypress (real install)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/Cypress
+          key: cypress-${{ runner.os }}-${{ hashFiles('fixtures/projects/cypress-e2e/package.json') }}
+      - run: pnpm --dir fixtures/projects/cypress-e2e exec cypress install
+      - run: pnpm --dir fixtures/projects/cypress-e2e exec cypress verify
+      - run: pnpm vitest run integration-tests/cypress-real.test.ts
+        env:
+          SMARTTEST_REAL_CYPRESS: "1"
+
   extension:
     name: extension (${{ matrix.os }})
     strategy:

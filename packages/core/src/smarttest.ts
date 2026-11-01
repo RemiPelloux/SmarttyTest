@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { existsSync } from "node:fs";
+import { existsSync, realpathSync } from "node:fs";
 import { availableParallelism } from "node:os";
 import { isAbsolute, join, relative } from "node:path";
 import { CypressAdapter } from "@smarttest/adapter-cypress";
@@ -342,6 +342,19 @@ const timed = async <T>(
   }
 };
 
+/**
+ * The project root with symlinks and Windows 8.3 short names resolved. Test runners report the
+ * canonical paths they load (macOS's /var is /private/var; Windows' temp dir is often
+ * C:\Users\RUNNER~1\...), so relating them to a non-canonical root would lose every result.
+ */
+function canonicalRoot(root: string): string {
+  try {
+    return realpathSync.native(root);
+  } catch {
+    return root;
+  }
+}
+
 export class SmartTest {
   private profileCache: ProjectProfile | undefined;
   private resolver: TypeScriptResolver | undefined;
@@ -358,9 +371,10 @@ export class SmartTest {
   }
 
   static async open(options: OpenOptions): Promise<SmartTest> {
-    const loaded = await loadConfig(options.root, options.configPath);
+    const root = canonicalRoot(options.root);
+    const loaded = await loadConfig(root, options.configPath);
     return new SmartTest(
-      options.root,
+      root,
       loaded,
       options.logger ?? silentLogger,
       options.storeDir,

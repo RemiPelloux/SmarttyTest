@@ -1,0 +1,11 @@
+{
+  "name": "fixture-cypress-e2e",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "cypress run"
+  },
+  "devDependencies": {
+    "cypress": "16.1.1"
+  }
+}

@@ -1,7 +1,7 @@
 import { execFileSync, spawnSync } from "node:child_process";
 import { chmod, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { basename, delimiter, dirname, join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { type HookStage, planHookInstall, planHookUninstall } from "./hooks.js";
 
@@ -35,6 +35,15 @@ async function repo(files: Record<string, string> = {}): Promise<string> {
 }
 
 /**
+ * A directory as the hook's shell prints it with `pwd`. Git for Windows runs hooks through its
+ * MSYS sh, which spells C:\Users\x as /c/Users/x.
+ */
+const posixPath = (path: string) =>
+  process.platform === "win32"
+    ? path.replace(/^([A-Za-z]):/, (_, d: string) => `/${d.toLowerCase()}`).replaceAll("\\", "/")
+    : path;
+
+/**
  * A stand-in for `npx` that records what SmartTest would have received: its directory and stdin.
  * The block only runs it when `node_modules/.bin/smarttest` exists in the project.
  */
@@ -49,7 +58,9 @@ async function fakeSmartTest(project: string, exit = 0) {
   );
   await mkdir(join(project, "node_modules/.bin"), { recursive: true });
   await writeFile(join(project, "node_modules/.bin/smarttest"), "#!/bin/sh\n", { mode: 0o755 });
-  const env = { ...process.env, PATH: `${bin}:${process.env.PATH}` };
+  // Windows spells the variable `Path`; keep a single entry so the fake comes first.
+  const pathKey = Object.keys(process.env).find((k) => k.toUpperCase() === "PATH") ?? "PATH";
+  const env = { ...process.env, [pathKey]: `${bin}${delimiter}${process.env[pathKey] ?? ""}` };
   return {
     env,
     pwd: async () => (await readFile(`${log}.pwd`, "utf8").catch(() => "")).trim(),
@@ -188,7 +199,7 @@ describe("where the hook lives", () => {
     for (const shell of SHELLS) {
       const r = spawnSync(shell, [".git/hooks/pre-commit"], { cwd: top, env: fake.env });
       expect(r.status, `${shell}: ${r.stderr}`).toBe(0);
-      expect(await fake.pwd()).toBe(app);
+      expect(await fake.pwd()).toBe(posixPath(app));
     }
   });
 
@@ -205,7 +216,7 @@ describe("where the hook lives", () => {
     // simple-git-hooks runs the command at the top-level of the worktree.
     const r = spawnSync("sh", ["-c", value], { cwd: top, input: REFS, env: fake.env });
     expect(r.status, r.stderr.toString()).toBe(0);
-    expect(await fake.pwd()).toBe(app);
+    expect(await fake.pwd()).toBe(posixPath(app));
     expect(await fake.stdin()).toBe(REFS);
     expect(await readFile(join(top, "pushed.txt"), "utf8")).toBe("refs/heads/protected\n");
 
@@ -225,7 +236,7 @@ describe("where the hook lives", () => {
     const main = await repo({ "package.json": "{}", "a.txt": "a\n" });
     git(main, "add", "-A");
     git(main, "commit", "-q", "-m", "init");
-    const wt = join(dirname(main), `${main.split("/").pop()}-wt`);
+    const wt = join(dirname(main), `${basename(main)}-wt`);
     roots.push(wt);
     git(main, "worktree", "add", "-q", "--detach", wt);
     const fake = await fakeSmartTest(wt);
@@ -242,7 +253,7 @@ describe("where the hook lives", () => {
       },
     );
     expect(commit.status, commit.stderr.toString()).toBe(0);
-    expect(await fake.pwd()).toBe(wt);
+    expect(await fake.pwd()).toBe(posixPath(wt));
   });
 
   it("follows an absolute core.hooksPath inside the repository", async () => {
