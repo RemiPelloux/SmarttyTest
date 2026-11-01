@@ -107,9 +107,21 @@ describe("commit hooks run the staged content", () => {
 
     await (await SmartTest.open({ root: dir })).runHook("pre-commit", { cache: false });
 
-    const { stats } = JSON.parse(
-      await readFile(join(dir, ".smarttest", "state", "index.json"), "utf8"),
-    ) as { stats: Record<string, [number, number]> };
+    // The stored index: the full write plus the delta written against it, if any.
+    type Stored = { baseId?: string; stats: Record<string, [number, number] | null> };
+    const state = (f: string) =>
+      readFile(join(dir, ".smarttest", "state", f), "utf8").then(
+        (t) => JSON.parse(t) as Stored,
+        () => undefined,
+      );
+    const base = (await state("index.json")) as Stored;
+    const delta = await state("index-delta.json");
+    const stats = { ...base.stats };
+    if (delta && delta.baseId === base.baseId)
+      for (const [f, s] of Object.entries(delta.stats)) {
+        if (s) stats[f] = s;
+        else delete stats[f];
+      }
     const files = Object.keys(stats);
     expect(files.length).toBeGreaterThan(1);
     // Every recorded stat is the working tree's, never the temporary checkout's.

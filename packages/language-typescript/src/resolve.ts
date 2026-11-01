@@ -12,6 +12,16 @@ export interface WorkspaceEntry {
 }
 
 const BUILTINS = new Set(builtinModules);
+/**
+ * Reads tsconfig files (and what they extend) without listing the project's files: only the
+ * compiler options are used, and `include` globbing costs a directory walk of the whole project.
+ */
+const OPTIONS_ONLY_HOST: ts.ParseConfigHost = {
+  useCaseSensitiveFileNames: ts.sys.useCaseSensitiveFileNames,
+  fileExists: (f) => ts.sys.fileExists(f),
+  readFile: (f) => ts.sys.readFile(f),
+  readDirectory: () => [],
+};
 const PROBE_EXTS = [".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs", ".json"];
 const CONDITIONS = [
   "@smarttest/source",
@@ -158,7 +168,7 @@ export class TypeScriptResolver implements ModuleResolver {
             const read = ts.readConfigFile(p, (f) => ts.sys.readFile(f));
             const parsed = ts.parseJsonConfigFileContent(
               read.config ?? {},
-              ts.sys,
+              OPTIONS_ONLY_HOST,
               dir,
               undefined,
               p,

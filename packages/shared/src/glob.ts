@@ -1,4 +1,4 @@
-import { statSync } from "node:fs";
+import { type Dirent, readdirSync, statSync } from "node:fs";
 import { readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { runProcess } from "./proc.js";
@@ -93,6 +93,41 @@ export interface WalkOptions {
 }
 
 /**
+ * The paths that are regular files (or links to one). One directory listing per directory instead
+ * of one stat per file; a path the listing does not show as a plain file or a directory (links,
+ * another case on case-insensitive disks, deleted files) is decided by `stat`, as before.
+ */
+function existingFiles(root: string, paths: readonly string[]): string[] {
+  const listings = new Map<string, Map<string, Dirent> | undefined>();
+  const listing = (dir: string) => {
+    if (!listings.has(dir)) {
+      let entries: Map<string, Dirent> | undefined;
+      try {
+        entries = new Map(
+          readdirSync(join(root, dir), { withFileTypes: true }).map((e) => [e.name, e]),
+        );
+      } catch {
+        entries = undefined;
+      }
+      listings.set(dir, entries);
+    }
+    return listings.get(dir);
+  };
+  return paths.filter((f) => {
+    if (!f) return false;
+    const slash = f.lastIndexOf("/");
+    const entry = listing(slash < 0 ? "" : f.slice(0, slash))?.get(f.slice(slash + 1));
+    if (entry?.isFile()) return true;
+    if (entry?.isDirectory()) return false;
+    try {
+      return statSync(join(root, f)).isFile();
+    } catch {
+      return false;
+    }
+  });
+}
+
+/**
  * Files Git considers part of the project: tracked + untracked, minus everything ignored by any
  * .gitignore. Submodules (gitlinks) and deleted files are dropped. Undefined outside a Git repo.
  * Not cached: files are created and deleted between calls (generate, deletes), and listing is fast.
@@ -113,15 +148,7 @@ export async function gitProjectFiles(root: string): Promise<string[] | undefine
       ],
       { cwd: root },
     );
-    if (res.code === 0) {
-      files = [...new Set(res.stdout.split("\0").filter(Boolean))].filter((f) => {
-        try {
-          return statSync(join(root, f)).isFile();
-        } catch {
-          return false;
-        }
-      });
-    }
+    if (res.code === 0) files = existingFiles(root, [...new Set(res.stdout.split("\0"))]);
   } catch {
     files = undefined;
   }
@@ -134,11 +161,15 @@ export async function gitProjectFiles(root: string): Promise<string[] | undefine
  */
 export async function walkFiles(
   root: string,
-  options: WalkOptions & { useGit?: boolean } = {},
+  options: WalkOptions & {
+    useGit?: boolean;
+    /** A `gitProjectFiles(root)` result to use instead of listing again (one listing per run). */
+    gitFiles?: readonly string[];
+  } = {},
 ): Promise<string[]> {
   const ignored = options.ignoredDirs ?? DEFAULT_IGNORED_DIRS;
   if (options.useGit !== false) {
-    const fromGit = await gitProjectFiles(root);
+    const fromGit = options.gitFiles ?? (await gitProjectFiles(root));
     if (fromGit) {
       return fromGit
         .filter(

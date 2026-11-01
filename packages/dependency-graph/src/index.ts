@@ -101,6 +101,32 @@ interface Dep {
 
 type LocalTarget = { file: string; unit: string } | { file: string; namespace: true };
 
+/** Version of `serialize()` output; bump on any change to it or to how the graph is built. */
+export const GRAPH_FORMAT = 1;
+
+interface SerializedGraph {
+  format: number;
+  deps: number[];
+  fileDependents: number[];
+  moduleDependents: number[];
+  reexporters: number[];
+  forward: number[];
+  factoryMocks: number[];
+  uncertainty: [string, string[]][];
+  deletedFiles: string[];
+  resourceKeys: string[];
+  assetReads: [string, string][];
+  waspOps: [string, [string, string, string][]][];
+  edgeCount: number;
+  /** [file, member edges it contributed]* */
+  memberEdges: number[];
+  edgeKinds: [string, string, string][];
+  strings: string[];
+}
+
+/** Set by `DependencyGraph.restore` for the constructor call it makes. */
+let restoring: SerializedGraph | undefined;
+
 const key = (file: string, unit: string) => `${file}#${unit}`;
 const splitKey = (k: string): [string, string] => {
   const i = k.indexOf("#");
@@ -124,7 +150,8 @@ export class DependencyGraph {
   readonly uncertainty = new Map<string, string[]>();
   readonly deletedFiles = new Set<string>();
   private edgeCount = 0;
-  private memberEdgeCount = 0;
+  /** Member-level edges per contributing file (patches subtract what they remove). */
+  private memberEdges = new Map<string, number>();
   private resourceKeys = new Set<string>();
   private assetReads: { pattern: string; from: string }[] = [];
   /** Files a test replaces with a factory mock (`vi.mock("./m", () => …)`): never loaded there. */
@@ -136,6 +163,12 @@ export class DependencyGraph {
     private readonly isTest: (path: string) => boolean,
     private readonly options: GraphOptions = {},
   ) {
+    const restore = restoring;
+    restoring = undefined;
+    if (restore) {
+      this.restore(restore);
+      return;
+    }
     this.build();
     this.linkRoutes();
     this.linkProvided();
@@ -385,6 +418,8 @@ export class DependencyGraph {
 
   /** Targets each file contributed edges to (so a patch touches only those). */
   private contributions = new Map<string, { deps: Set<string>; fileDeps: Set<string> }>();
+  /** A restored graph derives `contributions` from its edges on its first patch. */
+  private contributionsPending = false;
 
   private contributed(from: string) {
     const file = from.slice(0, from.indexOf("#"));
@@ -394,6 +429,10 @@ export class DependencyGraph {
       this.contributions.set(file, c);
     }
     return c;
+  }
+
+  private countMemberEdge(file: string): void {
+    this.memberEdges.set(file, (this.memberEdges.get(file) ?? 0) + 1);
   }
 
   private addDep(target: string, dep: Dep): void {
@@ -451,7 +490,7 @@ export class DependencyGraph {
           const r = this.resolveExport(t.file, m);
           if (r && r.unit !== WHOLE) {
             this.addDep(key(r.file, r.unit), dep());
-            this.memberEdgeCount++;
+            this.countMemberEdge(file);
           } else this.addFileDep(t.file, dep("medium"));
         }
         continue;
@@ -467,7 +506,7 @@ export class DependencyGraph {
       }
       for (const m of members) {
         const mk = this.memberKey(t.file, t.unit, m);
-        if (mk) this.memberEdgeCount++;
+        if (mk) this.countMemberEdge(file);
         this.addDep(mk ?? key(t.file, t.unit), dep());
       }
     }
@@ -504,12 +543,21 @@ export class DependencyGraph {
     for (const f of set) {
       const a = this.files.get(f);
       if (!a) return false;
+      // End-to-end specs carry uncertainty computed over the whole graph (linkRoutes).
+      if (this.options.e2eTests?.has(f)) return false;
       const routeFile = (this.options.routes ?? []).some((r) => r.file === f);
       const visits = [
         ...(a.topLevelResources ?? []),
         ...a.symbols.flatMap((s) => s.resources ?? []),
       ].some((r) => r.startsWith("route:"));
       if (routeFile || visits || /(^|\/)main\.wasp\.(ts|js|mts)$/.test(f)) return false;
+    }
+    if (this.contributionsPending) {
+      this.contributionsPending = false;
+      for (const [target, list] of this.deps)
+        for (const d of list) this.contributed(d.from).deps.add(target);
+      for (const [target, list] of this.fileDependents)
+        for (const d of list) this.contributed(d.from).fileDeps.add(target);
     }
     const fromChanged = (from: string) => set.has(from.slice(0, from.indexOf("#")));
     let removed = 0;
@@ -544,6 +592,7 @@ export class DependencyGraph {
     this.assetReads = this.assetReads.filter((r) => !fromChanged(r.from));
     for (const f of set) {
       this.forward.delete(f);
+      this.memberEdges.delete(f);
       this.factoryMocks.delete(f);
       this.uncertainty.delete(f);
       this.localCache.delete(f);
@@ -713,9 +762,178 @@ export class DependencyGraph {
     return {
       files: this.files.size,
       edges: this.edgeCount,
-      memberEdges: this.memberEdgeCount,
+      memberEdges: [...this.memberEdges.values()].reduce((a, b) => a + b, 0),
       uncertainFiles: this.uncertainty.size,
     };
+  }
+
+  // ── persistence ─────────────────────────────────────────────────────────────────────────
+
+  /**
+   * The built graph as compact JSON (a string table and integer arrays). It describes the graph
+   * built from exactly the analyses and options it was built with: the caller keys and validates
+   * it (see `DependencyGraph.restore`). Caches (closures, export maps) are not included.
+   */
+  serialize(): string {
+    const ids = new Map<string, number>();
+    const strings: string[] = [];
+    const id = (k: string) => {
+      let i = ids.get(k);
+      if (i === undefined) {
+        i = strings.length;
+        strings.push(k);
+        ids.set(k, i);
+      }
+      return i;
+    };
+    const codes = new Map<string, number>();
+    const edgeKinds: [string, string, string][] = [];
+    const code = (d: Dep) => {
+      const k = `${d.kind}|${d.provenance}|${d.confidence}`;
+      let c = codes.get(k);
+      if (c === undefined) {
+        c = edgeKinds.length;
+        edgeKinds.push([d.kind, d.provenance, d.confidence]);
+        codes.set(k, c);
+      }
+      return c;
+    };
+    const edges = (m: Map<string, Dep[]>) => {
+      const out: number[] = [];
+      for (const [target, list] of m) {
+        out.push(id(target), list.length);
+        for (const d of list) out.push(id(d.from), code(d));
+      }
+      return out;
+    };
+    const lists = (m: Map<string, Iterable<string>>) => {
+      const out: number[] = [];
+      for (const [k, values] of m) {
+        const v = [...values];
+        out.push(id(k), v.length);
+        for (const x of v) out.push(id(x));
+      }
+      return out;
+    };
+    const data: SerializedGraph = {
+      format: GRAPH_FORMAT,
+      deps: edges(this.deps),
+      fileDependents: edges(this.fileDependents),
+      moduleDependents: lists(this.moduleDependents),
+      reexporters: lists(this.reexporters),
+      forward: lists(this.forward),
+      factoryMocks: lists(this.factoryMocks),
+      uncertainty: [...this.uncertainty],
+      deletedFiles: [...this.deletedFiles],
+      resourceKeys: [...this.resourceKeys],
+      assetReads: this.assetReads.map((r) => [r.pattern, r.from]),
+      waspOps: [...this.waspOps].map(([dir, ops]) => [
+        dir,
+        [...ops].map(([name, t]) => [name, t.file, t.unit]),
+      ]),
+      edgeCount: this.edgeCount,
+      memberEdges: [...this.memberEdges].flatMap(([f, n]) => [id(f), n]),
+      edgeKinds,
+      strings,
+    };
+    return JSON.stringify(data);
+  }
+
+  /**
+   * Rebuilds a graph from `serialize()` output for the same analyses and options. Returns
+   * undefined when the text is not a complete graph of this format (the caller then builds).
+   */
+  static restore(
+    files: ReadonlyMap<string, FileAnalysis>,
+    isTest: (path: string) => boolean,
+    options: GraphOptions,
+    text: string,
+  ): DependencyGraph | undefined {
+    let data: SerializedGraph;
+    try {
+      data = JSON.parse(text) as SerializedGraph;
+      if (data?.format !== GRAPH_FORMAT || !Array.isArray(data.strings)) return undefined;
+      restoring = data;
+      return new DependencyGraph(files, isTest, options);
+    } catch {
+      return undefined;
+    } finally {
+      restoring = undefined;
+    }
+  }
+
+  /** Throws on any malformed part, so a damaged store is never half-used. */
+  private restore(data: SerializedGraph): void {
+    const { strings } = data;
+    const str = (i: unknown): string => {
+      const s = strings[i as number];
+      if (typeof s !== "string") throw new Error("graph store: bad string reference");
+      return s;
+    };
+    const ints = (a: unknown): number[] => {
+      if (!Array.isArray(a)) throw new Error("graph store: bad section");
+      return a as number[];
+    };
+    const kinds = data.edgeKinds.map(([kind, provenance, confidence]) => ({
+      kind: kind as GraphEdge["kind"],
+      provenance: provenance as Provenance,
+      confidence: confidence as Confidence,
+    }));
+    const edges = (a: unknown, into: Map<string, Dep[]>) => {
+      const xs = ints(a);
+      for (let i = 0; i < xs.length; ) {
+        const target = str(xs[i++]);
+        const n = xs[i++] as number;
+        if (!Number.isInteger(n) || n < 0 || i + 2 * n > xs.length)
+          throw new Error("graph store: bad edge list");
+        const list: Dep[] = new Array(n);
+        for (let j = 0; j < n; j++) {
+          const from = str(xs[i++]);
+          const k = kinds[xs[i++] as number];
+          if (!k) throw new Error("graph store: bad edge kind");
+          list[j] = { from, kind: k.kind, provenance: k.provenance, confidence: k.confidence };
+        }
+        into.set(target, list);
+      }
+    };
+    const lists = (a: unknown, put: (k: string, values: string[]) => void) => {
+      const xs = ints(a);
+      for (let i = 0; i < xs.length; ) {
+        const k = str(xs[i++]);
+        const n = xs[i++] as number;
+        if (!Number.isInteger(n) || n < 0 || i + n > xs.length)
+          throw new Error("graph store: bad list");
+        const values: string[] = new Array(n);
+        for (let j = 0; j < n; j++) values[j] = str(xs[i++]);
+        put(k, values);
+      }
+    };
+    edges(data.deps, this.deps);
+    edges(data.fileDependents, this.fileDependents);
+    lists(data.moduleDependents, (k, v) => this.moduleDependents.set(k, v));
+    lists(data.reexporters, (k, v) => this.reexporters.set(k, new Set(v)));
+    lists(data.forward, (k, v) => this.forward.set(k, new Set(v)));
+    lists(data.factoryMocks, (k, v) => this.factoryMocks.set(k, new Set(v)));
+    const text = (x: unknown): string => {
+      if (typeof x !== "string") throw new Error("graph store: bad string");
+      return x;
+    };
+    for (const [file, reasons] of data.uncertainty)
+      this.uncertainty.set(text(file), reasons.map(text));
+    for (const f of data.deletedFiles) this.deletedFiles.add(text(f));
+    for (const r of data.resourceKeys) this.resourceKeys.add(text(r));
+    this.assetReads = data.assetReads.map(([pattern, from]) => ({ pattern, from }));
+    for (const [dir, ops] of data.waspOps)
+      this.waspOps.set(dir, new Map(ops.map(([name, file, unit]) => [name, { file, unit }])));
+    if (!Number.isInteger(data.edgeCount)) throw new Error("graph store: bad counts");
+    this.edgeCount = data.edgeCount;
+    const members = ints(data.memberEdges);
+    for (let i = 0; i < members.length; i += 2) {
+      const n = members[i + 1];
+      if (!Number.isInteger(n)) throw new Error("graph store: bad counts");
+      this.memberEdges.set(str(members[i]), n as number);
+    }
+    this.contributionsPending = true;
   }
 
   /**
@@ -870,21 +1088,31 @@ export class DependencyGraph {
     const tests = new Map<string, TestHit & { files: string[] }>();
     const affectedFiles = new Set<string>();
     const affectedUnits = new Set<string>();
+    const labels = new Map<string, string>();
     const label = (k: string) => {
-      const [file, unit] = splitKey(k);
-      if (file === RESOURCE) return unit;
-      return unit === WHOLE || unit === ANY
-        ? file
-        : `${file}#${unit.replace(`.${INIT}`, ".constructor")}`;
+      let l = labels.get(k);
+      if (l === undefined) {
+        const [file, unit] = splitKey(k);
+        l =
+          file === RESOURCE
+            ? unit
+            : unit === WHOLE || unit === ANY
+              ? file
+              : `${file}#${unit.replace(`.${INIT}`, ".constructor")}`;
+        labels.set(k, l);
+      }
+      return l;
     };
     const pathOfKey = (k: string): string[] => {
+      // Collected from the reached key back to its seed, then reversed (paths can be long).
       const out: string[] = [];
       let cur: string | undefined = k;
       while (cur !== undefined) {
         const l = label(cur);
-        if (out[0] !== l) out.unshift(l);
+        if (out[out.length - 1] !== l) out.push(l);
         cur = parent.get(cur)?.from;
       }
+      out.reverse();
       // "file → file#Unit" is one hop, not two: keep the more precise label.
       if (out.length > 1 && !out[0]?.includes("#") && out[1]?.startsWith(`${out[0]}#`)) out.shift();
       return out;
@@ -904,7 +1132,7 @@ export class DependencyGraph {
           const path = pathOfKey(k);
           const files: string[] = [];
           for (let c = parent.get(k)?.from; c !== undefined; c = parent.get(c)?.from)
-            files.push(splitKey(c)[0]);
+            files.push(c.slice(0, c.indexOf("#")));
           tests.set(file, {
             test: file,
             path,

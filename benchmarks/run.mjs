@@ -8,7 +8,7 @@
  * measures SmartTest's own overhead. Test execution time is excluded: runners are not SmartTest.
  */
 import { execFileSync } from "node:child_process";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { cpus, platform, release, tmpdir, totalmem } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -20,8 +20,8 @@ const opt = (name, fallback) => {
   const i = args.indexOf(`--${name}`);
   return i > -1 ? args[i + 1] : fallback;
 };
-const SIZES = { small: 50, medium: 500, large: 2000 };
-const sizes = opt("sizes", "small,medium,large").split(",");
+const SIZES = { small: 50, medium: 500, large: 2000, xlarge: 10000 };
+const sizes = opt("sizes", "small,medium,large,xlarge").split(",");
 const outFile = join(root, opt("out", "benchmarks/RESULTS.md"));
 
 const { SmartTest } = await import(pathToFileURL(join(root, "packages/core/dist/index.js")).href);
@@ -94,6 +94,12 @@ async function generate(n) {
   return dir;
 }
 
+if (opt("generate")) {
+  // Profiling helper: generate one repository, print its path and keep it.
+  console.log(await generate(SIZES[opt("generate")]));
+  process.exit(0);
+}
+
 const median = (xs) => [...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)];
 async function time(fn, runs = 1) {
   const out = [];
@@ -115,29 +121,57 @@ for (const size of sizes) {
     () => execFileSync(process.execPath, [bin, "--version"], { stdio: "ignore" }),
     7,
   );
+  // Change a module in the middle layer (realistic fan-out): the body of Service<target>.run, which
+  // every module (and test) downstream depends on. Each call makes a new edit since the last run.
+  const target = Math.floor(n / 2);
+  const file = join(dir, "src", `m${target}.ts`);
+  const original = await readFile(file, "utf8");
+  let edits = 0;
+  const editBody = () =>
+    writeFile(file, original.replace(` + ${target};`, ` + ${target} + ${++edits} * 0;`));
+  const store = join(dir, ".smarttest");
+  const cli = () => execFileSync(process.execPath, [bin, "impact"], { cwd: dir, stdio: "ignore" });
+  // End to end, as a user runs it: process start, configuration, change detection, index, graph,
+  // impact, output. Cold: no index and no graph on disk. Warm: an edit since the previous run.
+  await editBody();
+  r.cliCold = await time(async () => {
+    await rm(store, { recursive: true, force: true });
+    cli();
+  }, 3);
+  const cliWarm = [];
+  for (let i = 0; i < 5; i++) {
+    await editBody();
+    const t = performance.now();
+    cli();
+    cliWarm.push(performance.now() - t);
+  }
+  r.cliWarm = median(cliWarm);
+  // In-process phases.
+  await rm(store, { recursive: true, force: true });
   const st = await SmartTest.open({ root: dir });
   r.coldIndex = await time(() => st.loadIndex());
   r.warmIndex = await time(() => st.loadIndex(), 3);
-  // Change a module in the middle layer (realistic fan-out).
-  const target = Math.floor(n / 2);
-  const file = join(dir, "src", `m${target}.ts`);
-  const { readFile } = await import("node:fs/promises");
-  // Change the body of Service<target>.run — every module (and test) downstream depends on it.
-  await writeFile(
-    file,
-    (await readFile(file, "utf8")).replace(` + ${target};`, ` + ${target} + 0;`),
-  );
   const warmAnalyses = [];
+  const graphModes = new Set();
   let last;
-  for (let i = 0; i < 3; i++) {
+  for (let i = 0; i < 4; i++) {
+    await editBody();
     const t = performance.now();
-    last = await (await SmartTest.open({ root: dir })).analyze();
+    const s = await SmartTest.open({ root: dir });
+    last = await s.analyze();
+    // The first analysis builds and stores the graph; the measured ones patch the stored graph.
+    if (i === 0) continue;
     warmAnalyses.push(performance.now() - t);
+    graphModes.add(s.lastGraphBuild);
   }
+  r.graphModes = [...graphModes].join(", ");
   r.warmDiff = median(warmAnalyses);
   r.selection = last.timings["graph build"] + last.timings["impact analysis"];
   r.selected = last.decision.selectedTests.length;
   r.total = last.testFiles.length;
+  // Graph build from the analyses (no stored graph).
+  await rm(join(store, "state", "graph.json"), { force: true });
+  r.graphBuild = (await (await SmartTest.open({ root: dir })).analyze()).timings["graph build"];
   // Watch mode: index and graph stay in memory; a body change patches the graph.
   {
     const warm = await SmartTest.open({ root: dir });
@@ -145,15 +179,11 @@ for (const size of sizes) {
     await warm.analyze();
     const patches = [];
     for (let i = 1; i <= 3; i++) {
-      await writeFile(
-        file,
-        (await readFile(file, "utf8")).replace(/ \+ 0;| \+ \d+ \* 0;/, ` + ${i} * 0;`),
-      );
+      await editBody();
       const a = await warm.analyze();
       if (warm.lastGraphBuild === "patched") patches.push(a.timings["graph build"]);
     }
     r.graphPatch = patches.length ? median(patches) : undefined;
-    r.graphBuild = last.timings["graph build"];
   }
   // Report generation for a run of this size.
   const executions = last.testFiles.map((f) => ({
@@ -202,7 +232,9 @@ const fmt = (ms) =>
   ms === undefined ? "—" : ms < 1000 ? `${Math.round(ms)} ms` : `${(ms / 1000).toFixed(2)} s`;
 const TARGETS = [
   ["Warm CLI startup (`--version`)", "startup", 300],
-  ["Simple diff analysis, warm index (end-to-end `analyze`)", "warmDiff", 500],
+  ["Warm analysis, end to end (CLI `impact` after an edit)", "cliWarm", 1000],
+  ["Cold start, end to end (CLI `impact`, no index or graph)", "cliCold", 1000],
+  ["Simple diff analysis, warm index (in-process `analyze` after an edit)", "warmDiff", 500],
   ["Warm graph selection (graph build + impact)", "selection", 200],
   ["Standard report generation (HTML)", "report", 2000],
   ["Graph update after a body change (watch: patched)", "graphPatch", 10],
@@ -214,7 +246,7 @@ const lines = [
   "<!-- GENERATED by benchmarks/run.mjs — re-run to update. -->",
   "",
   `Conditions: ${platform()} ${release()} · ${cpus()[0]?.model ?? "unknown CPU"} × ${cpus().length} · ${Math.round(totalmem() / 1024 ** 3)} GB RAM · Node ${process.versions.node} · smarttest ${TOOL.version}.`,
-  "Synthetic layered TypeScript repositories (10 modules per layer, 2 imports per module, one test per module, seeded). Test execution time is excluded.",
+  "Synthetic layered TypeScript repositories (10 modules per layer, 2 imports per module, one test per module, seeded). Test execution time is excluded. Warm runs follow a new edit to the changed module, so the stored graph is patched, not merely reloaded. End-to-end times include process start and output; targets for those rows are the 1.0.0 performance story (warm < 1 s at 10,000 modules, cold < 1 s at 2,000).",
   "",
   `| Operation | Target | ${cols.join(" | ")} |`,
   `|---|---|${cols.map(() => "---").join("|")}|`,
@@ -224,6 +256,12 @@ for (const [label, key, target] of TARGETS) {
     `| ${label} | < ${fmt(target)} | ${sizes.map((s) => `${fmt(results[s][key])} ${results[s][key] <= target ? "met" : "missed"}`).join(" | ")} |`,
   );
 }
+lines.push(
+  `| Graph build from the analyses (no stored graph) | — | ${sizes.map((s) => fmt(results[s].graphBuild)).join(" | ")} |`,
+);
+lines.push(
+  `| Stored graph in warm analyses | — | ${sizes.map((s) => results[s].graphModes).join(" | ")} |`,
+);
 lines.push(
   `| Cold index (first run, parse everything) | — | ${sizes.map((s) => fmt(results[s].coldIndex)).join(" | ")} |`,
 );
@@ -238,7 +276,7 @@ lines.push(
 );
 lines.push(
   "",
-  "Targets are aspirational engineering targets from PRD §31.3, not guarantees. Misses are reported, not hidden.",
+  "Targets are aspirational engineering targets from PRD §31.3 and the 1.0.0 performance story, not guarantees. The cold-start target is stated for 2,000 modules; it is shown for every size. Misses are reported, not hidden.",
   "",
 );
 await writeFile(outFile, lines.join("\n"));
