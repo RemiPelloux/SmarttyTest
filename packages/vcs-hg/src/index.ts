@@ -40,6 +40,7 @@ export function parseHgStatus(output: string): FileChange[] {
 }
 
 export class HgAdapter implements VersionControlAdapter, ChangeProvider {
+  readonly apiVersion = 1;
   readonly id = "hg";
   private repoRoot: string | undefined;
   constructor(private readonly projectRoot: string) {}

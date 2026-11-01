@@ -26,6 +26,7 @@ import {
 const GIT_CONFIG = ["-c", "core.quotePath=false", "-c", "color.ui=false"];
 
 export class GitAdapter implements VersionControlAdapter, ChangeProvider {
+  readonly apiVersion = 1;
   readonly id = "git";
   private repoRoot: string | undefined;
 

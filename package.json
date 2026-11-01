@@ -47,7 +47,16 @@
     "@changesets/cli": "^3.0.3",
     "@smarttest/adapter-jest": "workspace:*",
     "@smarttest/adapter-vitest": "workspace:*",
+    "@smarttest/adapter-node": "workspace:*",
+    "@smarttest/adapter-playwright": "workspace:*",
+    "@smarttest/adapter-cypress": "workspace:*",
+    "@smarttest/language-typescript": "workspace:*",
+    "@smarttest/language-javascript": "workspace:*",
+    "@smarttest/vcs-git": "workspace:*",
+    "@smarttest/vcs-hg": "workspace:*",
+    "@smarttest/vcs-svn": "workspace:*",
     "@smarttest/plugin-sdk": "workspace:*",
+    "@smarttest/shared": "workspace:*",
     "@axe-core/playwright": "4.14.0",
     "playwright-core": "1.64.1"
   }

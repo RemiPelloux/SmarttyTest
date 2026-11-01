@@ -175,18 +175,45 @@ importers:
       '@changesets/cli':
         specifier: ^3.0.3
         version: 3.0.3
+      '@smarttest/adapter-cypress':
+        specifier: workspace:*
+        version: link:packages/adapter-cypress
       '@smarttest/adapter-jest':
         specifier: workspace:*
         version: link:packages/adapter-jest
+      '@smarttest/adapter-node':
+        specifier: workspace:*
+        version: link:packages/adapter-node
+      '@smarttest/adapter-playwright':
+        specifier: workspace:*
+        version: link:packages/adapter-playwright
       '@smarttest/adapter-vitest':
         specifier: workspace:*
         version: link:packages/adapter-vitest
       '@smarttest/core':
         specifier: workspace:*
         version: link:packages/core
+      '@smarttest/language-javascript':
+        specifier: workspace:*
+        version: link:packages/language-javascript
+      '@smarttest/language-typescript':
+        specifier: workspace:*
+        version: link:packages/language-typescript
       '@smarttest/plugin-sdk':
         specifier: workspace:*
         version: link:packages/plugin-sdk
+      '@smarttest/shared':
+        specifier: workspace:*
+        version: link:packages/shared
+      '@smarttest/vcs-git':
+        specifier: workspace:*
+        version: link:packages/vcs-git
+      '@smarttest/vcs-hg':
+        specifier: workspace:*
+        version: link:packages/vcs-hg
+      '@smarttest/vcs-svn':
+        specifier: workspace:*
+        version: link:packages/vcs-svn
       '@types/node':
         specifier: ^24.0.0
         version: 24.19.2
@@ -261,6 +288,12 @@ importers:
         version: 5.0.5(@types/node@24.19.2)(@vitest/coverage-v8@5.0.5)(vite@8.3.5(@types/node@24.19.2)(esbuild@0.28.2)(yaml@2.9.1))
 
   fixtures/projects/node-test-esm: {}
+
+  fixtures/projects/plugin-edges-vitest:
+    devDependencies:
+      vitest:
+        specifier: ^5.0.5
+        version: 5.0.5(@types/node@24.19.2)(@vitest/coverage-v8@5.0.5)(vite@8.3.5(@types/node@24.19.2)(esbuild@0.28.2)(yaml@2.9.1))
 
   fixtures/projects/pnpm-monorepo:
     devDependencies:

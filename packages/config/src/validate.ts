@@ -10,6 +10,7 @@ const LAYOUTS = ["mirror", "colocated", "domain", "custom"];
 const ADAPTERS = ["vitest", "jest", "node", "playwright", "cypress"];
 const FORMATS = ["html", "json", "junit", "markdown"];
 const POLICIES = ["exclude", "test-source", "rebuild-required"];
+const VISIBILITIES = ["public", "protected", "private"];
 const MATCH_KEYS = [
   "path",
   "package",
@@ -40,6 +41,7 @@ const TOP_KEYS: Record<string, string[] | null> = {
   cache: null,
   hook: ["checks", "budgetMs"],
   parallelGroups: null,
+  plugins: null,
   projects: null,
   timeoutMs: null,
   workers: null,
@@ -51,6 +53,75 @@ const isObj = (v: unknown): v is Record<string, unknown> =>
   typeof v === "object" && v !== null && !Array.isArray(v);
 const isStrArr = (v: unknown): v is string[] =>
   Array.isArray(v) && v.every((x) => typeof x === "string");
+const isCount = (v: unknown): v is number => typeof v === "number" && Number.isInteger(v) && v >= 0;
+
+/** Rules, at the top level or inside a project. */
+function validateRules(
+  rules: unknown,
+  at: string,
+  err: (path: string, message: string) => void,
+): void {
+  if (rules === undefined) return;
+  if (!Array.isArray(rules)) {
+    err(at, "must be an array");
+    return;
+  }
+  const names = new Set<string>();
+  for (const [i, rule] of rules.entries()) {
+    const p = `${at}[${i}]`;
+    if (!isObj(rule)) {
+      err(p, "must be an object");
+      continue;
+    }
+    if (typeof rule.name !== "string" || !rule.name) err(`${p}.name`, "is required");
+    else if (names.has(rule.name)) err(`${p}.name`, `duplicate rule name "${rule.name}"`);
+    else names.add(rule.name);
+    if (!isObj(rule.match)) err(`${p}.match`, "is required and must be an object");
+    else
+      for (const [k, v] of Object.entries(rule.match)) {
+        if (!MATCH_KEYS.includes(k))
+          err(`${p}.match.${k}`, `unknown selector (expected one of ${MATCH_KEYS.join(", ")})`);
+        else if (typeof v !== "string") err(`${p}.match.${k}`, "must be a string");
+        else if (k === "visibility" && !VISIBILITIES.includes(v))
+          err(`${p}.match.visibility`, `must be one of ${VISIBILITIES.join(", ")}`);
+      }
+    if (rule.risk !== undefined && !RISKS.includes(rule.risk as string))
+      err(`${p}.risk`, `must be one of ${RISKS.join(", ")}`);
+    if (
+      rule.require !== undefined &&
+      !(isStrArr(rule.require) && rule.require.every((r) => CATEGORIES.includes(r)))
+    )
+      err(`${p}.require`, `must be an array of: ${CATEGORIES.join(", ")}`);
+    if (rule.execution !== undefined) {
+      const e = rule.execution;
+      if (!isObj(e)) err(`${p}.execution`, "must be an object");
+      else {
+        if (e.mode !== undefined && !MODES.includes(e.mode as string))
+          err(`${p}.execution.mode`, `must be one of ${MODES.join(", ")}`);
+        if (e.alwaysRunOnAffected !== undefined && typeof e.alwaysRunOnAffected !== "boolean")
+          err(`${p}.execution.alwaysRunOnAffected`, "must be a boolean");
+        if (e.retries !== undefined && !isCount(e.retries))
+          err(`${p}.execution.retries`, "must be a non-negative integer");
+      }
+    }
+    if (rule.coverage !== undefined) {
+      if (!isObj(rule.coverage)) err(`${p}.coverage`, "must be an object");
+      else
+        for (const k of ["lines", "branches"]) {
+          const v = rule.coverage[k];
+          if (v !== undefined && !(typeof v === "number" && v >= 0 && v <= 100))
+            err(`${p}.coverage.${k}`, "must be a number between 0 and 100");
+        }
+    }
+    if (rule.generate !== undefined) {
+      if (!isObj(rule.generate)) err(`${p}.generate`, "must be an object");
+      else
+        for (const k of ["template", "path"])
+          if (rule.generate[k] !== undefined && typeof rule.generate[k] !== "string")
+            err(`${p}.generate.${k}`, "must be a string");
+    }
+  }
+}
 
 /** Validates a raw configuration object. Errors block; warnings (unknown keys) don't. */
 export function validateConfig(raw: unknown): { errors: ConfigIssue[]; warnings: ConfigIssue[] } {
@@ -63,6 +134,7 @@ export function validateConfig(raw: unknown): { errors: ConfigIssue[]; warnings:
     return { errors, warnings };
   }
   for (const [key, value] of Object.entries(raw)) {
+    if (key === "$schema") continue; // editor hint in smarttest.config.json
     if (!(key in TOP_KEYS)) {
       warnings.push({ path: key, message: "unknown option (ignored)" });
       continue;
@@ -77,6 +149,11 @@ export function validateConfig(raw: unknown): { errors: ConfigIssue[]; warnings:
   const c = raw;
   for (const k of ["include", "exclude", "triggers"])
     if (c[k] !== undefined && !isStrArr(c[k])) err(k, "must be an array of glob strings");
+  if (c.plugins !== undefined && !(isStrArr(c.plugins) && c.plugins.every((p) => p.trim() !== "")))
+    err(
+      "plugins",
+      "must be an array of module paths (relative to the project root) or package names",
+    );
   if (c.mode !== undefined && !MODES.includes(c.mode as string))
     err("mode", `must be one of ${MODES.join(", ")}`);
   if (
@@ -86,8 +163,7 @@ export function validateConfig(raw: unknown): { errors: ConfigIssue[]; warnings:
     err("adapters", `must be an array of: ${ADAPTERS.join(", ")}`);
   for (const k of ["retries", "timeoutMs", "workers"]) {
     const v = c[k];
-    if (v !== undefined && !(typeof v === "number" && Number.isInteger(v) && v >= 0))
-      err(k, "must be a non-negative integer");
+    if (v !== undefined && !isCount(v)) err(k, "must be a non-negative integer");
   }
   if (c.adaptive !== undefined && typeof c.adaptive !== "boolean")
     err("adaptive", "must be a boolean");
@@ -150,10 +226,17 @@ export function validateConfig(raw: unknown): { errors: ConfigIssue[]; warnings:
             warn(`projects.${dir}.${k}`, "unknown key (ignored)");
         if (p.mode !== undefined && !MODES.includes(p.mode as string))
           err(`projects.${dir}.mode`, `must be one of: ${MODES.join(", ")}`);
-        if (p.tests !== undefined && !isObj(p.tests))
-          err(`projects.${dir}.tests`, "must be an object");
-        if (p.rules !== undefined && !Array.isArray(p.rules))
-          err(`projects.${dir}.rules`, "must be an array");
+        if (p.tests !== undefined) {
+          if (!isObj(p.tests)) err(`projects.${dir}.tests`, "must be an object");
+          else {
+            if (p.tests.layout !== undefined && !LAYOUTS.includes(p.tests.layout as string))
+              err(`projects.${dir}.tests.layout`, `must be one of ${LAYOUTS.join(", ")}`);
+            for (const k of ["directory", "naming", "path", "templates"])
+              if (p.tests[k] !== undefined && typeof p.tests[k] !== "string")
+                err(`projects.${dir}.tests.${k}`, "must be a string");
+          }
+        }
+        validateRules(p.rules, `projects.${dir}.rules`, err);
       }
   }
   if (c.storeDir !== undefined && typeof c.storeDir !== "string")
@@ -210,11 +293,24 @@ export function validateConfig(raw: unknown): { errors: ConfigIssue[]; warnings:
   }
   if (c.reports !== undefined) {
     if (!isObj(c.reports)) err("reports", "must be an object");
-    else if (
-      c.reports.formats !== undefined &&
-      !(isStrArr(c.reports.formats) && c.reports.formats.every((f) => FORMATS.includes(f)))
-    )
-      err("reports.formats", `must be an array of: ${FORMATS.join(", ")}`);
+    else {
+      if (
+        c.reports.formats !== undefined &&
+        !(isStrArr(c.reports.formats) && c.reports.formats.every((f) => FORMATS.includes(f)))
+      )
+        err("reports.formats", `must be an array of: ${FORMATS.join(", ")}`);
+      if (c.reports.outputDir !== undefined && typeof c.reports.outputDir !== "string")
+        err("reports.outputDir", "must be a string");
+    }
+  }
+  if (c.snapshots !== undefined) {
+    if (!isObj(c.snapshots)) err("snapshots", "must be an object");
+    else {
+      if (c.snapshots.storeContent !== undefined && typeof c.snapshots.storeContent !== "boolean")
+        err("snapshots.storeContent", "must be a boolean");
+      if (c.snapshots.keep !== undefined && !isCount(c.snapshots.keep))
+        err("snapshots.keep", "must be a non-negative integer");
+    }
   }
   if (c.generated !== undefined) {
     if (!Array.isArray(c.generated)) err("generated", "must be an array");
@@ -229,50 +325,6 @@ export function validateConfig(raw: unknown): { errors: ConfigIssue[]; warnings:
           err(`generated[${i}].from`, "must be an array of globs");
       });
   }
-  if (c.rules !== undefined) {
-    if (!Array.isArray(c.rules)) err("rules", "must be an array");
-    else {
-      const names = new Set<string>();
-      for (const [i, rule] of c.rules.entries()) {
-        const p = `rules[${i}]`;
-        if (!isObj(rule)) {
-          err(p, "must be an object");
-          continue;
-        }
-        if (typeof rule.name !== "string" || !rule.name) err(`${p}.name`, "is required");
-        else if (names.has(rule.name)) err(`${p}.name`, `duplicate rule name "${rule.name}"`);
-        else names.add(rule.name);
-        if (!isObj(rule.match)) err(`${p}.match`, "is required and must be an object");
-        else
-          for (const [k, v] of Object.entries(rule.match)) {
-            if (!MATCH_KEYS.includes(k))
-              err(`${p}.match.${k}`, `unknown selector (expected one of ${MATCH_KEYS.join(", ")})`);
-            else if (typeof v !== "string") err(`${p}.match.${k}`, "must be a string");
-          }
-        if (rule.risk !== undefined && !RISKS.includes(rule.risk as string))
-          err(`${p}.risk`, `must be one of ${RISKS.join(", ")}`);
-        if (
-          rule.require !== undefined &&
-          !(isStrArr(rule.require) && rule.require.every((r) => CATEGORIES.includes(r)))
-        )
-          err(`${p}.require`, `must be an array of: ${CATEGORIES.join(", ")}`);
-        if (rule.execution !== undefined) {
-          if (!isObj(rule.execution)) err(`${p}.execution`, "must be an object");
-          else if (
-            rule.execution.mode !== undefined &&
-            !MODES.includes(rule.execution.mode as string)
-          )
-            err(`${p}.execution.mode`, `must be one of ${MODES.join(", ")}`);
-        }
-        if (rule.coverage !== undefined && isObj(rule.coverage)) {
-          for (const k of ["lines", "branches"]) {
-            const v = rule.coverage[k];
-            if (v !== undefined && !(typeof v === "number" && v >= 0 && v <= 100))
-              err(`${p}.coverage.${k}`, "must be a number between 0 and 100");
-          }
-        }
-      }
-    }
-  }
+  validateRules(c.rules, "rules", err);
   return { errors, warnings };
 }

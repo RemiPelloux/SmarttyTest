@@ -28,6 +28,7 @@ export interface VitestAdapterOptions {
 }
 
 export class VitestAdapter implements TestAdapter {
+  readonly apiVersion = 1;
   readonly id = "vitest";
   constructor(private readonly options: VitestAdapterOptions) {}
 

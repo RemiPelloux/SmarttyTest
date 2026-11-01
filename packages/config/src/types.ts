@@ -116,6 +116,11 @@ export interface SmartTestConfig {
   parallelGroups?: number | "auto";
   /** Commit-hook behaviour (`smarttest run --hook`). */
   hook?: HookConfig;
+  /**
+   * Plugin modules (Plugin SDK v1): paths relative to the project root, or package names. Each
+   * module's default export is a `SmartTestPlugin` (see documentation/guides/plugins.md).
+   */
+  plugins?: string[];
   timeoutMs?: number;
   workers?: number;
   reports?: { formats?: ReportFormat[]; outputDir?: string };
@@ -147,6 +152,7 @@ export interface ResolvedConfig {
   cache: boolean;
   parallelGroups: number | "auto";
   hook: { checks: HookCheckConfig[]; budgetMs: number };
+  plugins: string[];
   timeoutMs: number;
   workers?: number;
   reports: { formats: ReportFormat[]; outputDir: string };

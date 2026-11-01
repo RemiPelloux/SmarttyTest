@@ -1,5 +1,6 @@
 import { readdir, readFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
+import { type JsonSchema, validateJsonSchema } from "@smarttest/shared";
 import { main } from "smarttest";
 import { describe, expect, it } from "vitest";
 import { edit, materialize } from "./helpers.js";
@@ -29,33 +30,12 @@ async function cli(cwd: string, ...argv: string[]) {
   return { code, out: c.out, err: c.err };
 }
 
-/** Minimal JSON-schema check: required keys (recursively for declared object properties) and consts. */
-function check(schema: Record<string, unknown>, value: unknown, path = "$"): string[] {
-  const issues: string[] = [];
-  if ("const" in schema && value !== schema.const)
-    issues.push(`${path}: expected ${String(schema.const)}`);
-  if (schema.type === "object") {
-    if (typeof value !== "object" || value === null) return [`${path}: expected object`];
-    for (const k of (schema.required as string[] | undefined) ?? [])
-      if (!(k in value)) issues.push(`${path}.${k}: missing`);
-    for (const [k, sub] of Object.entries(
-      (schema.properties as Record<string, Record<string, unknown>>) ?? {},
-    )) {
-      if (k in value)
-        issues.push(...check(sub, (value as Record<string, unknown>)[k], `${path}.${k}`));
-    }
-  }
-  if (schema.type === "array" && schema.items && Array.isArray(value)) {
-    for (const [i, v] of value.entries())
-      issues.push(...check(schema.items as Record<string, unknown>, v, `${path}[${i}]`));
-  }
-  return issues;
+/** Validates a document against a published schema; returns the issues as strings. */
+function check(schema: JsonSchema, value: unknown): string[] {
+  return validateJsonSchema(schema, value).map((i) => `${i.path}: ${i.message}`);
 }
 const schema = async (name: string) =>
-  JSON.parse(await readFile(join(SCHEMAS, `${name}.v1.schema.json`), "utf8")) as Record<
-    string,
-    unknown
-  >;
+  JSON.parse(await readFile(join(SCHEMAS, `${name}.v1.schema.json`), "utf8")) as JsonSchema;
 
 describe("smarttest CLI", () => {
   it("prints help and version, and rejects bad usage with exit 2 and a suggestion", async () => {

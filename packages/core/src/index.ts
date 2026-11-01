@@ -15,6 +15,13 @@ export {
   type CommitBenchmark,
   type HistoryBenchmark,
 } from "./history.js";
+export {
+  assertPlugin,
+  type LoadedPlugin,
+  loadPlugins,
+  PLUGIN_API_VERSION,
+  runEdgeProviders,
+} from "./plugins.js";
 export * from "./smarttest.js";
 export { type FlakyEntry, flakyReport, parseShard, shardFiles } from "./speed.js";
 export { type Drift, detectDrift, patchConfig, type SyncResult } from "./sync.js";

@@ -58,7 +58,10 @@ export interface VersionControlCapabilities {
   fileContentAtRevision: Capability;
 }
 
+/** A version-control adapter (Plugin SDK v1, frozen at 1.0.0). */
 export interface VersionControlAdapter {
+  /** Plugin API version this adapter implements. */
+  readonly apiVersion: 1;
   readonly id: string;
   detect(root: string): Promise<boolean>;
   getWorkingState(): Promise<WorkingState>;

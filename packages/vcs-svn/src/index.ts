@@ -48,6 +48,7 @@ export function parseSvnStatus(
 }
 
 export class SvnAdapter implements VersionControlAdapter, ChangeProvider {
+  readonly apiVersion = 1;
   readonly id = "svn";
   constructor(private readonly projectRoot: string) {}
 

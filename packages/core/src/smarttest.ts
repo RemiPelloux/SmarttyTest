@@ -15,7 +15,7 @@ import {
   type ResolvedConfig,
 } from "@smarttest/config";
 import { type CoverageReport, ingestIstanbul } from "@smarttest/coverage-engine";
-import { DependencyGraph, nextRoutes } from "@smarttest/dependency-graph";
+import { DependencyGraph, nextRoutes, type ProvidedGraphInput } from "@smarttest/dependency-graph";
 import { decideImpact, explainTest, type ImpactResult } from "@smarttest/impact-engine";
 import { javascriptAnalyzer } from "@smarttest/language-javascript";
 import { TypeScriptResolver, typescriptAnalyzer } from "@smarttest/language-typescript";
@@ -123,6 +123,7 @@ import {
   unknownCheckProjects,
 } from "./hook.js";
 import { ParsePool, parallelParsingAvailable } from "./parse-pool.js";
+import { type LoadedPlugin, loadPlugins, runEdgeProviders } from "./plugins.js";
 import { nothingInScope, restrictChanges, scopeWarnings, unchangedScopeDecision } from "./scope.js";
 import {
   cacheGet,
@@ -582,6 +583,7 @@ export class SmartTest {
       })
       .finally(() => pool?.close());
     await index.save();
+    await this.runPlugins(index);
     if (before) {
       // Changes other files can see (imports, exports, declarations) need a full graph rebuild.
       const surface = (x: FileAnalysis) =>
@@ -611,11 +613,32 @@ export class SmartTest {
     return { index, stats };
   }
 
+  private pluginsLoaded: Promise<LoadedPlugin[]> | undefined;
+  /** Output of the plugin edge providers for the current index (recomputed on each load). */
+  private provided: (ProvidedGraphInput & { warnings: string[] }) | undefined;
+
+  /** Plugins from the `plugins` option, loaded once per instance. */
+  plugins(): Promise<LoadedPlugin[]> {
+    this.pluginsLoaded ??= loadPlugins(this.root, this.config.plugins);
+    return this.pluginsLoaded;
+  }
+
+  private async runPlugins(index: SymbolIndex): Promise<void> {
+    if (!this.config.plugins.length) return;
+    this.provided = await runEdgeProviders(await this.plugins(), {
+      root: this.root,
+      files: [...index.entries().keys()],
+      isTest: this.isTest,
+      listFiles: () => this.allFiles(),
+    });
+  }
+
   buildGraph(index: SymbolIndex, e2eTests?: ReadonlySet<string>): DependencyGraph {
     const e2e = [...(e2eTests ?? [])].sort().join("|");
     const cached = this.graphCache;
     if (
       this.keepWarm &&
+      !this.provided &&
       cached &&
       cached.index === index &&
       cached.e2e === e2e &&
@@ -647,6 +670,9 @@ export class SmartTest {
     return new DependencyGraph(index.entries(), this.isTest, {
       ...(routes.length ? { routes } : {}),
       ...(e2eTests?.size ? { e2eTests } : {}),
+      ...(this.provided
+        ? { provided: { edges: this.provided.edges, unresolved: this.provided.unresolved } }
+        : {}),
     });
   }
 
@@ -834,6 +860,10 @@ export class SmartTest {
             isTest: this.isTest,
             mode: options.mode ?? this.config.mode,
             triggers: [...BUILTIN_TRIGGERS, ...this.config.triggers],
+            // A plugin module inside the project decides edges: changing it widens to everything.
+            globalTriggers: this.config.plugins
+              .filter((p) => p.startsWith("./"))
+              .map((p) => p.slice(2)),
             rules: new RulesEngine(effectiveRules(this.config)),
             packageOf: this.packageOf,
             resources,
@@ -844,7 +874,7 @@ export class SmartTest {
     );
     if (graphDiff.length) decision.details.graphDiff = graphDiff;
     if (scope) decision.warnings.unshift(...scopeWarnings(scope, input.changeSet.completeness));
-    decision.warnings.push(...discoveryWarnings);
+    decision.warnings.push(...discoveryWarnings, ...(this.provided?.warnings ?? []));
     const profileNow = this.profileCache;
     if (profileNow) {
       const drift = detectDrift(this.config, this.loaded.raw, profileNow).filter(
@@ -2430,6 +2460,26 @@ export class SmartTest {
     );
     for (const w of this.loaded.warnings)
       out.push({ severity: "warn", check: "config", message: `${w.path}: ${w.message}` });
+    if (this.config.plugins.length) {
+      try {
+        for (const { spec, plugin } of await this.plugins()) {
+          const providers = (plugin.edgeProviders ?? []).map((p) => p.id);
+          out.push({
+            severity: "ok",
+            check: "plugins",
+            message: `${plugin.name} (${spec})${providers.length ? ` · edge providers: ${providers.join(", ")}` : ""}`,
+          });
+        }
+      } catch (error) {
+        const e = error as SmartTestError;
+        out.push({
+          severity: "error",
+          check: "plugins",
+          message: e.message,
+          ...(e.hint ? { hint: e.hint } : {}),
+        });
+      }
+    }
     const rulesIssues = this.rules().validate();
     for (const r of rulesIssues)
       out.push({

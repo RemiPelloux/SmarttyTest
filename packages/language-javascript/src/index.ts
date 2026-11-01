@@ -6,6 +6,7 @@ import { ANALYZER_VERSION, analyzeSource } from "@smarttest/language-typescript"
 import type { Analyzer } from "@smarttest/source-parser";
 
 export const javascriptAnalyzer: Analyzer = {
+  apiVersion: 1,
   id: "javascript",
   version: ANALYZER_VERSION,
   supports: (path) => /\.(?:[cm]?js|jsx)$/.test(path),

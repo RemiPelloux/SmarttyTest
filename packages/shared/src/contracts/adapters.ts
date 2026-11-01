@@ -22,7 +22,10 @@ export interface CoverageArtifact {
   path: string;
 }
 
+/** A test runner adapter (Plugin SDK v1, frozen at 1.0.0). */
 export interface TestAdapter {
+  /** Plugin API version this adapter implements. */
+  readonly apiVersion: 1;
   id: string;
   discover(): Promise<TestCase[]>;
   execute(selection: TestSelection, options: ExecutionOptions): Promise<TestRunResult>;

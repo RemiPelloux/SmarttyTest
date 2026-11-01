@@ -82,6 +82,7 @@ export function resolveConfig(config: SmartTestConfig = {}): ResolvedConfig {
     cache: config.cache ?? true,
     parallelGroups: config.parallelGroups ?? "auto",
     hook: { checks: config.hook?.checks ?? [], budgetMs: config.hook?.budgetMs ?? 60_000 },
+    plugins: config.plugins ?? [],
     timeoutMs: config.timeoutMs ?? 10 * 60_000,
     ...(config.workers ? { workers: config.workers } : {}),
     reports: {
