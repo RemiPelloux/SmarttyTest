@@ -15,7 +15,7 @@ import {
   type ResolvedConfig,
 } from "@smarttest/config";
 import { type CoverageReport, ingestIstanbul } from "@smarttest/coverage-engine";
-import { DependencyGraph, nextRoutes } from "@smarttest/dependency-graph";
+import { DependencyGraph, type GraphOptions, nextRoutes } from "@smarttest/dependency-graph";
 import { decideImpact, explainTest, type ImpactResult } from "@smarttest/impact-engine";
 import { javascriptAnalyzer } from "@smarttest/language-javascript";
 import { TypeScriptResolver, typescriptAnalyzer } from "@smarttest/language-typescript";
@@ -46,6 +46,7 @@ import type { TestAdapter } from "@smarttest/shared";
 import {
   ExitCode,
   exists,
+  gitProjectFiles,
   type Logger,
   mapLimit,
   matchGlob,
@@ -57,6 +58,7 @@ import {
   sha256,
   silentLogger,
   walkFiles,
+  writeFileAtomic,
   writeJson,
 } from "@smarttest/shared";
 import {
@@ -99,6 +101,7 @@ import type { ChangeAnalysisInput, ChangeSource } from "@smarttest/vcs-core";
 import { GitAdapter } from "@smarttest/vcs-git";
 import { HgAdapter } from "@smarttest/vcs-hg";
 import { SvnAdapter } from "@smarttest/vcs-svn";
+import { GraphStore, surfaceOf } from "./graph-store.js";
 import {
   assertPushIsHead,
   type CheckResult,
@@ -379,18 +382,23 @@ export class SmartTest {
 
   isTest = (path: string): boolean => isTestFile(path, this.config.tests.match);
 
-  async profile(): Promise<ProjectProfile> {
-    this.profileCache ??= await detectProject(this.root, { isTestFile: this.isTest });
+  /** `gitFiles`: a `gitProjectFiles` listing taken by the caller (saves listing twice). */
+  async profile(gitFiles?: readonly string[]): Promise<ProjectProfile> {
+    this.profileCache ??= await detectProject(this.root, {
+      isTestFile: this.isTest,
+      ...(gitFiles ? { files: await walkFiles(this.root, { gitFiles }) } : {}),
+    });
     return this.profileCache;
   }
 
-  async sourceFiles(): Promise<string[]> {
+  async sourceFiles(gitFiles?: readonly string[]): Promise<string[]> {
     const generatedExcludes = this.config.generated
       .filter((g) => g.policy === "exclude")
       .map((g) => g.path);
     return walkFiles(this.root, {
       include: this.config.include,
       exclude: [...this.config.exclude, ...generatedExcludes],
+      ...(gitFiles ? { gitFiles } : {}),
     });
   }
 
@@ -521,12 +529,21 @@ export class SmartTest {
   private indexCache: SymbolIndex | undefined;
   private graphCache: { graph: DependencyGraph; index: SymbolIndex; e2e: string } | undefined;
   private lastIndexChange: { changed: string[]; structural: boolean } | undefined;
-  /** How the last graph was obtained ("patched" or "built"), for diagnostics. */
-  lastGraphBuild: "patched" | "built" | undefined;
+  /**
+   * How the last graph was obtained, for diagnostics: "built" from the analyses, "loaded" from the
+   * persisted graph, or "patched" (the persisted or in-memory graph, patched for changed files).
+   */
+  lastGraphBuild: "patched" | "built" | "loaded" | undefined;
+  /** Why the persisted graph could not be used last time (diagnostics). */
+  lastGraphStoreMiss: string | undefined;
 
   async loadIndex(): Promise<{ index: SymbolIndex; stats: UpdateStats }> {
+    // One project listing serves detection and the source file set; Git lists while the index
+    // is read.
+    const listing = gitProjectFiles(this.root);
     const index =
       this.keepWarm && this.indexCache ? this.indexCache : await SymbolIndex.load(this.storeDir);
+    const gitFiles = await listing;
     const before = this.keepWarm ? new Map(index.entries()) : undefined;
     // Cold start (no index, or one from another analyzer version) of a large project: parser
     // threads start before files are read, so their start-up overlaps with reading.
@@ -534,7 +551,7 @@ export class SmartTest {
     const cold =
       index.size === 0 ||
       (sample !== undefined && !ANALYZERS.some((a) => a.version === sample.analyzerVersion));
-    const profile = await this.profile();
+    const profile = await this.profile(gitFiles);
     for (const w of index.loadWarnings) this.logger.warn(w);
     const resolver = new TypeScriptResolver(
       this.root,
@@ -554,7 +571,7 @@ export class SmartTest {
       )
     ).join("\n");
     this.resolver = resolver;
-    const files = await this.sourceFiles();
+    const files = await this.sourceFiles(gitFiles);
     const pool =
       cold && files.length >= 300 && parallelParsingAvailable() ? new ParsePool() : undefined;
     const stats = await index
@@ -576,26 +593,14 @@ export class SmartTest {
     await index.save();
     if (before) {
       // Changes other files can see (imports, exports, declarations) need a full graph rebuild.
-      const surface = (x: FileAnalysis) =>
-        JSON.stringify([
-          x.importsHash,
-          x.localExports,
-          x.symbols.map((y) => [
-            y.qualifiedName,
-            y.kind,
-            y.exportNames,
-            y.parent ?? "",
-            y.extends ?? "",
-          ]),
-          x.catalogKeys ? Object.keys(x.catalogKeys) : [],
-        ]);
       const changed: string[] = [];
-      let structural = before.size !== index.size;
+      // Re-resolved in place (tsconfig paths, package manifests): other files may now point elsewhere.
+      let structural = before.size !== index.size || !!stats.resolvedAll;
       for (const [p, a] of index.entries()) {
         const old = before.get(p);
         if (old === a) continue;
         changed.push(p);
-        if (!old || surface(old) !== surface(a)) structural = true;
+        if (!old || surfaceOf(old) !== surfaceOf(a)) structural = true;
       }
       this.lastIndexChange = { changed, structural };
       this.indexCache = index;
@@ -627,6 +632,10 @@ export class SmartTest {
   }
 
   private buildGraphFresh(index: SymbolIndex, e2eTests?: ReadonlySet<string>): DependencyGraph {
+    return new DependencyGraph(index.entries(), this.isTest, this.graphOptions(index, e2eTests));
+  }
+
+  private graphOptions(index: SymbolIndex, e2eTests?: ReadonlySet<string>): GraphOptions {
     const files = [...index.entries().keys()];
     // Next.js projects: directories with a next.config, or the root when Next.js was detected.
     const nextRoots = new Set(
@@ -636,10 +645,48 @@ export class SmartTest {
     );
     if (this.profileCache?.frameworks.some((f) => f.value === "Next.js")) nextRoots.add("");
     const routes = nextRoots.size ? nextRoutes(files, [...nextRoots]) : [];
-    return new DependencyGraph(index.entries(), this.isTest, {
+    return {
       ...(routes.length ? { routes } : {}),
       ...(e2eTests?.size ? { e2eTests } : {}),
-    });
+    };
+  }
+
+  /**
+   * The graph for an analysis, persisted between runs (`.smarttest/state/graph.json`): restored
+   * when it provably matches the current analyses, patched for files whose content changed but
+   * whose surface did not, rebuilt otherwise (see graph-store.ts). Watch mode keeps its in-memory
+   * graph instead.
+   */
+  private async analysisGraph(
+    index: SymbolIndex,
+    e2eTests: ReadonlySet<string>,
+  ): Promise<DependencyGraph> {
+    if (this.keepWarm && this.graphCache) return this.buildGraph(index, e2eTests);
+    const options = this.graphOptions(index, e2eTests);
+    const store = new GraphStore(this.storeDir, this.config, options);
+    const loaded = store.load(index.entries(), this.isTest);
+    let graph: DependencyGraph;
+    if (loaded.status === "loaded" || loaded.status === "patched") {
+      graph = loaded.graph;
+      this.lastGraphBuild = loaded.status;
+      this.lastGraphStoreMiss = undefined;
+    } else {
+      graph = new DependencyGraph(index.entries(), this.isTest, options);
+      this.lastGraphBuild = "built";
+      this.lastGraphStoreMiss = `${loaded.status}: ${loaded.reason}`;
+      this.logger.debug("graph store not used", { status: loaded.status, reason: loaded.reason });
+    }
+    if (GraphStore.shouldSave(loaded))
+      await store
+        .save(graph, index.entries())
+        .catch((error: Error) =>
+          this.logger.debug("graph store not written", { error: error.message }),
+        );
+    if (this.keepWarm) {
+      this.graphCache = { graph, index, e2e: [...e2eTests].sort().join("|") };
+      this.lastIndexChange = { changed: [], structural: false };
+    }
+    return graph;
   }
 
   /**
@@ -755,10 +802,18 @@ export class SmartTest {
 
   async analyze(options: AnalyzeOptions = {}): Promise<Analysis> {
     const timings: Record<string, number> = {};
-    const input = options.input
-      ? this.withoutOwnState(options.input)
-      : await timed(timings, "change detection", () => this.changeInput(options.source));
-    const { index, stats } = await timed(timings, "index update", () => this.loadIndex());
+    // Change detection (VCS processes) and the index update are independent: run them together
+    // (both settle before an error is reported, so nothing keeps writing after it).
+    const [changed, updated] = await Promise.allSettled([
+      options.input
+        ? this.withoutOwnState(options.input)
+        : timed(timings, "change detection", () => this.changeInput(options.source)),
+      timed(timings, "index update", () => this.loadIndex()),
+    ]);
+    if (changed.status === "rejected") throw changed.reason;
+    if (updated.status === "rejected") throw updated.reason;
+    const input = changed.value;
+    const { index, stats } = updated.value;
     if (options.everything) {
       const { tests, unassigned, roots, assignment } = await this.discoverTests(index);
       const reason = { kind: "fallback" as const, message: options.everything.reason };
@@ -802,7 +857,7 @@ export class SmartTest {
         .filter(([, r]) => r.adapter === "playwright" || r.adapter === "cypress")
         .map(([t]) => t),
     );
-    const graph = await timed(timings, "graph build", () => this.buildGraph(index, e2eTests));
+    const graph = await timed(timings, "graph build", () => this.analysisGraph(index, e2eTests));
     const graphDiff: { file: string; added: string[]; removed: string[] }[] = [];
     const resources = new Map<string, ResourceChange>();
     const diffs = await timed(timings, "semantic diff", () =>
@@ -844,11 +899,11 @@ export class SmartTest {
       decision.warnings.push(
         `${unassigned.length} file(s) look like tests but no runner collects them, so they never run (e.g. ${unassigned.slice(0, 2).join(", ")})`,
       );
-    await writeJson(join(this.storeDir, "runs", "last-decision.json"), {
-      createdAt: new Date().toISOString(),
-      description: input.description,
-      decision,
-    });
+    // Compact: with thousands of selected tests and their dependency paths this file is large.
+    await writeFileAtomic(
+      join(this.storeDir, "runs", "last-decision.json"),
+      `${JSON.stringify({ createdAt: new Date().toISOString(), description: input.description, decision })}\n`,
+    );
     this.logger.info("impact decision", {
       source: input.description,
       changed: input.changeSet.changes.length,
@@ -2062,7 +2117,6 @@ export class SmartTest {
       .map((f) => f.path);
     const validation = await this.validateSetup();
     const reportPath = join(this.storeDir, "reports", "setup.md");
-    const { writeFileAtomic } = await import("@smarttest/shared");
     await writeFileAtomic(reportPath, renderSetupReport(plan, applied, validation));
     return { applied, validation, reportPath };
   }

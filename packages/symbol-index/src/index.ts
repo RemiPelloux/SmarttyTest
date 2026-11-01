@@ -3,8 +3,10 @@
  * Parsing is cached by content hash; module resolution is recomputed every update (cheap and
  * always consistent with added/removed files).
  */
+
+import { randomUUID } from "node:crypto";
 import { statSync } from "node:fs";
-import { readFile } from "node:fs/promises";
+import { readFile, rm } from "node:fs/promises";
 import { join, posix } from "node:path";
 import type { SourceRange } from "@smarttest/shared";
 import { exists, matchGlob, readJson, sha256, writeFileAtomic } from "@smarttest/shared";
@@ -20,16 +22,34 @@ export const INDEX_SCHEMA_VERSION = 2;
 
 interface IndexFile {
   schemaVersion: number;
+  /** Identifies this full write; a delta applies only to the base it names. */
+  baseId?: string;
   contextKey?: string;
   stats?: Record<string, [number, number]>;
   files: Record<string, FileAnalysis>;
 }
+
+/**
+ * Changes since the full index (`index.json`) was written, in `index-delta.json`: a run that
+ * re-parses a few files writes these entries instead of the whole index. `null` = removed.
+ */
+interface IndexDelta {
+  schemaVersion: number;
+  baseId: string;
+  stats: Record<string, [number, number] | null>;
+  files: Record<string, FileAnalysis | null>;
+}
+
+/** A delta grows up to this many paths (or 2% of the files) before the full index is rewritten. */
+const DELTA_MAX_PATHS = 64;
 
 export interface UpdateStats {
   files: number;
   parsed: number;
   reused: number;
   removed: number;
+  /** Every file was resolved again (resolution context or file set changed). */
+  resolvedAll?: boolean;
   durationMs: number;
 }
 
@@ -61,9 +81,23 @@ export class SymbolIndex {
   private fileStats = new Map<string, [number, number]>();
   private contextKey: string | undefined;
   private dirty = false;
+  /** Everything must be rewritten (resolution of every file may have changed). */
+  private fullyDirty = false;
+  /** Paths whose analysis or stats changed since the full index was written (delta entries). */
+  private changedPaths = new Set<string>();
+  private baseId: string | undefined;
   private warnings: string[] = [];
 
   private constructor(private readonly storePath: string | undefined) {}
+
+  private get deltaPath(): string | undefined {
+    return this.storePath?.replace(/index\.json$/, "index-delta.json");
+  }
+
+  private touch(path: string): void {
+    this.changedPaths.add(path);
+    this.dirty = true;
+  }
 
   static inMemory(): SymbolIndex {
     return new SymbolIndex(undefined);
@@ -79,6 +113,8 @@ export class SymbolIndex {
         for (const [k, v] of Object.entries(data.files)) idx.files.set(k, v);
         for (const [k, v] of Object.entries(data.stats ?? {})) idx.fileStats.set(k, v);
         idx.contextKey = data.contextKey;
+        idx.baseId = data.baseId;
+        if (data.baseId) await idx.applyDelta(data.baseId);
       } else {
         idx.warnings.push(
           "Local index was corrupt or from an incompatible version — rebuilt from scratch",
@@ -88,20 +124,76 @@ export class SymbolIndex {
     return idx;
   }
 
+  /** Applies the delta written against this base, if any (a delta for another base is ignored). */
+  private async applyDelta(baseId: string): Promise<void> {
+    const path = this.deltaPath;
+    const delta = path ? await readJson<IndexDelta>(path) : undefined;
+    if (
+      !delta ||
+      delta.schemaVersion !== INDEX_SCHEMA_VERSION ||
+      delta.baseId !== baseId ||
+      typeof delta.files !== "object" ||
+      typeof delta.stats !== "object"
+    )
+      return;
+    let added = false;
+    for (const [k, v] of Object.entries(delta.files)) {
+      if (v) {
+        if (!this.files.has(k)) added = true;
+        this.files.set(k, v);
+      } else this.files.delete(k);
+      this.changedPaths.add(k);
+    }
+    for (const [k, v] of Object.entries(delta.stats)) {
+      if (v) this.fileStats.set(k, v);
+      else this.fileStats.delete(k);
+      this.changedPaths.add(k);
+    }
+    // Same order as a full write.
+    if (added) this.files = new Map([...this.files].sort(([a], [b]) => a.localeCompare(b)));
+  }
+
   get loadWarnings(): readonly string[] {
     return this.warnings;
   }
 
   async save(): Promise<void> {
     if (!this.storePath || !this.dirty) return;
+    const deltaPath = this.deltaPath as string;
+    if (
+      this.baseId &&
+      !this.fullyDirty &&
+      this.changedPaths.size <= Math.max(DELTA_MAX_PATHS, this.files.size * 0.02)
+    ) {
+      const delta: IndexDelta = {
+        schemaVersion: INDEX_SCHEMA_VERSION,
+        baseId: this.baseId,
+        stats: {},
+        files: {},
+      };
+      for (const p of [...this.changedPaths].sort()) {
+        delta.files[p] = this.files.get(p) ?? null;
+        delta.stats[p] = this.fileStats.get(p) ?? null;
+      }
+      await writeFileAtomic(deltaPath, JSON.stringify(delta));
+      this.dirty = false;
+      return;
+    }
+    const baseId = randomUUID();
     const data: IndexFile = {
       schemaVersion: INDEX_SCHEMA_VERSION,
+      baseId,
       ...(this.contextKey ? { contextKey: this.contextKey } : {}),
       stats: Object.fromEntries(this.fileStats),
       files: Object.fromEntries([...this.files].sort(([a], [b]) => a.localeCompare(b))),
     };
     // Compact JSON: the index is a cache, not a document meant for humans.
     await writeFileAtomic(this.storePath, JSON.stringify(data));
+    // The new base makes any delta stale (it names the old base); remove it.
+    await rm(deltaPath, { force: true });
+    this.baseId = baseId;
+    this.changedPaths.clear();
+    this.fullyDirty = false;
     this.dirty = false;
   }
 
@@ -127,13 +219,15 @@ export class SymbolIndex {
       ? sha256(`${options.contextKey}|${fileSetKey}`)
       : undefined;
     const reuseResolution = !!contextKey && contextKey === this.contextKey;
-    const oldTargets = new Map<string, Map<string, string>>();
-    for (const [path, a] of this.files) {
+    // Previous resolution targets (to keep deleted targets visible), read before re-resolving:
+    // from the replaced analysis of a re-parsed file, else from the analysis itself.
+    const replaced = new Map<string, FileAnalysis>();
+    const targetsOf = (a: FileAnalysis | undefined) => {
       const m = new Map<string, string>();
-      for (const imp of a.imports)
+      for (const imp of a?.imports ?? [])
         if (imp.resolved) m.set(`${imp.kind}|${imp.specifier}`, imp.resolved);
-      oldTargets.set(path, m);
-    }
+      return m;
+    };
     let parsed = 0;
     let reused = 0;
     let removed = 0;
@@ -143,6 +237,7 @@ export class SymbolIndex {
       if (!wanted.has(path)) {
         this.files.delete(path);
         this.fileStats.delete(path);
+        this.touch(path);
         removed++;
       }
     }
@@ -164,14 +259,17 @@ export class SymbolIndex {
             st = m && m.size === s.size ? [m.mtimeMs, m.size] : undefined;
           }
         } catch {
-          this.files.delete(path);
+          if (this.files.delete(path)) this.touch(path);
           continue;
         }
         const prev = this.fileStats.get(path);
         if (!st) {
           // Content differs from the mirror: read it, and never let the mirror's stats vouch for
           // the analysis recorded here.
-          if (this.fileStats.delete(path)) statsChanged = true;
+          if (this.fileStats.delete(path)) {
+            statsChanged = true;
+            this.touch(path);
+          }
         } else if (
           cached &&
           prev &&
@@ -187,12 +285,13 @@ export class SymbolIndex {
       try {
         content = await read(path);
       } catch {
-        this.files.delete(path);
+        if (this.files.delete(path)) this.touch(path);
         continue;
       }
       if (st) {
         this.fileStats.set(path, st);
         statsChanged = true;
+        this.touch(path);
       }
       const hash = sha256(content);
       if (cached && cached.hash === hash && cached.analyzerVersion === analyzer.version) {
@@ -206,14 +305,17 @@ export class SymbolIndex {
     if (options.parseMany && pending.length >= (options.parallelThreshold ?? 300))
       parallel = await options.parseMany(pending.map(({ path, content }) => ({ path, content })));
     for (const [i, job] of pending.entries()) {
+      const previous = this.files.get(job.path);
+      if (previous && !replaced.has(job.path)) replaced.set(job.path, previous);
       this.files.set(job.path, parallel?.[i] ?? job.analyzer.analyze(job.path, job.content));
+      this.touch(job.path);
       changed.add(job.path);
       parsed++;
     }
     // Resolution pass. Deleted targets stay visible (missing: true) for impact analysis.
     for (const analysis of this.files.values()) {
       if (reuseResolution && !changed.has(analysis.path)) continue;
-      const old = oldTargets.get(analysis.path);
+      const old = targetsOf(replaced.get(analysis.path) ?? analysis);
       delete analysis.dynamicTargets;
       delete analysis.dynamicUnmatched;
       if (analysis.dynamicHints?.length) {
@@ -259,12 +361,15 @@ export class SymbolIndex {
       this.contextKey = contextKey;
       this.dirty = true;
     }
+    // Every file was re-resolved: only a full write records that.
+    if (!reuseResolution) this.fullyDirty = true;
     if (parsed || removed || statsChanged) this.dirty = true;
     return {
       files: this.files.size,
       parsed,
       reused,
       removed,
+      ...(reuseResolution ? {} : { resolvedAll: true }),
       durationMs: performance.now() - started,
     };
   }

@@ -131,3 +131,46 @@ describe("DependencyGraph", () => {
     expect(g.orphans(["test/auth.test.ts"])).toContain("src/catalog.ts");
   });
 });
+
+describe("DependencyGraph persistence", () => {
+  const g = graph(files, resolve);
+  const map = (g as unknown as { files: ReadonlyMap<string, FileAnalysis> }).files;
+  const isTest = (p: string) => p.includes(".test.");
+  const seeds = [{ file: "src/token.ts", units: ["TokenManager.verify"] }];
+  const tests = (x: DependencyGraph) => [...x.dependentsOf(seeds).tests.keys()].sort();
+
+  it("restores exactly the graph it serialized", () => {
+    const text = g.serialize();
+    const restored = DependencyGraph.restore(map, isTest, {}, text);
+    expect(restored).toBeDefined();
+    expect(restored?.serialize()).toBe(text);
+    expect(restored?.stats).toEqual(g.stats);
+    expect(tests(restored as DependencyGraph)).toEqual(tests(g));
+    expect(tests(g).length).toBeGreaterThan(0);
+    expect(restored?.toGraph()).toEqual(g.toGraph());
+  });
+
+  it("refuses anything that is not a complete graph of this format", () => {
+    const data = JSON.parse(g.serialize()) as Record<string, unknown>;
+    const bad = [
+      "",
+      "{",
+      "null",
+      JSON.stringify({ ...data, format: 0 }),
+      JSON.stringify({ ...data, strings: ["x"] }),
+      JSON.stringify({ ...data, deps: [0, 99] }),
+      JSON.stringify({ ...data, edgeKinds: [] }),
+      JSON.stringify({ ...data, forward: "x" }),
+      JSON.stringify({ ...data, edgeCount: "1" }),
+    ];
+    for (const text of bad)
+      expect(DependencyGraph.restore(map, isTest, {}, text), text).toBeUndefined();
+  });
+
+  it("patches a restored graph like a built one", () => {
+    const restored = DependencyGraph.restore(map, isTest, {}, g.serialize()) as DependencyGraph;
+    expect(restored.patch(["src/auth.ts"])).toBe(true);
+    expect(tests(restored)).toEqual(tests(g));
+    expect(restored.stats).toEqual(g.stats);
+  });
+});
