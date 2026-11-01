@@ -126,6 +126,8 @@ export interface StubFolder {
 export interface Message {
   readonly level: "info" | "warning" | "error";
   readonly text: string;
+  /** Action buttons offered with the message. */
+  readonly items?: readonly string[];
 }
 
 const workspaceFoldersChanged = new EventEmitter<void>();
@@ -168,8 +170,8 @@ export const stub = {
 const none = (): Disposable => new Disposable(() => {});
 
 function message(level: Message["level"]) {
-  return (text: string): Promise<undefined> => {
-    stub.messages.push({ level, text });
+  return (text: string, ...items: string[]): Promise<undefined> => {
+    stub.messages.push({ level, text, ...(items.length ? { items } : {}) });
     return Promise.resolve(undefined);
   };
 }

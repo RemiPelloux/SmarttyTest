@@ -64,6 +64,16 @@ Reserved for later versions ([roadmap](../planning/roadmap.md)): `ai …` and `a
 | `--uncommitted`                        | HEAD → working tree, including untracked files                                                         |
 | `--since-snapshot` / `--snapshot <id>` | latest (or given) native snapshot → working tree (hybrid mode works with Git too)                      |
 
+### Scoping to one file: `--only <path>` (`run`, `impact`)
+
+`--only src/cart.ts` keeps only the changes to that file (repeatable; a directory keeps every change under it; a rename matches its old or new path) and selects the tests those changes affect. It restricts the **changed set**, never the dependency analysis: a test that cannot be ruled out for the kept change, for example because an unresolved or dynamic import could reach it, is still selected.
+
+- Other changed files are left out, and a warning names them: tests affected only by them are neither selected nor run. Run without `--only` for the whole change set.
+- A path with no change selects no test and says so (`src/cart.ts has no change …`). That is not a pass. To see which tests protect an unchanged file, use `smarttest explain src/cart.ts`.
+- With no baseline (first native snapshot), SmartTest cannot tell whether the file changed and keeps its full-suite fallback.
+- A scoped run never advances the native snapshot baseline. `--only` cannot be combined with `--all` or `--hook`.
+- With `--json`, `impact` adds `only` and `run` adds `report.change.only`: `{ paths, matched, unchanged, excluded }` (requested paths, kept changes, requested paths with no change, left-out changes). The description ends with `· only <paths>`.
+
 ## `run`
 
 | Flag             | Meaning                                                                       |

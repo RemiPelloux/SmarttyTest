@@ -1,9 +1,15 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { parseRunJson, type RunReport } from "../src/core/contracts.js";
 import {
-  fileReach,
+  type ImpactResult,
+  parseImpactJson,
+  parseRunJson,
+  type RunReport,
+} from "../src/core/contracts.js";
+import {
+  changeDescription,
   fileRunDetail,
+  fileScope,
   groupFiles,
   groupHasFailure,
   resultState,
@@ -190,66 +196,71 @@ describe("results view grouping", () => {
   });
 });
 
-describe("run for one file", () => {
-  const value = () => report();
+describe("run for one file (--only)", () => {
+  const impact = (only?: ImpactResult["only"], selected = true): ImpactResult => {
+    const value = parseImpactJson(
+      readFileSync(new URL("./fixtures/impact.json", import.meta.url), "utf8"),
+    );
+    return {
+      ...value,
+      description: `${value.description}${only ? ` · only ${only.paths.join(", ")}` : ""}`,
+      decision: { ...value.decision, selectedTests: selected ? value.decision.selectedTests : [] },
+      ...(only ? { only } : {}),
+    };
+  };
+  const scope = (over: Partial<NonNullable<ImpactResult["only"]>> = {}) => ({
+    paths: ["src/a.ts"],
+    matched: ["src/a.ts"],
+    unchanged: [],
+    excluded: [],
+    ...over,
+  });
 
-  it("intersects the tests reaching the file with the run's selection", () => {
-    const reach = fileReach({
-      kind: "source",
-      target: "src/util/strings.ts",
-      description: "",
-      tests: [
-        { test: "test/strings.test.ts", path: [] },
-        { test: "test/other.test.ts", path: [] },
-      ],
-      uncertainty: [],
-      rules: [],
-      risk: "low",
+  it("runs when the file's changes select tests", () => {
+    expect(fileScope(impact(scope()), "src/a.ts")).toEqual({ kind: "run", scope: scope() });
+  });
+
+  it("says the file has no change instead of reporting anything as passed", () => {
+    const result = fileScope(
+      impact(scope({ matched: [], unchanged: ["src/a.ts"] }), false),
+      "src/a.ts",
+    );
+    expect(result.kind).toBe("unchanged");
+    expect(result).toMatchObject({
+      message:
+        "SmartTest: src/a.ts has no change in git · HEAD…working tree, so no test was selected. Nothing was run; this is not a pass.",
     });
-    expect(fileRunDetail(reach, value())).toBe(
-      "1 of the 2 selected test(s) reach this file: test/strings.test.ts.",
-    );
-  });
-
-  it("says SmartTest could not determine the answer when explain failed", () => {
-    const detail = fileRunDetail({ known: false, reason: "explain timed out" }, value());
-    expect(detail).toContain("could not determine which tests reach this file");
-    expect(detail).toContain("explain timed out");
-    expect(detail).not.toContain("no direct static path");
-  });
-
-  it("treats a test explanation as an unknown answer", () => {
-    const reach = fileReach({
-      kind: "test",
-      target: "test/a.test.ts",
-      description: "",
-      mode: "balanced",
-      analysisStatus: "complete",
-      reasons: [],
-    });
-    expect(reach.known).toBe(false);
-    expect(fileRunDetail(reach, value())).toContain("could not determine");
-  });
-
-  it("does not call a file unreached when the path goes through unresolved code", () => {
-    const detail = fileRunDetail(
-      {
-        known: true,
-        tests: [],
-        uncertainty: [{ file: "src/loader.ts", reasons: ["dynamic import"] }],
-      },
-      value(),
-    );
-    expect(detail).toContain("could not determine whether any selected test reaches this file");
-    expect(detail).toContain("src/loader.ts");
-  });
-
-  it("reports no static path only when the answer is complete", () => {
-    expect(fileRunDetail({ known: true, tests: [], uncertainty: [] }, value())).toBe(
-      "No selected test has a static path to this file; 2 test(s) were selected by the change set and run.",
-    );
+    // Windows paths compare case-insensitively.
     expect(
-      fileRunDetail({ known: true, tests: ["test/cache.test.ts"], uncertainty: [] }, value()),
-    ).toContain("none was selected by this change set");
+      fileScope(impact(scope({ matched: [], unchanged: ["SRC/A.ts"] }), false), "src/a.ts", "win32")
+        .kind,
+    ).toBe("unchanged");
+  });
+
+  it("distinguishes a changed file whose change selects nothing", () => {
+    const result = fileScope(impact(scope(), false), "src/a.ts");
+    expect(result.kind).toBe("nothing-selected");
+    expect(result).toMatchObject({ message: expect.stringContaining("this is not a pass") });
+  });
+
+  it("refuses to widen to the whole change set when the CLI has no --only", () => {
+    const result = fileScope(impact(undefined), "src/a.ts");
+    expect(result.kind).toBe("unsupported");
+    expect(result).toMatchObject({ message: expect.stringContaining("Nothing was run") });
+  });
+
+  it("names the file and the changes it left out", () => {
+    const value = report();
+    const scoped: RunReport = {
+      ...value,
+      change: { ...value.change, only: scope({ excluded: ["src/b.ts", "src/c.ts"] }) },
+    };
+    expect(fileRunDetail(scoped, "src/a.ts")).toBe(
+      "2 test(s) selected for the changes in src/a.ts. 2 other changed file(s) were not considered; Run Affected Tests covers the whole change set.",
+    );
+    expect(fileRunDetail(value, "src/a.ts")).toBe("2 test(s) selected.");
+    expect(changeDescription("git · HEAD…working tree · only src/a.ts")).toBe(
+      "git · HEAD…working tree",
+    );
   });
 });

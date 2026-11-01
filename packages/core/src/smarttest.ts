@@ -42,7 +42,7 @@ import {
   isPrismaSchema,
   type ResourceChange,
 } from "@smarttest/semantic-diff";
-import type { TestAdapter } from "@smarttest/shared";
+import type { ChangeScope, TestAdapter } from "@smarttest/shared";
 import {
   ExitCode,
   exists,
@@ -123,6 +123,7 @@ import {
   unknownCheckProjects,
 } from "./hook.js";
 import { ParsePool, parallelParsingAvailable } from "./parse-pool.js";
+import { nothingInScope, restrictChanges, scopeWarnings, unchangedScopeDecision } from "./scope.js";
 import {
   cacheGet,
   cachePut,
@@ -171,6 +172,11 @@ export interface AnalyzeOptions {
   everything?: { reason: string };
   /** A ready-made change set (watch mode) instead of `source`. */
   input?: ChangeAnalysisInput;
+  /**
+   * Restrict the changed set to these project-relative paths (files or directories) before
+   * selection (`--only`). The dependency analysis is not restricted.
+   */
+  only?: readonly string[];
 }
 
 export interface Analysis {
@@ -188,6 +194,8 @@ export interface Analysis {
   assignment: Map<string, RunnerRoot>;
   decision: ImpactResult;
   timings: Record<string, number>;
+  /** Present when the change set was restricted with `only`. */
+  scope?: ChangeScope;
 }
 
 export interface RunOptions extends AnalyzeOptions {
@@ -755,9 +763,12 @@ export class SmartTest {
 
   async analyze(options: AnalyzeOptions = {}): Promise<Analysis> {
     const timings: Record<string, number> = {};
-    const input = options.input
+    const detected = options.input
       ? this.withoutOwnState(options.input)
       : await timed(timings, "change detection", () => this.changeInput(options.source));
+    const scoped = options.only ? restrictChanges(detected, options.only) : undefined;
+    const input = scoped?.input ?? detected;
+    const scope = scoped?.scope;
     const { index, stats } = await timed(timings, "index update", () => this.loadIndex());
     if (options.everything) {
       const { tests, unassigned, roots, assignment } = await this.discoverTests(index);
@@ -771,7 +782,7 @@ export class SmartTest {
         safetyMode: options.mode ?? this.config.mode,
         requestedMode: options.mode ?? this.config.mode,
         reasons: [reason],
-        warnings: [],
+        warnings: scope ? scopeWarnings(scope, input.changeSet.completeness) : [],
         fallbackApplied: true,
         details: { triggers: [], seeds: [], trivialSkipped: [], ignored: [], uncertainty: [] },
       } satisfies ImpactResult;
@@ -788,6 +799,7 @@ export class SmartTest {
         assignment,
         decision,
         timings,
+        ...(scope ? { scope } : {}),
       };
     }
     const {
@@ -809,26 +821,29 @@ export class SmartTest {
       this.semanticDiffs(input, index, graphDiff, resources),
     );
     const traceView = await this.traceView(input, index);
-    const decision = await timed(timings, "impact analysis", () =>
-      decideImpact({
-        ...(traceView?.size ? { traces: traceView } : {}),
-        changeSet: input.changeSet,
-        diffs,
-        graph,
-        files: index.entries(),
-        testFiles: tests,
-        isTest: this.isTest,
-        mode: options.mode ?? this.config.mode,
-        triggers: [...BUILTIN_TRIGGERS, ...this.config.triggers],
-        rules: new RulesEngine(effectiveRules(this.config)),
-        packageOf: this.packageOf,
-        resources,
-        generated: this.config.generated
-          .filter((g) => g.policy === "rebuild-required" && g.from?.length)
-          .map((g) => ({ path: g.path, from: g.from ?? [] })),
-      }),
+    const decision = await timed(timings, "impact analysis", async () =>
+      scope && nothingInScope(scope, input.changeSet.completeness)
+        ? unchangedScopeDecision(tests, scope, options.mode ?? this.config.mode)
+        : decideImpact({
+            ...(traceView?.size ? { traces: traceView } : {}),
+            changeSet: input.changeSet,
+            diffs,
+            graph,
+            files: index.entries(),
+            testFiles: tests,
+            isTest: this.isTest,
+            mode: options.mode ?? this.config.mode,
+            triggers: [...BUILTIN_TRIGGERS, ...this.config.triggers],
+            rules: new RulesEngine(effectiveRules(this.config)),
+            packageOf: this.packageOf,
+            resources,
+            generated: this.config.generated
+              .filter((g) => g.policy === "rebuild-required" && g.from?.length)
+              .map((g) => ({ path: g.path, from: g.from ?? [] })),
+          }),
     );
     if (graphDiff.length) decision.details.graphDiff = graphDiff;
+    if (scope) decision.warnings.unshift(...scopeWarnings(scope, input.changeSet.completeness));
     decision.warnings.push(...discoveryWarnings);
     const profileNow = this.profileCache;
     if (profileNow) {
@@ -872,6 +887,7 @@ export class SmartTest {
       assignment,
       decision,
       timings,
+      ...(scope ? { scope } : {}),
     };
   }
 
@@ -1413,8 +1429,10 @@ export class SmartTest {
     const typicalAnalysis = recorded.analysisMs?.length
       ? [...recorded.analysisMs].sort((a, b) => a - b)[Math.floor(recorded.analysisMs.length / 2)]
       : undefined;
+    // A scoped run (`only`) is meant to be small: running everything would defeat it.
     const adaptive =
       !options.all &&
+      !options.only &&
       this.config.adaptive !== false &&
       recorded.fullRunMs !== undefined &&
       typicalAnalysis !== undefined &&
@@ -1652,7 +1670,11 @@ export class SmartTest {
       finishedAt: new Date().toISOString(),
       project: (await this.profile()).name,
       mode: analysis.decision.safetyMode,
-      change: { description: analysis.input.description, changeSet: analysis.input.changeSet },
+      change: {
+        description: analysis.input.description,
+        changeSet: analysis.input.changeSet,
+        ...(analysis.scope ? { only: analysis.scope } : {}),
+      },
       decision: stripDetails(analysis.decision),
       executions,
       summary: summarize(analysis.decision, executions, durationMs),
@@ -1689,8 +1711,10 @@ export class SmartTest {
     await this.recordFlaky(report);
     const status = overallStatus(report);
     // Advance the native baseline only after a fully passing run, so failures are never hidden.
+    // A scoped run (`only`) did not test the whole change set, so it never advances it.
     if (
       status === "passed" &&
+      !analysis.scope &&
       (analysis.input.changeSet.provider === "native" ||
         (this.config.vcs.snapshots && !options.source))
     ) {

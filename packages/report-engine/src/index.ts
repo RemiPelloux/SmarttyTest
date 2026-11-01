@@ -4,6 +4,7 @@
  */
 import { join } from "node:path";
 import type {
+  ChangeScope,
   ChangeSet,
   ImpactDecision,
   SafetyMode,
@@ -58,7 +59,12 @@ export interface RunReport {
   finishedAt: string;
   project: string;
   mode: SafetyMode;
-  change: { description: string; changeSet: ChangeSet };
+  change: {
+    description: string;
+    changeSet: ChangeSet;
+    /** Present when the change set was restricted with `--only`. */
+    only?: ChangeScope;
+  };
   decision: ImpactDecision;
   executions: FileExecution[];
   summary: RunSummary;

@@ -31,6 +31,7 @@ import {
   parseRunJson,
   parseScanJson,
 } from "../../src/core/contracts.js";
+import { fileScope } from "../../src/core/results.js";
 
 const cli =
   process.env.SMARTTEST_CLI ??
@@ -140,5 +141,23 @@ describe.skipIf(!available)("real smarttest CLI", () => {
     expect(result.report.summary.cached).toBe(0);
     expect(result.report.executions.some((execution) => execution.status === "passed")).toBe(true);
     expect(result.integrityIssues).toEqual([]);
+  });
+
+  it("scopes impact to one file with --only, and reports an unchanged file as such", async () => {
+    const directory = copyFixture();
+    temporary.push(directory);
+    const options = { mode: "balanced", changeSource: "uncommitted" } as const;
+    const changed = parseImpactJson(
+      (await call(impactArgs(options, ["src/core/Labeler.ts"]), directory)).stdout,
+    );
+    expect(changed.only?.matched).toEqual(["src/core/Labeler.ts"]);
+    expect(fileScope(changed, "src/core/Labeler.ts").kind).toBe("run");
+
+    const unchanged = parseImpactJson(
+      (await call(impactArgs(options, ["src/util/numbers.ts"]), directory)).stdout,
+    );
+    expect(unchanged.decision.selectedTests).toEqual([]);
+    expect(unchanged.only?.excluded).toEqual(["src/core/Labeler.ts"]);
+    expect(fileScope(unchanged, "src/util/numbers.ts").kind).toBe("unchanged");
   });
 });

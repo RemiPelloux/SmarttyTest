@@ -45,15 +45,15 @@ An unknown symbol is never labelled unprotected. Uncertainty, unresolved imports
 
 ## Commands
 
-| Command                                       | Effect                                                                                                       |
-| --------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| `SmartTest: Show Impact of Current Change`    | Markdown report for the current symbol, or a summary of the file.                                            |
-| `SmartTest: Explain Protection at Cursor`     | Explain the enclosing function or method.                                                                    |
-| `SmartTest: Run Affected Tests`               | Run the change set's selected tests and fill the SmartTest view.                                             |
-| `SmartTest: Run Affected Tests for This File` | Run the whole change set (the CLI has no per-file selector) and report which selected tests reach this file. |
-| `SmartTest: Refresh Analysis`                 | Drop graph/scan/explain caches and analyse again.                                                            |
-| `SmartTest: Show Output`                      | Show CLI errors, stderr and timeouts.                                                                        |
-| `SmartTest: Why Is SmartTest Disabled?`       | Explain Restricted Mode and open Workspace Trust.                                                            |
+| Command                                       | Effect                                                                                                                                                              |
+| --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `SmartTest: Show Impact of Current Change`    | Markdown report for the current symbol, or a summary of the file.                                                                                                   |
+| `SmartTest: Explain Protection at Cursor`     | Explain the enclosing function or method.                                                                                                                           |
+| `SmartTest: Run Affected Tests`               | Run the change set's selected tests and fill the SmartTest view.                                                                                                    |
+| `SmartTest: Run Affected Tests for This File` | Run only the tests this file's changes affect (`--only <file>`, SmartTest 1.0.0+). Unresolved imports still select; a file with no change runs nothing and says so. |
+| `SmartTest: Refresh Analysis`                 | Drop graph/scan/explain caches and analyse again.                                                                                                                   |
+| `SmartTest: Show Output`                      | Show CLI errors, stderr and timeouts.                                                                                                                               |
+| `SmartTest: Why Is SmartTest Disabled?`       | Explain Restricted Mode and open Workspace Trust.                                                                                                                   |
 
 Settings such as `smarttest.mode`, `smarttest.changeSource`, `smarttest.baseRef`, `smarttest.executablePath` and the analysis caps are documented in [the extension README](../../extensions/vscode/README.md#settings).
 

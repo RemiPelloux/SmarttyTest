@@ -52,6 +52,19 @@ describe("real CLI fixtures", () => {
     expect(result.report.executions.every((execution) => execution.status === "passed")).toBe(true);
     expect(result.integrityIssues).toEqual([]);
   });
+
+  it("parses the --only scope of impact and run, and its absence", () => {
+    const only = { paths: ["src/a.ts"], matched: [], unchanged: ["src/a.ts"], excluded: ["b.ts"] };
+    expect(parseImpactJson(fixture("impact")).only).toBeUndefined();
+    const impact = JSON.parse(fixture("impact")) as Record<string, unknown>;
+    expect(parseImpactJson(JSON.stringify({ ...impact, only })).only).toEqual(only);
+    const run = JSON.parse(fixture("run")) as { report: { change: Record<string, unknown> } };
+    run.report.change.only = only;
+    expect(parseRunJson(JSON.stringify(run)).report.change.only).toEqual(only);
+    expect(() =>
+      parseImpactJson(JSON.stringify({ ...impact, only: { ...only, excluded: undefined } })),
+    ).toThrow(/\$\.only\.excluded/);
+  });
 });
 
 describe("contract failures are errors, not zeros", () => {

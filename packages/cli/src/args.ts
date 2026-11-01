@@ -25,6 +25,7 @@ export const OPTIONS = {
   uncommitted: { type: "boolean" },
   "since-snapshot": { type: "boolean" },
   snapshot: { type: "string" },
+  only: { type: "string", multiple: true },
   // run
   coverage: { type: "boolean" },
   retries: { type: "string" },
