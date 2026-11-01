@@ -8,6 +8,7 @@ import { tmpdir } from "node:os";
 import { isAbsolute, join, relative } from "node:path";
 import { resolvePackageBin } from "@smarttest/plugin-sdk";
 import {
+  canonicalPath,
   type ExecutionOptions,
   relPosixReported,
   runProcess,
@@ -143,6 +144,22 @@ export function parsePlaywrightReport(
 export const escapeRe = (s: string) =>
   s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/^-/, "[-]");
 
+/**
+ * The filter that selects exactly one spec file. Playwright reads each CLI argument as a
+ * case-insensitive regular expression searched in the spec's absolute path, so a bare
+ * `home.spec.ts` also runs `myhome.spec.ts` and `e2e/home.spec.ts`. The filter is the whole
+ * absolute path, escaped and anchored at both ends (`^…$`); each spelling given (the root as
+ * written and its canonical form, when they differ) is an alternative, and `/` matches either
+ * separator (Windows paths). Starting with `^` and ending with `$`, it is never read as an
+ * option, a `/regex/flags` argument or a `file:line` filter.
+ */
+export function specFileFilter(absolutePaths: readonly string[]): string {
+  const alternatives = [...new Set(absolutePaths)].map((p) =>
+    p.split(/[\\/]/).map(escapeRe).join("[\\\\/]"),
+  );
+  return `^(?:${alternatives.join("|")})$`;
+}
+
 export class PlaywrightAdapter implements TestAdapter {
   readonly apiVersion = 1;
   readonly id = "playwright";
@@ -273,9 +290,8 @@ export class PlaywrightAdapter implements TestAdapter {
 
   async execute(selection: TestSelection, options: ExecutionOptions): Promise<TestRunResult> {
     const startedAt = new Date().toISOString();
-    const filters = selection.files.map((f) =>
-      escapeRe(relative(this.options.cwd, join(this.options.projectRoot, f)).split("\\").join("/")),
-    );
+    const roots = [this.options.projectRoot, canonicalPath(this.options.projectRoot)];
+    const filters = selection.files.map((f) => specFileFilter(roots.map((r) => join(r, f))));
     const env = { ...(options.env ?? {}), ...(await this.coverageEnv(options)) };
     const { res, report } = await this.report(
       [

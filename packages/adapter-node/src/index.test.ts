@@ -44,6 +44,75 @@ describe("file arguments to node --test", () => {
   });
 });
 
+describe("the project's node --test script", () => {
+  it("runs with the script's preloads, env file, conditions and NODE_OPTIONS", async () => {
+    const root = await mkdtemp(join(tmpdir(), "smarttest-node-flags-"));
+    try {
+      await mkdir(join(root, "test"));
+      await writeFile(
+        join(root, "package.json"),
+        JSON.stringify({
+          type: "module",
+          scripts: {
+            build: "echo build",
+            test: "tsc -b && NODE_OPTIONS='--import ./pre.mjs' node --require ./setup.cjs --env-file .env.test --conditions=smarttest --test --test-name-pattern=never --test-reporter spec test/",
+          },
+        }),
+      );
+      await writeFile(join(root, "setup.cjs"), "globalThis.SETUP = 'required';\n");
+      await writeFile(join(root, "pre.mjs"), "globalThis.PRE = 'imported';\n");
+      await writeFile(join(root, ".env.test"), "FROM_ENV_FILE=yes\n");
+      await writeFile(
+        join(root, "test", "a.test.js"),
+        [
+          'import test from "node:test";',
+          'import assert from "node:assert";',
+          'test("needs the preloads", () => {',
+          '  assert.equal(globalThis.SETUP, "required");',
+          '  assert.equal(globalThis.PRE, "imported");',
+          '  assert.equal(process.env.FROM_ENV_FILE, "yes");',
+          '  assert.ok(process.execArgv.includes("--conditions=smarttest"));',
+          "});",
+          "",
+        ].join("\n"),
+      );
+      const adapter = new NodeTestAdapter({ projectRoot: root, cwd: root, patterns: ["test/"] });
+      expect(adapter.scriptFlags()).toEqual({
+        args: ["--require=./setup.cjs", "--env-file=.env.test", "--conditions=smarttest"],
+        env: { NODE_OPTIONS: "--import ./pre.mjs" },
+      });
+      const run = await adapter.execute({ files: ["test/a.test.js"] }, {});
+      expect(run.executions.map((e) => [e.testId, e.status, e.error?.message])).toEqual([
+        ["test/a.test.js::needs the preloads", "passed", undefined],
+      ]);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("--workers replaces the script's --test-concurrency; an explicit command wins", () => {
+    const adapter = new NodeTestAdapter({
+      projectRoot: "/p",
+      cwd: "/p",
+      command: {
+        nodeArgs: ["--test-concurrency=1", "--experimental-test-module-mocks"],
+        env: {},
+        patterns: [],
+        preloads: [],
+        computed: false,
+      },
+    });
+    expect(adapter.scriptFlags().args).toEqual([
+      "--test-concurrency=1",
+      "--experimental-test-module-mocks",
+    ]);
+    expect(adapter.scriptFlags(4).args).toEqual(["--experimental-test-module-mocks"]);
+    expect(
+      new NodeTestAdapter({ projectRoot: "/p", cwd: "/p", command: null }).scriptFlags(),
+    ).toEqual({ args: [], env: {} });
+  });
+});
+
 const xml = `<?xml version="1.0" encoding="utf-8"?>
 <testsuites>
 	<testsuite name="math" time="0.005" tests="4" failures="1" skipped="2">

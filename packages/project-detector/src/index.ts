@@ -7,7 +7,15 @@ import { constants } from "node:fs";
 import { access, readdir, stat } from "node:fs/promises";
 import { arch, cpus, freemem, platform, totalmem } from "node:os";
 import { dirname, join } from "node:path";
-import { exists, matchGlob, readJson, readText, toPosix, walkFiles } from "@smarttest/shared";
+import {
+  exists,
+  matchGlob,
+  readJson,
+  readNodeTestCommand,
+  readText,
+  toPosix,
+  walkFiles,
+} from "@smarttest/shared";
 import { detectTestCommands, type ExistingTestCommand } from "./commands.js";
 
 export { detectTestCommands, type ExistingTestCommand } from "./commands.js";
@@ -439,11 +447,8 @@ async function detectRunners(
     // Node's built-in runner: `node --test [patterns]`
     const nodeScript = scripts.find(([, cmd]) => /\bnode\b[^&|;]*\s--test\b/.test(cmd));
     if (nodeScript) {
-      const patterns = (/--test\b((?:\s+(?!-)[^\s&|;]+)*)/.exec(nodeScript[1])?.[1] ?? "")
-        .trim()
-        .split(/\s+/)
-        .filter((p) => p && !p.startsWith("-"))
-        .map((p) => p.replace(/^["']|["']$/g, "").replace(/^\.\//, ""));
+      // Every file/glob argument, wherever the node options sit (`--test --import tsx test/`).
+      const patterns = readNodeTestCommand(nodeScript[1])?.patterns ?? [];
       add({
         adapter: "node",
         dir,

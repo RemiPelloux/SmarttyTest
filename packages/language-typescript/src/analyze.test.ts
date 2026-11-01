@@ -274,3 +274,24 @@ vi.mock("./a", () => ({ find: () => mocks.find() }));
     expect(mocks(unsafe)).toEqual(["./a:actual"]);
   });
 });
+
+describe("import.meta.glob", () => {
+  it("keeps root-absolute, eager, array and aliased patterns; ignores negations", () => {
+    const a = analyzeSource(
+      "src/registry.ts",
+      [
+        'const a = import.meta.glob("/src/pages/*.ts", { eager: true });',
+        'const b = import.meta.glob(["./widgets/*.ts", "!**/*.test.ts", "@/lib/*.ts"]);',
+        'const c = import.meta.globEager("../legacy/*.js");',
+        "const d = import.meta.glob(pattern);",
+      ].join("\n"),
+    );
+    expect(a.dynamicHints?.map((h) => h.pattern)).toEqual([
+      "/src/pages/*.ts",
+      "widgets/*.ts",
+      "@/lib/*.ts",
+      "../legacy/*.js",
+    ]);
+    expect(a.dynamicUnresolved).toEqual(["line 4: import.meta.glob(pattern)"]);
+  });
+});

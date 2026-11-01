@@ -359,8 +359,9 @@ export class SymbolIndex {
               : wanted.has(p)
                 ? [p]
                 : [];
-          let hits = rel.startsWith("..") ? [] : match(rel);
-          // An aliased pattern (`import.meta.glob("@/pages/*.ts")`).
+          // A root-absolute pattern (`/src/pages/*.ts`) starts at the Vite root: the resolver's.
+          let hits = rel.startsWith("..") || h.pattern.startsWith("/") ? [] : match(rel);
+          // An aliased or root-absolute pattern (`import.meta.glob("@/pages/*.ts")`).
           if (!hits.length) {
             const aliased = options.resolver.resolvePattern?.(analysis.path, h.pattern);
             if (aliased) hits = match(aliased);

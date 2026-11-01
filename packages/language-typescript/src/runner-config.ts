@@ -4,6 +4,7 @@
  * local modules the configuration itself imports. Nothing is executed: a value that is not a
  * literal (or one of the usual path-building calls) is reported as computed, never guessed.
  */
+import { readNodeTestCommand } from "@smarttest/shared";
 import ts from "typescript";
 
 export type RunnerKind = "vitest" | "jest" | "node" | "playwright" | "cypress";
@@ -324,21 +325,18 @@ export function readRunnerConfig(
 }
 
 /**
- * Files a `node --test` script preloads (`--import`, `--require`/`-r`, `--loader`), and whether
- * the command builds its flags in a way that can't be read (a variable or a subshell).
+ * Files a `node --test` script preloads (`--import`, `--require`/`-r`, `--loader`, also inside a
+ * `NODE_OPTIONS=` prefix), and whether the command builds its flags in a way that can't be read
+ * (a variable or a subshell). The same reading the Node adapter uses to run the command's flags.
  */
 export function readNodeTestScript(script: string): {
   loads: ConfigLoadedFile[];
   computed: boolean;
 } {
-  const loads: ConfigLoadedFile[] = [];
-  const words = script.split(/\s+/).filter(Boolean);
-  for (let i = 0; i < words.length; i++) {
-    const w = words[i] as string;
-    const m = /^(--import|--require|-r|--loader|--experimental-loader)(?:=(.+))?$/.exec(w);
-    if (!m) continue;
-    const value = (m[2] ?? words[++i] ?? "").replace(/^['"]|['"]$/g, "");
-    if (value) loads.push({ key: m[1] as string, path: value, base: "runner" });
-  }
-  return { loads, computed: /\$\{?[A-Za-z_]|`|\$\(/.test(script) };
+  const command = readNodeTestCommand(script);
+  if (!command) return { loads: [], computed: /\$\{?[A-Za-z_]|`|\$\(/.test(script) };
+  return {
+    loads: command.preloads.map((p) => ({ key: p.flag, path: p.value, base: "runner" })),
+    computed: command.computed,
+  };
 }

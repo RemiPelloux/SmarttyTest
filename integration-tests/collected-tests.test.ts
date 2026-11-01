@@ -192,4 +192,17 @@ describe("files a runner collects are tests, whatever their name", () => {
     },
     180_000,
   );
+
+  it("type tests a package script runs with `vitest --typecheck` (nothing in the config)", async () => {
+    const dir = await vitestProject({
+      "package.json":
+        '{ "name": "fixture-ts-lib-vitest", "private": true, "type": "module", "scripts": { "test": "vitest run --typecheck" } }\n',
+      "test/numbers.test-d.ts":
+        'import { expectTypeOf, test } from "vitest";\nimport { clamp } from "@lib/util/numbers";\n\ntest("clamp returns a number", () => expectTypeOf(clamp(1, 0, 2)).toEqualTypeOf<number>());\n',
+    });
+    await edit(dir, "src/util/numbers.ts", "Math.min(max,", "Math.min(max + 1,");
+    const a = await analyze(dir);
+    expect(a.testFiles).toContain("test/numbers.test-d.ts");
+    expect(selectedOf(a)).toEqual(["test/numbers.test-d.ts", "test/numbers.test.ts"]);
+  }, 120_000);
 });

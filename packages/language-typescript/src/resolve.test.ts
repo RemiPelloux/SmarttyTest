@@ -322,4 +322,150 @@ describe("TypeScriptResolver", () => {
     expect(r.resolvePattern("src/main.ts", "@/pages/*.ts")).toBe("src/pages/*.ts");
     expect(r.resolvePattern("src/main.ts", "./pages/*.ts")).toBeUndefined();
   });
+
+  it("resolves root-absolute glob patterns from the nearest Vite root", async () => {
+    const root = await project({
+      "apps/web/vite.config.ts": "export default {};",
+      "apps/web/src/main.ts": "",
+      "scripts/x.ts": "",
+    });
+    const r = new TypeScriptResolver(root);
+    expect(r.resolvePattern("apps/web/src/main.ts", "/src/pages/*.ts")).toBe(
+      "apps/web/src/pages/*.ts",
+    );
+    expect(r.resolvePattern("scripts/x.ts", "/src/**/*.ts")).toBe("src/**/*.ts");
+  });
+});
+
+describe("aliases only a bundler or test-runner config declares", () => {
+  const pkg = JSON.stringify({ name: "app", dependencies: { vue: "3" } });
+
+  it("Vite resolve.alias: object form, path.resolve / fileURLToPath / root-absolute targets", async () => {
+    const root = await project({
+      "package.json": pkg,
+      "vite.config.ts": `import path from "node:path";
+import { fileURLToPath } from "node:url";
+export default {
+  resolve: {
+    alias: {
+      "@": path.resolve(__dirname, "./src"),
+      "~lib": fileURLToPath(new URL("./lib", import.meta.url)),
+      "#ui": "/src/ui",
+    },
+  },
+};`,
+      "src/util/date.ts": "export {};",
+      "src/ui/Button.ts": "export {};",
+      "lib/index.ts": "export {};",
+      "src/main.ts": "",
+      "node_modules/vue/package.json": '{"name":"vue","main":"index.js"}',
+      "node_modules/vue/index.js": "",
+    });
+    const r = new TypeScriptResolver(root);
+    expect(r.resolve("src/main.ts", "@/util/date")).toEqual({ resolved: "src/util/date.ts" });
+    expect(r.resolve("src/main.ts", "~lib")).toEqual({ resolved: "lib/index.ts" });
+    expect(r.resolve("src/main.ts", "#ui/Button")).toEqual({ resolved: "src/ui/Button.ts" });
+    // Not a prefix of another name: `@scope/pkg` and `~library` are no `@`/`~lib` alias.
+    expect(r.resolve("src/main.ts", "~library").resolved).toBeUndefined();
+    expect(r.resolve("src/main.ts", "vue")).toEqual({ external: true });
+    // An alias that maps to no file stays unresolved, never external.
+    expect(r.resolve("src/main.ts", "@/missing").reason).toMatch(/vite alias "@"/);
+    expect(r.inputsFor(["src/main.ts"])).toContain("vite.config.ts");
+    expect(r.resolvePattern("src/main.ts", "@/ui/*.ts")).toBe("src/ui/*.ts");
+  });
+
+  it("Vitest array form with regex finds, and aliases kept in a config the config imports", async () => {
+    const root = await project({
+      "package.json": pkg,
+      "vitest.shared.ts": `import { resolve } from "node:path";
+export const shared = { resolve: { alias: [{ find: /^~(.*)$/, replacement: resolve(__dirname, "src/$1") }] } };`,
+      "vitest.config.ts": `import { mergeConfig } from "vitest/config";
+import { shared } from "./vitest.shared";
+export default mergeConfig(shared, { test: { alias: [{ find: "@test", replacement: "./test/support" }] } });`,
+      "src/a.ts": "export {};",
+      "test/support/index.ts": "export {};",
+      "test/a.test.ts": "",
+    });
+    const r = new TypeScriptResolver(root);
+    expect(r.resolve("test/a.test.ts", "~a")).toEqual({ resolved: "src/a.ts" });
+    expect(r.resolve("test/a.test.ts", "@test")).toEqual({ resolved: "test/support/index.ts" });
+    expect(r.inputsFor(["test/a.test.ts"])).toEqual(
+      expect.arrayContaining(["vitest.config.ts", "vitest.shared.ts"]),
+    );
+  });
+
+  it("Jest moduleNameMapper: $1 captures, <rootDir>, directory targets, target lists", async () => {
+    const root = await project({
+      "package.json": pkg,
+      "jest.config.js": `module.exports = {
+  rootDir: ".",
+  moduleNameMapper: {
+    "^@app/(.*)$": "<rootDir>/src/$1",
+    "^@shared$": ["<rootDir>/missing", "<rootDir>/shared"],
+    "\\\\.(css)$": "identity-obj-proxy",
+  },
+};`,
+      "src/x/y.ts": "export {};",
+      "shared/index.js": "",
+      "test/a.test.ts": "",
+    });
+    const r = new TypeScriptResolver(root);
+    expect(r.resolve("test/a.test.ts", "@app/x/y")).toEqual({ resolved: "src/x/y.ts" });
+    expect(r.resolve("test/a.test.ts", "@shared")).toEqual({ resolved: "shared/index.js" });
+  });
+
+  it("Jest config in package.json, webpack `name$`, Babel module-resolver", async () => {
+    const root = await project({
+      "package.json": JSON.stringify({
+        name: "app",
+        jest: { moduleNameMapper: { "^~/(.*)$": "<rootDir>/src/$1" } },
+      }),
+      "webpack.config.js": `const path = require("path");
+module.exports = { resolve: { alias: { Utils$: path.resolve(__dirname, "src/utils/index.js"), Comp: path.join(__dirname, "src/components") } } };`,
+      ".babelrc": JSON.stringify({
+        plugins: [["module-resolver", { alias: { "^#(.+)": "./src/\\1", lib: "./lib" } }]],
+      }),
+      "src/utils/index.js": "",
+      "src/utils/extra.js": "",
+      "src/components/Btn.js": "",
+      "src/hash.js": "",
+      "lib/a.js": "",
+      "src/main.js": "",
+    });
+    const r = new TypeScriptResolver(root);
+    expect(r.resolve("src/main.js", "~/hash")).toEqual({ resolved: "src/hash.js" });
+    expect(r.resolve("src/main.js", "Utils")).toEqual({ resolved: "src/utils/index.js" });
+    expect(r.resolve("src/main.js", "Utils/extra").resolved).toBeUndefined();
+    expect(r.resolve("src/main.js", "Comp/Btn")).toEqual({ resolved: "src/components/Btn.js" });
+    expect(r.resolve("src/main.js", "#hash")).toEqual({ resolved: "src/hash.js" });
+    expect(r.resolve("src/main.js", "lib/a")).toEqual({ resolved: "lib/a.js" });
+  });
+
+  it("app and test configs that map an import to different files keep it uncertain", async () => {
+    const root = await project({
+      "package.json": pkg,
+      "vite.config.ts": `export default { resolve: { alias: { "@": "/src" } } };`,
+      "jest.config.js": `module.exports = { moduleNameMapper: { "^@/(.*)$": "<rootDir>/test/fakes/$1" } };`,
+      "src/api.ts": "export {};",
+      "test/fakes/api.ts": "export {};",
+      "src/main.ts": "",
+    });
+    const r = new TypeScriptResolver(root);
+    const out = r.resolve("src/main.ts", "@/api");
+    expect(out.resolved).toBe("src/api.ts");
+    expect(out.uncertain).toMatch(/src\/api\.ts.*test\/fakes\/api\.ts/);
+  });
+
+  it("an alias set to a computed value stays unresolved", async () => {
+    const root = await project({
+      "package.json": pkg,
+      "vite.config.ts": `const dirs = compute();
+export default { resolve: { alias: dirs } };`,
+      "src/a.ts": "export {};",
+      "src/main.ts": "",
+    });
+    const r = new TypeScriptResolver(root);
+    expect(r.resolve("src/main.ts", "@/a").resolved).toBeUndefined();
+    expect(r.resolve("src/main.ts", "@/a").external).toBeUndefined();
+  });
 });

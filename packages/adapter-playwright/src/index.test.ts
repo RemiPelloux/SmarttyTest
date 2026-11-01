@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { escapeRe, parsePlaywrightReport, playwrightRunErrors } from "./index.js";
+import { escapeRe, parsePlaywrightReport, playwrightRunErrors, specFileFilter } from "./index.js";
 
 describe("Playwright results that are not a pass", () => {
   // Recorded from Playwright 1.56: project `main` depends on `setup`, and setup throws.
@@ -68,5 +68,30 @@ describe("spec filters (SR-05)", () => {
     expect(new RegExp(filter).test("/repo/--config=evil.spec.ts")).toBe(true);
     expect(new RegExp(filter).test("/repo/--configXevil.spec.ts")).toBe(false);
     expect(escapeRe("e2e/a.spec.ts")).toBe("e2e/a\\.spec\\.ts");
+  });
+
+  it("a selected spec's filter matches that file only (Playwright: `gi` regex on the absolute path)", () => {
+    // How Playwright 1.56 builds a CLI file filter (util.js forceRegExp / createFileMatcher).
+    const matches = (filter: string, abs: string) => {
+      expect(/^\/(.*)\/([gi]*)$/.test(filter)).toBe(false); // never read as /re/flags
+      expect(/^(.*?):(\d+):?(\d+)?$/.test(filter)).toBe(false); // never read as file:line
+      return new RegExp(filter, "gi").test(abs);
+    };
+    const f = specFileFilter(["/repo/home.spec.ts", "/private/repo/home.spec.ts"]);
+    expect(f.startsWith("-")).toBe(false);
+    expect(matches(f, "/repo/home.spec.ts")).toBe(true);
+    expect(matches(f, "/private/repo/home.spec.ts")).toBe(true);
+    expect(matches(f, "/repo/myhome.spec.ts")).toBe(false);
+    expect(matches(f, "/repo/e2e/home.spec.ts")).toBe(false);
+    expect(matches(f, "/repo/home.spec.tsx")).toBe(false);
+    expect(matches(f, "/other/repo/home.spec.ts")).toBe(false);
+    expect(matches(f, "/repo/homeXspec.ts")).toBe(false);
+    const w = specFileFilter(["C:\\repo\\e2e\\home.spec.ts"]);
+    expect(matches(w, "C:\\repo\\e2e\\home.spec.ts")).toBe(true);
+    expect(matches(w, "C:\\repo\\e2e\\myhome.spec.ts")).toBe(false);
+    const g = specFileFilter(["/repo/e2e/[id]/--config=(a)+.spec.ts"]);
+    expect(matches(g, "/repo/e2e/[id]/--config=(a)+.spec.ts")).toBe(true);
+    expect(matches(g, "/repo/e2e/i/--config=aa.spec.ts")).toBe(false);
+    expect(matches(specFileFilter(["/repo/home.spec.ts:12"]), "/repo/home.spec.ts:12")).toBe(true);
   });
 });

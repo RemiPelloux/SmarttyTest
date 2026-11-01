@@ -14,7 +14,7 @@ import { ProcessScripts } from "./processes.js";
 import { catalogKeys, collectResources, MODEL_MODULES } from "./resources.js";
 import { StaticPathEvaluator } from "./static-path.js";
 
-export const ANALYZER_VERSION = "ts-12";
+export const ANALYZER_VERSION = "ts-13";
 
 function scriptKind(path: string): ts.ScriptKind {
   if (path.endsWith(".tsx")) return ts.ScriptKind.TSX;
@@ -1026,20 +1026,23 @@ export function analyzeSource(path: string, content: string): FileAnalysis {
       ) {
         if (MOCK_CALLS.has(callee.name.text)) kind = "mock";
       }
-      // Vite's import.meta.glob("./dir/*.ts" | [...]) imports every matching file.
+      // Vite's import.meta.glob("./dir/*.ts" | "/src/*.ts" | [...], { eager }) imports every
+      // matching file (`globEager`: Vite 2). A root-absolute pattern starts at the Vite root, an
+      // aliased one goes through the resolver. A negated pattern (`!**/*.test.ts`) only removes
+      // files: ignoring it keeps more files, never fewer.
       if (
         ts.isPropertyAccessExpression(callee) &&
-        callee.name.text === "glob" &&
+        (callee.name.text === "glob" || callee.name.text === "globEager") &&
         ts.isMetaProperty(callee.expression) &&
         arg
       ) {
         const patterns = ts.isArrayLiteralExpression(arg) ? [...arg.elements] : [arg];
         for (const p of patterns) {
           const expr = `line ${lineOf(n) + 1}: ${n.getText(sf).slice(0, 80)}`;
-          if (ts.isStringLiteralLike(p) && !p.text.startsWith("!") && !p.text.startsWith("/"))
+          if (ts.isStringLiteralLike(p) && p.text.startsWith("!")) continue;
+          if (ts.isStringLiteralLike(p) && p.text)
             dynamicHints.push({ pattern: p.text.replace(/^\.\//, ""), line: lineOf(n), expr });
-          else if (!(ts.isStringLiteralLike(p) && p.text.startsWith("!")))
-            dynamicUnresolved.push(expr);
+          else dynamicUnresolved.push(expr);
         }
       }
       // fs reads with a path built from the file's location become asset edges

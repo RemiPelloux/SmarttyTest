@@ -80,6 +80,7 @@ import {
   stateKey,
   stateKeyFile,
   stateKeySource,
+  vitestScriptTypecheck,
   walkFiles,
   writeFileAtomic,
   writeJson,
@@ -432,6 +433,14 @@ async function staticDefaultDiscovery(
     // knows which files it collects.
     if (/\b(includeSource|typecheck)\b/.test(cfg) || isVitestWorkspaceFile(root.configFile))
       return undefined;
+    // `vitest --typecheck` in a script: the adapter passes it, so Vitest also collects type tests.
+    let scripts: Record<string, string> = {};
+    try {
+      scripts = (JSON.parse(pkg || "{}") as { scripts?: Record<string, string> }).scripts ?? {};
+    } catch {
+      return undefined;
+    }
+    if (vitestScriptTypecheck(scripts, root.configFile)) return undefined;
     if (!root.configFile)
       for (const v of ["vite.config.ts", "vite.config.js", "vite.config.mjs", "vite.config.mts"])
         if (await exists(join(projectRoot, root.dir, v))) return undefined;
