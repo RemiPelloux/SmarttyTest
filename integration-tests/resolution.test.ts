@@ -119,4 +119,51 @@ describe("import resolution, end to end", () => {
       expect(await selected(dir)).toEqual(["src/app.test.ts"]);
     }, 60_000);
   }
+
+  it("an alias only vite.config.ts declares selects only the tests of the changed file", async () => {
+    const dir = await project({
+      "vite.config.ts":
+        'import path from "node:path";\nexport default { resolve: { alias: { "@": path.resolve(__dirname, "./src") } } };\n',
+      "src/a.ts": "export const a = () => 1;\n",
+      "src/b.ts": "export const b = () => 2;\n",
+      "test/a.test.ts":
+        'import { it } from "vitest";\nimport { a } from "@/a";\nit("a", () => { a(); });\n',
+      "test/b.test.ts":
+        'import { it } from "vitest";\nimport { b } from "@/b";\nit("b", () => { b(); });\n',
+    });
+    await write(dir, { "src/a.ts": "export const a = () => 3;\n" });
+    expect(await selected(dir)).toEqual(["test/a.test.ts"]);
+    // The alias is a resolution input: pointing it elsewhere re-resolves the imports.
+    await write(dir, {
+      "vite.config.ts":
+        'import path from "node:path";\nexport default { resolve: { alias: { "@": path.resolve(__dirname, "./lib") } } };\n',
+      "lib/a.ts": "export const a = () => 1;\n",
+      "lib/b.ts": "export const b = () => 2;\n",
+    });
+    git(dir, "add", "-A");
+    git(dir, "commit", "-qm", "move the alias");
+    await write(dir, { "lib/b.ts": "export const b = () => 4;\n" });
+    expect(await selected(dir)).toEqual(["test/b.test.ts"]);
+  }, 60_000);
+
+  it("import.meta.glob with root-absolute, eager, array and negated patterns", async () => {
+    const dir = await project({
+      "vite.config.ts": "export default {};\n",
+      "src/pages/home.ts": "export const title = 'home';\n",
+      "src/pages/about.ts": "export const title = 'about';\n",
+      "src/pages/home.test.ts":
+        'import { it } from "vitest";\nimport { title } from "./home";\nit("home", () => { title; });\n',
+      "src/other.ts": "export const other = () => 1;\n",
+      "src/registry.ts":
+        'export const eager = import.meta.glob("/src/pages/*.ts", { eager: true });\nexport const lazy = import.meta.glob(["/src/pages/*.ts", "!**/*.test.ts"]);\n',
+      "test/registry.test.ts":
+        'import { it } from "vitest";\nimport { eager } from "../src/registry";\nit("registry", () => { eager; });\n',
+      "test/other.test.ts":
+        'import { it } from "vitest";\nimport { other } from "../src/other";\nit("other", () => { other(); });\n',
+    });
+    await write(dir, { "src/other.ts": "export const other = () => 2;\n" });
+    expect(await selected(dir)).toEqual(["test/other.test.ts"]);
+    await write(dir, { "src/pages/about.ts": "export const title = 'About';\n" });
+    expect(await selected(dir)).toEqual(["test/other.test.ts", "test/registry.test.ts"]);
+  }, 60_000);
 });

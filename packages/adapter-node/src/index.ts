@@ -8,6 +8,9 @@ import { join, relative } from "node:path";
 import {
   canonicalPath,
   type ExecutionOptions,
+  findNodeTestScript,
+  type NodeTestCommand,
+  readPackageScripts,
   relPosixReported,
   runProcess,
   type TestAdapter,
@@ -20,13 +23,18 @@ import {
   toPosix,
   walkFiles,
 } from "@smarttest/shared";
-import { expandNodePatterns } from "@smarttest/test-discovery";
+import { expandNodePatterns, nodeStripsTypes } from "@smarttest/test-discovery";
 
 export interface NodeTestAdapterOptions {
   projectRoot: string;
   cwd: string;
   /** Patterns from `node --test <patterns>`; defaults to Node's own defaults. */
   patterns?: string[];
+  /**
+   * The project's `node --test` command; read from the first package.json script in `cwd` that
+   * runs one when omitted (`null`: none). See `NodeTestAdapter.scriptFlags`.
+   */
+  command?: NodeTestCommand | null;
 }
 
 const decode = (s: string) =>
@@ -135,8 +143,39 @@ export class NodeTestAdapter implements TestAdapter {
     };
   }
 
+  private command(): NodeTestCommand | undefined {
+    if (this.options.command !== undefined) return this.options.command ?? undefined;
+    return findNodeTestScript(readPackageScripts(this.options.cwd))?.command;
+  }
+
+  /**
+   * What the project's own `node --test` script adds to the run, so tests that need a preload
+   * run as they do with `npm test`: every node option of the command (`--import tsx`,
+   * `--require ./setup.cjs`, `--env-file`, `--conditions`, `--experimental-*`,
+   * `--test-concurrency`, `--test-timeout`…) and the variables set before it (`NODE_OPTIONS=…`,
+   * `TZ=UTC`). Not passed: the file/glob arguments (SmartTest gives the selected files), and the
+   * options SmartTest sets or that change what a selected run means: `--test-name-pattern`,
+   * `--test-skip-pattern`, `--test-only`, reporters and their destinations, `--test-shard`,
+   * `--watch`, coverage options, `--test-update-snapshots` and the inspector. `--workers` replaces
+   * the script's `--test-concurrency`.
+   */
+  scriptFlags(workers?: number): { args: string[]; env: Record<string, string> } {
+    const command = this.command();
+    if (!command) return { args: [], env: {} };
+    const args = workers
+      ? command.nodeArgs.filter((a) => !/^--test-concurrency(?:=|$)/.test(a))
+      : command.nodeArgs;
+    return { args, env: command.env };
+  }
+
   async discover(): Promise<TestCase[]> {
-    const patterns = expandNodePatterns(this.options.patterns);
+    // The script's flags decide whether this Node runs TypeScript test files.
+    const script = this.scriptFlags();
+    const flags = [...script.args, script.env.NODE_OPTIONS ?? ""].join(" ");
+    const strip = /--no-experimental-strip-types\b/.test(flags)
+      ? false
+      : /--experimental-(?:strip|transform)-types\b/.test(flags) || nodeStripsTypes();
+    const patterns = expandNodePatterns(this.options.patterns, strip);
     const files = await walkFiles(this.options.cwd, { include: patterns });
     return files.map((f) => {
       const rel = relPosixReported(this.options.projectRoot, join(this.options.cwd, f)) ?? f;
@@ -148,8 +187,10 @@ export class NodeTestAdapter implements TestAdapter {
     const startedAt = new Date().toISOString();
     const tmp = await mkdtemp(join(tmpdir(), "smarttest-node-"));
     const out = join(tmp, "junit.xml");
+    const script = this.scriptFlags(options.workers);
     try {
       const args = [
+        ...script.args,
         "--test",
         "--test-reporter=junit",
         `--test-reporter-destination=${out}`,
@@ -161,7 +202,13 @@ export class NodeTestAdapter implements TestAdapter {
       const res = await runProcess(process.execPath, args, {
         // Canonical like the file filters: Windows keeps a short-name cwd (RUNNER~1) as given.
         cwd: canonicalPath(this.options.cwd),
-        env: { ...process.env, FORCE_COLOR: "0", NO_COLOR: "1", ...options.env },
+        env: {
+          ...process.env,
+          ...script.env,
+          FORCE_COLOR: "0",
+          NO_COLOR: "1",
+          ...options.env,
+        },
         ...(options.timeoutMs ? { timeoutMs: options.timeoutMs } : {}),
         ...(options.signal ? { signal: options.signal } : {}),
       });

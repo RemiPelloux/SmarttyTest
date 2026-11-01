@@ -8,6 +8,7 @@ import { type JestLikeReport, parseJestLikeReport, resolvePackageBin } from "@sm
 import {
   canonicalPath,
   type ExecutionOptions,
+  readPackageScripts,
   relPosixReported,
   runProcess,
   SmartTestError,
@@ -16,6 +17,7 @@ import {
   type TestCase,
   type TestRunResult,
   type TestSelection,
+  vitestScriptTypecheck,
 } from "@smarttest/shared";
 
 export interface VitestAdapterOptions {
@@ -26,6 +28,11 @@ export interface VitestAdapterOptions {
   configFile?: string;
   /** Where coverage JSON should be written when coverage is requested. */
   coverageDir?: string;
+  /**
+   * Run type tests (`--typecheck`). Defaults to whether a package.json script in `cwd` runs
+   * Vitest with `--typecheck` (see `vitestScriptTypecheck`).
+   */
+  typecheck?: boolean;
 }
 
 export class VitestAdapter implements TestAdapter {
@@ -71,10 +78,21 @@ export class VitestAdapter implements TestAdapter {
     return ["--config", join(this.options.projectRoot, file)];
   }
 
+  /**
+   * `--typecheck` when the project's own script passes it: discovery lists the type tests
+   * (`*.test-d.ts`) only with it, and a run without it collects none of them.
+   */
+  private scriptArgs(): string[] {
+    const typecheck =
+      this.options.typecheck ??
+      vitestScriptTypecheck(readPackageScripts(this.options.cwd), this.options.configFile);
+    return typecheck ? ["--typecheck"] : [];
+  }
+
   async discover(): Promise<TestCase[]> {
     const res = await runProcess(
       process.execPath,
-      [this.bin(), "list", "--json", "--filesOnly", ...this.configArgs()],
+      [this.bin(), "list", "--json", "--filesOnly", ...this.configArgs(), ...this.scriptArgs()],
       {
         cwd: canonicalPath(this.options.cwd),
         env: { ...process.env, FORCE_COLOR: "0", NO_COLOR: "1" },
@@ -123,6 +141,7 @@ export class VitestAdapter implements TestAdapter {
       `--outputFile.json=${out}`,
       "--passWithNoTests",
       ...this.configArgs(),
+      ...this.scriptArgs(),
       ...(options.workers ? [`--maxWorkers=${options.workers}`] : []),
       ...(options.trace ? ["--pool=threads"] : []),
       ...(options.coverage && this.options.coverageDir

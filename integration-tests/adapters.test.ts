@@ -3,7 +3,7 @@
  * control, language analyzers. Edge providers are covered in plugins.test.ts.
  */
 import { execFileSync } from "node:child_process";
-import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { CypressAdapter } from "@smarttest/adapter-cypress";
@@ -63,6 +63,37 @@ describe("runner adapters conform to the plugin SDK", () => {
       },
     });
     expect(passes(report)).toContain("runner.execute.outcomes");
+  }, 120_000);
+
+  it("Vitest: `--typecheck` in the package script lists and runs the type tests", async () => {
+    const root = await mkdtemp(join(tmpdir(), "st-vitest-typecheck-"));
+    await symlink(join(FIXTURES, "..", "..", "node_modules"), join(root, "node_modules"));
+    await writeFile(
+      join(root, "package.json"),
+      JSON.stringify({ type: "module", scripts: { test: "vitest run --typecheck" } }),
+    );
+    await writeFile(
+      join(root, "tsconfig.json"),
+      '{ "compilerOptions": { "strict": true, "module": "esnext", "moduleResolution": "bundler", "noEmit": true } }\n',
+    );
+    await mkdir(join(root, "test"));
+    await writeFile(
+      join(root, "test", "a.test.ts"),
+      'import { expect, test } from "vitest";\ntest("a", () => expect(1).toBe(1));\n',
+    );
+    await writeFile(
+      join(root, "test", "t.test-d.ts"),
+      'import { expectTypeOf, test } from "vitest";\ntest("types", () => { expectTypeOf<number>().toEqualTypeOf<string>(); });\n',
+    );
+    const adapter = new VitestAdapter({ projectRoot: root, cwd: root });
+    expect((await adapter.discover()).map((t) => t.filePath).sort()).toEqual([
+      "test/a.test.ts",
+      "test/t.test-d.ts",
+    ]);
+    const run = await adapter.execute({ files: ["test/t.test-d.ts"] }, {});
+    expect(run.executions.map((e) => [e.testId.split("::")[0], e.status])).toEqual([
+      ["test/t.test-d.ts", "failed"],
+    ]);
   }, 120_000);
 
   it("Jest: discovery and execution, including a failing test", async () => {
@@ -141,6 +172,29 @@ describe("runner adapters conform to the plugin SDK", () => {
       expectedFiles: ["e2e/home.spec.js", "e2e/users.spec.js"],
     });
     expect(passes(report)).toContain("runner.discovery.expected");
+  }, 120_000);
+
+  it("Playwright: a selected spec runs alone, not the specs whose path contains its name", async () => {
+    // No browser: the specs use no page. Playwright reads file filters as unanchored regexes.
+    const root = await mkdtemp(join(tmpdir(), "st-pw-filter-"));
+    await symlink(join(FIXTURES, "next-playwright", "node_modules"), join(root, "node_modules"));
+    await writeFile(join(root, "package.json"), '{ "type": "module" }\n');
+    await writeFile(
+      join(root, "playwright.config.mjs"),
+      'export default { testDir: ".", workers: 1 };\n',
+    );
+    await mkdir(join(root, "e2e"), { recursive: true });
+    const spec = (title: string, ok: boolean) =>
+      `import { expect, test } from "@playwright/test";\ntest("${title}", () => { expect(${ok}).toBe(true); });\n`;
+    await writeFile(join(root, "home.spec.mjs"), spec("home", true));
+    await writeFile(join(root, "myhome.spec.mjs"), spec("myhome", false));
+    await writeFile(join(root, "e2e", "home.spec.mjs"), spec("e2e home", false));
+    const adapter = new PlaywrightAdapter({ projectRoot: root, cwd: root });
+    const result = await adapter.execute({ files: ["home.spec.mjs"] }, { workers: 1 });
+    expect(result.executions.map((e) => [e.testId, e.status])).toEqual([
+      ["home.spec.mjs::home", "passed"],
+    ]);
+    expect((result as { meta?: { exitCode?: number } }).meta?.exitCode).toBe(0);
   }, 120_000);
 
   it("Cypress: static (partial) discovery from the project files", async () => {

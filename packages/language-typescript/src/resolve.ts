@@ -4,6 +4,13 @@ import { dirname, join } from "node:path";
 import { relPosix, toPosix } from "@smarttest/shared";
 import type { ModuleResolver, ResolveResult } from "@smarttest/source-parser";
 import ts from "typescript";
+import {
+  ALIAS_CONFIGS,
+  type AliasConfig,
+  type AliasTool,
+  matchAlias,
+  readAliasConfig,
+} from "./bundler-aliases.js";
 
 export interface WorkspaceEntry {
   name: string;
@@ -14,9 +21,11 @@ export interface WorkspaceEntry {
 /**
  * Bumped when resolution changes, so stored resolutions are redone (2: tsconfig references;
  * 3: local names before builtins, declared dependencies, export conditions, package `imports`,
- * the tsconfig project that includes the file, imports outside the root).
+ * the tsconfig project that includes the file, imports outside the root; 4: bundler and
+ * test-runner aliases, root-absolute glob patterns).
  */
-export const RESOLVER_VERSION = 3;
+export const RESOLVER_VERSION = 4;
+const ALIAS_TOOLS = Object.keys(ALIAS_CONFIGS) as AliasTool[];
 const BUILTINS = new Set(builtinModules);
 /**
  * Modules a framework generates or serves (Wasp's SDK, SvelteKit, Nuxt): not npm installs. They
@@ -199,6 +208,8 @@ export class TypeScriptResolver implements ModuleResolver {
   private readonly declaredByDir = new Map<string, Set<string>>();
   /** Every file read to decide resolutions (tsconfig chains, package.json files): the cache key. */
   private readonly inputs = new Set<string>();
+  private readonly aliasByDir = new Map<string, AliasConfig[]>();
+  private readonly aliasByFile = new Map<string, AliasConfig | undefined>();
   private readonly host: ts.ModuleResolutionHost = {
     fileExists: (p) => this.isFile(p),
     readFile: (p) => ts.sys.readFile(p),
@@ -264,6 +275,7 @@ export class TypeScriptResolver implements ModuleResolver {
       this.optionsFor(d);
       this.declared(d);
       this.nearestPackage(d);
+      this.aliasConfigs(d);
       for (const m of FRAMEWORK_MARKERS) if (this.isFile(join(d, m))) this.inputs.add(join(d, m));
     }
     return [...this.inputs].map((p) => relPosix(this.root, p) ?? toPosix(p)).sort();
@@ -547,14 +559,18 @@ export class TypeScriptResolver implements ModuleResolver {
   }
 
   /** Where a root-absolute import (`/src/x`, Vite) starts: the nearest Vite root, else the root. */
-  private rootAbsolute(absFrom: string, specifier: string): ResolveResult {
+  private viteRoots(absFrom: string): string[] {
     const bases: string[] = [];
     for (let d = dirname(absFrom); this.rel(d) !== undefined; d = dirname(d)) {
       if (VITE_CONFIGS.some((c) => this.isFile(join(d, c))) || this.isFile(join(d, "index.html")))
         bases.push(d);
       if (toPosix(d) === toPosix(this.root) || dirname(d) === d) break;
     }
-    bases.push(this.root);
+    return bases;
+  }
+
+  private rootAbsolute(absFrom: string, specifier: string): ResolveResult {
+    const bases = [...this.viteRoots(absFrom), this.root];
     for (const b of bases) {
       const abs = this.probe(join(b, specifier));
       if (abs) return this.finish(abs, specifier);
@@ -562,8 +578,144 @@ export class TypeScriptResolver implements ModuleResolver {
     return { reason: `root-absolute import "${specifier}" does not resolve to a file` };
   }
 
+  /**
+   * The aliases bundler and test-runner configurations declare for files in `absDir`: the nearest
+   * configuration of each tool (Vite, Vitest, Jest, webpack, Babel) from there up to the root.
+   * Each configuration file read is a resolution input.
+   */
+  private aliasConfigs(absDir: string): AliasConfig[] {
+    const cached = this.aliasByDir.get(absDir);
+    if (cached) return cached;
+    const found: AliasConfig[] = [];
+    const done = new Set<AliasTool>();
+    for (let d = absDir; this.rel(d) !== undefined; d = dirname(d)) {
+      for (const tool of ALIAS_TOOLS) {
+        if (done.has(tool)) continue;
+        for (const name of ALIAS_CONFIGS[tool]) {
+          const [fileName, field] = name.split("#") as [string, string | undefined];
+          const p = join(d, fileName);
+          if (!this.isFile(p)) continue;
+          if (field && !(field in (this.packageJson(d) ?? {}))) continue;
+          // The nearest config file of a tool is the one it uses, aliases or not.
+          done.add(tool);
+          this.inputs.add(p);
+          const key = field ? `${p}#${field}` : p;
+          if (!this.aliasByFile.has(key)) this.aliasByFile.set(key, readAliasConfig(tool, key));
+          const config = this.aliasByFile.get(key);
+          if (config) {
+            for (const f of config.inputs) this.inputs.add(f);
+            found.push(config);
+          }
+          break;
+        }
+      }
+      if (toPosix(d) === toPosix(this.root) || dirname(d) === d) break;
+    }
+    this.aliasByDir.set(absDir, found);
+    return found;
+  }
+
+  /** Where an alias candidate points: a file, a package, or nothing. */
+  private aliasTarget(
+    fromFile: string,
+    config: AliasConfig,
+    c: { abs?: string; spec?: string },
+    specifier: string,
+  ): ResolveResult | undefined {
+    let abs: string | undefined;
+    if (c.abs !== undefined) abs = this.probe(c.abs);
+    else {
+      const spec = c.spec ?? "";
+      if (spec.startsWith("/"))
+        // Vite reads `/src` from its root; Jest & co. read a file-system path.
+        abs = this.probe(
+          config.tool === "vite" || config.tool === "vitest" ? join(config.root, spec) : spec,
+        );
+      else {
+        abs = this.probe(join(config.dir, spec));
+        // A package (`vue` → `vue/dist/vue.esm-bundler.js`): resolved once more, without aliases.
+        if (!abs) {
+          const out = this.resolve(fromFile, spec, false);
+          return out.resolved || out.external ? out : undefined;
+        }
+      }
+    }
+    return abs ? this.finish(abs, specifier) : undefined;
+  }
+
+  /** What each bundler/test-runner configuration that aliases `specifier` maps it to. */
+  private bundlerAlias(fromFile: string, absFrom: string, specifier: string): ResolveResult[] {
+    const outs: ResolveResult[] = [];
+    for (const config of this.aliasConfigs(dirname(absFrom))) {
+      const hit = matchAlias(config, specifier);
+      if (!hit) continue;
+      let out: ResolveResult | undefined;
+      for (const c of hit.candidates) {
+        out = this.aliasTarget(fromFile, config, c, specifier);
+        if (out) break;
+      }
+      const where = relPosix(this.root, config.file.split("#")[0] as string) ?? config.file;
+      outs.push(
+        out ?? {
+          reason: `${config.tool} alias "${hit.rule.find}" (${where}) maps "${specifier}" to no file`,
+        },
+      );
+    }
+    return outs;
+  }
+
+  /**
+   * The aliases' outcomes with TypeScript's. Configurations that load different files (the app's
+   * Vite alias and the tests' Jest mapper) keep the import uncertain; an alias that maps to no
+   * file while another resolves does too.
+   */
+  private withAliases(
+    aliased: ResolveResult[],
+    viaTs: ResolveResult | undefined,
+    specifier: string,
+  ): ResolveResult {
+    const all = viaTs?.resolved ? [...aliased, viaTs] : aliased;
+    const resolved = all.filter((o) => o.resolved);
+    if (resolved.length) {
+      const c = this.combine(resolved, `"${specifier}" (bundler aliases and tsconfig paths)`);
+      const uncertain =
+        c?.uncertain ??
+        aliased.find((o) => !o.resolved && !o.external)?.reason ??
+        resolved.find((o) => o.uncertain)?.uncertain;
+      return uncertain ? { ...(c as ResolveResult), uncertain } : (c as ResolveResult);
+    }
+    const missing = aliased.find((o) => !o.external);
+    return missing ?? { external: true };
+  }
+
   resolvePattern(fromFile: string, pattern: string): string | undefined {
-    if (pattern.startsWith(".") || pattern.startsWith("/")) return undefined;
+    const absFrom = join(this.root, fromFile);
+    if (pattern.startsWith("/")) {
+      // Root-absolute (`import.meta.glob("/src/pages/*.ts")`): from the nearest Vite root.
+      return relPosix(this.root, join(this.viteRoots(absFrom)[0] ?? this.root, pattern));
+    }
+    if (pattern.startsWith(".")) return undefined;
+    const viaPaths = this.pathsPattern(fromFile, pattern);
+    if (viaPaths) return viaPaths;
+    for (const config of this.aliasConfigs(dirname(absFrom))) {
+      const hit = matchAlias(config, pattern);
+      for (const c of hit?.candidates ?? []) {
+        const spec = c.spec ?? "";
+        const abs =
+          c.abs ??
+          (spec.startsWith("/")
+            ? config.tool === "vite" || config.tool === "vitest"
+              ? join(config.root, spec)
+              : spec
+            : join(config.dir, spec));
+        const rel = relPosix(this.root, abs);
+        if (rel !== undefined) return rel;
+      }
+    }
+    return undefined;
+  }
+
+  private pathsPattern(fromFile: string, pattern: string): string | undefined {
     for (const { opts } of this.optionsFor(dirname(join(this.root, fromFile)))) {
       const paths = opts.paths ?? {};
       const base = opts.baseUrl ?? (opts as { pathsBasePath?: string }).pathsBasePath;
@@ -584,13 +736,17 @@ export class TypeScriptResolver implements ModuleResolver {
     return undefined;
   }
 
-  resolve(fromFile: string, specifier: string): ResolveResult {
+  /**
+   * `aliases`: apply bundler/test-runner aliases (off when resolving an alias's own target, as
+   * bundlers do: an alias is applied once).
+   */
+  resolve(fromFile: string, specifier: string, aliases = true): ResolveResult {
     if (specifier.startsWith("node:")) return { external: true };
     if (/^[a-z]+:/i.test(specifier) && !/^[a-zA-Z]:[\\/]/.test(specifier))
       return { external: true };
     // A bundler query (`./icon.svg?raw`, `#web/a.css?inline`, `./w.ts?worker`) names the same file.
     const query = specifier.indexOf("?");
-    if (query > 0) return this.resolve(fromFile, specifier.slice(0, query));
+    if (query > 0) return this.resolve(fromFile, specifier.slice(0, query), aliases);
     const absFrom = join(this.root, fromFile);
     const relative = specifier.startsWith(".") || specifier.startsWith("/");
 
@@ -628,6 +784,12 @@ export class TypeScriptResolver implements ModuleResolver {
     // The SDK a framework generates (`wasp/client/operations`): its build is no project source.
     if (!relative && this.frameworkModule(absFrom, specifier)) return { external: true };
     const projects = this.optionsFor(dirname(absFrom));
+    // An alias only a bundler or test-runner config declares (`@` → `./src` in vite.config.ts).
+    if (!relative && aliases) {
+      const aliased = this.bundlerAlias(fromFile, absFrom, specifier);
+      if (aliased.length)
+        return this.withAliases(aliased, this.tsResolve(specifier, absFrom, projects), specifier);
+    }
     // A Node builtin name (`events`, `constants`) is a builtin unless a local alias or `baseUrl`
     // folder of that name resolves it.
     if (BUILTINS.has(specifier)) {

@@ -23,6 +23,8 @@ The graph holds files, symbols, tests and configuration. Its edges are `IMPORTS`
 - Files: in a Git repository, the project is what `git ls-files` sees. Everything `.gitignore` excludes (build output such as `.wasp/`, `.next/`, `dist/`) and submodules are skipped.
 - Tests: each runner (Jest, Vitest, `node --test`) is asked which files it collects, with its own config. A file named `*.test.ts` that no runner collects never runs, and `doctor` reports it.
 - Computed imports: ``import(`${SCRIPTS}x.mjs`)``, `new URL("../tpl/", import.meta.url)` and `resolve(__dirname, "fixtures")` are evaluated statically. A partially known path becomes a bounded glob (`templates/*.ts`). Only truly unknowable imports (`import(file)`) remain uncertainty.
+- `import.meta.glob` (and Vite 2's `globEager`): relative, root-absolute (`/src/pages/*.ts`, from the nearest Vite root) and aliased patterns, alone or in an array, with or without `{ eager: true }`. A negated pattern (`!**/*.test.ts`) is ignored, which keeps more files, never fewer.
+- Aliases: tsconfig/jsconfig `paths`, and aliases that only a bundler or test-runner config declares: Vite and Vitest `resolve.alias`/`test.alias` (object and `{ find, replacement }` forms, regex finds), Jest `moduleNameMapper` (`$1` captures, `<rootDir>`, directory targets, lists of targets; also in package.json), webpack `resolve.alias` (`name$` for the exact name) and Babel `module-resolver` `alias`. The nearest config of each tool applies, with the local modules it imports. When two configs (the app's Vite alias and the tests' Jest mapper) map an import to different files, the import stays uncertain; an alias whose value is computed (`alias: makeAliases()`) leaves its imports unresolved. These configs are resolution inputs: editing one re-resolves the imports.
 
 ### Member-level precision
 
@@ -96,6 +98,12 @@ The result is an `ImpactDecision` containing selected tests with reasons, skippe
 ## 8. Run & report
 
 Selected tests run through the project's runner (Jest, Vitest or `node --test`). Results are normalized, and skipped tests are reported as not run, never as passed. → [Safety model](safety-model.md)
+
+The runner is started the way the project's own script starts it:
+
+- `node --test`: the first package.json script that runs `node … --test` gives its node options and the variables set before `node` (`NODE_OPTIONS=…`, `TZ=UTC`, also after `cross-env`). Passed: `--import`, `--require`/`-r`, `--loader`, `--env-file`, `--conditions`/`-C`, `--experimental-*`, `--test-concurrency`, `--test-timeout`, `--test-isolation` and any other node option. Not passed: the script's file and glob arguments (SmartTest gives the selected files), `--test-name-pattern`, `--test-skip-pattern`, `--test-only`, `--test-reporter`, `--test-reporter-destination`, `--test-shard`, `--watch`, coverage options (`--experimental-test-coverage`, `--test-coverage-*`), `--test-update-snapshots` and the inspector. `--workers` replaces the script's `--test-concurrency`. A part built at run time (`$VAR`, a subshell) is left out.
+- Vitest: a script that runs Vitest with `--typecheck` (or `--typecheck.enabled`) for the same config makes discovery and runs pass `--typecheck`, so type tests (`*.test-d.ts`) are listed and run. `--typecheck.only` is not followed (it would drop the runtime tests).
+- Playwright: each selected spec is passed as a filter anchored on its whole path, so `home.spec.ts` never also runs `myhome.spec.ts` or `e2e/home.spec.ts`.
 
 ## Asking "why?"
 
