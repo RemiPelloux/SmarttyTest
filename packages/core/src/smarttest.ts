@@ -157,6 +157,12 @@ import { outsideLinks } from "./outside.js";
 import { ParsePool, parallelParsingAvailable } from "./parse-pool.js";
 import { type LoadedPlugin, loadPlugins, pluginsChanged, runEdgeProviders } from "./plugins.js";
 import {
+  type RunnerInputs,
+  readRunnerInputs,
+  runnerHits,
+  runnerInputFiles,
+} from "./runner-inputs.js";
+import {
   nothingInScope,
   resolveScopePaths,
   restrictChanges,
@@ -1006,14 +1012,28 @@ export class SmartTest {
         }
         candidates.sort();
         const pkg = (await readText(join(this.root, root.dir, "package.json"))) ?? "";
+        // The local modules the configuration imports (`mergeConfig(shared, …)`) decide what it
+        // collects as much as the configuration itself.
+        const imported = (await readRunnerInputs(this.root, root)).configs.filter(
+          (c) => c.importedBy,
+        );
+        const importedText = await Promise.all(
+          imported.map(async (c) => `${c.file}:${(await readText(join(this.root, c.file))) ?? ""}`),
+        );
         const key = sha256(
-          [rootKey(root), (root.patterns ?? []).join(","), cfg, pkg, candidates.join("\n")].join(
-            "\u0000",
-          ),
+          [
+            rootKey(root),
+            (root.patterns ?? []).join(","),
+            cfg,
+            ...importedText,
+            pkg,
+            candidates.join("\n"),
+          ].join("\u0000"),
         );
         let files = cache[key];
         let failed = false;
-        if (!files) files = await staticDefaultDiscovery(this.root, root, cfg, pkg, candidates);
+        if (!files && !imported.length)
+          files = await staticDefaultDiscovery(this.root, root, cfg, pkg, candidates);
         if (!files) {
           try {
             files = (
@@ -1070,6 +1090,42 @@ export class SmartTest {
     const tests = [...assignment.keys()].sort();
     const { unassigned, helpers } = split(staticCandidates.filter((f) => !assignment.has(f)));
     return { tests, unassigned, helpers, roots, assignment, warnings, perRoot };
+  }
+
+  /** What each runner loads because its configuration names it (setup files, config imports…). */
+  async runnerInputs(roots: readonly RunnerRoot[]): Promise<RunnerInputs[]> {
+    return Promise.all(roots.map((r) => readRunnerInputs(this.root, r)));
+  }
+
+  /** The index and graph queries runner inputs need. */
+  private runnerGraphView(
+    index: SymbolIndex,
+    graph: DependencyGraph,
+    assignment: ReadonlyMap<string, RunnerRoot>,
+  ) {
+    const testsByRoot = new Map<RunnerRoot, string[]>();
+    for (const [t, r] of assignment) testsByRoot.set(r, [...(testsByRoot.get(r) ?? []), t]);
+    const importsOf = (file: string): string[] =>
+      (index.get(file)?.imports ?? []).flatMap((i) =>
+        i.resolved && i.resolved !== file ? [i.resolved] : [],
+      );
+    return {
+      testsOf: (r: RunnerRoot) => (testsByRoot.get(r) ?? []).sort(),
+      importsOf,
+      importersOf: (match: (specifier: string) => boolean) =>
+        [...index.entries()].flatMap(([file, a]) =>
+          a.imports
+            .filter((i) => match(i.specifier))
+            .map((i) => ({ file, ...(i.resolved ? { resolved: i.resolved } : {}) })),
+        ),
+      dependsDirectly: (from: string, to: string) =>
+        new Set(graph.why(to, from)?.map((k) => k.split("#")[0])).size === 2,
+      testsDependingOn: (file: string) => [
+        ...graph.dependentsOf([{ file, units: ["*"] }]).tests.keys(),
+      ],
+      reachesAnyTest: (file: string) => graph.reachesAnyTest([{ file, units: ["*"] }]),
+      isTest: (file: string) => graph.isTestFile(file),
+    };
   }
 
   // ── Analysis & impact ───────────────────────────────────────────────────────────────────
@@ -1149,6 +1205,13 @@ export class SmartTest {
       this.semanticDiffs(input, index, graphDiff, resources),
     );
     const traceView = await this.traceView(input, index);
+    const runners = await timed(timings, "runner configuration", async () =>
+      runnerHits({
+        ...this.runnerGraphView(index, graph, assignment),
+        inputs: await this.runnerInputs(roots),
+        changeSet: input.changeSet,
+      }),
+    );
     const decision = await timed(timings, "impact analysis", async () =>
       scope && nothingInScope(scope, input.changeSet.completeness)
         ? unchangedScopeDecision(tests, scope, options.mode ?? this.config.mode)
@@ -1166,6 +1229,7 @@ export class SmartTest {
             isTest: (path) => graph.isTestFile(path),
             mode: options.mode ?? this.config.mode,
             triggers: [...BUILTIN_TRIGGERS, ...this.config.triggers],
+            runnerInputs: runners.hits,
             // A plugin module inside the project decides edges: changing it widens to everything.
             globalTriggers: this.config.plugins
               .filter((p) => p.startsWith("./"))
@@ -1184,7 +1248,11 @@ export class SmartTest {
         ...(only?.notes ?? []),
         ...scopeWarnings(scope, input.changeSet.completeness),
       );
-    decision.warnings.push(...discoveryWarnings, ...(this.provided?.warnings ?? []));
+    decision.warnings.push(
+      ...discoveryWarnings,
+      ...runners.warnings,
+      ...(this.provided?.warnings ?? []),
+    );
     const profileNow = this.profileCache;
     if (profileNow) {
       const drift = detectDrift(this.config, this.loaded.raw, profileNow).filter(
@@ -2276,7 +2344,8 @@ export class SmartTest {
         : "fresh analysis";
     const { index } = await this.loadIndex();
     const graph = this.buildGraph(index);
-    graph.setDiscovery(await this.discoverTests(index));
+    const discovered = await this.discoverTests(index);
+    graph.setDiscovery(discovered);
     if (
       graph.isTestFile(target) ||
       decision.selectedTests.some((t) => t.filePath === target) ||
@@ -2295,7 +2364,22 @@ export class SmartTest {
     const [file, unit] = target.includes("#")
       ? (target.split("#") as [string, string])
       : [target, "*"];
-    if (!index.get(file) && !graph.hasFile(file)) {
+    // Files a runner loads because its configuration names them (setup files, config imports…).
+    const loadedBy = runnerHits({
+      ...this.runnerGraphView(index, graph, discovered.assignment),
+      inputs: await this.runnerInputs(discovered.roots),
+      changeSet: {
+        provider: "explain",
+        changes: [{ path: file, type: "modified" }],
+        completeness: "complete",
+        warnings: [],
+      },
+    }).hits.map((h) => ({
+      reason: h.message.replace(/^.+? changed — /, ""),
+      tests: [...h.tests],
+      ...(h.path ? { path: h.path } : {}),
+    }));
+    if (!index.get(file) && !graph.hasFile(file) && !loadedBy.length) {
       throw new SmartTestError(`Unknown test, file or symbol: ${target}`, {
         code: "ST_UNKNOWN_TARGET",
         category: "usage",
@@ -2332,6 +2416,7 @@ export class SmartTest {
           }
         : {}),
       uncertainty: graph.uncertaintyReachableFrom(file),
+      loadedBy,
       rules: policy.matched.map((m) => m.rule.name),
       risk: policy.risk,
     };
@@ -2732,7 +2817,7 @@ export class SmartTest {
         const global = files.filter(
           (f) =>
             inScope(f) &&
-            (/(^|\/)(package\.json|package-lock\.json|pnpm-lock\.yaml|yarn\.lock|bun\.lockb?|tsconfig[^/]*\.json|\.env[^/]*|babel\.config\.[^/]+|\.babelrc[^/]*|\.swcrc)$/.test(
+            (/(^|\/)(package\.json|package-lock\.json|pnpm-lock\.yaml|yarn\.lock|bun\.lockb?|tsconfig[^/]*\.json|\.env[^/]*|babel\.config\.[^/]+|\.babelrc[^/]*|\.swcrc|\.nvmrc|\.node-version|\.tool-versions|\.npmrc|postcss\.config\.[^/]+|\.postcssrc[^/]*|tailwind\.config\.[^/]+)$/.test(
               f,
             ) ||
               /(^|\/)__mocks__\//.test(f) ||
@@ -2751,14 +2836,26 @@ export class SmartTest {
           if (d === this.root || d === join(d, "..")) break;
         }
         base = {
-          node: process.versions.node.split(".")[0] as string,
+          node: process.versions.node,
           runner: `${root.adapter}@${runnerVersion}`,
           smarttest: TOOL.version,
           config: root.configFile ? await h(root.configFile) : "",
         };
         for (const f of global.sort()) base[`g:${f}`] = await h(f);
+        // What the configuration makes the runner load: its imports, setup files, mapped
+        // modules, and everything they import. Any change there can change any result.
+        const inputs = await readRunnerInputs(this.root, root);
+        for (const f of runnerInputFiles(inputs, (file) =>
+          (analysis.index.get(file)?.imports ?? []).flatMap((i) =>
+            i.resolved && i.resolved !== file ? [i.resolved] : [],
+          ),
+        ))
+          base[`r:${f}`] = await h(f);
+        // A value it can't read statically could name any file: no cached result.
+        if (inputs.computed.length) base = { uncacheable: "computed configuration" };
         shared.set(rk, base);
       }
+      if (base.uncacheable) continue;
       const parts: Record<string, string> = { ...base };
       for (const f of closure) parts[`f:${f}`] = await h(f);
       const trace = view?.trace(t);

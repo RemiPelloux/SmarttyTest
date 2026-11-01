@@ -56,13 +56,18 @@ A test that replaces module M with a factory mock (`vi.mock("./m", () => …)`, 
 
 [Rules](rules.md) add risk levels, always-run tests and mode overrides. Mandatory triggers widen the selection for changes with global impact:
 
-| Trigger                                                  | Default effect                                                                   |
-| -------------------------------------------------------- | -------------------------------------------------------------------------------- |
-| `tsconfig*.json`, Babel/SWC config                       | full suite                                                                       |
-| Jest/Vitest config, global setup files                   | full suite for that runner/project                                               |
-| `package.json` dependencies, lockfiles                   | full suite (affected workspace in monorepos)                                     |
-| `.env`, `.env.test`, `.env.local`…                       | full suite, unless every changed key is read by analysed code (then its readers) |
-| Unresolved import or dynamic pattern touching the change | widened per mode, see below                                                      |
+| Trigger                                                  | Default effect                                                                                                                             |
+| -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `tsconfig*.json`, Babel/SWC config                       | full suite                                                                                                                                 |
+| A runner's config and the local files it imports         | every test of that runner                                                                                                                  |
+| Files the config names, and everything they import       | every test of that runner (setup files, global setup/teardown, test environment, Cypress support file, `node --test --import`/`--require`) |
+| A local file an alias / `moduleNameMapper` maps to       | tests that import the mapped specifier (every test of the runner when none is analysed, e.g. stylesheets)                                  |
+| PostCSS/Tailwind config, `.babelrc`, setup-named files   | full suite for their directory                                                                                                             |
+| `package.json` dependencies, lockfiles                   | full suite (affected workspace in monorepos)                                                                                               |
+| `.env`, `.env.test`, `.env.local`…                       | full suite, unless every changed key is read by analysed code (then its readers)                                                           |
+| Unresolved import or dynamic pattern touching the change | widened per mode, see below                                                                                                                |
+
+The config is read statically. When a setting that names files is computed (`setupFiles: findSetups()`), SmartTest says so in a warning, selects every test of that runner for a changed file no test imports, and never caches that runner's results. `smarttest explain test/setup.ts` lists the runners that load a file and why ("setup file of vitest (setupFiles in vitest.config.ts)").
 
 Rules can add triggers but cannot remove the built-in ones.
 

@@ -27,6 +27,7 @@ const fixtures = [
   "yarn-workspaces-node",
   "next-playwright",
   "plugin-edges-vitest",
+  "runner-inputs-vitest",
 ];
 
 for (const fixture of fixtures) {

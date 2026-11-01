@@ -432,3 +432,76 @@ describe("changes the graph no longer sees", () => {
     expect(d.reasons[0]?.message).toMatch(/DATABASE_URL not read by analysed code/);
   });
 });
+
+describe("decideImpact · files a runner loads", () => {
+  const { files, graph, isTest, tests } = setup();
+  const run = (paths: string[], runnerInputs: Parameters<typeof decideImpact>[0]["runnerInputs"]) =>
+    decideImpact({
+      changeSet: changed(paths),
+      diffs: new Map(),
+      graph,
+      files,
+      testFiles: tests,
+      isTest,
+      mode: "fast", // FAST: the dynamic-import test is not selected for uncertainty
+      triggers: ["**/vitest.config.*", "**/package.json"],
+      rules: new RulesEngine([]),
+      ...(runnerInputs ? { runnerInputs } : {}),
+    });
+
+  it("a setup file (and what it imports) selects the tests of its runner, with the reason", () => {
+    const message = "test/setup.ts changed — setup file of vitest (setupFiles in vitest.config.ts)";
+    const d = run(
+      ["test/setup.ts"],
+      [{ file: "test/setup.ts", tests: ["test/a.test.ts", "test/b.test.ts"], message }],
+    );
+    expect(sel(d)).toEqual(["test/a.test.ts", "test/b.test.ts"]);
+    expect(explainTest(d, "test/a.test.ts").reasons).toEqual([message]);
+    expect(d.details.ignored).toEqual([]);
+    expect(d.details.runnerInputs).toEqual([{ file: "test/setup.ts", message, tests: 2 }]);
+    // Without it, nothing selects them.
+    expect(sel(run(["test/setup.ts"], undefined))).toEqual([]);
+  });
+
+  it("a changed module a setup file imports is not reported unprotected", () => {
+    const hit = {
+      file: "src/auth/guard.ts",
+      tests: ["test/a.test.ts"],
+      message: "src/auth/guard.ts changed — imported by test/setup.ts, setup file of vitest",
+      path: ["src/auth/guard.ts", "test/setup.ts"],
+    };
+    const d = decideImpact({
+      changeSet: changed(["src/auth/guard.ts"]),
+      diffs: new Map([unit("src/auth/guard.ts", ["unused"])]),
+      graph,
+      files,
+      testFiles: tests,
+      isTest,
+      mode: "fast", // FAST: the dynamic-import test is not selected for uncertainty
+      triggers: [],
+      rules: new RulesEngine([]),
+      runnerInputs: [hit],
+    });
+    expect(sel(d)).toEqual(["test/a.test.ts"]);
+    expect(explainTest(d, "test/a.test.ts").path).toEqual(hit.path);
+    expect(d.details.unprotected).toBeUndefined();
+  });
+
+  it("a runner's own configuration selects that runner's tests, not every test", () => {
+    const own = run(
+      ["vitest.config.ts"],
+      [
+        {
+          file: "vitest.config.ts",
+          tests: ["test/a.test.ts"],
+          message: "vitest.config.ts changed — configuration of vitest",
+          narrow: true,
+        },
+      ],
+    );
+    expect(sel(own)).toEqual(["test/a.test.ts"]);
+    expect(own.fallbackApplied).toBe(false);
+    // Read by no runner: the directory-wide trigger applies.
+    expect(sel(run(["vitest.config.ts"], undefined))).toEqual([...tests].sort());
+  });
+});

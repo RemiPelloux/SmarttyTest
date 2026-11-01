@@ -1,0 +1,12 @@
+{
+  "runners": ["vitest"],
+  "vcs": "git",
+  "testFiles": 5,
+  "mutations": [
+    { "file": "src/mocks/handlers.ts", "find": "\"alice\"", "replace": "\"bob\"", "expectFailing": ["test/handlers.test.ts"] },
+    { "file": "test/support/setup.ts", "find": "= handlers;", "replace": "= { user: \"carol\" };", "expectFailing": ["test/handlers.test.ts"] },
+    { "file": "vitest.shared.ts", "find": "__LIMIT__: \"3\"", "replace": "__LIMIT__: \"4\"", "expectFailing": ["test/limit.test.ts"] },
+    { "file": "test/support/flags.ts", "find": "darkMode = true", "replace": "darkMode = false", "expectFailing": ["test/theme.test.ts"] },
+    { "file": "src/math.ts", "find": "return a + b;", "replace": "return a - b;", "expectFailing": ["test/add.test.ts"] }
+  ]
+}

@@ -46,6 +46,23 @@ export interface ImpactInput {
    * folders (`changeSet.outside`) selects the importer's tests.
    */
   outsideLinks?: ReadonlyMap<string, readonly string[]>;
+  /**
+   * Files a runner loads for its tests because its configuration names them (setup files, the
+   * configuration's own imports, mapped modules), with the tests that depend on them.
+   */
+  runnerInputs?: readonly RunnerHit[];
+}
+
+/** A changed file that a runner's configuration makes a dependency of some of its tests. */
+export interface RunnerHit {
+  file: string;
+  tests: readonly string[];
+  /** Why, for `explain`: "test/setup.ts changed — setup file of vitest (setupFiles in …)". */
+  message: string;
+  /** Import chain from the changed file to the file the configuration names. */
+  path?: string[];
+  /** The file is read by these runners only: it replaces the file's directory-wide trigger. */
+  narrow?: boolean;
 }
 
 /** Runtime traces as seen by the impact engine. */
@@ -76,6 +93,8 @@ export interface ImpactDetails {
   observedSkips?: { test: string; tracedAt: string }[];
   /** Changed units no test reaches, statically or in a fresh trace. */
   unprotected?: string[];
+  /** Changed files a runner loads for its tests (setup files, config imports, mapped modules). */
+  runnerInputs?: { file: string; message: string; tests: number }[];
 }
 
 export type ImpactResult = ImpactDecision & { details: ImpactDetails };
@@ -192,10 +211,38 @@ export function decideImpact(input: ImpactInput): ImpactResult {
     return unmatched;
   };
 
+  // 2a. Files a runner loads for its tests because its configuration names them: their change
+  // selects that runner's tests (a runner's own configuration selects its tests, not every test).
+  const runnerInputFiles = new Set<string>();
+  const narrowed = new Set<string>();
+  const known = new Set(allTests);
+  for (const change of changeSet.changes) {
+    for (const path of [change.path, change.previousPath].filter((p): p is string => !!p)) {
+      for (const hit of input.runnerInputs ?? []) {
+        if (hit.file !== path) continue;
+        const tests = hit.tests.filter((t) => known.has(t));
+        if (!tests.length) continue;
+        runnerInputFiles.add(path);
+        if (hit.narrow) narrowed.add(path);
+        const loaded = details.runnerInputs ?? [];
+        details.runnerInputs = loaded;
+        if (!loaded.some((r) => r.file === path && r.message === hit.message))
+          loaded.push({ file: path, message: hit.message, tests: tests.length });
+        for (const t of tests)
+          select(t, {
+            kind: "mandatory-trigger",
+            message: hit.message,
+            ...(hit.path ? { path: hit.path } : {}),
+          });
+      }
+    }
+  }
+
   // 2. Mandatory triggers (cannot be disabled by rules). An environment file whose changed keys
   // are all read by analysed code selects those readers instead.
   for (const change of changeSet.changes) {
     for (const path of [change.path, change.previousPath].filter((p): p is string => !!p)) {
+      if (narrowed.has(path) && !input.globalTriggers?.some((t) => matchGlob(path, t))) continue;
       const globalPattern = input.globalTriggers?.find((t) => matchGlob(path, t));
       const pattern = globalPattern ?? input.triggers.find((t) => matchGlob(path, t));
       if (!pattern) continue;
@@ -365,7 +412,7 @@ export function decideImpact(input: ImpactInput): ImpactResult {
     ]);
     if (traversal.affectedFiles.size > 1 || traversal.tests.size)
       details.seeds.push({ file: path, units: ["*"], ...(rc ? { referencesOnly: true } : {}) });
-    else if (!readers.length && !rc)
+    else if (!readers.length && !rc && !runnerInputFiles.has(path))
       details.ignored.push(`${path} (not part of the analysed sources)`);
   }
 
@@ -593,7 +640,7 @@ export function decideImpact(input: ImpactInput): ImpactResult {
   if (!fallback && unitList.length && unitList.length <= 200) {
     const unprotected: string[] = [];
     for (const { file, unit } of unitList) {
-      if (unit === "*") continue;
+      if (unit === "*" || runnerInputFiles.has(file)) continue;
       // Units already on a path to a selected test are protected; others need a search.
       const reached =
         [...selected.values()].some((rs) => rs.some((r) => r.path?.[0] === `${file}#${unit}`)) ||
