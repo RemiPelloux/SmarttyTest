@@ -112,35 +112,89 @@ async function poll(ms, until) {
   return false;
 }
 
+/** Every distinct `/api/runs` answer while waiting for a run, written to the JSON log. */
+const runTrace = [];
+
+async function studioApi(studio, path) {
+  const res = await fetch(`${studio.origin}${path}`, {
+    headers: { authorization: `Bearer ${studio.handle.token}` },
+  });
+  if (!res.ok) throw new Error(`${path}: HTTP ${res.status}`);
+  return res.json();
+}
+
 /**
- * Polls the reader (as poll does) until Studio's API reports a recorded run and none active.
- * GET /api/runs with the session token answers `{ active, runs }`.
+ * Polls the reader (as poll does) while asking Studio's API (GET /api/runs → `{ active, runs }`)
+ * every 2 s, until `until(body)` holds. Each distinct answer goes into runTrace.
  */
-async function runFinished(studio, ms) {
-  let done = false;
+async function waitForRuns(studio, ms, until) {
+  let met = false;
   let checking = false;
+  let last = "";
   const check = async () => {
-    if (checking || done) return;
+    if (checking || met) return;
     checking = true;
     try {
-      const res = await fetch(`${studio.origin}/api/runs`, {
-        headers: { authorization: `Bearer ${studio.handle.token}` },
-      });
-      const body = await res.json();
-      done = res.ok && body.active === null && body.runs.length > 0;
-    } catch {
-      // The next tick asks again.
+      const body = await studioApi(studio, "/api/runs");
+      const runs = body.runs.map((r) => ({
+        id: r.id,
+        state: r.state,
+        startedAt: r.startedAt,
+        finishedAt: r.finishedAt,
+      }));
+      const key = JSON.stringify([body.active, runs]);
+      if (key !== last) {
+        last = key;
+        runTrace.push({ at: new Date().toISOString(), active: body.active, runs });
+      }
+      met = until(body);
+    } catch (error) {
+      runTrace.push({ at: new Date().toISOString(), error: error.message });
     } finally {
       checking = false;
     }
   };
   const timer = setInterval(check, 2000);
   try {
-    return await poll(ms, () => done);
+    return await poll(ms, () => met);
   } finally {
     clearInterval(timer);
   }
 }
+
+const runStarted = (body) => body.active !== null || body.runs.length > 0;
+const runDone = (body) => body.active === null && body.runs.length > 0;
+
+/** Phase events of the latest run with seconds since its start, e.g. "analysing +0.1s". */
+async function phaseTimings(studio) {
+  try {
+    const { runs } = await studioApi(studio, "/api/runs");
+    const latest = runs[0];
+    if (!latest) return [];
+    const { run, events } = await studioApi(studio, `/api/runs/${latest.id}`);
+    const start = Date.parse(run.startedAt);
+    return [
+      `run ${run.id} state ${run.state}, started ${run.startedAt}, finished ${run.finishedAt ?? "-"}`,
+      ...events
+        .filter((e) => e.type === "phase" || e.type === "group")
+        .map((e) =>
+          `${e.type === "group" ? `group ${e.adapter} ${e.phase}` : e.phase} +${((Date.parse(e.at) - start) / 1000).toFixed(1)}s ${e.message ?? ""}`.trim(),
+        ),
+    ];
+  } catch (error) {
+    return [`(phase timings unavailable: ${error.message})`];
+  }
+}
+
+const traceSummary = () =>
+  runTrace
+    .slice(-8)
+    .map((t) =>
+      t.error
+        ? `${t.at} error ${t.error}`
+        : `${t.at} active=${t.active ?? "none"} runs=${t.runs.length}${t.runs[0] ? ` [${t.runs[0].id} ${t.runs[0].state}]` : ""}`,
+    )
+    .join("\n  ");
 
 /**
  * Calibrates the instrument before judging Studio: a bare page whose persistent, initially empty
@@ -323,8 +377,36 @@ async function main() {
       const verdict = /Run (passed|finished|hit)|No test|Nothing to run/;
       // Wait for the run itself (Studio's API), not for speech: with a screen reader on, a hosted
       // runner can take minutes, and the drawer must not be read while it still says "Running".
-      const finished = await runFinished(studio, 900_000);
-      if (!finished) fail("run", "the run did not finish within 15 minutes");
+      let started = await waitForRuns(studio, 60_000, runStarted);
+      if (!started) {
+        const lastPhrase = spoken.at(-1)?.text ?? "";
+        // Once more: VoiceOver's own activation when its cursor is on the button, else Enter.
+        const how = MAC && /Run affected/i.test(lastPhrase) ? "VoiceOver act" : "Enter";
+        console.log(
+          `No run within 60 s of Enter (last phrase "${lastPhrase}"); retrying with ${how}`,
+        );
+        await command(() => (how === "Enter" ? key("Enter") : sr.act()));
+        started = await waitForRuns(studio, 60_000, runStarted);
+      }
+      if (!started) {
+        fail(
+          "run",
+          `Enter on Run affected did not start a run (also after a retry). Last phrases: ${spoken
+            .slice(-6)
+            .map((s) => s.text)
+            .join(" | ")}`,
+        );
+      } else {
+        const finished = await waitForRuns(studio, 900_000, runDone);
+        const timings = await phaseTimings(studio);
+        runTrace.push({ at: new Date().toISOString(), phases: timings });
+        console.log(`Run phases:\n  ${timings.join("\n  ")}`);
+        if (!finished)
+          fail(
+            "run",
+            `the run did not finish within 15 minutes.\n  /api/runs trace:\n  ${traceSummary()}\n  phases:\n  ${timings.join("\n  ")}`,
+          );
+      }
       await poll(4000);
       const said = heardSince(mark);
       if (!said.some((t) => /Selecting tests|Running tests/.test(t)))
@@ -376,7 +458,7 @@ async function main() {
   );
   await writeFile(
     join(OUT, `spoken-${READER}.json`),
-    `${JSON.stringify({ reader: READER, calibration, failures, advisories, spoken }, null, 2)}\n`,
+    `${JSON.stringify({ reader: READER, calibration, failures, advisories, runTrace, spoken }, null, 2)}\n`,
   );
   console.log(
     `\n${READER}: ${failures.length} failures, ${spoken.length} phrases → ${join(OUT, `spoken-${READER}.txt`)}`,
