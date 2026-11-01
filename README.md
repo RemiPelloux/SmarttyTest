@@ -81,7 +81,7 @@ LeadsIt has six independent projects, no root `package.json`, and three runners 
 | Test files run  | 3,052       |                                            | 522 (17%) |
 | Missed failures |             |                                            | 0         |
 
-Four public repositories (commander.js, path-to-regexp, ufo, defu) set up with `init --yes` and no configuration edits also replay with 0 missed failures ([results](documentation/case-studies/external-repositories.md)).
+Four public repositories (commander.js, path-to-regexp, ufo, defu) set up with `init --yes` and no configuration edits also replay with 0 missed failures ([results](documentation/case-studies/external-repositories.md); [1.0.0 benchmarks](documentation/case-studies/benchmarks-1.0.md)).
 
 SmartTest saved 63% of the full-run time. It was 6% slower than the previous hook over these commits: on single-project commits the hook runs one small suite, and SmartTest's analysis time counts in full. On the 12 most recent commits, with `--traces`, it also found 0 missed failures. Details and caveats: [case study](documentation/case-studies/leadsit.md).
 

@@ -76,6 +76,7 @@ const NAV = [
     [
       ["Case study: LeadsIt", "docs/case-studies/leadsit.html"],
       ["External repositories", "docs/case-studies/external-repositories.html"],
+      ["Benchmarks for 1.0.0", "docs/case-studies/benchmarks-1.0.html"],
     ],
   ],
   [
