@@ -10,10 +10,11 @@
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { SmartTest } from "@smarttest/core";
+import { main } from "smarttest";
 import { describe, expect, it } from "vitest";
 import { edit, materialize } from "./helpers.js";
 
-const statuses = (out: Awaited<ReturnType<SmartTest["run"]>>) =>
+const statuses = (out: Pick<Awaited<ReturnType<SmartTest["run"]>>, "report">) =>
   Object.fromEntries(
     out.report.executions.flatMap((e) => e.tests.map((t) => [t.testId, t.status] as const)),
   );
@@ -41,16 +42,26 @@ describe.runIf(process.env.SMARTTEST_REAL_CYPRESS === "1")("Cypress (real instal
     expect(out.exitCode).toBe(1);
   }, 300_000);
 
-  it("passes when the selected spec passes", async () => {
+  it("`smarttest run` passes when the selected spec passes", async () => {
     const dir = await materialize("cypress-e2e", { git: true });
     await edit(dir, "src/strings.js", "text.toUpperCase()", "String(text).toUpperCase()");
-    const out = await (await SmartTest.open({ root: dir })).run({ formats: ["json"] });
+    let stdout = "";
+    const code = await main(
+      ["run", "--json"],
+      {
+        stdout: { write: (s: string) => (stdout += s), isTTY: false },
+        stderr: { write: () => true, isTTY: false },
+      },
+      dir,
+    );
+    const report = JSON.parse(stdout).report as Awaited<ReturnType<SmartTest["run"]>>["report"];
 
-    expect(out.report.decision.selectedTests.map((t) => t.filePath)).toEqual([
+    expect(report.decision.selectedTests.map((t) => t.filePath)).toEqual([
       "cypress/e2e/strings.cy.js",
     ]);
-    expect(statuses(out)).toEqual({ "cypress/e2e/strings.cy.js::strings shouts": "passed" });
-    expect(out.exitCode).toBe(0);
+    expect(statuses({ report })).toEqual({ "cypress/e2e/strings.cy.js::strings shouts": "passed" });
+    expect(report.summary.passed).toBe(1);
+    expect(code).toBe(0);
   }, 300_000);
 
   it("reports a spec that fails to load as failed, never as passed or missing", async () => {
