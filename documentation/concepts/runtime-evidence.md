@@ -15,7 +15,7 @@ A failing test is not traced. Collection takes about one run of each test file; 
 
 ## When a trace is used
 
-A trace is fresh while every file it loaded has, at the base of the change being analysed, the content it had when the trace was taken, and the runtime fingerprint is unchanged. A file changed by the current change is compared through its old content, so a trace taken at `HEAD` stays usable for the working tree. A stale trace is ignored, never reused. `smarttest trace --stale` refreshes only the stale ones.
+A trace is fresh while every file it loaded has, at the base of the change being analysed, the content it had when the trace was taken, and the runtime fingerprint is unchanged. A file changed by the current change is compared through its old content, so a trace taken at `HEAD` stays usable for the working tree. The environment variables the loaded files read (`process.env.X`) must also have the values they had when the trace was taken, since the same code can take another path with another value; a test whose files read `process.env` with a computed key is never ruled out by its trace. A stale trace is ignored, never reused. `smarttest trace --stale` refreshes only the stale ones.
 
 ## How traces change the selection
 

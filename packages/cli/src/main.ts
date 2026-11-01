@@ -530,7 +530,7 @@ async function cmdImpact(ctx: Ctx): Promise<number> {
     return ExitCode.Success;
   }
   ctx.out(
-    `${t.cyan("◇")} ${a.input.description} · ${a.input.changeSet.changes.length} changed file(s) · mode ${t.violet(a.decision.safetyMode)} · analysis ${a.decision.analysisStatus}`,
+    `${t.cyan("◇")} ${a.input.description} · ${a.input.changeSet.changes.length} changed file(s)${a.input.changeSet.outside?.length ? ` (+${a.input.changeSet.outside.length} outside the project)` : ""} · mode ${t.violet(a.decision.safetyMode)} · analysis ${a.decision.analysisStatus}`,
   );
   for (const c of a.input.changeSet.changes) {
     const d = a.diffs.get(c.path);

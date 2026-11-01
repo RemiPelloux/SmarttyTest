@@ -36,5 +36,30 @@ describe("vcs-core parsers", () => {
       "app",
     );
     expect(cs.changes).toEqual([{ type: "modified", path: "src/a.ts" }]);
+    // Outside the project, but project files can import it: kept, relative to the project.
+    expect(cs.outside).toEqual([{ type: "modified", path: "../other/b.ts" }]);
+  });
+
+  it("keeps a file moved out of the project as a deletion inside it", () => {
+    const cs = scopeChangeSet(
+      {
+        provider: "git",
+        completeness: "complete",
+        warnings: [],
+        changes: [
+          { type: "renamed", path: "shared/a.ts", previousPath: "apps/web/src/a.ts" },
+          { type: "renamed", path: "apps/web/src/b.ts", previousPath: "shared/b.ts" },
+        ],
+      },
+      "apps/web",
+    );
+    expect(cs.changes).toEqual([
+      { type: "deleted", path: "src/a.ts" },
+      { type: "added", path: "src/b.ts" },
+    ]);
+    expect(cs.outside).toEqual([
+      { type: "added", path: "../../shared/a.ts" },
+      { type: "deleted", path: "../../shared/b.ts" },
+    ]);
   });
 });
