@@ -11,7 +11,7 @@ The 1.0.0 benchmark story: at least five real repositories, LeadsIt included, re
 - Machine: Linux, 16 cores, 30 GB of RAM, Node.js 26.12.1, shared with other jobs. Each run went through a machine-wide lock, so no two benchmarks overlapped. Times are wall-clock and vary by about 10% from run to run.
 - Raw results: [`benchmarks/releases/1.0.0/`](../../benchmarks/releases/1.0.0/).
 
-## Result: 0 missed failures on six repositories
+## Result: 0 missed failures on six repositories (seven with Galdia)
 
 | Repository                                                            | Runner                      | Test files | Commits | Full runs   | SmartTest  | Saved | Test files run | Full-suite fallbacks | Missed | Already failing |
 | --------------------------------------------------------------------- | --------------------------- | ---------- | ------- | ----------- | ---------- | ----- | -------------- | -------------------- | ------ | --------------- |
@@ -106,6 +106,19 @@ The persisted graph cut graph time on a warm run from 42 ms (rebuilt) to 14 ms, 
 Tests: `packages/smart-init/src/hooks.test.ts` (hooks path in `node_modules`), `integration-tests/adoption.test.ts` (init with a refused hook), `integration-tests/real-world.test.ts` (two configs of one runner in the project-gated baseline; fails without the fix).
 
 No selection bug was found: 0 missed failures everywhere.
+
+## Galdia, after the pre-publication audit
+
+[Galdia](https://github.com/RemiPelloux/Galdia), a pnpm workspace with 9 packages, 229 Vitest files in four projects and 31 Playwright specs, was set up with `init --yes` and replayed on its last 12 commits. Only Vitest was replayed: the Playwright specs stay in its pre-push gate (`hook.runners: [vitest]`).
+
+| Build                      | Full runs  | SmartTest | Saved | Test files run | Analysis complete | Missed | Already failing |
+| -------------------------- | ---------- | --------- | ----- | -------------- | ----------------- | ------ | --------------- |
+| 1.0.0 as first tagged      | 4 min 32 s | 32.2 s    | 88%   | 197 / 2,662    | 0 of 12 commits   | 0      | 132             |
+| 1.0.0 with the audit fixes | 4 min 14 s | 9.9 s     | 96%   | 29 / 2,662     | 12 of 12 commits  | 0      | 152             |
+
+The first run found that `import icon from "#web/assets/icons/galdia.svg?raw"` did not resolve: a bundler query behind a path alias. Every test reaching `Icon.tsx` was therefore uncertain and selected. Resolving it made every commit's analysis complete and cut the selection from 197 to 29 files, still with 0 missed failures. The "already failing" tests are a starter-deck update in that history that broke tests before a later commit fixed them; they fail on the parent commit too.
+
+The same audit, in fresh installs, found a missed failure that none of the replays had hit. A new export whose initializer throws at import was not seen as affecting the file's importers. It is fixed: code that runs at import now affects every importer. On the fixtures' 92 one-declaration edits this changed no selection.
 
 ## Not covered
 

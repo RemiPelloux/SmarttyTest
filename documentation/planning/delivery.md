@@ -202,6 +202,13 @@ Carried gates closed in this version:
 
 Gate: met. No open defect is known that can make a failing test be skipped. The regression harness and all six real-repository replays are at 0 missed failures.
 
+Pre-publication audit (same tag, before npm). A code audit of the release diff, a first-user audit in fresh installs, and Galdia found defects; each is fixed with a regression test ([changelog](../../CHANGELOG.md)). Three could make a failing test look fine:
+- a throwing initializer that a test reaches only through an import;
+- two tests with the same name in one file;
+- `--shard` advancing the native baseline.
+
+Galdia's replay: 12 commits, 0 missed, 96% less test time ([benchmarks](../case-studies/benchmarks-1.0.md#galdia-after-the-pre-publication-audit)).
+
 ## After 1.0.0
 
 | Item                                                                                                     | From         | Status                                                                   |
