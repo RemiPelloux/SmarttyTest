@@ -280,6 +280,20 @@ async function openBrowser(url) {
  * Presses a key in the browser. On macOS, Guidepup's VoiceOver commands bring the VoiceOver app
  * to the front, and a plain press then goes to VoiceOver instead of the page: name Safari.
  */
+/**
+ * Puts the reader's cursor at the top of the page. NVDA: Control+Home in browse mode. VoiceOver
+ * has no "top of the web content" command that works from anywhere (VO-Shift-Home stops at the
+ * top of the current group, VO-Command-Home goes to the window's toolbar), and Shift+Tab from
+ * the first control leaves for Safari's toolbar. Reloading the page (Command+R) puts VoiceOver
+ * where it always starts on load, then Tab gives the first control, "Studio overview", focus.
+ */
+async function toTop() {
+  if (!MAC) return key("Control+Home");
+  await key("Command+KeyR");
+  await poll(5000);
+  await key("Tab");
+}
+
 function key(name) {
   return MAC ? sr.press(name, { application: "Safari" }) : sr.press(name);
 }
@@ -353,13 +367,27 @@ async function main() {
     // Landmarks until main, then headings from the start of main (the reader's cursor never
     // goes back, so walking every landmark first would start the heading walk past the h1),
     // then the remaining landmarks.
+    // Every pass starts from the top of the page, and one that misses main or the h1 (VoiceOver's
+    // cursor does not always start or land in the same place) is walked once more from the top.
+    const isMain = (t) => /\bmain\b/i.test(t);
+    const isH1 = (t) => /level 1\b/i.test(t) && /Overview/.test(t);
     step = "landmarks";
     let mark = spoken.length;
-    for (let i = 0; i < 6 && !heardSince(mark).some((t) => /\bmain\b/i.test(t)); i++)
-      await command(() => sr.nextLandmark());
+    for (let pass = 0; pass < 2 && !heardSince(mark).some(isMain); pass++) {
+      await command(toTop);
+      const passMark = spoken.length;
+      for (let i = 0; i < 6 && !heardSince(passMark).some(isMain); i++)
+        await command(() => sr.nextLandmark());
+    }
     step = "headings";
     const headingMark = spoken.length;
-    for (let i = 0; i < 6; i++) await command(() => sr.nextHeading());
+    for (let i = 0; i < 6 && !heardSince(headingMark).some(isH1); i++)
+      await command(() => sr.nextHeading());
+    if (!heardSince(headingMark).some(isH1)) {
+      await command(toTop);
+      for (let i = 0; i < 8 && !heardSince(headingMark).some(isH1); i++)
+        await command(() => sr.nextHeading());
+    }
     const headingPhrases = heardSince(headingMark);
     const headings = headingPhrases.join(" | ");
     step = "landmarks";
@@ -367,8 +395,7 @@ async function main() {
     const landmarks = heardSince(mark).join(" | ");
     if (!/navigation/i.test(landmarks)) fail("landmarks", `no navigation landmark: ${landmarks}`);
     if (!/\bmain\b/i.test(landmarks)) fail("landmarks", `no main landmark: ${landmarks}`);
-    if (!headingPhrases.some((t) => /level 1\b/i.test(t) && /Overview/.test(t)))
-      fail("headings", `the Overview h1 is not spoken: ${headings}`);
+    if (!headingPhrases.some(isH1)) fail("headings", `the Overview h1 is not spoken: ${headings}`);
 
     step = "run";
     if (!(await tabTo(/Run affected/i))) {
