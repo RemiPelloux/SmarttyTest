@@ -1,6 +1,6 @@
 {
   "name": "@smarttest/native-snapshots",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Native snapshot engine: baselines, fingerprints, comparisons.",
   "license": "Apache-2.0",
   "type": "module",

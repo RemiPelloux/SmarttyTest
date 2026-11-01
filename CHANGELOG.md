@@ -2,13 +2,39 @@
 
 All notable changes are documented here. Releases are managed with [Changesets](https://github.com/changesets/changesets). The project follows [Semantic Versioning](https://semver.org/).
 
-## Unreleased
+## [1.0.2] — patch
 
-### Fixed
+An audit of 1.0.1 (two soundness oracles on the six adopting projects, four reproduction-driven reviews) found ways a run could pass while the suite failed, and ways a change could skip a test it affects. Each is fixed with a test that fails without the fix. Under the [semver policy](documentation/reference/contracts.md#semver-policy) these are bug fixes: some selections grow, and some runs that passed now fail because the suite really failed. No contract changes; `explain --json` gains an optional `loadedBy` field.
 
-- Path aliases in a referenced tsconfig are followed. A `tsconfig.json` that only lists `references` (Vite's React template) keeps its `paths` in `tsconfig.app.json`; SmartTest took every `@hooks/…`-style import for an npm package and dropped it, with no warning. OpenPro's admin lost 4,021 of its 9,065 dependency edges and its front end about 22,000; a change to a hook imported through an alias could select no test.
-- A bare import that is neither a path alias nor an installed package is unresolved (its dependents cannot be ruled out), never silently external. Framework modules (`wasp/…`, `$app/…`, `#imports`) and projects with nothing installed keep the old behaviour.
-- Upgrading SmartTest redoes the stored import resolution when the resolver changed.
+### Fixed: a run passed while the suite failed
+
+- A failing Vitest `beforeAll`/`afterAll` fails the file and quotes the error; the tests it stopped are "not run", never "skipped by the test itself".
+- A runner that exits non-zero, or reports errors outside any test (Vitest unhandled errors, Playwright `globalTeardown`, Jest run errors), fails the run with the runner's own message, and nothing is cached as passed. This includes coverage thresholds the runner enforces.
+- A failing Playwright setup project fails the run; the specs that depend on it are "not run".
+- A file a runner collects is a test even when it is not named like one (Node's `test/*.js`, a custom Vitest `include`, Playwright `*.setup.js`).
+- Cypress results are credited to a spec only with evidence; a skip on a retry no longer hides an earlier failure.
+- `node --test` escapes glob characters in file names (`[id].test.js` ran another file), and runs with the test script's own Node flags (`--import`, `--require`, `--env-file`, `NODE_OPTIONS`…).
+- Playwright file filters match the exact path: selecting `home.spec.ts` no longer also runs `myhome.spec.ts`.
+
+### Fixed: a change skipped a test it affects
+
+- Runner configuration: setup files (Vitest `setupFiles`/`globalSetup`, Jest setup files, environments and transformers, Playwright global setup/teardown, Cypress `supportFile`, `node --test --import/--require`), the modules a config imports (`mergeConfig` with a shared file) and `moduleNameMapper`/`alias` targets select that runner's tests. `explain` names them ("setup file of vitest"). They are part of the discovery and result-cache keys, with the full Node version, `.nvmrc`/`.node-version`/`.tool-versions`/`.npmrc` and PostCSS/Tailwind configs. New triggers: `playwright.config.*`, `cypress.config.*`, `postcss.config.*`, `tailwind.config.*`; a runner's own config selects only that runner's tests.
+- Code: calls through an interface- or base-typed variable (`const r: Repo = new MemRepo()`, DI defaults, module singletons); `vi.doMock`/`jest.doMock` and nested mocks no longer hide a static import, and a mock factory that may reach the real module counts as loading it; scripts started as workers or child processes (`new Worker`, `fork`, `spawn`/`execFile` of `node`/`tsx`, template-literal paths) are dependencies of the caller; template-literal text changes are code changes, not formatting.
+- Graph: the walk continues through a test file other tests import; Node's defaults include `.ts/.mts/.cts` when Node strips types; Vitest type tests (`*.test-d.ts`, `typecheck`, a `--typecheck` script flag) and `includeSource` tests are discovered, and type-only changes are never ruled out for them by traces.
+- Path aliases in a referenced tsconfig are followed. A `tsconfig.json` that only lists `references` (Vite's React template) keeps its `paths` in `tsconfig.app.json`; SmartTest took every `@hooks/…`-style import for an npm package and dropped it, with no warning. OpenPro's admin lost 4,021 of its 9,065 dependency edges and its front end about 22,000. A bare import that is neither an alias nor a declared package is unresolved (its dependents cannot be ruled out), never silently external.
+- Resolution: folders named like Node built-ins (`src/domain`, `constants`) resolve to the project; "installed" means declared in a `package.json` (a missing `node_modules`, the pnpm store, hoisting or Yarn PnP no longer hide an alias); workspace packages resolve to `src/`, not `lib/`/`esm/` builds; a referenced tsconfig applies only to the files it includes; conditional `exports` and disagreeing configs are uncertain; `package.json` `imports` are honoured; framework modules count only when the framework is detected; imports leaving the project are uncertain; Vite, Jest, webpack and Babel aliases are read.
+- Cache: the stored import resolution is redone when `jsconfig.json`, an `extends` target, a bundler config or a `package.json` the resolver read changes, and when an imported asset is added or deleted.
+- Change set: a deleted or renamed data file selects the code that reads it; untracked files are kept when the project is a subfolder of the repository; personal git settings (`diff.mnemonicPrefix`, `noprefix`, external diff, colour…) no longer change what SmartTest reads; changes outside the project select the project files that import them; a submodule bump becomes the files changed inside it, or selects every test using it.
+- Traces: a trace records the environment variables its code read and is stale when one differs; a computed `process.env[x]` read means it never rules a test out. `.env.*` variants select the tests under their folder.
+
+### Performance
+
+- Previous file versions come from one `git cat-file --batch` process (400 changed files: 410 git processes to 9, 1.18 s to 0.51 s); the file listing is read once per command.
+- Path rules no longer make analysis quadratic (400 files with two rules: 621 ms to 29 ms); a dynamic import no longer costs time per test.
+- Adding or removing a file re-resolves only the imports it can affect (239 ms to 108 ms).
+- `explain` for a test in the last decision answers from it (306 ms to 86 ms); TypeScript loads only when needed.
+- State stays small: `traces.json` is compact (1,000 tests × 300 files: 118 MB to 6.6 MB; 3,000 × 500 no longer crashes), `last-decision.json` is a third of its size, the result cache, history and shadow log are pruned, and `discovery.json` is written only when it changes. Studio keeps state warm.
+- Adaptive mode records a full-suite time only from a clean run, and the record expires, so a run where no test started can no longer force every later hook to run everything.
 
 ## [1.0.1] — patch
 

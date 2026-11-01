@@ -1,6 +1,6 @@
 {
   "name": "@smarttest/rules-engine",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Deterministic rule evaluation, precedence and explanations.",
   "license": "Apache-2.0",
   "type": "module",

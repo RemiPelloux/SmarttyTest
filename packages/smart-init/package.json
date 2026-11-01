@@ -1,6 +1,6 @@
 {
   "name": "@smarttest/smart-init",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Recommendation engine, setup plan, safe writes, rollback.",
   "license": "Apache-2.0",
   "type": "module",

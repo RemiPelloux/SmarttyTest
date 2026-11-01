@@ -9,7 +9,7 @@ Planning is in story points. One sprint is about 40 points. Each version has an 
 ## Where 1.0.0 stands
 
 - Released: 0.3.0 to 1.0.0 on top of the [foundation backlog](foundation/README.md). Sprint-by-sprint results, partial items and what moved: [delivery log](delivery.md).
-- 1.0.0 freezes the config schema, exit codes and `--json` contracts ([contracts](../reference/contracts.md)) and the Plugin SDK v1. It is published on npm as `@tkmremi/smarttest` (the command is `smarttest`); 1.0.1 fixes the selection bug the first six projects found.
+- 1.0.0 freezes the config schema, exit codes and `--json` contracts ([contracts](../reference/contracts.md)) and the Plugin SDK v1. It is published on npm as `@tkmremi/smarttest` (the command is `smarttest`); 1.0.1 fixes the selection bug the first six projects found. 1.0.2 fixes what an audit of 1.0.1 found: four ways a run could pass while the suite failed and about 30 ways a change could skip a test it affects.
 - Graph: files, top-level symbols and class members; imports, re-exports, barrels, workspace packages, CommonJS, inheritance; environment keys, Prisma models, translation keys, assets, snapshots, manual mocks, Wasp operations, Next.js routes and the URLs end-to-end specs visit; edges from plugins; runtime traces as observed evidence. Unresolved relationships are uncertainty and select the test. The graph is persisted between runs.
 - Runners: Jest, Vitest, `node --test`, Playwright, Cypress (checked against a real install). Version control: Git, Subversion, Mercurial, native snapshots. CI on Linux, Windows and macOS.
 - Real-world checks: [six repositories](../case-studies/benchmarks-1.0.md), LeadsIt and OpenPro's front end included, 0 missed failures.

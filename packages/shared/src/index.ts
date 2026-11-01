@@ -26,6 +26,6 @@ export * from "./scripts.js";
 export * from "./state.js";
 export * from "./text.js";
 
-export const VERSION = "1.0.1";
+export const VERSION = "1.0.2";
 /** The npm package users install and import (`npm install -D @tkmremi/smarttest`); the command is `smarttest`. */
 export const PACKAGE_NAME = "@tkmremi/smarttest";

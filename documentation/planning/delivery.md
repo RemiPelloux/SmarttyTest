@@ -217,6 +217,15 @@ Checked on the six projects that installed 1.0.0 from npm (Galdia, LeadsIt, Open
 - Fixed: Vitest and Jest discovery ignored the runner's config file (a Stryker config listed 2,298 files instead of 29); a failed listing's filename fallback took helpers as end-to-end specs; "Cannot be ruled out" now gives the graph's reason.
 - Measured on 1.0.0: `impact` 0.65 s (Galdia, 1,400 files) to 1.3 s (OpenPro front, 10,600 files) warm, analysis itself under 25 ms; `trace` about 4–5 s per test file (one process each).
 
+## 1.0.2 · patch (1 November 2026)
+
+An audit of 1.0.1 before more projects adopt it, so the fixes ship in one release. Two soundness oracles ran on the five adopting projects (every file a test loaded at run time must be reachable in the graph; every import must resolve as the TypeScript compiler resolves it), and four reviews reproduced each finding in a throwaway project.
+
+- Fixed: four ways a run passed while the suite failed (Vitest hook failures, runner exit codes and run-level errors, failing Playwright setup projects, collected files not named like tests).
+- Fixed: about 30 ways a change skipped a test it affects, across runner configuration (setup files, config imports, mapped modules), code analysis (interface-typed instances, `doMock`, workers and child processes), the graph walk, import resolution and its cache, the change set (deleted data files, subfolder projects, submodules, outside the project) and trace freshness (environment variables).
+- Checked after the fixes: the trace oracle finds no file a test loaded that selection cannot reach (Galdia's ops scripts and LeadsIt's MCP server are now linked); resolution agrees with the compiler on 19,233 imports. Replaying 10 commits with full suites on each of the five projects gives 0 selection misses; the two failures the replay flagged (`MiaDock.test.tsx` in openpro-admin, `tournament-pool.test.ts` in Galdia) are tests that fail only under full-suite load, with no dependency on the change.
+- Faster: 400 changed files 1.18 s to 0.51 s (one `git cat-file --batch`), path rules no longer quadratic, `explain` from the last decision 86 ms, `traces.json` about 18 times smaller.
+
 ## After 1.0.0
 
 | Item                                                                                                     | From         | Status                                                                   |
