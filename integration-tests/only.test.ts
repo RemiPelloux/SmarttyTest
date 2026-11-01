@@ -160,6 +160,21 @@ describe("--only: file-scoped selection", () => {
     ).toBe("failed");
   }, 180_000);
 
+  it("matches a path by its real letter case and refuses a path that is neither changed nor on disk", async () => {
+    const dir = await materialize("ts-lib-vitest", { git: true });
+    await edit(dir, "src/util/strings.ts", "s.charAt(0).toUpperCase()", "s.charAt(0)");
+    // Wrong case: on a case-insensitive file system it would match nothing and skip every test.
+    const run = await cli(dir, "run", "--uncommitted", "--only", "src/Util/Strings.ts", "--json");
+    expect(run.code, run.out).toBe(1);
+    const report = JSON.parse(run.out).report;
+    expect(report.change.only.matched).toEqual(["src/util/strings.ts"]);
+    expect(report.decision.warnings.join("\n")).toContain("matched src/util/strings.ts");
+    // A typo is a usage error, never an all-skipped pass.
+    const typo = await cli(dir, "run", "--uncommitted", "--only", "src/util/strngs.ts", "--json");
+    expect(typo.code).toBe(2);
+    expect(JSON.parse(typo.out).error).toMatchObject({ code: "ST_USAGE", category: "usage" });
+  }, 120_000);
+
   it("rejects --only outside the project, with --all and with --hook", async () => {
     const dir = await materialize("ts-lib-vitest", { git: true });
     expect((await cli(dir, "impact", "--only", "../elsewhere.ts")).code).toBe(2);

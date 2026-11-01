@@ -120,4 +120,30 @@ describe("impact map", () => {
     expect(map.paths).toHaveLength(MAX_MAP_PATHS);
     expect(map.truncated).toBe(true);
   });
+
+  it("lists unreached changed units from every path, not only the kept ones", () => {
+    const many = Array.from({ length: MAX_MAP_PATHS + 1 }, (_, i) =>
+      test(`test/t${i}.test.ts`, [
+        reason("direct-dependency", { path: ["src/a.ts#A.run", `test/t${i}.test.ts`] }),
+      ]),
+    );
+    // Past the cap: B.go is reached, by a path the map does not send.
+    many.push(
+      test("test/b.test.ts", [
+        reason("direct-dependency", { path: ["src/b.ts#B.go", "test/b.test.ts"] }),
+      ]),
+    );
+    const map = impactMapOf(
+      snapshotOf(
+        many,
+        [],
+        [
+          { path: "src/a.ts", units: ["A.run"] },
+          { path: "src/b.ts", units: ["B.go"] },
+        ],
+      ),
+    );
+    expect(map.truncated).toBe(true);
+    expect(map.unreached).toEqual([]);
+  });
 });

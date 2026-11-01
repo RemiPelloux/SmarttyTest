@@ -1,6 +1,7 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { SmartTest } from "@smarttest/core";
+import type { TestAdapter } from "@smarttest/shared";
 import { describe, expect, it } from "vitest";
 import { edit, git, materialize } from "./helpers.js";
 
@@ -159,5 +160,48 @@ describe("no-vcs-vitest (native snapshots)", () => {
       "tests/strings.test.ts",
     ]);
     expect(second.report.change.changeSet.provider).toBe("native");
+  }, 120_000);
+
+  it("never advances the baseline after one shard, so the other shards still see the change", async () => {
+    const dir = await materialize("no-vcs-vitest");
+    expect((await (await SmartTest.open({ root: dir })).run({ formats: ["json"] })).exitCode).toBe(
+      0,
+    );
+    for (const [file, from, to] of [
+      ["src/strings.ts", "toUpperCase()", "toUpperCase().toString()"],
+      ["src/math.ts", "a + b", "b + a"],
+    ] as const)
+      await writeFile(join(dir, file), (await readFile(join(dir, file), "utf8")).replace(from, to));
+    const both = ["tests/math.test.ts", "tests/strings.test.ts"];
+    expect(selectedOf(await (await SmartTest.open({ root: dir })).analyze())).toEqual(both);
+    const shard = await (await SmartTest.open({ root: dir })).run({
+      shard: { index: 1, total: 2 },
+      formats: ["json"],
+    });
+    expect(shard.exitCode).toBe(0);
+    expect(shard.report.executions).toHaveLength(1);
+    // Shard 2/2 (another CI job, or the next local run) must still select both tests.
+    expect(selectedOf(await (await SmartTest.open({ root: dir })).analyze())).toEqual(both);
+  }, 120_000);
+});
+
+describe("validate-selection", () => {
+  it("counts a reference file that could not run as a possible miss, never as a pass", async () => {
+    const dir = await materialize("ts-lib-vitest", { git: true });
+    await edit(dir, "src/util/numbers.ts", "Math.max(min, n)", "Math.max(n, min)");
+    const st = await SmartTest.open({ root: dir });
+    // The reference runner crashes (a broken install, an out-of-memory kill…).
+    (st as unknown as { createAdapter: () => TestAdapter }).createAdapter = () => ({
+      apiVersion: 1,
+      id: "crashing",
+      getCapabilities: () => ({}) as ReturnType<TestAdapter["getCapabilities"]>,
+      discover: async () => [],
+      execute: () => Promise.reject(new Error("runner crashed")),
+    });
+    const v = await st.validateSelection();
+    const skipped = v.decision.skippedTests.map((t) => t.filePath);
+    expect(skipped.length).toBeGreaterThan(0);
+    expect(v.failuresMissed.map((m) => m.test).sort()).toEqual([...skipped].sort());
+    expect(v.failuresMissed[0]?.note).toContain("could not run");
   }, 120_000);
 });

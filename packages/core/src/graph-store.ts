@@ -83,7 +83,14 @@ export class GraphStore {
     private readonly graphOptions: GraphOptions,
   ) {
     this.path = join(storeDir, "state", "graph.json");
-    this.config = sha256(JSON.stringify(config) ?? "");
+    // Report output (`reports.formats`, `reports.outputDir`) never shapes the graph, and hook runs
+    // rewrite `reports.outputDir` for their temporary checkout: keying on it would make hook runs
+    // and normal runs invalidate each other's stored graph. Everything else stays in the key.
+    const keyed =
+      config && typeof config === "object" && !Array.isArray(config)
+        ? { ...config, reports: undefined } // JSON.stringify drops it
+        : config;
+    this.config = sha256(JSON.stringify(keyed) ?? "");
     this.options = sha256(
       JSON.stringify([graphOptions.routes ?? [], [...(graphOptions.e2eTests ?? [])].sort()]),
     );

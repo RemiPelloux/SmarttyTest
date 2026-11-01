@@ -3,8 +3,43 @@
   "$id": "https://smarttest.dev/schemas/run.v1.json",
   "title": "smarttest run --json (v1)",
   "type": "object",
-  "required": ["schemaVersion", "command", "report", "reports", "integrityIssues"],
+  "required": ["schemaVersion", "command"],
+  "oneOf": [
+    {
+      "description": "A run that executed: the report, the written report files and the integrity check. `run --hook` adds `hook`.",
+      "required": ["report", "reports", "integrityIssues"]
+    },
+    {
+      "description": "`run --hook` only, when nothing ran: the hook was bypassed (SMARTTEST_SKIP=1, `hook.skipped` true) or the push only deleted remote refs (`hook.nothingPushed` true). No tests ran, so there is no report and nothing passed.",
+      "required": ["hook"],
+      "additionalProperties": false,
+      "properties": {
+        "schemaVersion": { "const": 1 },
+        "command": { "const": "run" },
+        "hook": {
+          "type": "object",
+          "required": ["stage", "skipped"],
+          "anyOf": [
+            { "properties": { "skipped": { "const": true } } },
+            { "required": ["nothingPushed"], "properties": { "nothingPushed": { "const": true } } }
+          ]
+        }
+      }
+    }
+  ],
   "properties": {
+    "hook": {
+      "description": "`run --hook` only: the hook outcome (stage, bypass, checks, warnings, tests left to CI, duration).",
+      "type": "object",
+      "required": ["stage", "skipped", "checks", "warnings", "durationMs"],
+      "properties": {
+        "stage": { "enum": ["pre-commit", "pre-push"] },
+        "skipped": { "type": "boolean" },
+        "nothingPushed": { "type": "boolean" },
+        "checks": { "type": "array" },
+        "warnings": { "type": "array" }
+      }
+    },
     "schemaVersion": {
       "const": 1
     },

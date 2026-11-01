@@ -1,6 +1,7 @@
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { Worker } from "node:worker_threads";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   readStateFile,
@@ -21,6 +22,22 @@ async function dir() {
   const d = await mkdtemp(join(tmpdir(), "st-state-"));
   dirs.push(d);
   return d;
+}
+
+/** Points the per-user key at a temporary cache directory (every platform's variable). */
+async function keyHome(): Promise<string> {
+  const home = await dir();
+  vi.stubEnv("SMARTTEST_STATE_KEY", "");
+  vi.stubEnv("XDG_CACHE_HOME", home);
+  vi.stubEnv("LOCALAPPDATA", home);
+  vi.stubEnv("HOME", home);
+  return process.platform === "darwin" ? join(home, "Library", "Caches") : home;
+}
+
+/** A new process, as far as the in-memory key is concerned. */
+async function freshState(): Promise<typeof import("./state.js")> {
+  vi.resetModules();
+  return import("./state.js");
 }
 
 describe("authenticated state (SR-16)", () => {
@@ -58,6 +75,46 @@ describe("authenticated state (SR-16)", () => {
     expect(await readStateJson(path)).toEqual({ k: ["test/a.test.ts"] });
     vi.stubEnv("SMARTTEST_STATE_KEY", "b".repeat(40));
     expect(await readStateJson(path)).toBeUndefined();
+  });
+
+  it("repairs a truncated key file once, atomically, and keeps the repaired key", async () => {
+    const cache = await keyHome();
+    const file = join(cache, "smarttest", "state.key");
+    await mkdir(join(cache, "smarttest"), { recursive: true });
+    await writeFile(file, "short");
+    const first = await freshState();
+    const key = first.stateKey();
+    expect(first.stateKeySource()).toBe("repaired");
+    expect(key).toHaveLength(32);
+    expect(await readFile(file)).toEqual(key);
+    // The next process reads the same key: signed caches survive again.
+    const second = await freshState();
+    expect(second.stateKey()).toEqual(key);
+    expect(second.stateKeySource()).toBe("stored");
+  });
+
+  it("never lets two processes repair the key into different keys", async () => {
+    const cache = await keyHome();
+    const dirPath = join(cache, "smarttest");
+    const file = join(dirPath, "state.key");
+    await mkdir(dirPath, { recursive: true });
+    await writeFile(file, "short");
+    // Another process holds the lock and writes its key a moment later.
+    await writeFile(`${file}.lock`, "1\n");
+    const theirs = "k".repeat(32);
+    const worker = new Worker(
+      `const fs = require("node:fs");
+       const { file, key } = require("node:worker_threads").workerData;
+       setTimeout(() => {
+         fs.writeFileSync(file + ".w.tmp", key);
+         fs.renameSync(file + ".w.tmp", file);
+         fs.rmSync(file + ".lock");
+       }, 150);`,
+      { eval: true, workerData: { file, key: theirs } },
+    );
+    const state = await freshState();
+    expect(state.stateKey().toString()).toBe(theirs);
+    await worker.terminate();
   });
 
   it("keeps the per-user key outside every project", () => {

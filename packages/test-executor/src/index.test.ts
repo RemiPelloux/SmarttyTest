@@ -95,6 +95,43 @@ describe("executeGroups", () => {
     expect(status).toEqual({ "a.test.ts": "flaky", "b.test.ts": "failed", "c.test.ts": "passed" });
   });
 
+  it("treats same-named results in one attempt as two tests, not a retry", async () => {
+    let calls = 0;
+    const dup: TestAdapter = {
+      ...fakeAdapter({}),
+      execute: async (selection) => {
+        calls++;
+        const f = selection.files[0] ?? "";
+        // it("dup", fail); it("dup", pass): same id, same attempt, every time.
+        return {
+          adapter: "fake",
+          executions: [
+            {
+              testId: `${f}::dup`,
+              status: "failed",
+              durationMs: 1,
+              attempts: 1,
+              error: { message: "boom" },
+            },
+            { testId: `${f}::dup`, status: "passed", durationMs: 1, attempts: 1 },
+          ],
+          startedAt: "",
+          finishedAt: "",
+        };
+      },
+    };
+    for (const retries of [0, 1]) {
+      calls = 0;
+      const res = await executeGroups([{ adapter: "fake", dir: "", files: ["d.test.ts"] }], {
+        createAdapter: () => dup,
+        retries,
+      });
+      expect(res.files[0]?.status).toBe("failed");
+      expect(res.files[0]?.tests[0]?.error?.message).toBe("boom");
+      expect(calls).toBe(1 + retries);
+    }
+  });
+
   it("reports runner crashes as infrastructure errors", async () => {
     const res = await executeGroups([{ adapter: "x", dir: "", files: ["a.test.ts"] }], {
       createAdapter: () => {

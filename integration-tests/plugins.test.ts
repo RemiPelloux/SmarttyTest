@@ -111,6 +111,29 @@ describe("edge-provider plugins", () => {
     ]);
   }, 120_000);
 
+  it("a long-lived instance (watch, Studio) loads an edited plugin, never the old version", async () => {
+    const dir = await materialize(FIXTURE, { git: true });
+    const st = await SmartTest.open({ root: dir });
+    st.keepWarm = true;
+    await st.analyze();
+    expect((await st.plugins()).map((p) => p.plugin.name)).toEqual(["sql-edges"]);
+    // The new plugin version links orders.ts to find-user.sql too; commit it so that the next
+    // change set is only the SQL file (the plugin change alone would widen to everything).
+    await edit(
+      dir,
+      "tools/sql-edges.mjs",
+      "return { edges, unresolved };",
+      'edges.push({ from: "src/orders.ts", to: "sql/find-user.sql", kind: "REFERENCES", confidence: "high" });\n    return { edges, unresolved };',
+    );
+    git(dir, "commit", "-qam", "plugin v2");
+    await edit(dir, "sql/find-user.sql", "id = ?", "email = ?");
+    const a = await st.analyze();
+    expect(a.decision.selectedTests.map((t) => t.filePath).sort()).toEqual([
+      "tests/orders.test.ts",
+      "tests/users.test.ts",
+    ]);
+  }, 120_000);
+
   it("a provider that throws or returns invalid edges fails the run (exit 4), never 'no edges'", async () => {
     const dir = await materialize(FIXTURE, { git: true });
     await edit(dir, "sql/find-user.sql", "id = ?", "email = ?");

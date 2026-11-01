@@ -83,6 +83,14 @@ describe("GraphStore", () => {
       status: "stale",
       reason: "configuration changed",
     });
+    // Report output never shapes the graph: a hook run's own outputDir keeps the stored graph.
+    expect(
+      new GraphStore(
+        dir,
+        { mode: "balanced", reports: { formats: ["json"], outputDir: "../tmp/x" } },
+        {},
+      ).load(files, isTest),
+    ).toMatchObject({ status: "loaded" });
     expect(
       new GraphStore(dir, { mode: "balanced" }, { e2eTests: new Set(["test/m0.test.ts"]) }).load(
         files,

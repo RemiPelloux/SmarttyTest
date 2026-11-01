@@ -290,3 +290,42 @@ describe("per-project conventions", () => {
     });
   }, 120_000);
 });
+
+describe("init and the project's formatter", () => {
+  it("formats the new config with the project's Prettier, and never fails init when it cannot", async () => {
+    const prettier = (body: string) => ({
+      "node_modules/.bin/prettier": "",
+      "node_modules/prettier/package.json": JSON.stringify({
+        name: "prettier",
+        bin: "bin/prettier.cjs",
+      }),
+      "node_modules/prettier/bin/prettier.cjs": body,
+    });
+    // A stand-in for Prettier with singleQuote: true (stdin to stdout).
+    const singleQuote =
+      'const i = process.argv.indexOf("--stdin-filepath");\nif (i < 0 || !process.argv[i + 1]) process.exit(2);\nlet s = "";\nprocess.stdin.on("data", (d) => (s += d));\nprocess.stdin.on("end", () => process.stdout.write(s.replaceAll(\'"\', "\'")));\n';
+    const base = {
+      "package.json": JSON.stringify({ name: "galdia", type: "module" }),
+      "tsconfig.json": "{}",
+      "src/a.ts": "export const a = 1;\n",
+    };
+    const dir = await repo({ ...base, ...prettier(singleQuote) });
+    const st = await SmartTest.open({ root: dir });
+    const plan = await st.initPlan();
+    const config = plan.files.find((f) => f.path === "smarttest.config.ts");
+    // The dry-run plan says so.
+    expect(config?.reason).toContain("formatted with the project's Prettier");
+    await st.initApply(plan);
+    const written = await readFile(join(dir, "smarttest.config.ts"), "utf8");
+    expect(written).toContain("import { defineConfig } from 'smarttest';");
+    expect(written).not.toContain('"');
+
+    const broken = await repo({ ...base, ...prettier("process.exit(1);\n") });
+    const st2 = await SmartTest.open({ root: broken });
+    const res = await st2.initApply(await st2.initPlan());
+    expect(await readFile(join(broken, "smarttest.config.ts"), "utf8")).toContain(
+      'import { defineConfig } from "smarttest";',
+    );
+    expect(res.validation.messages.join("\n")).toContain("written unformatted: Prettier failed");
+  }, 120_000);
+});

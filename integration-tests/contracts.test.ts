@@ -5,6 +5,7 @@
  */
 import { readdir, readFile, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
+import { Readable } from "node:stream";
 import {
   assertSupportedSchema,
   ExitCode,
@@ -13,7 +14,7 @@ import {
 } from "@smarttest/shared";
 import { main } from "smarttest";
 import { describe, expect, it } from "vitest";
-import { edit, materialize } from "./helpers.js";
+import { edit, git, materialize } from "./helpers.js";
 
 const ROOT = resolve(import.meta.dirname, "..");
 const SCHEMAS = join(ROOT, "packages/cli/schemas");
@@ -161,6 +162,58 @@ describe("frozen --json documents validate against their schema", () => {
     expect(r.code).toBe(0);
     await expectValid("validate-selection", r.out);
   }, 120_000);
+
+  it("run --hook: a hook run, a bypass and a push that only deletes refs", async () => {
+    const dir = await materialize("nest-auth-vitest", { git: true });
+    await edit(dir, "src/modules/catalog/CatalogService.ts", "sum + p.price", "p.price + sum");
+    git(dir, "add", "-A");
+    const ran = await cli(dir, "run", "--staged", "--hook", "--json");
+    expect(ran.code).toBe(0);
+    const ranDoc = await expectValid("run", ran.out);
+    expect(ranDoc.report).toBeDefined();
+    expect(ranDoc.hook).toMatchObject({ stage: "pre-commit", skipped: false });
+
+    const skip = process.env.SMARTTEST_SKIP;
+    process.env.SMARTTEST_SKIP = "1";
+    try {
+      const bypass = await cli(dir, "run", "--staged", "--hook", "--json");
+      expect(bypass.code).toBe(0);
+      const doc = await expectValid("run", bypass.out);
+      expect(doc.report).toBeUndefined();
+      expect(doc.hook).toMatchObject({ stage: "pre-commit", skipped: true });
+    } finally {
+      if (skip === undefined) delete process.env.SMARTTEST_SKIP;
+      else process.env.SMARTTEST_SKIP = skip;
+    }
+
+    git(dir, "commit", "-q", "-m", "change");
+    const head = git(dir, "rev-parse", "HEAD").trim();
+    const stdin = Object.getOwnPropertyDescriptor(process, "stdin");
+    // Git starts the pre-push hook with GIT_EXEC_PATH set and the refs on stdin.
+    process.env.GIT_EXEC_PATH = "/usr/lib/git-core";
+    Object.defineProperty(process, "stdin", {
+      configurable: true,
+      value: Readable.from([`(delete) ${"0".repeat(40)} refs/heads/feature ${head}\n`]),
+    });
+    try {
+      const deleted = await cli(dir, "run", "--push", "--hook", "--json");
+      expect(deleted.code).toBe(0);
+      const doc = await expectValid("run", deleted.out);
+      expect(doc.hook).toMatchObject({ stage: "pre-push", nothingPushed: true });
+    } finally {
+      delete process.env.GIT_EXEC_PATH;
+      if (stdin) Object.defineProperty(process, "stdin", stdin);
+    }
+    // A hook-only document must say why nothing ran: a bare hook object is not valid.
+    const run = await schema("run");
+    expect(
+      validateJsonSchema(run, {
+        schemaVersion: 1,
+        command: "run",
+        hook: { stage: "pre-commit", skipped: false, checks: [], warnings: [], durationMs: 0 },
+      }),
+    ).not.toEqual([]);
+  }, 180_000);
 });
 
 describe("exit codes", () => {

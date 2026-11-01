@@ -175,6 +175,15 @@ export function validateReportIntegrity(report: RunReport): string[] {
     issues.push("fallback applied but analysisStatus is not 'fallback'");
   if (report.coverage && report.coverage.scope === "full" && report.decision.skippedTests.length)
     issues.push("coverage labelled 'full' for a run that skipped tests");
+  if (report.coverage?.scope === "full") {
+    const notRun = report.executions.filter(
+      (e) => e.status === "cancelled" || e.status === "infrastructure-error",
+    ).length;
+    if (notRun || left.length)
+      issues.push(
+        `coverage labelled 'full' but ${notRun + left.length} selected test file(s) did not run`,
+      );
+  }
   return issues;
 }
 
@@ -295,7 +304,7 @@ export function toMarkdown(report: RunReport, htmlLink?: string): string {
   if (report.leftToCi?.length) {
     out.push("", `**Selected, not run in the hook (left to CI): ${report.leftToCi.length}**`, "");
     for (const l of report.leftToCi.slice(0, 50))
-      out.push(`- \`${l.file}\` — ${l.adapter} · ${esc(l.rule)}`);
+      out.push(`- ${mdCode(l.file)} — ${mdText(l.adapter)} · ${mdText(l.rule)}`);
     if (report.leftToCi.length > 50) out.push(`- … ${report.leftToCi.length - 50} more`);
   }
   out.push("", "<details><summary>Why these tests?</summary>", "");

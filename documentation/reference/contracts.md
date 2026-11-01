@@ -36,6 +36,8 @@ With `--json`, a command prints exactly one JSON document on stdout; logs and pr
 | `sync`                          | `sync.v1.schema.json`               |                                                                        |
 | any command, on failure         | `error.v1.schema.json`              | `error.code`, `error.category`, `error.message`, optional `error.hint` |
 
+`run --hook --json` adds a `hook` object to the `run` document. When the hook ran nothing (bypassed with `SMARTTEST_SKIP=1`, `hook.skipped: true`, or a push that only deletes remote refs, `hook.nothingPushed: true`), the document has `schemaVersion`, `command` and `hook` only: there is no `report`, and nothing is reported as passed.
+
 `trace`, `shadow`, `migrate`, `init`, `uninstall`, `generate`, `rules`, `snapshot`, `vcs`, `benchmark`, `graph`, `coverage`, `report` and `studio` also accept `--json`. Their documents carry `schemaVersion: 1` but are **experimental**: their shape may change in a minor release. A test fails when a command starts printing JSON without being listed as frozen or experimental.
 
 Consumers should ignore fields they do not know and tolerate new values in enumerations of output fields (a new selection reason `kind`, a new doctor `check`).

@@ -1,8 +1,12 @@
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { ChangeAnalysisInput } from "@smarttest/vcs-core";
 import { describe, expect, it } from "vitest";
 import {
   normalizeScopePath,
   nothingInScope,
+  resolveScopePaths,
   restrictChanges,
   scopeWarnings,
   unchangedScopeDecision,
@@ -74,5 +78,30 @@ describe("--only scope", () => {
       { testId: "t/b.test.ts", filePath: "t/b.test.ts", reasons: ["no change in a.ts (--only)"] },
     ]);
     expect(decision).toMatchObject({ safetyMode: "safe", fallbackApplied: false });
+  });
+});
+
+describe("--only paths are checked against the change set and the disk", () => {
+  it("keeps changed paths, fixes letter case from the listing, and refuses unknown paths", async () => {
+    const root = await mkdtemp(join(tmpdir(), "st-scope-"));
+    try {
+      await mkdir(join(root, "src"));
+      await writeFile(join(root, "src", "cart.ts"), "");
+      const changes = input([{ path: "src/cart.ts" }, { path: "src/Gone.ts" }]).changeSet.changes;
+      expect(await resolveScopePaths(root, ["src/cart.ts", "src"], changes)).toEqual({
+        paths: ["src/cart.ts", "src"],
+        notes: [],
+      });
+      // Existing file, wrong case; deleted file (only in the change set), wrong case.
+      const fixed = await resolveScopePaths(root, ["SRC/Cart.ts", "src/gone.ts"], changes);
+      expect(fixed.paths).toEqual(["src/cart.ts", "src/Gone.ts"]);
+      expect(fixed.notes).toHaveLength(2);
+      await expect(resolveScopePaths(root, ["src/crat.ts"], changes)).rejects.toMatchObject({
+        code: "ST_USAGE",
+        category: "usage",
+      });
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
   });
 });

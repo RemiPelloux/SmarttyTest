@@ -22,6 +22,7 @@ import {
   type GraphEdgeKind,
   SmartTestError,
   type SmartTestPlugin,
+  shortHash,
 } from "@smarttest/shared";
 
 export { PLUGIN_API_VERSION };
@@ -47,7 +48,23 @@ export interface LoadedPlugin {
   spec: string;
   /** Absolute path of the loaded module. */
   path: string;
+  /** Content hash of the module file when it was loaded (a changed file is loaded again). */
+  hash: string;
   plugin: SmartTestPlugin;
+}
+
+/** Content hash of a plugin file ("" when it cannot be read: always reloaded, then fails loudly). */
+export async function pluginFileHash(path: string): Promise<string> {
+  return readFile(path).then(
+    (b) => shortHash(b, 16),
+    () => "",
+  );
+}
+
+/** True when a loaded plugin's file changed since it was loaded (watch mode, Studio). */
+export async function pluginsChanged(loaded: readonly LoadedPlugin[]): Promise<boolean> {
+  for (const p of loaded) if ((await pluginFileHash(p.path)) !== p.hash) return true;
+  return false;
 }
 
 const isObject = (v: unknown): v is Record<string, unknown> =>
@@ -138,8 +155,11 @@ export async function loadPlugins(root: string, specs: readonly string[]): Promi
       });
     }
     let mod: { default?: unknown };
+    // The ESM loader caches a module by URL for the life of the process: the content hash in the
+    // URL makes a long-lived process (watch mode, Studio) load an edited plugin, not the old one.
+    const hash = await pluginFileHash(path);
     try {
-      mod = (await import(pathToFileURL(path).href)) as { default?: unknown };
+      mod = (await import(`${pathToFileURL(path).href}?v=${hash}`)) as { default?: unknown };
     } catch (error) {
       throw new SmartTestError(`Plugin ${spec} failed to load: ${(error as Error).message}`, {
         code: "ST_PLUGIN_LOAD_FAILED",
@@ -150,7 +170,7 @@ export async function loadPlugins(root: string, specs: readonly string[]): Promi
     }
     const plugin = mod.default ?? mod;
     assertPlugin(spec, plugin);
-    out.push({ spec, path, plugin });
+    out.push({ spec, path, hash, plugin });
   }
   return out;
 }
