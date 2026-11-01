@@ -708,11 +708,19 @@ async function cmdExplain(ctx: Ctx): Promise<number> {
     }
     ctx.out(t.dim(`Analysis: ${r.analysisStatus} · mode: ${r.mode} · ${r.description}`));
   } else {
+    const protectedBy = new Set([
+      ...r.tests.map((h) => h.test),
+      ...r.loadedBy.flatMap((l) => l.tests),
+    ]);
     ctx.out(
-      `${t.bold(target)} is protected by ${r.tests.length} test file(s)${r.risk !== "low" ? ` · risk ${t.yellow(r.risk)}` : ""}${r.rules.length ? t.dim(` · rules: ${r.rules.join(", ")}`) : ""}`,
+      `${t.bold(target)} is protected by ${protectedBy.size} test file(s)${r.risk !== "low" ? ` · risk ${t.yellow(r.risk)}` : ""}${r.rules.length ? t.dim(` · rules: ${r.rules.join(", ")}`) : ""}`,
     );
+    for (const l of r.loadedBy)
+      ctx.out(
+        `  ${t.green("■")} ${l.reason}: ${l.tests.length} test file(s)${l.path ? `  ${t.dim(l.path.join(" → "))}` : ""}`,
+      );
     for (const h of r.tests) ctx.out(`  ${t.green("■")} ${h.test}  ${t.dim(h.path.join(" → "))}`);
-    if (!r.tests.length)
+    if (!protectedBy.size)
       ctx.out(
         `  ${t.yellow("▲")} No test depends on it — consider \`smarttest generate --path ${target.split("#")[0]}\``,
       );

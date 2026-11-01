@@ -7,6 +7,15 @@ import { ANALYZER_VERSION, analyzeSource } from "./analyze.js";
 
 export { ANALYZER_VERSION, analyzeSource, tokenHash } from "./analyze.js";
 export { TypeScriptResolver, type WorkspaceEntry } from "./resolve.js";
+export {
+  type ConfigLoadedFile,
+  type ConfigMapping,
+  type ConfigPath,
+  type RunnerConfigFacts,
+  type RunnerKind,
+  readNodeTestScript,
+  readRunnerConfig,
+} from "./runner-config.js";
 
 export const typescriptAnalyzer: Analyzer = {
   apiVersion: 1,
