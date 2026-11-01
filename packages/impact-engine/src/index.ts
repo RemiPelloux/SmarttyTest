@@ -5,6 +5,7 @@
  * skipped tests are reported as not run; every selection carries its reasons.
  */
 
+import { posix } from "node:path";
 import { type DependencyGraph, RESOURCE, type Seed } from "@smarttest/dependency-graph";
 import { type RulesEngine, strictestMode } from "@smarttest/rules-engine";
 import type { FileSemanticDiff, ResourceChange } from "@smarttest/semantic-diff";
@@ -39,6 +40,12 @@ export interface ImpactInput {
   generated?: readonly { path: string; from: readonly string[] }[];
   /** Observed execution from runtime traces (optional). */
   traces?: TraceEvidence;
+  /**
+   * Project files importing a package linked to a folder outside the project (a workspace sibling):
+   * importer → linked folders, relative to the project (`../shared`). A change under one of those
+   * folders (`changeSet.outside`) selects the importer's tests.
+   */
+  outsideLinks?: ReadonlyMap<string, readonly string[]>;
 }
 
 /** Runtime traces as seen by the impact engine. */
@@ -76,6 +83,8 @@ export type ImpactResult = ImpactDecision & { details: ImpactDetails };
 const inDir = (path: string, dir: string) =>
   dir === "" || path === dir || path.startsWith(`${dir}/`);
 const dirOf = (path: string) => (path.includes("/") ? path.slice(0, path.lastIndexOf("/")) : "");
+/** `./x`, `./x.js` and `./x.ts` can all name `x.ts`: compare paths without a module extension. */
+const stripModuleExt = (path: string) => path.replace(/\.(?:[cm]?[jt]sx?|json)$/, "");
 
 export function decideImpact(input: ImpactInput): ImpactResult {
   const { changeSet, graph, isTest } = input;
@@ -135,6 +144,45 @@ export function decideImpact(input: ImpactInput): ImpactResult {
         select(t, reason);
     }
   };
+  /**
+   * Files whose imports name a path, read from the import specifiers rather than from resolution:
+   * a deleted file no longer resolves, and a file outside the project never does.
+   */
+  let specifierIndex: Map<string, Set<string>> | undefined;
+  const importersOf = (target: string, underDir = false): string[] => {
+    if (!specifierIndex) {
+      specifierIndex = new Map();
+      const add = (k: string, file: string) => {
+        const set = specifierIndex?.get(k) ?? new Set<string>();
+        set.add(file);
+        specifierIndex?.set(k, set);
+      };
+      for (const [file, a] of input.files) {
+        for (const imp of a.imports) {
+          if (imp.resolved) add(imp.resolved, file);
+          const spec = imp.specifier.split("?")[0] as string;
+          if (!spec.startsWith("./") && !spec.startsWith("../") && spec !== "." && spec !== "..")
+            continue;
+          const n = posix.normalize(posix.join(dirOf(file), spec)).replace(/\/$/, "");
+          add(n, file);
+          add(stripModuleExt(n), file);
+        }
+      }
+    }
+    const out = new Set<string>();
+    if (underDir) {
+      for (const [k, files] of specifierIndex)
+        if (inDir(k, target)) for (const f of files) out.add(f);
+    } else {
+      const keys = [target, stripModuleExt(target)];
+      if (/(^|\/)index\.[cm]?[jt]sx?$/.test(target)) keys.push(dirOf(target) || ".");
+      for (const k of keys) for (const f of specifierIndex.get(k) ?? []) out.add(f);
+    }
+    for (const [file, dirs] of input.outsideLinks ?? [])
+      if (dirs.some((d) => inDir(target, d) || (underDir && inDir(d, target)))) out.add(file);
+    out.delete(target);
+    return [...out].sort();
+  };
   const resourceSeeded = new Set<string>();
   /** Seeds readers of changed resource keys; returns the keys nobody reads. */
   const seedResources = (rc: ResourceChange): string[] => {
@@ -193,10 +241,30 @@ export function decideImpact(input: ImpactInput): ImpactResult {
       }
       continue;
     }
+    // A submodule whose changed files could not be listed: everything that uses it.
+    if (change.submodule) {
+      const reason: SelectionReason = {
+        kind: "fallback",
+        message: `Submodule ${path} changed and the files changed inside it are unknown: tests using it are selected`,
+      };
+      selectScope(path, reason);
+      const users = importersOf(path, true).map((file) => ({ file, units: ["*"] }));
+      if (users.length)
+        for (const hit of graph.dependentsOf(users).tests.values()) select(hit.test, reason);
+      continue;
+    }
     const rc = input.resources?.get(path);
     if (rc && rc.kind !== "i18n") {
       const unmatched = seedResources(rc);
-      if (unmatched.length)
+      // Keys no analysed code reads can still be read by a library, a runner or a setup file
+      // (`DATABASE_URL`): the tests under the env file's folder are selected, as for a trigger.
+      if (unmatched.length && rc.kind === "env") {
+        const scope = dirOf(path);
+        selectScope(scope, {
+          kind: "fallback",
+          message: `${path}: ${unmatched.join(", ")} not read by analysed code (a library or runner may read ${unmatched.length > 1 ? "them" : "it"})${scope ? ` — scope ${scope}/` : ""}`,
+        });
+      } else if (unmatched.length)
         details.ignored.push(`${path}: ${unmatched.join(", ")} (not read by analysed code)`);
       if (rc.global)
         selectScope(dirOf(path), {
@@ -240,9 +308,16 @@ export function decideImpact(input: ImpactInput): ImpactResult {
     }
     if (change.type === "deleted" || change.type === "renamed") {
       const old = change.type === "renamed" ? (change.previousPath as string) : path;
-      if (graph.hasFile(old) || input.files.has(old))
-        details.seeds.push({ file: old, units: ["*"] });
-      else if (!input.diffs.has(old))
+      // Users of the old path: its graph node, code reading it through fs, and importers whose
+      // specifier names it (once deleted, it no longer resolves, so it may have no node).
+      const users = [
+        ...(graph.hasFile(old) || input.files.has(old)
+          ? [{ file: old, units: ["*"] }]
+          : importersOf(old).map((file) => ({ file, units: ["*"] }))),
+        ...graph.assetReaders(old),
+      ];
+      details.seeds.push(...users);
+      if (!users.length && !input.diffs.has(old))
         details.ignored.push(`${old} (${change.type}; not referenced by analysed code)`);
       if (change.type === "deleted") continue;
     }
@@ -292,6 +367,28 @@ export function decideImpact(input: ImpactInput): ImpactResult {
       details.seeds.push({ file: path, units: ["*"], ...(rc ? { referencesOnly: true } : {}) });
     else if (!readers.length && !rc)
       details.ignored.push(`${path} (not part of the analysed sources)`);
+  }
+
+  // 3b. Changes outside the project folder: the project files importing them, by relative path or
+  // through a package linked to a folder outside the project.
+  const outsideHits: { file: string; importers: string[] }[] = [];
+  for (const change of changeSet.outside ?? []) {
+    for (const file of [change.path, change.previousPath].filter((p): p is string => !!p)) {
+      const importers = importersOf(file);
+      if (!importers.length) continue;
+      outsideHits.push({ file, importers });
+      details.seeds.push(...importers.map((f) => ({ file: f, units: ["*"] })));
+    }
+  }
+  for (const { file, importers } of outsideHits) {
+    const reach = graph.dependentsOf(importers.map((f) => ({ file: f, units: ["*"] })));
+    for (const hit of reach.tests.values())
+      select(hit.test, {
+        kind: hit.depth <= 1 ? "direct-dependency" : "transitive-dependency",
+        message: `Uses ${file}, outside the project, which changed (through ${hit.path[0]?.replace(/#.*$/, "") ?? importers[0]})`,
+        path: [file, ...hit.path],
+        confidence: hit.confidence,
+      });
   }
 
   // 4. Traverse the graph.

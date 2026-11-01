@@ -318,3 +318,117 @@ describe("decideImpact: tests that are imported, type tests", () => {
     expect(code.details.observedSkips?.map((s) => s.test)).toEqual(["test/types.test-d.ts"]);
   });
 });
+
+/** A small project: sources, and the resolution of each `file:specifier` (others are unresolved). */
+function project(srcs: Record<string, string>, resolved: Record<string, string>) {
+  const files = new Map<string, FileAnalysis>();
+  for (const [p, c] of Object.entries(srcs)) {
+    const an = analyzeSource(p, c);
+    for (const imp of an.imports) {
+      const r = resolved[`${p}:${imp.specifier}`];
+      if (r) imp.resolved = r;
+      else if (imp.specifier.startsWith(".")) imp.unresolved = "does not resolve";
+      else imp.external = true;
+    }
+    files.set(p, an);
+  }
+  const isTest = (p: string) => p.includes(".test.");
+  const graph = new DependencyGraph(files, isTest);
+  return (
+    cs: ChangeSet,
+    mode: "fast" | "balanced" | "safe",
+    extra: Partial<Parameters<typeof decideImpact>[0]> = {},
+  ) =>
+    decideImpact({
+      changeSet: cs,
+      diffs: new Map(),
+      graph,
+      files,
+      testFiles: [...files.keys()].filter(isTest),
+      isTest,
+      mode,
+      triggers: [],
+      rules: new RulesEngine([]),
+      ...extra,
+    });
+}
+
+describe("changes the graph no longer sees", () => {
+  const decideIn = project(
+    {
+      "src/conf.ts": 'import conf from "./conf.json";\nexport const v = () => conf.v;\n',
+      "src/load.ts":
+        'import { readFileSync } from "node:fs";\nexport const load = () => readFileSync(new URL("./data.txt", import.meta.url), "utf8");\n',
+      "src/m.ts": 'import { x } from "../../shared/x";\nexport const m = () => x;\n',
+      "src/w.ts": 'import { y } from "@acme/shared";\nexport const w = () => y;\n',
+      "src/sub.ts": 'import { s } from "../lib/s";\nexport const sub = () => s;\n',
+      "test/conf.test.ts": 'import { v } from "../src/conf";\nv();\n',
+      "test/load.test.ts": 'import { load } from "../src/load";\nload();\n',
+      "test/m.test.ts": 'import { m } from "../src/m";\nm();\n',
+      "test/w.test.ts": 'import { w } from "../src/w";\nw();\n',
+      "test/sub.test.ts": 'import { sub } from "../src/sub";\nsub();\n',
+    },
+    {
+      "test/conf.test.ts:../src/conf": "src/conf.ts",
+      "test/load.test.ts:../src/load": "src/load.ts",
+      "test/m.test.ts:../src/m": "src/m.ts",
+      "test/w.test.ts:../src/w": "src/w.ts",
+      "test/sub.test.ts:../src/sub": "src/sub.ts",
+      "src/sub.ts:../lib/s": "lib/s.ts",
+    },
+  );
+  const cs = (changes: ChangeSet["changes"], outside?: ChangeSet["changes"]): ChangeSet => ({
+    provider: "vcs",
+    completeness: "complete",
+    warnings: [],
+    changes,
+    ...(outside ? { outside } : {}),
+  });
+  const picked = (d: ReturnType<typeof decideIn>) => d.selectedTests.map((t) => t.filePath).sort();
+
+  it("a deleted or renamed non-code file selects the code importing or reading it, in every mode", () => {
+    for (const mode of ["fast", "safe"] as const) {
+      const del = decideIn(cs([{ type: "deleted", path: "src/conf.json" }]), mode);
+      expect(picked(del)).toContain("test/conf.test.ts");
+      expect(del.details.ignored).toEqual([]);
+      const read = decideIn(
+        cs([{ type: "renamed", path: "src/data2.txt", previousPath: "src/data.txt" }]),
+        mode,
+      );
+      expect(picked(read)).toContain("test/load.test.ts");
+      expect(read.details.ignored).not.toContain(
+        "src/data.txt (renamed; not referenced by analysed code)",
+      );
+    }
+  });
+
+  it("a change outside the project selects the tests of the files importing it", () => {
+    const d = decideIn(cs([], [{ type: "modified", path: "../shared/x.ts" }]), "fast");
+    expect(picked(d)).toEqual(["test/m.test.ts"]);
+    expect(d.selectedTests[0]?.reasons[0]?.message).toMatch(/Uses \.\.\/shared\/x\.ts, outside/);
+    // Through a package linked to a folder outside the project (a workspace sibling).
+    const linked = decideIn(cs([], [{ type: "modified", path: "../shared/y.ts" }]), "fast", {
+      outsideLinks: new Map([["src/w.ts", ["../shared"]]]),
+    });
+    expect(picked(linked)).toEqual(["test/w.test.ts"]);
+    const other = decideIn(cs([], [{ type: "modified", path: "../other/z.ts" }]), "fast");
+    expect(picked(other)).toEqual([]);
+  });
+
+  it("a submodule bump that could not be expanded selects every test using it", () => {
+    const d = decideIn(cs([{ type: "modified", path: "lib", submodule: true }]), "fast");
+    expect(picked(d)).toEqual(["test/sub.test.ts"]);
+    expect(d.selectedTests[0]?.reasons[0]?.message).toMatch(/Submodule lib changed/);
+  });
+
+  it("an env file key no analysed code reads selects the tests under the file's folder", () => {
+    const d = decideIn(cs([{ type: "modified", path: ".env.e2e" }]), "balanced", {
+      resources: new Map([
+        [".env.e2e", { file: ".env.e2e", kind: "env", keys: ["DATABASE_URL"], global: false }],
+      ]),
+    });
+    expect(picked(d)).toHaveLength(5);
+    expect(d.details.ignored).toEqual([]);
+    expect(d.reasons[0]?.message).toMatch(/DATABASE_URL not read by analysed code/);
+  });
+});

@@ -153,6 +153,7 @@ import {
   treeOf,
   unknownCheckProjects,
 } from "./hook.js";
+import { outsideLinks } from "./outside.js";
 import { ParsePool, parallelParsingAvailable } from "./parse-pool.js";
 import { type LoadedPlugin, loadPlugins, pluginsChanged, runEdgeProviders } from "./plugins.js";
 import {
@@ -188,6 +189,7 @@ import {
   TRACE_STORE_VERSION,
   type TraceStore,
   TraceView,
+  traceEnv,
 } from "./traces.js";
 import { type Watcher, watchProject } from "./watch.js";
 
@@ -1146,6 +1148,9 @@ export class SmartTest {
         ? unchangedScopeDecision(tests, scope, options.mode ?? this.config.mode)
         : decideImpact({
             ...(traceView?.size ? { traces: traceView } : {}),
+            ...(input.changeSet.outside?.length
+              ? { outsideLinks: outsideLinks(this.root, index.entries()) }
+              : {}),
             changeSet: input.changeSet,
             diffs,
             graph,
@@ -1608,6 +1613,7 @@ export class SmartTest {
           at: new Date().toISOString(),
           status: "passed",
           fileHashes,
+          ...traceEnv(executed.keys(), index),
           executed: Object.fromEntries([...executed].map(([f, s]) => [f, [...s].sort()])),
           known: Object.fromEntries([...known].map(([f, s]) => [f, [...s].sort()])),
         };

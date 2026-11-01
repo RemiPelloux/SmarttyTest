@@ -119,13 +119,19 @@ export function restrictChanges(
     paths: wanted,
     matched: kept.map((c) => c.path),
     unchanged: wanted.filter((w) => !kept.some((c) => matches(c, w))),
-    excluded: input.changeSet.changes.filter((c) => !keptSet.has(c)).map((c) => c.path),
+    excluded: [
+      ...input.changeSet.changes.filter((c) => !keptSet.has(c)).map((c) => c.path),
+      ...(input.changeSet.outside ?? []).map((c) => c.path),
+    ],
   };
   return {
     input: {
       ...input,
       description: `${input.description} · only ${wanted.join(", ")}`,
-      changeSet: { ...input.changeSet, changes: kept },
+      // Changes outside the project are left out too: they are not under any requested path.
+      changeSet: (({ outside: _outside, ...rest }) => ({ ...rest, changes: kept }))(
+        input.changeSet,
+      ),
     },
     scope,
   };

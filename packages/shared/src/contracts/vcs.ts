@@ -23,6 +23,11 @@ export interface FileChange {
   changedRanges?: SourceRange[];
   previousHash?: string;
   currentHash?: string;
+  /**
+   * The path is a nested repository (a Git submodule) whose recorded commit moved, and the files
+   * that changed inside it could not be listed. Every test that uses anything under it is selected.
+   */
+  submodule?: boolean;
 }
 
 export interface ChangeSet {
@@ -32,6 +37,12 @@ export interface ChangeSet {
   changes: FileChange[];
   completeness: Completeness;
   warnings: string[];
+  /**
+   * Changes outside the project folder, with paths relative to the project root (`../shared/x.ts`).
+   * Project files can import them (a sibling package, a shared folder), so the impact analysis
+   * selects their importers instead of dropping them.
+   */
+  outside?: FileChange[];
 }
 
 /**

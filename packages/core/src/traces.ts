@@ -9,7 +9,8 @@ import { fileURLToPath } from "node:url";
 import { readStateJson, sha256, writeStateJson } from "@smarttest/shared";
 import type { FileAnalysis } from "@smarttest/source-parser";
 
-export const TRACE_STORE_VERSION = 1;
+/** 2: traces record the environment variables their files read (`env`, `envAny`). */
+export const TRACE_STORE_VERSION = 2;
 
 export interface TestTrace {
   /** ISO time of collection. */
@@ -17,6 +18,13 @@ export interface TestTrace {
   status: "passed" | "failed";
   /** Content hash of every project file the test loaded (the test included). */
   fileHashes: Record<string, string>;
+  /**
+   * Environment variables the loaded files read, with a hash of their value when traced (see
+   * `envValueHash`). With another value, the same code can take another path: the trace is stale.
+   */
+  env?: Record<string, string>;
+  /** A loaded file reads `process.env` with keys that can't be listed: never fresh. */
+  envAny?: boolean;
   /** Per loaded file: names of functions that ran ("" = module code). */
   executed: Record<string, string[]>;
   /** Per loaded file: names of all functions V8 saw (to detect names that do not map). */
@@ -96,6 +104,38 @@ export async function hashFile(root: string, file: string): Promise<string | und
   }
 }
 
+/** Hash of an environment variable's value, distinct for an unset variable. */
+export function envValueHash(value: string | undefined): string {
+  return value === undefined ? "unset" : sha256(`=${value}`).slice(0, 16);
+}
+
+/**
+ * The environment a trace depends on: the keys its loaded files read, with their current values
+ * hashed. `any` when a file reads keys that can't be listed (`process.env[name]`), or when a loaded
+ * file was not analysed, so what it reads is unknown.
+ */
+export function traceEnv(
+  loaded: Iterable<string>,
+  files: { get(file: string): FileAnalysis | undefined },
+  env: NodeJS.ProcessEnv = process.env,
+): { env?: Record<string, string>; envAny?: true } {
+  const keys = new Set<string>();
+  for (const file of loaded) {
+    const a = files.get(file);
+    if (!a) return { envAny: true };
+    for (const r of [
+      ...(a.topLevelResources ?? []),
+      ...a.symbols.flatMap((s) => s.resources ?? []),
+    ]) {
+      if (!r.startsWith("env:")) continue;
+      if (r === "env:*") return { envAny: true };
+      keys.add(r.slice(4));
+    }
+  }
+  if (!keys.size) return {};
+  return { env: Object.fromEntries([...keys].sort().map((k) => [k, envValueHash(env[k])])) };
+}
+
 export async function cleanDir(dir: string): Promise<void> {
   await rm(dir, { recursive: true, force: true });
 }
@@ -113,6 +153,8 @@ export class TraceView {
     /** Content hash of a file at the base of the analysed change, if it exists there. */
     private readonly baseHash: (file: string) => string | undefined,
     private readonly files: ReadonlyMap<string, FileAnalysis>,
+    /** The environment the selected tests will run with. */
+    private readonly env: NodeJS.ProcessEnv = process.env,
   ) {}
 
   get size(): number {
@@ -131,7 +173,14 @@ export class TraceView {
     const cached = this.freshCache.get(test);
     if (cached !== undefined) return cached;
     const t = this.store?.tests[test];
-    let fresh = !!t && this.store?.env === this.currentEnv && t.status === "passed";
+    let fresh = !!t && this.store?.env === this.currentEnv && t.status === "passed" && !t.envAny;
+    // Code that reads an environment variable can run differently with another value.
+    if (fresh && t?.env)
+      for (const [key, h] of Object.entries(t.env))
+        if (envValueHash(this.env[key]) !== h) {
+          fresh = false;
+          break;
+        }
     if (fresh && t)
       for (const [file, h] of Object.entries(t.fileHashes))
         if (this.baseHash(file) !== h) {

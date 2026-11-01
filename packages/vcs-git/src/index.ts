@@ -1,6 +1,8 @@
 /**
  * @smarttest/vcs-git — Git adapter (spec §7.5). Spawns `git` without a shell.
  */
+
+import { join, posix } from "node:path";
 import {
   assertSafeRevision,
   type ChangeSet,
@@ -19,12 +21,28 @@ import {
   type ChangeProvider,
   type ChangeSource,
   describeSource,
-  parseNameStatusZ,
+  GITLINK_MODE,
+  parseRawZ,
   parseZeroContextRanges,
+  type RawChange,
   scopeChangeSet,
 } from "@smarttest/vcs-core";
 
 const GIT_CONFIG = ["-c", "core.quotePath=false", "-c", "color.ui=false"];
+/**
+ * Output that does not depend on the user's Git configuration: repository-relative paths
+ * (`diff.relative`), `a/` and `b/` prefixes (`diff.noprefix`, `diff.mnemonicPrefix`), no colour,
+ * no external diff or text conversion, and submodules always reported (`diff.ignoreSubmodules`).
+ */
+const DIFF_FLAGS = [
+  "--no-relative",
+  "--src-prefix=a/",
+  "--dst-prefix=b/",
+  "--no-color",
+  "--no-ext-diff",
+  "--no-textconv",
+  "--ignore-submodules=none",
+];
 
 export class GitAdapter implements VersionControlAdapter, ChangeProvider {
   readonly apiVersion = 1;
@@ -166,25 +184,122 @@ export class GitAdapter implements VersionControlAdapter, ChangeProvider {
     baseRevision?: string,
     cached = false,
   ): Promise<ChangeSet> {
-    const flags = cached ? ["--cached"] : [];
-    const nameStatus = await this.git(["diff", ...flags, "--name-status", "-z", "-M", ...range]);
-    const changes = parseNameStatusZ(nameStatus);
+    const flags = [...(cached ? ["--cached"] : []), ...DIFF_FLAGS];
+    const raw = parseRawZ(await this.git(["diff", ...flags, "--raw", "-z", "-M", ...range]));
+    const changes: FileChange[] = [];
+    const warnings: string[] = [];
+    for (const r of raw) {
+      if (r.oldMode !== GITLINK_MODE && r.newMode !== GITLINK_MODE) changes.push(r.change);
+      else changes.push(...(await this.submoduleChanges(r, includeUntracked, warnings)));
+    }
     const ranges = parseZeroContextRanges(
-      await this.git(["diff", ...flags, "-U0", "-M", "--no-ext-diff", ...range]),
+      await this.git(["diff", ...flags, "-U0", "-M", ...range]),
     );
     for (const c of changes) {
       const r = ranges.get(c.path);
-      if (r && c.type !== "deleted") c.changedRanges = r;
+      if (r && c.type !== "deleted" && !c.submodule) c.changedRanges = r;
     }
     if (includeUntracked) {
-      const untracked = (await this.git(["ls-files", "--others", "--exclude-standard", "-z"]))
+      // Repository-relative (`--full-name`) and repository-wide (`:/`), like the diff above: the
+      // project may be a subfolder, and it can import files outside it.
+      const untracked = (
+        await this.git([
+          "ls-files",
+          "--others",
+          "--exclude-standard",
+          "-z",
+          "--full-name",
+          "--",
+          ":/",
+        ])
+      )
         .split("\0")
         .filter(Boolean);
       for (const path of untracked) changes.push({ type: "added", path });
     }
-    const cs: ChangeSet = { provider: "git", changes, completeness: "complete", warnings: [] };
+    const cs: ChangeSet = { provider: "git", changes, completeness: "complete", warnings };
     if (baseRevision) cs.baseRevision = baseRevision;
     return cs;
+  }
+
+  /** Submodule checkouts (repo-relative path → commit before the change), for `readBefore`. */
+  private readonly submoduleBase = new Map<string, string>();
+
+  /**
+   * A submodule whose recorded commit moved: the files that changed inside it, when the checkout
+   * has both commits. Otherwise one change flagged `submodule`, which selects every test using it.
+   */
+  private async submoduleChanges(
+    r: RawChange,
+    worktree: boolean,
+    warnings: string[],
+  ): Promise<FileChange[]> {
+    const path = r.change.path;
+    const fallback = (why: string): FileChange[] => {
+      warnings.push(`Submodule ${path} changed, but ${why}: every test using it is selected`);
+      return [{ ...r.change, submodule: true }];
+    };
+    if (r.oldMode !== GITLINK_MODE || r.newMode !== GITLINK_MODE)
+      return fallback(r.oldMode === GITLINK_MODE ? "it was removed" : "it was added");
+    const dir = join(await this.root(), path);
+    const sub = async (args: string[]) =>
+      runProcess("git", [...GIT_CONFIG, ...args], { cwd: dir }).catch(() => undefined);
+    const top = await sub(["rev-parse", "--show-toplevel"]);
+    const { realpath } = await import("node:fs/promises");
+    const real = async (p: string) => realpath(p).catch(() => p);
+    if (top?.code !== 0 || (await real(top.stdout.trim())) !== (await real(dir)))
+      return fallback("it is not checked out");
+    const zero = /^0+$/.test(r.newId);
+    const range = zero ? [r.oldId] : [r.oldId, r.newId];
+    for (const id of range) {
+      const has = await sub(["cat-file", "-e", `${id}^{commit}`]);
+      if (has?.code !== 0) return fallback(`commit ${id.slice(0, 12)} is not in its checkout`);
+    }
+    const listed = await sub(["diff", ...DIFF_FLAGS, "--raw", "-z", "-M", ...range]);
+    if (listed?.code !== 0) return fallback("its changes could not be listed");
+    const out: FileChange[] = [];
+    for (const inner of parseRawZ(listed.stdout)) {
+      const c = inner.change;
+      // A nested submodule is not expanded further: it stands for everything under it.
+      out.push({
+        ...c,
+        path: `${path}/${c.path}`,
+        ...(c.previousPath ? { previousPath: `${path}/${c.previousPath}` } : {}),
+        ...(inner.oldMode === GITLINK_MODE || inner.newMode === GITLINK_MODE
+          ? { submodule: true }
+          : {}),
+      });
+    }
+    if (zero && worktree) {
+      const untracked = await sub([
+        "ls-files",
+        "--others",
+        "--exclude-standard",
+        "-z",
+        "--full-name",
+      ]);
+      for (const p of (untracked?.stdout ?? "").split("\0").filter(Boolean))
+        out.push({ type: "added", path: `${path}/${p}` });
+    }
+    this.submoduleBase.set(path, r.oldId);
+    return out;
+  }
+
+  /** Content of a repository path at a revision, looking inside an expanded submodule. */
+  private async showAt(rev: string, repoPath: string): Promise<string | undefined> {
+    for (const [sub, id] of this.submoduleBase) {
+      if (!repoPath.startsWith(`${sub}/`)) continue;
+      const res = await runProcess(
+        "git",
+        [...GIT_CONFIG, "show", `${id}:${repoPath.slice(sub.length + 1)}`],
+        { cwd: join(await this.root(), sub) },
+      );
+      return res.code === 0 ? res.stdout : undefined;
+    }
+    const res = await runProcess("git", [...GIT_CONFIG, "show", `${rev}:${repoPath}`], {
+      cwd: this.projectRoot,
+    });
+    return res.code === 0 ? res.stdout : undefined;
   }
 
   async getChangeInput(source: ChangeSource): Promise<ChangeAnalysisInput> {
@@ -195,7 +310,14 @@ export class GitAdapter implements VersionControlAdapter, ChangeProvider {
     const hasHead = await this.hasHead();
     if (!hasHead) {
       const files = (
-        await this.git(["ls-files", "--others", "--cached", "--exclude-standard", "-z"])
+        await this.git([
+          "ls-files",
+          "--others",
+          "--cached",
+          "--exclude-standard",
+          "-z",
+          "--full-name",
+        ])
       )
         .split("\0")
         .filter(Boolean);
@@ -234,11 +356,9 @@ export class GitAdapter implements VersionControlAdapter, ChangeProvider {
     const scoped = scopeChangeSet(changeSet, prefix);
     const readBefore = async (path: string): Promise<string | undefined> => {
       if (!beforeRev) return undefined;
-      const repoPath = prefix ? `${prefix}/${path}` : path;
-      const res = await runProcess("git", [...GIT_CONFIG, "show", `${beforeRev}:${repoPath}`], {
-        cwd: this.projectRoot,
-      });
-      return res.code === 0 ? res.stdout : undefined;
+      const repoPath = posix.normalize(prefix ? `${prefix}/${path}` : path);
+      if (repoPath.startsWith("../")) return undefined;
+      return this.showAt(beforeRev, repoPath);
     };
     return { changeSet: scoped, readBefore, description: `git · ${describeSource(source)}` };
   }
