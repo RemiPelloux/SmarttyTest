@@ -61,7 +61,7 @@ export class JestAdapter implements TestAdapter {
 
   async discover(): Promise<TestCase[]> {
     const res = await runProcess(process.execPath, [this.bin(), "--listTests", "--json"], {
-      cwd: this.options.cwd,
+      cwd: canonicalPath(this.options.cwd),
       env: { ...process.env, FORCE_COLOR: "0", NO_COLOR: "1" },
       timeoutMs: 120_000,
     });
@@ -120,7 +120,8 @@ export class JestAdapter implements TestAdapter {
     ];
     try {
       const res = await runProcess(process.execPath, args, {
-        cwd: this.options.cwd,
+        // Canonical like the file filters: Windows keeps a short-name cwd (RUNNER~1) as given.
+        cwd: canonicalPath(this.options.cwd),
         env: { ...process.env, FORCE_COLOR: "0", NO_COLOR: "1", ...options.env },
         ...(options.timeoutMs ? { timeoutMs: options.timeoutMs } : {}),
         ...(options.signal ? { signal: options.signal } : {}),

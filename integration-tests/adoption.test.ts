@@ -248,7 +248,9 @@ describe("per-project conventions", () => {
       await writeFile(join(hooks, "pre-commit"), "#!/bin/sh\nnpx lint-staged\n");
       git(dir, "config", "core.hooksPath", hooks);
       git(dir, "add", "-A");
-      git(dir, "commit", "-qm", "init");
+      // The stand-in hook is not executable, so POSIX Git skips it; Git for Windows has no execute
+      // bit and would run it (npx lint-staged). Committing never needs it here.
+      git(dir, "commit", "--no-verify", "-qm", "init");
       const plan = await (await SmartTest.open({ root: dir })).initPlan();
       expect(plan.files.map((f) => f.path)).toContain("smarttest.config.ts");
       expect(plan.files.some((f) => f.path.endsWith("pre-commit"))).toBe(false);

@@ -140,7 +140,8 @@ export class NodeTestAdapter implements TestAdapter {
         ...selection.files.map((f) => join(canonicalPath(this.options.projectRoot), f)),
       ];
       const res = await runProcess(process.execPath, args, {
-        cwd: this.options.cwd,
+        // Canonical like the file filters: Windows keeps a short-name cwd (RUNNER~1) as given.
+        cwd: canonicalPath(this.options.cwd),
         env: { ...process.env, FORCE_COLOR: "0", NO_COLOR: "1", ...options.env },
         ...(options.timeoutMs ? { timeoutMs: options.timeoutMs } : {}),
         ...(options.signal ? { signal: options.signal } : {}),
