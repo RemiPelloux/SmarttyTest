@@ -18,6 +18,9 @@ export async function materialize(name: string, options: { git?: boolean } = {})
   if (options.git) {
     await writeFile(join(dir, ".gitignore"), "node_modules\n.smarttest/\n");
     git(dir, "init", "-q", "-b", "main");
+    // The files were copied byte for byte; keep Git from converting them on a later checkout
+    // (Windows runners default to core.autocrlf=true), whatever the machine's global setting.
+    git(dir, "config", "core.autocrlf", "false");
     git(dir, "add", "-A");
     git(dir, "commit", "-q", "-m", "initial");
   }

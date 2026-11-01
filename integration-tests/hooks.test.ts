@@ -645,7 +645,8 @@ it("does not inherit the pre-commit Git environment", () => {
 async function linkedWorkspace(): Promise<string> {
   const dir = await materialize("pnpm-monorepo");
   const installed = join(FIXTURES, "pnpm-monorepo", "node_modules");
-  await rm(join(dir, "node_modules"));
+  // A link on POSIX, a directory of junctions on Windows (see linkNodeModules).
+  await rm(join(dir, "node_modules"), { recursive: true, force: true });
   await mkdir(join(dir, "node_modules/@demo"), { recursive: true });
   for (const entry of ["vitest", ".bin"])
     await symlink(join(installed, entry), join(dir, "node_modules", entry));
@@ -704,7 +705,7 @@ describe("the temporary checkout is the content under test", () => {
   it("lets Vite load an installed package's file by URL in the checkout", async () => {
     // A real node_modules (not a link to the fixture's): the package is inside the project.
     const dir = await materialize("ts-lib-vitest");
-    await rm(join(dir, "node_modules"));
+    await rm(join(dir, "node_modules"), { recursive: true, force: true });
     await mkdir(join(dir, "node_modules/asset-pkg"), { recursive: true });
     for (const entry of ["vitest", ".bin"])
       await symlink(
@@ -891,7 +892,10 @@ describe("a push that only deletes refs", () => {
   }, 120_000);
 });
 
-describe("a hook run that is terminated", () => {
+// Windows has no POSIX signals: `kill(SIGTERM|SIGHUP)` there is TerminateProcess, which runs no
+// handler, so no process can clean up after it. There, the next hook run removes the checkout
+// ("removes checkouts abandoned by a killed run", which runs on every platform).
+describe.skipIf(process.platform === "win32")("a hook run that is terminated", () => {
   const bin = resolve(import.meta.dirname, "../packages/cli/dist/bin.js");
 
   it.each(["SIGTERM", "SIGHUP"] as const)(

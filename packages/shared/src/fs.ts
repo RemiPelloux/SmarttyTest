@@ -102,8 +102,10 @@ export async function linkNodeModules(src: string, dest: string): Promise<void> 
     await symlink(src, dest, "dir");
     return;
   }
+  const entries = await readdir(src, { withFileTypes: true }).catch(() => undefined);
+  if (!entries) return; // nothing installed: stays missing, like a dangling POSIX link
   await mkdir(dest, { recursive: true });
-  for (const e of await readdir(src, { withFileTypes: true })) {
+  for (const e of entries) {
     const from = join(src, e.name);
     const to = join(dest, e.name);
     if (e.name.startsWith("@") && e.isDirectory()) {
