@@ -118,6 +118,22 @@ function renderValue(v: unknown, indent: string): string {
     .join("\n")}\n${indent}}`;
 }
 
+const BROWSER_RUNNERS = ["playwright", "cypress"];
+
+/**
+ * The hook scope to propose when browser end-to-end runners sit next to a unit runner: the hook
+ * runs the unit runners, and selected browser specs are reported as left to CI. Undefined when
+ * there is nothing to separate.
+ */
+export function suggestHookRunners(
+  adapters: readonly string[],
+): NonNullable<NonNullable<SmartTestConfig["hook"]>["runners"]> | undefined {
+  const unique = [...new Set(adapters)];
+  const unit = unique.filter((a) => !BROWSER_RUNNERS.includes(a));
+  if (!unit.length || unit.length === unique.length) return undefined;
+  return unit as NonNullable<NonNullable<SmartTestConfig["hook"]>["runners"]>;
+}
+
 export function renderConfigFile(config: SmartTestConfig, typescript: boolean): string {
   const lines = [
     typescript
@@ -275,6 +291,14 @@ export async function buildPlan(
         .map((c) => `${c.source}${c.line ? `:${c.line}` : ""}`),
     });
   }
+  const hookRunners = suggestHookRunners(adapters);
+  if (hookRunners)
+    recs.push({
+      key: "Hook scope",
+      value: `hook.runners: [${hookRunners.join(", ")}]`,
+      reason: `commit hooks run ${hookRunners.join(", ")}; selected ${adapters.filter((a) => BROWSER_RUNNERS.includes(a)).join(", ")} specs need a browser, so the hook reports them as "selected, not run in the hook (left to CI)" — \`smarttest run\` and \`smarttest ci\` still run them`,
+      evidence: profile.runners.flatMap((r) => r.evidence),
+    });
   const hookCommands = profile.testCommands.filter((c) =>
     /husky|hooks|lefthook|pre-commit-config/.test(c.source),
   );
@@ -301,6 +325,7 @@ export async function buildPlan(
     ...(projects ? { projects } : {}),
     ...(exclude.length ? { exclude } : {}),
     ...(rules.length ? { rules } : {}),
+    ...(hookRunners ? { hook: { runners: hookRunners } } : {}),
     reports: { formats: ["html", "json", "junit"] },
   };
 

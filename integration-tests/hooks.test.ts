@@ -925,3 +925,131 @@ describe("a hook run that is terminated", () => {
     120_000,
   );
 });
+
+describe("a hook scope keeps browser specs in CI and out of the hook", () => {
+  const bin = resolve(import.meta.dirname, "../packages/cli/dist/bin.js");
+  const spec = "e2e/checkout.spec.js";
+  const unitTest = "test/format.test.js";
+
+  /**
+   * next-playwright (node --test + Playwright) plus a spec whose import SmartTest cannot resolve
+   * (a non-literal dynamic import): it is selected by any change, as uncertainty must be.
+   */
+  async function setup(scope: Record<string, unknown>): Promise<string> {
+    const dir = await materialize("next-playwright", { git: true });
+    await writeFile(
+      join(dir, spec),
+      [
+        'import { expect, test } from "@playwright/test";',
+        "",
+        'test("checkout", async ({ request }) => {',
+        "  // Loaded from the deployed environment's helpers: SmartTest cannot resolve this import.",
+        "  const { seedCart } = await import(process.env.CART_HELPERS);",
+        "  await seedCart(request);",
+        '  expect((await request.get("/")).ok()).toBe(true);',
+        "});",
+        "",
+      ].join("\n"),
+    );
+    await writeFile(join(dir, "smarttest.config.json"), `${JSON.stringify({ hook: scope })}\n`);
+    await commitAll(dir, "unresolved spec and hook scope");
+    // A change the unit test covers; the spec is selected only because its import is unresolved.
+    await edit(
+      dir,
+      "lib/format.js",
+      "export function displayName",
+      "// staged\nexport function displayName",
+    );
+    git(dir, "add", "lib/format.js");
+    return dir;
+  }
+
+  it("reports the spec as selected, not run in the hook, runs the unit tests and passes", async () => {
+    const dir = await setup({ runners: ["node"] });
+    const log = join(await mkdtemp(join(tmpdir(), "st-hook-log-")), "hook.log");
+    await mkdir(join(dir, ".git/hooks"), { recursive: true });
+    await writeFile(
+      join(dir, ".git/hooks/pre-commit"),
+      `#!/bin/sh\n${JSON.stringify(process.execPath)} ${JSON.stringify(bin)} run --staged --hook --no-cache > ${JSON.stringify(log)} 2>&1\n`,
+      { mode: 0o755 },
+    );
+    git(dir, "config", "core.hooksPath", join(dir, ".git/hooks"));
+
+    const commit = spawnSync(
+      "git",
+      [
+        "-c",
+        "user.name=SmartTest",
+        "-c",
+        "user.email=ci@smarttest.dev",
+        "-c",
+        "commit.gpgsign=false",
+        "commit",
+        "-q",
+        "-m",
+        "format",
+      ],
+      { cwd: dir, encoding: "utf8", env: process.env },
+    );
+    const output = await readFile(log, "utf8");
+    // The hook succeeds because everything it ran passed; the spec is listed as left to CI.
+    expect(commit.status, output).toBe(0);
+    expect(output).toContain("selected, not run in the hook (left to CI) by hook.runners [node]");
+    expect(output).toContain(`${spec} (playwright)`);
+    expect(output).toMatch(/[1-9]\d* passed/);
+    expect(output).toMatch(/[1-9]\d* left to CI \(not run\)/);
+
+    const report = JSON.parse(await readFile(join(dir, ".smarttest/runs/latest.json"), "utf8"));
+    const selected = report.decision.selectedTests.map((t: { filePath: string }) => t.filePath);
+    expect(selected).toContain(spec);
+    expect(selected).toContain(unitTest);
+    const left: string[] = report.leftToCi.map((l: { file: string }) => l.file);
+    expect(left).toContain(spec);
+    expect(left).not.toContain(unitTest);
+    expect(report.summary.leftToCi).toBe(left.length);
+    const executed: string[] = report.executions.map((e: { file: string }) => e.file);
+    expect(executed).toContain(unitTest);
+    // Never run, so never passed: a left-to-CI file has no execution record at all.
+    for (const l of left) expect(executed).not.toContain(l);
+
+    const records = JSON.parse(await readFile(join(dir, ".smarttest/state/hooks.json"), "utf8"));
+    expect(records.runs.at(-1)).toMatchObject({
+      passed: true,
+      leftToCi: left.length,
+      scope: ["hook.runners [node]"],
+    });
+
+    const st = await SmartTest.open({ root: dir });
+    const history = await st.hookHistory();
+    expect(history.scope).toEqual(["hook.runners [node]"]);
+    expect(history.leftToCi).toBe(left.length);
+    const doctor = await st.doctor();
+    expect(doctor.some((f) => f.check === "hook" && f.message.startsWith("hook scope:"))).toBe(
+      true,
+    );
+
+    // `run` is unaffected by the hook scope: the same kind of change still selects the spec.
+    await edit(dir, "lib/format.js", "// staged", "// unstaged");
+    const analysis = await st.analyze({ source: { kind: "uncommitted" } });
+    expect(analysis.decision.selectedTests.map((t) => t.filePath)).toContain(spec);
+  }, 180_000);
+
+  it("states the left-to-CI files in the --json result", async () => {
+    const dir = await setup({ exclude: ["e2e/**"] });
+    const r = spawnSync(
+      process.execPath,
+      [bin, "run", "--staged", "--hook", "--no-cache", "--json"],
+      {
+        cwd: dir,
+        encoding: "utf8",
+      },
+    );
+    expect(r.status, r.stderr).toBe(0);
+    const json = JSON.parse(r.stdout);
+    expect(json.hook.leftToCi.count).toBeGreaterThan(0);
+    expect(json.hook.leftToCi.rules).toEqual(['hook.exclude "e2e/**"']);
+    expect(json.hook.leftToCi.files.map((f: { file: string }) => f.file)).toContain(spec);
+    expect(json.report.summary.leftToCi).toBe(json.hook.leftToCi.count);
+    expect(json.report.summary.passed).toBeGreaterThan(0);
+  }, 180_000);
+});

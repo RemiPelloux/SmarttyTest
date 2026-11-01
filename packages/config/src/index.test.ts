@@ -24,6 +24,18 @@ describe("validateConfig", () => {
     expect(errors.map((e) => e.path)).toEqual(["mode", "rules[0].match.klass"]);
     expect(warnings.map((w) => w.path)).toEqual(["foo"]);
   });
+
+  it("validates the hook scope", () => {
+    expect(validateConfig({ hook: { runners: ["vitest"], exclude: ["e2e/**"] } }).errors).toEqual(
+      [],
+    );
+    const { errors } = validateConfig({ hook: { runners: ["mocha"], exclude: "e2e/**" } });
+    expect(errors.map((e) => e.path)).toEqual(["hook.runners", "hook.exclude"]);
+    // An empty allow-list would run no test in the hook: refused rather than a silent no-op.
+    expect(validateConfig({ hook: { runners: [] } }).errors.map((e) => e.path)).toEqual([
+      "hook.runners",
+    ]);
+  });
 });
 
 describe("loadConfig", () => {
@@ -36,6 +48,29 @@ describe("loadConfig", () => {
     const loaded = await loadConfig(root);
     expect(loaded.config.mode).toBe("safe");
     expect(loaded.config.retries).toBe(1);
+  });
+
+  it("rejects an unknown hook runner as a SmartTestError with a hint", async () => {
+    const root = await mkdtemp(join(tmpdir(), "st-config-"));
+    await writeFile(
+      join(root, "smarttest.config.json"),
+      JSON.stringify({ hook: { runners: ["playwrite"] } }),
+    );
+    const error = await loadConfig(root).catch((e: unknown) => e);
+    expect(error).toMatchObject({ code: "ST_CONFIG_INVALID", category: "configuration" });
+    expect((error as Error).message).toContain("hook.runners");
+    expect((error as { hint?: string }).hint).toBeTruthy();
+  });
+
+  it("resolves the hook scope; no scope means every runner", async () => {
+    const root = await mkdtemp(join(tmpdir(), "st-config-"));
+    expect((await loadConfig(root)).config.hook).toMatchObject({ exclude: [] });
+    expect((await loadConfig(root)).config.hook.runners).toBeUndefined();
+    await writeFile(
+      join(root, "smarttest.config.json"),
+      JSON.stringify({ hook: { runners: ["vitest"] } }),
+    );
+    expect((await loadConfig(root)).config.hook.runners).toEqual(["vitest"]);
   });
 
   it("fails with ST_CONFIG_INVALID on bad values", async () => {

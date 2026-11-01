@@ -75,6 +75,7 @@ import {
   renderSetupReport,
   rollback,
   type SetupPlan,
+  suggestHookRunners,
 } from "@smarttest/smart-init";
 import type { Analyzer, FileAnalysis } from "@smarttest/source-parser";
 import { LOCALE_PATH } from "@smarttest/source-parser";
@@ -103,15 +104,18 @@ import {
   assertPushIsHead,
   type CheckResult,
   commitsWithoutHook,
+  describeScope,
   GIT_HOOK_ENV,
   type HookRecords,
   hookInvocations,
   isHookContext,
   isolate,
+  type LeftToCi,
   loadHookRecords,
   median,
   normalizeProject,
   onlyDeletions,
+  outsideHookScope,
   type PushRef,
   planChecks,
   projectPaths,
@@ -198,6 +202,11 @@ export interface RunOptions extends AnalyzeOptions {
   shard?: { index: number; total: number };
   /** Stop starting runner groups after one fails. */
   bail?: boolean;
+  /**
+   * Apply the hook scope (`hook.runners`, `hook.exclude`): selected tests outside it are not run
+   * and are reported as left to CI. Internal to `runHook`; `run` and `ci` never set it.
+   */
+  hookScope?: boolean;
   /** Reuse an analysis computed by the caller (benchmark) instead of analysing again. */
   analysis?: Analysis;
   /**
@@ -269,6 +278,11 @@ export interface HookOutcome {
   checks: CheckResult[];
   /** Hook configuration problems (a check that can never run), shown with the result. */
   warnings: string[];
+  /**
+   * Selected test files the hook scope (`hook.runners`, `hook.exclude`) did not run: selected,
+   * not run in the hook, left to CI. Never counted as passed.
+   */
+  leftToCi?: { count: number; rules: string[]; files: LeftToCi[] };
   durationMs: number;
 }
 
@@ -1038,6 +1052,7 @@ export class SmartTest {
       // asked for `--no-cache` (an explicit `false` is respected).
       bail: options.bail ?? true,
       cache: options.cache ?? true,
+      hookScope: true,
       command: `hook ${stage}`,
       holdCheckout: () => checksPromise,
       onIsolatedConfig: (config) => {
@@ -1088,16 +1103,36 @@ export class SmartTest {
     const passed =
       outcome.exitCode === ExitCode.Success && checks.every((c) => c.status === "passed");
     const tree = await treeOf(this.root, stage);
+    const left = outcome.report.leftToCi ?? [];
+    const scope = describeScope(active.hook);
     records.runs.push({
       at: new Date().toISOString(),
       stage,
       durationMs,
       selected: outcome.report.decision.selectedTests.length,
       passed,
+      ...(left.length ? { leftToCi: left.length } : {}),
+      ...(scope.length ? { scope } : {}),
       ...(tree ? { tree } : {}),
     });
     await saveHookRecords(this.storeDir, records);
-    return { stage, skipped: false, outcome, checks, warnings, durationMs };
+    return {
+      stage,
+      skipped: false,
+      outcome,
+      checks,
+      warnings,
+      ...(left.length
+        ? {
+            leftToCi: {
+              count: left.length,
+              rules: [...new Set(left.map((l) => l.rule))],
+              files: left,
+            },
+          }
+        : {}),
+      durationMs,
+    };
   }
 
   /** `smarttest hook status` details: recent hook durations, bypasses, commits made without it. */
@@ -1109,10 +1144,16 @@ export class SmartTest {
     bypasses: HookRecords["bypasses"];
     withoutHook: { checked: number; without: { sha: string; subject: string }[] };
     installedLocally: boolean;
+    /** The hook scope in force (`hook.runners`, `hook.exclude`); empty: the hook runs everything. */
+    scope: string[];
+    /** Selected test files left to CI by the scope across the recent runs. */
+    leftToCi: number;
   }> {
     const records = await loadHookRecords(this.storeDir);
     const recent = records.runs.slice(-30);
     return {
+      scope: describeScope(this.config.hook),
+      leftToCi: recent.reduce((n, r) => n + (r.leftToCi ?? 0), 0),
       runs: records.runs.length,
       medianMs: median(recent.map((r) => r.durationMs)),
       slowestMs: Math.max(0, ...recent.map((r) => r.durationMs)),
@@ -1469,6 +1510,23 @@ export class SmartTest {
         `Shard ${options.shard.index}/${options.shard.total}: ${mine.size} of ${all.length} selected test files run here; the others run in the other shards`,
       );
     }
+    // Hook scope: selected tests the hook does not run stay selected and are reported as left to
+    // CI with the rule that removed them; they are never passed and never dropped (§32.2).
+    const leftToCi = options.hookScope
+      ? outsideHookScope(
+          analysis.decision.selectedTests.map((t) => ({
+            file: t.filePath,
+            adapter: analysis.assignment.get(t.filePath)?.adapter,
+          })),
+          this.config.hook,
+        )
+      : [];
+    const leftFiles = new Set(leftToCi.map((l) => l.file));
+    const toRun = analysis.decision.selectedTests.filter((t) => !leftFiles.has(t.filePath));
+    if (leftToCi.length)
+      warnings.push(
+        `${leftToCi.length} selected test file(s) not run in the hook (left to CI) by ${[...new Set(leftToCi.map((l) => l.rule))].join(", ")} — \`smarttest run\` and \`smarttest ci\` run them`,
+      );
     // Validated result cache: a passing result is reused only while every input is unchanged.
     const history = await loadHistory(this.storeDir);
     const useCache = (options.cache ?? this.config.cache) && !options.all && !options.coverage;
@@ -1476,7 +1534,7 @@ export class SmartTest {
     const keys = useCache
       ? await this.resultKeys(
           analysis,
-          analysis.decision.selectedTests.map((t) => t.filePath),
+          toRun.map((t) => t.filePath),
           history,
         )
       : new Map<string, string>();
@@ -1503,13 +1561,10 @@ export class SmartTest {
     const cachedFiles = new Set(cachedExecutions.map((e) => e.file));
     // Fail-fast order: recent failures, then the tests closest to the change.
     const depthOf = new Map(
-      analysis.decision.selectedTests.map((t) => [
-        t.filePath,
-        Math.min(...t.reasons.map((r) => r.path?.length ?? 99), 99),
-      ]),
+      toRun.map((t) => [t.filePath, Math.min(...t.reasons.map((r) => r.path?.length ?? 99), 99)]),
     );
     const order = failFastOrder(
-      analysis.decision.selectedTests.map((t) => t.filePath).filter((f) => !cachedFiles.has(f)),
+      toRun.map((t) => t.filePath).filter((f) => !cachedFiles.has(f)),
       recentlyFailingFiles(history),
       (f) => depthOf.get(f) ?? 99,
     );
@@ -1631,6 +1686,7 @@ export class SmartTest {
       analysis.decision.skippedTests.length === 0 &&
       analysis.testFiles.length > 0 &&
       !cachedExecutions.length &&
+      !leftToCi.length &&
       !options.shard;
     await writeJson(statsPath, {
       analysisMs: adaptive
@@ -1655,7 +1711,8 @@ export class SmartTest {
       change: { description: analysis.input.description, changeSet: analysis.input.changeSet },
       decision: stripDetails(analysis.decision),
       executions,
-      summary: summarize(analysis.decision, executions, durationMs),
+      summary: summarize(analysis.decision, executions, durationMs, leftToCi.length),
+      ...(leftToCi.length ? { leftToCi } : {}),
       ...(coverage
         ? {
             coverage: {
@@ -1688,9 +1745,11 @@ export class SmartTest {
     await writeJson(join(this.storeDir, "runs", "latest.json"), report);
     await this.recordFlaky(report);
     const status = overallStatus(report);
-    // Advance the native baseline only after a fully passing run, so failures are never hidden.
+    // Advance the native baseline only after a fully passing run, so failures are never hidden;
+    // a run that left selected tests to CI did not verify the change.
     if (
       status === "passed" &&
+      !leftToCi.length &&
       (analysis.input.changeSet.provider === "native" ||
         (this.config.vcs.snapshots && !options.source))
     ) {
@@ -2030,6 +2089,16 @@ export class SmartTest {
   ): Promise<HookPlan> {
     const profile = await this.profile();
     return planHookInstall(this.root, { ...options, testCommands: profile.testCommands });
+  }
+
+  /**
+   * The hook scope to propose (`hook.runners`) when browser runners (Playwright, Cypress) sit next
+   * to a unit runner and no scope is configured; undefined otherwise.
+   */
+  async hookScopeSuggestion(): Promise<string[] | undefined> {
+    if (describeScope(this.config.hook).length) return undefined;
+    const roots = await this.runnerRoots();
+    return suggestHookRunners(roots.map((r) => r.adapter));
   }
 
   async hookUninstallPlan(
@@ -2597,6 +2666,24 @@ export class SmartTest {
               }
             : {}),
         });
+      if (history.scope.length)
+        out.push({
+          severity: "info",
+          check: "hook",
+          message: `hook scope: ${history.scope.join(", ")}; selected tests outside it are not run in the hook (left to CI)${history.leftToCi ? ` — ${history.leftToCi} in recent hook runs` : ""}`,
+          hint: "`smarttest run` and `smarttest ci` still run them; make sure CI does.",
+        });
+      else if (plans.some((p) => p?.installed)) {
+        const suggested = await this.hookScopeSuggestion();
+        if (suggested)
+          out.push({
+            severity: "info",
+            check: "hook",
+            message:
+              "the hook also runs browser end-to-end specs (Playwright/Cypress) when they are selected",
+            hint: `To leave them to CI, set \`hook: { runners: [${suggested.map((a) => `"${a}"`).join(", ")}] }\`; the hook then reports them as left to CI.`,
+          });
+      }
       if (history.bypasses.length)
         out.push({
           severity: "warn",
