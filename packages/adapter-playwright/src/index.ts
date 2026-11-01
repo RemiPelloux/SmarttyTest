@@ -3,7 +3,7 @@
  * Discovery uses `playwright test --list`; execution passes the selected spec files as filters
  * and reads the JSON reporter. Traces, screenshots and videos are attached to the results.
  */
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { isAbsolute, join, relative } from "node:path";
 import { resolvePackageBin } from "@smarttest/plugin-sdk";
@@ -20,11 +20,29 @@ import {
   type TestSelection,
   type TestStatus,
 } from "@smarttest/shared";
+import { BROWSER_COVERAGE_ENV } from "./coverage.js";
+
+export {
+  BROWSER_COVERAGE_ENV,
+  coveragePageFixture,
+  type ExtendableTest,
+  withBrowserCoverage,
+} from "./coverage.js";
 
 export interface PlaywrightAdapterOptions {
   projectRoot: string;
   cwd: string;
   configFile?: string;
+  /**
+   * Where browser coverage goes on a coverage run. Chromium V8 dumps are written to `<dir>/v8` by
+   * the `withBrowserCoverage` page fixture, which the project's tests must use.
+   */
+  coverageDir?: string;
+}
+
+/** The directory the coverage fixture writes to on a coverage run. */
+export function browserCoverageDir(coverageDir: string): string {
+  return join(coverageDir, "v8");
 }
 
 interface PwResult {
@@ -123,7 +141,8 @@ export class PlaywrightAdapter implements TestAdapter {
       discovery: true,
       fileSelection: true,
       testCaseSelection: false,
-      coverage: false,
+      // Chromium only, and only when the tests use the withBrowserCoverage page fixture.
+      coverage: "partial",
       tracing: true,
       parallel: true,
       cancellation: true,
@@ -212,11 +231,24 @@ export class PlaywrightAdapter implements TestAdapter {
     return files.map((f) => ({ id: f, filePath: f, suitePath: [], name: f, tags: ["e2e"] }));
   }
 
+  /**
+   * On a coverage run, an emptied dump directory and the variable that turns the page fixture on.
+   * Dumps from an earlier run must never be read as this run's coverage.
+   */
+  async coverageEnv(options: ExecutionOptions): Promise<Record<string, string>> {
+    if (!options.coverage || !this.options.coverageDir) return {};
+    const dir = browserCoverageDir(this.options.coverageDir);
+    await rm(dir, { recursive: true, force: true });
+    await mkdir(dir, { recursive: true });
+    return { [BROWSER_COVERAGE_ENV]: dir };
+  }
+
   async execute(selection: TestSelection, options: ExecutionOptions): Promise<TestRunResult> {
     const startedAt = new Date().toISOString();
     const filters = selection.files.map((f) =>
       escapeRe(relative(this.options.cwd, join(this.options.projectRoot, f)).split("\\").join("/")),
     );
+    const env = { ...(options.env ?? {}), ...(await this.coverageEnv(options)) };
     const { res, report } = await this.report(
       [
         ...filters,
@@ -226,7 +258,7 @@ export class PlaywrightAdapter implements TestAdapter {
       {
         ...(options.timeoutMs ? { timeoutMs: options.timeoutMs } : {}),
         ...(options.signal ? { signal: options.signal } : {}),
-        ...(options.env ? { env: options.env } : {}),
+        ...(Object.keys(env).length ? { env } : {}),
       },
     );
     const executions = report

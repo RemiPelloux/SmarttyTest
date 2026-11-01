@@ -342,6 +342,40 @@ export interface StudioSourceUnit {
   observedBy: string[];
 }
 
+/**
+ * Line and branch coverage a coverage run observed for one file, from one origin. Runner coverage
+ * (istanbul JSON written by Vitest or Jest) and browser coverage (Chromium V8 through the
+ * Playwright fixture) are separate measurements and are never merged.
+ */
+export interface StudioSourceCoverage {
+  origin: "istanbul" | "browser-v8";
+  /** `selected`: only the selected tests ran, so this is not whole-project coverage. */
+  scope: "full" | "selected";
+  runId: string;
+  collectedAt: string;
+  /**
+   * `current`: the file is byte for byte the one measured. `stale`: it changed since, so no line
+   * is marked. `absent`: the run's report has no entry for this file (no test in that run loaded
+   * it). `unverified`: the file is too large to compare, so no line is marked.
+   */
+  state: "current" | "stale" | "absent" | "unverified";
+  /** Lines holding code, with how often they ran. Empty unless `current`. */
+  lines: { n: number; hits: number }[];
+  /** One entry per branch point: arms that ran out of all arms. Empty unless `current`. */
+  branches: { line: number; type: string; covered: number; total: number }[];
+  /** The current change's lines, measured against this coverage. Null unless `current`. */
+  changed: {
+    lines: number;
+    covered: number;
+    uncovered: number;
+    /** Changed lines with no statement in the measurement (blank, comment, type-only). */
+    notMeasured: number;
+    branches: number;
+    branchesCovered: number;
+  } | null;
+  note: string;
+}
+
 export interface StudioSource {
   schemaVersion: number;
   path: string;
@@ -352,7 +386,81 @@ export interface StudioSource {
   changedLines: number[];
   units: StudioSourceUnit[];
   traces: { fresh: number; stale: number; missing: number; collectedAt: string | null } | null;
+  /** Observed line coverage per origin that has a recorded coverage run. */
+  coverage: StudioSourceCoverage[];
   note: string | null;
+}
+
+/** Graph edge kinds, plus the kinds Studio gives hops and reasons the graph stores no edge for. */
+export type StudioMapEdgeKind =
+  | "IMPORTS"
+  | "EXPORTS"
+  | "CALLS"
+  | "REFERENCES"
+  | "EXTENDS"
+  | "IMPLEMENTS"
+  | "INSTANTIATES"
+  | "DEPENDS_ON"
+  | "TESTS"
+  | "COVERS"
+  | "OBSERVED_EXECUTION"
+  | "CONFIGURES"
+  | "CONTAINS"
+  | "RULE"
+  | "TRIGGER"
+  | "FALLBACK"
+  | "UNCERTAINTY"
+  | "TEST_CHANGED"
+  | "MODIFIED"
+  | "UNCLASSIFIED";
+
+export interface StudioMapNode {
+  /** The traversal's label: `file`, `file#Unit`, or `@reason` for evidence without a graph node. */
+  id: string;
+  label: string;
+  file: string | null;
+  unit: string | null;
+  role: "changed" | "affected" | "test" | "evidence";
+  unprotected: boolean;
+}
+
+export interface StudioMapEdge {
+  id: string;
+  from: string;
+  to: string;
+  kind: StudioMapEdgeKind;
+  confidence: string | null;
+  /** Selected test files whose path uses this edge. */
+  tests: string[];
+}
+
+export interface StudioMapPath {
+  test: string;
+  origin: string;
+  originFile: string | null;
+  reasonKind: string;
+  message: string;
+  confidence: string | null;
+  nodes: string[];
+  edges: string[];
+  edgeKinds: StudioMapEdgeKind[];
+}
+
+export interface StudioImpactMap {
+  schemaVersion: number;
+  generatedAt: string;
+  change: string;
+  nodes: StudioMapNode[];
+  edges: StudioMapEdge[];
+  paths: StudioMapPath[];
+  changed: { id: string; file: string; unit: string | null }[];
+  /** Changed units no selected test's path starts from. */
+  unreached: { id: string; file: string; unit: string | null; unprotected: boolean }[];
+  edgeKinds: StudioMapEdgeKind[];
+  confidences: string[];
+  /** Selection reasons in the analysis; `paths` holds at most a fixed number of them. */
+  totalPaths: number;
+  truncated: boolean;
 }
 
 export interface StudioFileIndex {

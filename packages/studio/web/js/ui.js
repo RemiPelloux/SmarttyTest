@@ -410,6 +410,8 @@ export function segmented({ items, active, onSelect, label: ariaLabel }) {
         {
           class: "seg__btn",
           type: "button",
+          // A focus key lets a re-render put keyboard focus back on the pressed button.
+          "data-fk": `seg:${ariaLabel}:${item.id}`,
           "aria-pressed": String(item.id === active),
           onClick: () => onSelect(item.id),
         },

@@ -5,9 +5,10 @@
  * read the same `Analysis`, so a number on one screen always matches the rows on another. Nothing
  * is recomputed per request and nothing is invented when data is missing.
  */
+import { createHash } from "node:crypto";
 import { open, realpath } from "node:fs/promises";
 import { join, resolve, sep } from "node:path";
-import type { Analysis, FlakyEntry, SmartTest } from "@smarttest/core";
+import type { Analysis, FlakyEntry, LineCoverageReport, SmartTest } from "@smarttest/core";
 import type { ProjectProfile } from "@smarttest/project-detector";
 import type { RunReport, RunSummary } from "@smarttest/report-engine";
 import { mapLimit, readJson, type SafetyMode } from "@smarttest/shared";
@@ -25,6 +26,7 @@ import type {
   StudioRunVerdict,
   StudioSelectionReason,
   StudioSource,
+  StudioSourceCoverage,
   StudioSourceUnit,
   StudioTestRow,
   StudioTests,
@@ -50,7 +52,16 @@ export interface Snapshot {
   observed: Map<string, Set<string>>;
   diffs: Map<string, LineDiff>;
   coverage: { runAt: string; summary: RunReport["coverage"] } | null;
+  /** Line detail of the last coverage run of each origin, read with the last run. */
+  lineCoverage: LineCoverageSet;
 }
+
+export interface LineCoverageSet {
+  istanbul: LineCoverageReport | undefined;
+  browser: LineCoverageReport | undefined;
+}
+
+export const NO_LINE_COVERAGE: LineCoverageSet = { istanbul: undefined, browser: undefined };
 
 /** One `smarttest.config.ts` mode, shown wherever a decision is explained. */
 export function projectOf(st: SmartTest, profile: ProjectProfile): StudioProject {
@@ -232,6 +243,7 @@ export async function buildSnapshot(
   view: TraceViewLike | undefined,
   coverage: Snapshot["coverage"],
   analysed?: Analysis,
+  lineCoverage: LineCoverageSet = NO_LINE_COVERAGE,
 ): Promise<Snapshot> {
   const started = performance.now();
   const profile = await st.profile();
@@ -336,6 +348,91 @@ export async function buildSnapshot(
     observed: observedIndex(analysis, view),
     diffs,
     coverage,
+    lineCoverage,
+  };
+}
+
+/**
+ * One origin's observed coverage of one file. Lines are marked only when the file on disk is
+ * byte for byte the file that was measured; otherwise the state says why nothing is marked.
+ */
+export function sourceCoverageOf(
+  report: LineCoverageReport,
+  path: string,
+  text: string,
+  truncated: boolean,
+  changedLines: readonly number[],
+): StudioSourceCoverage {
+  const base = {
+    origin: report.origin,
+    scope: report.scope,
+    runId: report.runId,
+    collectedAt: report.collectedAt,
+    lines: [] as StudioSourceCoverage["lines"],
+    branches: [] as StudioSourceCoverage["branches"],
+    changed: null,
+  };
+  const scopeNote =
+    report.scope === "full" ? "full suite" : "selected tests only, not whole-project coverage";
+  const what = report.origin === "browser-v8" ? "Browser (Chromium V8)" : "Runner";
+  const lower = report.origin === "browser-v8" ? "browser (Chromium V8)" : "runner";
+  const entry = report.files[path];
+  if (!entry)
+    return {
+      ...base,
+      state: "absent",
+      note: `${what} coverage of run ${report.runId} (${scopeNote}) has no entry for this file: no test in that run loaded it. That is not a measurement of its lines.`,
+    };
+  if (truncated)
+    return {
+      ...base,
+      state: "unverified",
+      note: `${what} coverage exists for this file, but it is too large to check against the measured version, so no line is marked.`,
+    };
+  const sha = createHash("sha256").update(text).digest("hex");
+  if (!entry.sha256 || entry.sha256 !== sha)
+    return {
+      ...base,
+      state: "stale",
+      note: `This file changed after ${lower} coverage was collected (run ${report.runId}), so its line numbers no longer match and no line is marked. Run with coverage again.`,
+    };
+  const lines = entry.lines
+    .filter(([n]) => Number.isInteger(n) && n >= 1)
+    .map(([n, hits]) => ({ n, hits: Math.max(0, Number(hits) || 0) }));
+  const byLine = new Map(lines.map((l) => [l.n, l.hits]));
+  const branches = entry.branches.map((b) => ({
+    line: b.line,
+    type: b.type,
+    covered: b.arms.filter((n) => n > 0).length,
+    total: b.arms.length,
+  }));
+  const changedSet = new Set(changedLines);
+  let covered = 0;
+  let uncovered = 0;
+  let notMeasured = 0;
+  for (const n of changedSet) {
+    const hits = byLine.get(n);
+    if (hits === undefined) notMeasured++;
+    else if (hits > 0) covered++;
+    else uncovered++;
+  }
+  const changedBranches = branches.filter((b) => changedSet.has(b.line));
+  return {
+    ...base,
+    state: "current",
+    lines,
+    branches,
+    changed: changedSet.size
+      ? {
+          lines: changedSet.size,
+          covered,
+          uncovered,
+          notMeasured,
+          branches: changedBranches.reduce((n, b) => n + b.total, 0),
+          branchesCovered: changedBranches.reduce((n, b) => n + b.covered, 0),
+        }
+      : null,
+    note: `Observed ${lower} coverage from run ${report.runId} (${scopeNote}). A line marked covered ran at least once in that run; it says nothing about whether a test checked its result.${report.origin === "browser-v8" ? " V8 has no statement map: lines are read from block ranges, and branches are V8 blocks." : ""}`,
   };
 }
 
@@ -746,6 +843,7 @@ export async function sourceOf(
       changedLines: [],
       units: [],
       traces: null,
+      coverage: [],
       note:
         changed?.type === "deleted" ? "Deleted by the current change." : "File is not readable.",
     };
@@ -787,6 +885,10 @@ export async function sourceOf(
   }
   // The snapshot's trace counts cover the same tests with the same rules; reuse them.
   const traces = snapshot.impact.traces;
+  const sortedChanged = [...changedLines].sort((a, b) => a - b);
+  const coverage = [snapshot.lineCoverage.istanbul, snapshot.lineCoverage.browser]
+    .filter((report): report is LineCoverageReport => Boolean(report))
+    .map((report) => sourceCoverageOf(report, path, file.text, truncated, sortedChanged));
   return {
     schemaVersion: 1,
     path,
@@ -794,8 +896,9 @@ export async function sourceOf(
       index?.language ?? (path.endsWith(".ts") || path.endsWith(".tsx") ? "typescript" : "unknown"),
     exists: true,
     lines,
-    changedLines: [...changedLines].sort((a, b) => a - b),
+    changedLines: sortedChanged,
     units,
+    coverage,
     traces: traces.available
       ? {
           fresh: traces.fresh,

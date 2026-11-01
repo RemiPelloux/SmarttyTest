@@ -14,7 +14,13 @@ import {
   loadConfig,
   type ResolvedConfig,
 } from "@smarttest/config";
-import { type CoverageReport, ingestIstanbul } from "@smarttest/coverage-engine";
+import {
+  type CoverageReport,
+  ingestBrowserV8,
+  ingestIstanbul,
+  ingestIstanbulLines,
+  type LineCoverageReport,
+} from "@smarttest/coverage-engine";
 import { DependencyGraph, nextRoutes } from "@smarttest/dependency-graph";
 import { decideImpact, explainTest, type ImpactResult } from "@smarttest/impact-engine";
 import { javascriptAnalyzer } from "@smarttest/language-javascript";
@@ -1537,6 +1543,7 @@ export class SmartTest {
         ? Math.max(1, Math.floor((cpus - 1) / Math.min(concurrency, plan.groups.length)))
         : undefined);
     const coverageDirs: string[] = [];
+    const browserCoverageDirs: string[] = [];
     const summary = await timed(timings, "test execution", () =>
       executeGroups(plan.groups, {
         concurrency,
@@ -1545,6 +1552,8 @@ export class SmartTest {
         createAdapter: (g) => {
           const dir = options.coverage ? this.coverageDirFor(g) : undefined;
           if (dir) coverageDirs.push(join(dir, "coverage-final.json"));
+          // The Playwright coverage fixture writes Chromium's V8 coverage here.
+          if (dir && g.adapter === "playwright") browserCoverageDirs.push(join(dir, "v8"));
           return this.createAdapter(g, dir);
         },
         timeoutMs: options.timeoutMs ?? this.config.timeoutMs,
@@ -1573,13 +1582,30 @@ export class SmartTest {
     }
     let coverage: CoverageReport | undefined;
     if (options.coverage) {
-      coverage = await timed(timings, "coverage", () =>
-        ingestIstanbul(coverageDirs, this.root, options.all ? "full" : "selected", runId),
+      const scope = options.all ? "full" : "selected";
+      const [summaryReport, lines, browser] = await timed(timings, "coverage", () =>
+        Promise.all([
+          ingestIstanbul(coverageDirs, this.root, scope, runId),
+          ingestIstanbulLines(coverageDirs, this.root, scope, runId),
+          browserCoverageDirs.length
+            ? ingestBrowserV8(browserCoverageDirs, this.root, scope, runId)
+            : Promise.resolve(undefined),
+        ]),
       );
+      coverage = summaryReport;
+      // Line detail of each origin is replaced only by a run that measured that origin; each file
+      // names its run, scope and time, and readers check file hashes before showing lines.
       if (coverage) await writeJson(join(this.storeDir, "runs", "coverage.json"), coverage);
-      else
+      if (lines) await writeJson(join(this.storeDir, "runs", "coverage-lines.json"), lines);
+      if (browser)
+        await writeJson(join(this.storeDir, "runs", "browser-coverage-lines.json"), browser);
+      if (!coverage && !browser)
         warnings.push(
           "Coverage was requested but no coverage report was produced — is a coverage provider installed?",
+        );
+      else if (browser && !coverage)
+        warnings.push(
+          "Only browser coverage was recorded (Playwright, Chromium): it is kept apart from runner coverage and has no summary percentage",
         );
     }
     const executions: FileExecution[] = [
@@ -1744,6 +1770,23 @@ export class SmartTest {
 
   async coverage(): Promise<CoverageReport | undefined> {
     return readJson<CoverageReport>(join(this.storeDir, "runs", "coverage.json"));
+  }
+
+  /**
+   * Line and branch detail of the last coverage run of each origin: runner istanbul output and
+   * browser V8 coverage (Playwright fixture). The two are separate measurements, never merged.
+   */
+  async lineCoverage(): Promise<{
+    istanbul: LineCoverageReport | undefined;
+    browser: LineCoverageReport | undefined;
+  }> {
+    const [istanbul, browser] = await Promise.all([
+      readJson<LineCoverageReport>(join(this.storeDir, "runs", "coverage-lines.json")),
+      readJson<LineCoverageReport>(join(this.storeDir, "runs", "browser-coverage-lines.json")),
+    ]);
+    const valid = (r: LineCoverageReport | undefined) =>
+      r && r.schemaVersion === 1 && r.files && typeof r.files === "object" ? r : undefined;
+    return { istanbul: valid(istanbul), browser: valid(browser) };
   }
 
   // ── Explain & graph ─────────────────────────────────────────────────────────────────────

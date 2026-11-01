@@ -108,6 +108,8 @@ export class VitestAdapter implements TestAdapter {
         ? [
             "--coverage.enabled=true",
             "--coverage.reporter=json",
+            // A failing test still ran code: record what it observed (Jest does by default).
+            "--coverage.reportOnFailure=true",
             `--coverage.reportsDirectory=${this.options.coverageDir}`,
           ]
         : []),
