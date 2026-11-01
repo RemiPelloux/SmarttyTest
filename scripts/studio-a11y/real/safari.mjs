@@ -16,11 +16,12 @@
  * --browser=chrome runs the same WebDriver checks in Chrome, to work on this script off a Mac.
  * Exit code 0 when every gated check passes, 1 when one fails, 2 when the check itself broke.
  */
+import { execFile } from "node:child_process";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { parseArgs } from "node:util";
+import { parseArgs, promisify } from "node:util";
 import { Builder, Key } from "selenium-webdriver";
 import chrome from "selenium-webdriver/chrome.js";
 import { pageHelpers } from "../page-helpers.mjs";
@@ -36,6 +37,19 @@ const { values: args } = parseArgs({
 const OUT = resolve(args.out);
 const AXE = await readFile(createRequire(import.meta.url).resolve("axe-core/axe.min.js"), "utf8");
 const sleep = (ms) => new Promise((done) => setTimeout(done, ms));
+const osa = promisify(execFile);
+
+/**
+ * Brings Safari to the front (macOS only). Keys sent through WebDriver reach the page either
+ * way, but WebKit restyles :focus reliably only for an active window.
+ */
+async function activateSafari() {
+  if (process.platform !== "darwin" || args.browser !== "safari") return;
+  await osa("osascript", ["-e", 'tell application "Safari" to activate']).catch((error) =>
+    console.log(`osascript activate failed: ${error.message}`),
+  );
+  await sleep(300);
+}
 
 const failures = [];
 const advisories = [];
@@ -141,6 +155,7 @@ class Session {
   async skipLink() {
     for (const option of [false, true]) {
       await this.open(SCREENS[0]);
+      await activateSafari();
       this.option = option;
       await this.tab();
       const info = await this.focusInfo();
@@ -165,6 +180,7 @@ class Session {
 
   /** Presses Tab until focus wraps; every control must be reached, visibly, without a trap. */
   async walk(state, { max = 260, within = null } = {}) {
+    await activateSafari();
     const expected = await this.page(() => window.__a11y.expected());
     const stops = [];
     let first = null;
@@ -197,15 +213,29 @@ class Session {
         fail(state, "focus-visible", `${info.desc} does not match :focus-visible`);
       // As in ../audit.mjs: WebKit can apply :focus styles (the skip link's move on screen) a
       // little late, so an entirely hidden stop is measured again before it counts.
+      // Under automation Safari's window can also lose its active state, and WebKit then stops
+      // restyling for focus: bring Safari to the front before measuring again.
       let obscured = info;
       for (let retry = 0; retry < 4 && obscured.obscured === "entirely"; retry++) {
+        if (retry === 1) await activateSafari();
         await sleep(200);
         obscured = await this.focusInfo();
       }
       if (obscured.obscured === "entirely" && obscured.obscuredBy !== "run drawer") {
         const where = await this.page(() => {
-          const r = document.activeElement.getBoundingClientRect();
-          return `rect ${Math.round(r.left)},${Math.round(r.top)} ${Math.round(r.width)}x${Math.round(r.height)}, scrollY ${Math.round(scrollY)}, viewport ${innerWidth}x${innerHeight}`;
+          const el = document.activeElement;
+          const r = el.getBoundingClientRect();
+          const cs = getComputedStyle(el);
+          return [
+            `rect ${Math.round(r.left)},${Math.round(r.top)} ${Math.round(r.width)}x${Math.round(r.height)}`,
+            `scrollY ${Math.round(scrollY)}`,
+            `viewport ${innerWidth}x${innerHeight}`,
+            `hasFocus ${document.hasFocus()}`,
+            `:focus ${el.matches(":focus")}`,
+            `:focus-visible ${el.matches(":focus-visible")}`,
+            `computed ${cs.position} left ${cs.left}`,
+            `visibility ${document.visibilityState}`,
+          ].join(", ");
         });
         fail(
           state,

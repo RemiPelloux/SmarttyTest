@@ -147,11 +147,19 @@ async function openBrowser(url) {
 
 // ── Steps ───────────────────────────────────────────────────────────────────────────────────
 
+/**
+ * Presses a key in the browser. On macOS, Guidepup's VoiceOver commands bring the VoiceOver app
+ * to the front, and a plain press then goes to VoiceOver instead of the page: name Safari.
+ */
+function key(name) {
+  return MAC ? sr.press(name, { application: "Safari" }) : sr.press(name);
+}
+
 /** Presses Tab (or Shift+Tab) until the spoken phrase matches `pattern`. */
 async function tabTo(pattern, { back = false, max = 40 } = {}) {
   for (let i = 0; i < max; i++) {
     const before = spoken.length;
-    await command(() => sr.press(back ? "Shift+Tab" : "Tab"));
+    await command(() => key(back ? "Shift+Tab" : "Tab"));
     if (heardSince(before).some((t) => pattern.test(t))) return true;
   }
   return false;
@@ -206,28 +214,34 @@ async function main() {
     browser = await openBrowser(studio.url("/overview", { theme: "dark" }));
     await poll(8000);
     // Put keyboard focus (and with it the reader's cursor) in the page.
-    await command(() => sr.press("Tab"));
+    await command(() => key("Tab"));
 
+    // Landmarks until main, then headings from the start of main (the reader's cursor never
+    // goes back, so walking every landmark first would start the heading walk past the h1),
+    // then the remaining landmarks.
     step = "landmarks";
     let mark = spoken.length;
-    for (let i = 0; i < 8; i++) await command(() => sr.nextLandmark());
+    for (let i = 0; i < 6 && !heardSince(mark).some((t) => /\bmain\b/i.test(t)); i++)
+      await command(() => sr.nextLandmark());
+    step = "headings";
+    const headingMark = spoken.length;
+    for (let i = 0; i < 6; i++) await command(() => sr.nextHeading());
+    const headingPhrases = heardSince(headingMark);
+    const headings = headingPhrases.join(" | ");
+    step = "landmarks";
+    for (let i = 0; i < 3; i++) await command(() => sr.nextLandmark());
     const landmarks = heardSince(mark).join(" | ");
     if (!/navigation/i.test(landmarks)) fail("landmarks", `no navigation landmark: ${landmarks}`);
     if (!/\bmain\b/i.test(landmarks)) fail("landmarks", `no main landmark: ${landmarks}`);
-
-    step = "headings";
-    mark = spoken.length;
-    for (let i = 0; i < 6; i++) await command(() => sr.nextHeading());
-    const headings = heardSince(mark).join(" | ");
-    if (!/heading/i.test(headings) || !/Overview/.test(headings))
-      fail("headings", `the Overview heading is not spoken: ${headings}`);
+    if (!headingPhrases.some((t) => /level 1\b/i.test(t) && /Overview/.test(t)))
+      fail("headings", `the Overview h1 is not spoken: ${headings}`);
 
     step = "run";
     if (!(await tabTo(/Run affected/i))) {
       fail("run", "Tab never reaches the Run affected button");
     } else {
       mark = spoken.length;
-      await command(() => sr.press("Enter"));
+      await command(() => key("Enter"));
       const verdict = /Run (passed|finished|hit)|No test|Nothing to run/;
       await poll(180_000, () => heardSince(mark).some((t) => verdict.test(t)));
       await poll(2000);
@@ -250,7 +264,7 @@ async function main() {
         fail("results", `reading the run drawer never speaks the failing test: ${results}`);
 
       step = "close-run";
-      await command(() => sr.press("Escape"));
+      await command(() => key("Escape"));
       await poll(1500);
     }
 
@@ -259,7 +273,7 @@ async function main() {
       fail("navigation", "Shift+Tab never reaches the Tests screen button");
     } else {
       mark = spoken.length;
-      await command(() => sr.press("Enter"));
+      await command(() => key("Enter"));
       await poll(3000);
       for (let i = 0; i < 4; i++) await command(() => sr.nextHeading());
       const said = heardSince(mark).join(" | ");
