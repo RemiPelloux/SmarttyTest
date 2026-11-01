@@ -119,6 +119,11 @@ export function ruleMatches(rule: Rule, target: RuleTarget): boolean {
 export class RulesEngine {
   constructor(readonly rules: readonly Rule[]) {}
 
+  /** Whether any rule selects by symbol (class, method, decorator…); otherwise a file's path decides. */
+  needsSymbols(): boolean {
+    return this.rules.some(needsSymbol);
+  }
+
   match(target: RuleTarget): RuleMatch[] {
     return this.rules
       .map((rule, index) => ({ rule, index, specificity: selectorSpecificity(rule) }))

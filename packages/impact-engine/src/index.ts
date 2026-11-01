@@ -108,11 +108,28 @@ const stripModuleExt = (path: string) => path.replace(/\.(?:[cm]?[jt]sx?|json)$/
 export function decideImpact(input: ImpactInput): ImpactResult {
   const { changeSet, graph, isTest } = input;
   const selected = new Map<string, SelectionReason[]>();
-  const select = (test: string, reason: SelectionReason) => {
-    const list = selected.get(test) ?? [];
-    if (!list.some((r) => r.kind === reason.kind && r.message === reason.message))
-      list.push(reason);
-    selected.set(test, list);
+  /** Per selected test: `kind\0message` of its reasons and the rule names among them. */
+  const reasonKeys = new Map<string, { keys: Set<string>; rules: Set<string> }>();
+  /** Adds a reason to a test, selecting it; `dedupe` skips a reason of the same kind and message. */
+  const addReason = (test: string, reason: SelectionReason, dedupe: boolean) => {
+    let list = selected.get(test);
+    let seen = reasonKeys.get(test);
+    if (!list || !seen) {
+      list = [];
+      seen = { keys: new Set(), rules: new Set() };
+      selected.set(test, list);
+      reasonKeys.set(test, seen);
+    }
+    const k = `${reason.kind}\0${reason.message}`;
+    if (dedupe && seen.keys.has(k)) return;
+    seen.keys.add(k);
+    if (reason.ruleName !== undefined) seen.rules.add(reason.ruleName);
+    list.push(reason);
+  };
+  const select = (test: string, reason: SelectionReason) => addReason(test, reason, true);
+  const unselect = (test: string) => {
+    selected.delete(test);
+    reasonKeys.delete(test);
   };
   const warnings = [...changeSet.warnings];
   const reasons: SelectionReason[] = [];
@@ -158,10 +175,8 @@ export function decideImpact(input: ImpactInput): ImpactResult {
   const selectScope = (scope: string, reason: SelectionReason) => {
     if (scope === "") return selectAll(reason);
     reasons.push(reason);
-    for (const t of allTests) {
-      if (inDir(t, scope) || [...graph.dependenciesOf(t)].some((d) => inDir(d, scope)))
-        select(t, reason);
-    }
+    const users = graph.filesDependingOn((d) => inDir(d, scope));
+    for (const t of allTests) if (inDir(t, scope) || users.has(t)) select(t, reason);
   };
   /**
    * Files whose imports name a path, read from the import specifiers rather than from resolution:
@@ -216,10 +231,15 @@ export function decideImpact(input: ImpactInput): ImpactResult {
   const runnerInputFiles = new Set<string>();
   const narrowed = new Set<string>();
   const known = new Set(allTests);
+  const hitsByFile = new Map<string, RunnerHit[]>();
+  for (const hit of input.runnerInputs ?? []) {
+    const list = hitsByFile.get(hit.file);
+    if (list) list.push(hit);
+    else hitsByFile.set(hit.file, [hit]);
+  }
   for (const change of changeSet.changes) {
     for (const path of [change.path, change.previousPath].filter((p): p is string => !!p)) {
-      for (const hit of input.runnerInputs ?? []) {
-        if (hit.file !== path) continue;
+      for (const hit of hitsByFile.get(path) ?? []) {
         const tests = hit.tests.filter((t) => known.has(t));
         if (!tests.length) continue;
         runnerInputFiles.add(path);
@@ -268,14 +288,39 @@ export function decideImpact(input: ImpactInput): ImpactResult {
   }
 
   // 3. Seeds from changed files.
+  /** Analysed files matching each generated-output glob (computed once per glob). */
+  const generatedOutputs = new Map<string, string[]>();
+  const outputsOf = (glob: string): string[] => {
+    let list = generatedOutputs.get(glob);
+    if (!list) {
+      list = [...input.files.keys()].filter((f) => matchGlob(f, glob));
+      generatedOutputs.set(glob, list);
+    }
+    return list;
+  };
+  /** Analysed files by path without a module extension, in analysis order (for manual mocks). */
+  let byStem: Map<string, string[]> | undefined;
+  const filesByStem = (): Map<string, string[]> => {
+    if (!byStem) {
+      byStem = new Map();
+      for (const f of input.files.keys()) {
+        const k = f.replace(/\.[cm]?[jt]sx?$/, "");
+        const list = byStem.get(k);
+        if (list) list.push(f);
+        else byStem.set(k, [f]);
+      }
+    }
+    return byStem;
+  };
+  const triggerFiles = new Set(details.triggers.map((t) => t.file));
   for (const change of changeSet.changes) {
     const path = change.path;
-    if (details.triggers.some((t) => t.file === path) || resourceSeeded.has(path)) continue;
+    if (triggerFiles.has(path) || resourceSeeded.has(path)) continue;
     // Generated outputs: a generator input change stands for its outputs (rebuild required).
     const gens = (input.generated ?? []).filter((g) => g.from.some((f) => matchGlob(path, f)));
     if (gens.length) {
       for (const g of gens) {
-        const outputs = [...input.files.keys()].filter((f) => matchGlob(f, g.path));
+        const outputs = outputsOf(g.path);
         warnings.push(
           `${path} changed: regenerate ${g.path} before running tests (rebuild-required)`,
         );
@@ -325,7 +370,7 @@ export function decideImpact(input: ImpactInput): ImpactResult {
     const snap = /^(.*\/)?__snapshots__\/(.+)\.snap$/.exec(path);
     if (snap) {
       const test = `${snap[1] ?? ""}${snap[2]}`;
-      if (allTests.includes(test))
+      if (known.has(test))
         select(test, { kind: "test-file-changed", message: `Snapshot ${path} changed` });
       else details.ignored.push(`${path} (snapshot of an unknown test)`);
       continue;
@@ -334,9 +379,9 @@ export function decideImpact(input: ImpactInput): ImpactResult {
     if (mock) {
       const dir = mock[1] ?? "";
       const stem = (mock[2] as string).replace(/\.[cm]?[jt]sx?$/, "");
-      const real = [...input.files.keys()].find(
-        (f) => f.replace(/\.[cm]?[jt]sx?$/, "") === (dir ? `${dir}/${stem}` : stem) && !isTest(f),
-      );
+      const real = filesByStem()
+        .get(dir ? `${dir}/${stem}` : stem)
+        ?.find((f) => !isTest(f));
       if (real) details.seeds.push({ file: real, units: ["*"] });
       else
         selectScope(dir, {
@@ -495,70 +540,105 @@ export function decideImpact(input: ImpactInput): ImpactResult {
     }
   }
 
-  // 5. Rules: risk, mode upgrades, always-run.
+  // 5. Rules: risk, mode upgrades, always-run. Each affected file is evaluated in order (mode
+  // upgrades name the first file that raises the mode); an always-run rule selects the same tests
+  // wherever it matches, so it runs once, and "Matched rule" reasons go to the tests whose path
+  // starts with the file, found through an index of path origins instead of every selected test.
   const affectedFiles = [...traversal.affectedFiles].filter((f) => !isTest(f)).sort();
-  for (const file of affectedFiles) {
-    const a = input.files.get(file);
-    const pkg = input.packageOf?.(file);
-    const targets = [
-      { path: file, ...(pkg ? { package: pkg } : {}) },
-      ...(a
-        ? a.symbols.map((s) => ({
-            path: file,
-            ...(pkg ? { package: pkg } : {}),
-            symbol: {
-              name: s.name,
-              qualifiedName: s.qualifiedName,
-              kind: s.kind,
-              decorators: s.decorators,
-              ...(s.visibility ? { visibility: s.visibility } : {}),
-              ...(s.parent ? { parent: s.parent } : {}),
-              ...(s.extends ? { extends: s.extends } : {}),
-              ...(s.implements ? { implements: s.implements } : {}),
-            },
-          }))
-        : []),
-    ];
-    const policy = input.rules.evaluateAll(targets);
-    if (policy.mode) {
-      const next = strictestMode(mode, policy.mode);
-      if (next !== mode) {
-        reasons.push({
-          kind: "rule-match",
-          message: `Mode upgraded to ${next} by rule(s) ${policy.matched.map((m) => m.rule.name).join(", ")} (${file})`,
-        });
-        mode = next;
+  if (input.rules.rules.length) {
+    const withSymbols = input.rules.needsSymbols();
+    const byOrigin = new Map<string, Set<string>>();
+    for (const [t, rs] of selected)
+      for (const r of rs) {
+        const origin = r.path?.[0];
+        if (origin === undefined) continue;
+        const set = byOrigin.get(origin);
+        if (set) set.add(t);
+        else byOrigin.set(origin, new Set([t]));
       }
-    }
-    for (const m of policy.matched) {
-      if (!m.rule.execution?.alwaysRunOnAffected) continue;
-      for (const t of allTests) {
-        const deps = graph.dependenciesOf(t);
-        const touches =
-          [...deps].some((d) => matchesRuleScope(m.rule.match.path, d)) ||
-          (m.rule.match.path ? matchGlob(t, m.rule.match.path) : false);
-        if (touches)
-          select(t, {
-            kind: "rule-match",
-            message: `Rule "${m.rule.name}" always runs its tests when its scope is affected`,
-            ruleName: m.rule.name,
-          });
+    const origins = [...byOrigin.keys()].sort();
+    /** Tests with a reason whose path starts with `prefix` (sorted origins share a range). */
+    const testsWithOrigin = (prefix: string): Set<string> => {
+      let lo = 0;
+      let hi = origins.length;
+      while (lo < hi) {
+        const mid = (lo + hi) >>> 1;
+        if ((origins[mid] as string) < prefix) lo = mid + 1;
+        else hi = mid;
       }
-    }
-    for (const m of policy.matched) {
-      for (const t of selected.keys()) {
-        const sel = selected.get(t);
-        if (
-          sel?.some((r) => r.path?.[0]?.startsWith(file)) &&
-          !sel.some((r) => r.ruleName === m.rule.name)
-        ) {
-          sel.push({
+      const out = new Set<string>();
+      for (let i = lo; i < origins.length && (origins[i] as string).startsWith(prefix); i++)
+        for (const t of byOrigin.get(origins[i] as string) ?? []) out.add(t);
+      return out;
+    };
+    const alwaysRan = new Set<string>();
+    for (const file of affectedFiles) {
+      const a = input.files.get(file);
+      const pkg = input.packageOf?.(file);
+      // Without a symbol selector, a symbol target matches exactly when its file target does.
+      const targets = [
+        { path: file, ...(pkg ? { package: pkg } : {}) },
+        ...(a && withSymbols
+          ? a.symbols.map((s) => ({
+              path: file,
+              ...(pkg ? { package: pkg } : {}),
+              symbol: {
+                name: s.name,
+                qualifiedName: s.qualifiedName,
+                kind: s.kind,
+                decorators: s.decorators,
+                ...(s.visibility ? { visibility: s.visibility } : {}),
+                ...(s.parent ? { parent: s.parent } : {}),
+                ...(s.extends ? { extends: s.extends } : {}),
+                ...(s.implements ? { implements: s.implements } : {}),
+              },
+            }))
+          : []),
+      ];
+      const policy = input.rules.evaluateAll(targets);
+      if (policy.mode) {
+        const next = strictestMode(mode, policy.mode);
+        if (next !== mode) {
+          reasons.push({
             kind: "rule-match",
-            message: `Matched rule: ${m.rule.name}${m.rule.risk ? ` (risk: ${m.rule.risk})` : ""}`,
-            ruleName: m.rule.name,
+            message: `Mode upgraded to ${next} by rule(s) ${policy.matched.map((m) => m.rule.name).join(", ")} (${file})`,
           });
+          mode = next;
         }
       }
+      for (const m of policy.matched) {
+        if (!m.rule.execution?.alwaysRunOnAffected) continue;
+        const scope = m.rule.match.path;
+        const key = `${m.rule.name}\0${scope ?? ""}`;
+        if (alwaysRan.has(key)) continue;
+        alwaysRan.add(key);
+        if (!scope) continue; // no path scope: no test touches it
+        // A test touches the scope when it or a file it imports (transitively) is in it.
+        const users = graph.filesDependingOn((d) => matchGlob(d, scope));
+        for (const t of allTests)
+          if (users.has(t) || matchGlob(t, scope))
+            select(t, {
+              kind: "rule-match",
+              message: `Rule "${m.rule.name}" always runs its tests when its scope is affected`,
+              ruleName: m.rule.name,
+            });
+      }
+      if (!policy.matched.length) continue;
+      const hits = testsWithOrigin(file);
+      for (const m of policy.matched)
+        for (const t of hits) {
+          const seen = reasonKeys.get(t);
+          if (!seen || seen.rules.has(m.rule.name)) continue;
+          addReason(
+            t,
+            {
+              kind: "rule-match",
+              message: `Matched rule: ${m.rule.name}${m.rule.risk ? ` (risk: ${m.rule.risk})` : ""}`,
+              ruleName: m.rule.name,
+            },
+            false,
+          );
+        }
     }
   }
 
@@ -574,7 +654,7 @@ export function decideImpact(input: ImpactInput): ImpactResult {
       );
       if (!onlyStatic || nonCodeTests.has(test) || !traces.isFresh(test) || ranChange(test))
         continue;
-      selected.delete(test);
+      unselect(test);
       skips.push({ test, tracedAt: traces.collectedAt(test) ?? "" });
     }
     if (skips.length) details.observedSkips = skips;
@@ -587,13 +667,15 @@ export function decideImpact(input: ImpactInput): ImpactResult {
     if (u) relevantUncertainty.set(f, u);
   }
   const uncertainTests: { test: string; files: { file: string; reasons: string[] }[] }[] = [];
+  const observedSkip = new Map((details.observedSkips ?? []).map((s) => [s.test, s]));
   for (const t of allTests) {
     if (selected.has(t)) continue;
-    if (details.observedSkips?.some((s) => s.test === t)) continue;
+    if (observedSkip.has(t)) continue;
     // A fresh trace shows what the dynamic imports actually loaded.
     if (traces && mode !== "safe" && traces.isFresh(t) && !ranChange(t) && !nonCodeTests.has(t))
       continue;
-    const u = graph.uncertaintyReachableFrom(t);
+    // The reason names three files and whether there are more: four are enough.
+    const u = graph.uncertaintyReachableFrom(t, 4);
     if (u.length) uncertainTests.push({ test: t, files: u });
   }
   details.uncertainty = [...relevantUncertainty].map(([file, rs]) => ({ file, reasons: rs }));
@@ -639,12 +721,14 @@ export function decideImpact(input: ImpactInput): ImpactResult {
   );
   if (!fallback && unitList.length && unitList.length <= 200) {
     const unprotected: string[] = [];
+    const origins = new Set<string>();
+    for (const rs of selected.values())
+      for (const r of rs) if (r.path?.[0] !== undefined) origins.add(r.path[0]);
     for (const { file, unit } of unitList) {
       if (unit === "*" || runnerInputFiles.has(file)) continue;
       // Units already on a path to a selected test are protected; others need a search.
       const reached =
-        [...selected.values()].some((rs) => rs.some((r) => r.path?.[0] === `${file}#${unit}`)) ||
-        graph.reachesAnyTest([{ file, units: [unit] }]);
+        origins.has(`${file}#${unit}`) || graph.reachesAnyTest([{ file, units: [unit] }]);
       const observed = traces
         ? allTests.some((t) => traces.isFresh(t) && traces.executed(t, file, unit))
         : false;
@@ -659,12 +743,12 @@ export function decideImpact(input: ImpactInput): ImpactResult {
     const selectedTests: SelectedTest[] = [...selected]
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([test, rs]) => ({ testId: test, filePath: test, reasons: rs }));
-    const unresolvedTotal = (t: string) => graph.uncertaintyReachableFrom(t).length;
+    const observed = new Map((details.observedSkips ?? []).map((s) => [s.test, s]));
     const skippedTests: SkippedTest[] = allTests
       .filter((t) => !selected.has(t))
       .map((t) => {
-        const n = unresolvedTotal(t);
-        const obs = details.observedSkips?.find((s) => s.test === t);
+        const n = graph.uncertaintyCount(t);
+        const obs = observed.get(t);
         if (obs)
           return {
             testId: t,
@@ -711,10 +795,6 @@ export function decideImpact(input: ImpactInput): ImpactResult {
       ),
     );
   }
-}
-
-function matchesRuleScope(pattern: string | undefined, path: string): boolean {
-  return pattern ? matchGlob(path, pattern) : false;
 }
 
 /** Explanation for one test, for `smarttest explain`. */

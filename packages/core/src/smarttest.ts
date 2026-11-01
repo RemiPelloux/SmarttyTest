@@ -28,12 +28,7 @@ import {
   type ProvidedGraphInput,
 } from "@smarttest/dependency-graph";
 import { decideImpact, explainTest, type ImpactResult } from "@smarttest/impact-engine";
-import { javascriptAnalyzer } from "@smarttest/language-javascript";
-import {
-  RESOLVER_VERSION,
-  TypeScriptResolver,
-  typescriptAnalyzer,
-} from "@smarttest/language-typescript";
+import type { TypeScriptResolver } from "@smarttest/language-typescript";
 import { SnapshotStore } from "@smarttest/native-snapshots";
 import { detectProject, type ProjectProfile } from "@smarttest/project-detector";
 import {
@@ -103,7 +98,7 @@ import {
   type SetupPlan,
   suggestHookRunners,
 } from "@smarttest/smart-init";
-import type { Analyzer, FileAnalysis } from "@smarttest/source-parser";
+import type { FileAnalysis } from "@smarttest/source-parser";
 import { LOCALE_PATH } from "@smarttest/source-parser";
 import { SymbolIndex, type UpdateStats } from "@smarttest/symbol-index";
 import {
@@ -153,6 +148,7 @@ import {
   treeOf,
   unknownCheckProjects,
 } from "./hook.js";
+import { languages } from "./languages.js";
 import { outsideLinks } from "./outside.js";
 import { ParsePool, parallelParsingAvailable } from "./parse-pool.js";
 import { type LoadedPlugin, loadPlugins, pluginsChanged, runEdgeProviders } from "./plugins.js";
@@ -198,8 +194,6 @@ import {
   traceEnv,
 } from "./traces.js";
 import { type Watcher, watchProject } from "./watch.js";
-
-const ANALYZERS: Analyzer[] = [typescriptAnalyzer, javascriptAnalyzer];
 
 export interface OpenOptions {
   root: string;
@@ -717,6 +711,7 @@ export class SmartTest {
     // One project listing serves detection and the source file set; Git lists while the index
     // is read.
     const listing = gitProjectFiles(this.root);
+    const lang = languages();
     const index =
       this.keepWarm && this.indexCache ? this.indexCache : await SymbolIndex.load(this.storeDir);
     const gitFiles = await listing;
@@ -724,12 +719,13 @@ export class SmartTest {
     // Cold start (no index, or one from another analyzer version) of a large project: parser
     // threads start before files are read, so their start-up overlaps with reading.
     const sample = index.entries().values().next().value as FileAnalysis | undefined;
+    const { ts: typescript, analyzers: ANALYZERS } = await lang;
     const cold =
       index.size === 0 ||
       (sample !== undefined && !ANALYZERS.some((a) => a.version === sample.analyzerVersion));
     const profile = await this.profile(gitFiles);
     for (const w of index.loadWarnings) this.logger.warn(w);
-    const resolver = new TypeScriptResolver(
+    const resolver = new typescript.TypeScriptResolver(
       this.root,
       profile.workspaces.map((w) => ({ name: w.name, dir: w.dir, manifest: w.manifest })),
     );
@@ -746,7 +742,7 @@ export class SmartTest {
     ];
     const { readFile } = await import("node:fs/promises");
     // RESOLVER_VERSION: a SmartTest upgrade that resolves differently re-resolves every import.
-    const contextKey = `${RESOLVER_VERSION}\n${(
+    const contextKey = `${typescript.RESOLVER_VERSION}\n${(
       await Promise.all(
         contextFiles.map(
           async (f) =>
@@ -1636,12 +1632,14 @@ export class SmartTest {
       env,
       tests: previous?.env === env ? { ...previous.tests } : {},
     };
-    let wanted = options.files?.length ? tests.filter((t) => options.files?.includes(t)) : tests;
+    const only = new Set(options.files ?? []);
+    let wanted = only.size ? tests.filter((t) => only.has(t)) : tests;
     if (options.stale) {
       const view = await this.traceView(undefined, index);
       wanted = wanted.filter((t) => !view?.isFresh(t));
     }
-    for (const t of Object.keys(store.tests)) if (!tests.includes(t)) delete store.tests[t];
+    const current = new Set(tests);
+    for (const t of Object.keys(store.tests)) if (!current.has(t)) delete store.tests[t];
     const plan = planExecution(wanted, roots, this.config.adapters, assignment);
     const jobs = plan.groups.flatMap((g) => g.files.map((file) => ({ group: g, file })));
     const failed: string[] = [];
@@ -1709,6 +1707,7 @@ export class SmartTest {
   ): Promise<Map<string, FileSemanticDiff>> {
     const diffs = new Map<string, FileSemanticDiff>();
     const { readFile } = await import("node:fs/promises");
+    const { analyzers: ANALYZERS } = await languages();
     // Each "before" read is a VCS process: start the ones the loop below needs together.
     const resource = (path: string) =>
       isEnvFile(path) || isPrismaSchema(path) || isJsonCatalog(path, LOCALE_PATH);
@@ -2336,30 +2335,48 @@ export class SmartTest {
         saved = undefined;
       }
     }
-    const decision = saved?.decision ?? (await this.analyze(options)).decision;
+    const analysis = saved ? undefined : await this.analyze(options);
+    const decision = saved?.decision ?? (analysis as Analysis).decision;
     const description = saved
       ? `${saved.description} · decision of the run at ${saved.createdAt ?? "an earlier time"}`
       : moved
         ? `fresh analysis (the change or mode moved since the run at ${moved})`
         : "fresh analysis";
-    const { index } = await this.loadIndex();
-    const graph = this.buildGraph(index);
-    const discovered = await this.discoverTests(index);
-    graph.setDiscovery(discovered);
+    const asTest = () => ({
+      kind: "test" as const,
+      target,
+      description,
+      mode: decision.safetyMode,
+      analysisStatus: decision.analysisStatus,
+      ...explainTest(decision, target),
+    });
+    // A test of the decision is explained from the decision alone: no index, graph or discovery.
     if (
-      graph.isTestFile(target) ||
       decision.selectedTests.some((t) => t.filePath === target) ||
       decision.skippedTests.some((t) => t.filePath === target)
-    ) {
-      return {
-        kind: "test" as const,
-        target,
-        description,
-        mode: decision.safetyMode,
-        analysisStatus: decision.analysisStatus,
-        ...explainTest(decision, target),
-      };
+    )
+      return asTest();
+    // The analysis just made has the index, graph and discovery this needs. Its graph links
+    // end-to-end tests to the routes they visit, which the graph below does not: with end-to-end
+    // tests, the graph is built as before.
+    const reuse =
+      analysis &&
+      !options.everything &&
+      ![...analysis.assignment.values()].some(
+        (r) => r.adapter === "playwright" || r.adapter === "cypress",
+      )
+        ? analysis
+        : undefined;
+    const index = reuse ? reuse.index : (await this.loadIndex()).index;
+    const graph = reuse ? reuse.graph : this.buildGraph(index);
+    let discovered: { roots: RunnerRoot[]; assignment: Map<string, RunnerRoot> };
+    if (reuse) discovered = { roots: reuse.runnerRoots, assignment: reuse.assignment };
+    else {
+      const found = await this.discoverTests(index);
+      graph.setDiscovery(found);
+      discovered = found;
     }
+    if (graph.isTestFile(target)) return asTest();
     // A source file or symbol: which tests protect it?
     const [file, unit] = target.includes("#")
       ? (target.split("#") as [string, string])
@@ -2785,6 +2802,7 @@ export class SmartTest {
     if (!tests.length) return out;
     const profile = await this.profile();
     const files = await this.allFiles();
+    const fileSet = new Set(files);
     const hashes = new Map<string, string>();
     const h = async (f: string): Promise<string> => {
       let v = hashes.get(f);
@@ -2806,7 +2824,7 @@ export class SmartTest {
       const root = analysis.assignment.get(t);
       if (!root || root.adapter === "playwright" || root.adapter === "cypress") continue;
       if (flaky.has(t)) continue;
-      if (analysis.graph.uncertaintyReachableFrom(t).length) continue;
+      if (analysis.graph.uncertaintyCount(t)) continue;
       const closure = [t, ...analysis.graph.dependenciesOf(t)];
       if (closure.some((f) => analysis.index.get(f)?.assetReads?.length)) continue;
       const rk = `${root.adapter}:${root.dir}`;
@@ -2861,7 +2879,7 @@ export class SmartTest {
       const trace = view?.trace(t);
       if (trace) for (const f of Object.keys(trace.fileHashes)) parts[`f:${f}`] = await h(f);
       const snap = `${t.includes("/") ? t.slice(0, t.lastIndexOf("/") + 1) : ""}__snapshots__/${t.slice(t.lastIndexOf("/") + 1)}.snap`;
-      if (files.includes(snap)) parts[`s:${snap}`] = await h(snap);
+      if (fileSet.has(snap)) parts[`s:${snap}`] = await h(snap);
       out.set(t, resultKey(parts));
     }
     return out;
