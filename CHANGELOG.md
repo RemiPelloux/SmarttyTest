@@ -2,7 +2,9 @@
 
 All notable changes are documented here. Releases are managed with [Changesets](https://github.com/changesets/changesets). The project follows [Semantic Versioning](https://semver.org/).
 
-## Unreleased
+## [1.0.1] — patch
+
+The first projects on 1.0.0 (Galdia, LeadsIt, four OpenPro repositories) showed one selection bug and three smaller ones. No contract changes.
 
 ### Fixed
 

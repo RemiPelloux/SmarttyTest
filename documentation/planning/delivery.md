@@ -209,6 +209,14 @@ Pre-publication audit (same tag, before npm). A code audit of the release diff, 
 
 Galdia's replay: 12 commits, 0 missed, 96% less test time ([benchmarks](../case-studies/benchmarks-1.0.md#galdia-after-the-pre-publication-audit)).
 
+## 1.0.1 · patch (1 November 2026)
+
+Checked on the six projects that installed 1.0.0 from npm (Galdia, LeadsIt, OpenPro's front, admin, MCP service and desktop monitor): `doctor`, `scan`, `impact`, `explain`, `trace` and real runs.
+
+- Fixed: a file named like a test that no runner collects but other files import (`src/ads/__tests__/renderManager.tsx` in OpenPro's front end) stopped selection; the 12 specs importing it were never selected for changes under `src/ads/`. Selection now goes through such helpers. The run never passed (exit 4), but its hint would have hidden the specs.
+- Fixed: Vitest and Jest discovery ignored the runner's config file (a Stryker config listed 2,298 files instead of 29); a failed listing's filename fallback took helpers as end-to-end specs; "Cannot be ruled out" now gives the graph's reason.
+- Measured on 1.0.0: `impact` 0.65 s (Galdia, 1,400 files) to 1.3 s (OpenPro front, 10,600 files) warm, analysis itself under 25 ms; `trace` about 4–5 s per test file (one process each).
+
 ## After 1.0.0
 
 | Item                                                                                                     | From         | Status                                                                   |
