@@ -727,22 +727,28 @@ export class SmartTest {
       this.root,
       profile.workspaces.map((w) => ({ name: w.name, dir: w.dir, manifest: w.manifest })),
     );
+    const files = await this.sourceFiles(gitFiles);
+    // Every file the resolver reads to resolve these files (tsconfig/jsconfig and what they
+    // extend or reference, package.json files) keys the stored resolutions.
     const contextFiles = [
-      "package.json",
-      ...profile.layout.tsconfigFiles,
-      ...profile.workspaces.map((w) => `${w.dir}/package.json`),
+      ...new Set([
+        "package.json",
+        ...profile.layout.tsconfigFiles,
+        ...profile.workspaces.map((w) => `${w.dir}/package.json`),
+        ...resolver.inputsFor(files),
+      ]),
     ];
     const { readFile } = await import("node:fs/promises");
     // RESOLVER_VERSION: a SmartTest upgrade that resolves differently re-resolves every import.
     const contextKey = `${RESOLVER_VERSION}\n${(
       await Promise.all(
         contextFiles.map(
-          async (f) => `${f}:${await readFile(join(this.root, f), "utf8").catch(() => "")}`,
+          async (f) =>
+            `${f}:${await readFile(isAbsolute(f) ? f : join(this.root, f), "utf8").catch(() => "")}`,
         ),
       )
     ).join("\n")}`;
     this.resolver = resolver;
-    const files = await this.sourceFiles(gitFiles);
     const pool =
       cold && files.length >= 300 && parallelParsingAvailable() ? new ParsePool() : undefined;
     const stats = await index

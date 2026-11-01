@@ -1,3 +1,4 @@
+import { statSync } from "node:fs";
 import { mkdtemp, readFile, rm, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -147,5 +148,97 @@ describe("SymbolIndex trust (SR-16)", () => {
     const { index, stats } = await update(root, ["a.ts", "b.ts"]);
     expect(stats.parsed).toBe(2);
     expect(index.get("a.ts")?.imports.map((i) => i.resolved)).toEqual(["b.ts"]);
+  });
+});
+
+describe("SymbolIndex resolution", () => {
+  /** "./name" resolves to the first of name.ts / name.json that exists on disk. */
+  const diskResolver = (root: string, extra: Partial<ModuleResolver> = {}): ModuleResolver => ({
+    resolve: (_from, spec) => {
+      for (const ext of [".ts", ".json"]) {
+        const target = `${spec.slice(2)}${ext}`;
+        if (statSync(join(root, target), { throwIfNoEntry: false })) return { resolved: target };
+      }
+      return { reason: "not found" };
+    },
+    ...extra,
+  });
+  const run = async (root: string, files: string[], resolver: ModuleResolver) => {
+    const index = await SymbolIndex.load(join(root, ".smarttest"));
+    await index.update({ root, files, analyzers: [analyzer], resolver, contextKey: "ctx" });
+    await index.save();
+    return index;
+  };
+
+  // Audit p10: the file set holds source files only, so deleting an imported JSON/SVG/CSS file
+  // kept the stale resolution and the change selected nothing.
+  it("re-resolves the importers of an asset deleted or restored with a warm index", async () => {
+    const root = await project({ "a.ts": 'import "./data"', "data.json": "{}" });
+    const files = ["a.ts"];
+    expect((await run(root, files, diskResolver(root))).get("a.ts")?.imports[0]).toMatchObject({
+      resolved: "data.json",
+    });
+    await rm(join(root, "data.json"));
+    const gone = (await run(root, files, diskResolver(root))).get("a.ts")?.imports[0];
+    expect(gone).toMatchObject({ resolved: "data.json", missing: true, unresolved: "not found" });
+    // The stored index says so too.
+    const loaded = await SymbolIndex.load(join(root, ".smarttest"));
+    expect(loaded.get("a.ts")?.imports[0]?.missing).toBe(true);
+    await writeFile(join(root, "data.json"), "{}");
+    const back = (await run(root, files, diskResolver(root))).get("a.ts")?.imports[0];
+    expect(back?.resolved).toBe("data.json");
+    expect(back?.unresolved).toBeUndefined();
+  });
+
+  it("re-resolves an unresolved import once the asset it names exists", async () => {
+    const root = await project({ "a.ts": 'import "./data"' });
+    const first = await run(root, ["a.ts"], diskResolver(root));
+    expect(first.get("a.ts")?.imports[0]?.unresolved).toBe("not found");
+    await writeFile(join(root, "data.json"), "{}");
+    const imp = (await run(root, ["a.ts"], diskResolver(root))).get("a.ts")?.imports[0];
+    expect(imp?.resolved).toBe("data.json");
+    expect(imp?.unresolved).toBeUndefined();
+  });
+
+  // Audit p5/p14: a gitignored build (lib/index.js) is no graph node; trusting the edge lost the
+  // tests of the source it is built from.
+  it("turns code resolved outside the indexed files into uncertainty", async () => {
+    const root = await project({ "a.ts": 'import "./b"', "b.ts": "" });
+    const imp = (await run(root, ["a.ts"], diskResolver(root))).get("a.ts")?.imports[0];
+    expect(imp?.unresolved).toBe('resolves to "b.ts", which is not an indexed source file');
+    expect(imp?.resolved).toBeUndefined();
+  });
+
+  it("keeps the edge of an uncertain resolution and records its reason", async () => {
+    const root = await project({ "a.ts": 'import "./b"', "b.ts": "" });
+    const resolver: ModuleResolver = {
+      resolve: () => ({ resolved: "b.ts", uncertain: "conditions disagree" }),
+    };
+    const imp = (await run(root, ["a.ts", "b.ts"], resolver)).get("a.ts")?.imports[0];
+    expect(imp).toMatchObject({ resolved: "b.ts", unresolved: "conditions disagree" });
+  });
+
+  it("matches an aliased glob pattern through the resolver", async () => {
+    const root = await project({ "a.ts": "", "p1.ts": "", "p2.ts": "" });
+    const globber: Analyzer = {
+      ...analyzer,
+      analyze: (path, content) => ({
+        ...analyzer.analyze(path, content),
+        ...(path === "a.ts"
+          ? { dynamicHints: [{ pattern: "@/p*.ts", line: 0, expr: "glob" }] }
+          : {}),
+      }),
+    };
+    const index = await SymbolIndex.load(join(root, ".smarttest"));
+    await index.update({
+      root,
+      files: ["a.ts", "p1.ts", "p2.ts"],
+      analyzers: [globber],
+      resolver: diskResolver(root, {
+        resolvePattern: (_f, p) => (p.startsWith("@/") ? p.slice(2) : undefined),
+      }),
+    });
+    expect(index.get("a.ts")?.dynamicTargets).toEqual(["p1.ts", "p2.ts"]);
+    expect(index.get("a.ts")?.dynamicUnmatched).toBeUndefined();
   });
 });

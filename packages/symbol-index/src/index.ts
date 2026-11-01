@@ -5,7 +5,7 @@
  */
 
 import { randomUUID } from "node:crypto";
-import { statSync } from "node:fs";
+import { existsSync, statSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { join, posix } from "node:path";
 import type { SourceRange } from "@smarttest/shared";
@@ -26,6 +26,8 @@ import type {
 import { rangesOverlap, topLevelSymbols } from "@smarttest/source-parser";
 
 export const INDEX_SCHEMA_VERSION = 2;
+/** Source code (a graph node when indexed), as opposed to assets an import can also name. */
+const CODE = /\.(?:[cm]?[jt]sx?)$/;
 
 interface IndexFile {
   schemaVersion: number;
@@ -320,9 +322,28 @@ export class SymbolIndex {
       changed.add(job.path);
       parsed++;
     }
+    // A non-code file (JSON, SVG, CSS) is not in the file set, so adding or removing one does not
+    // change the reuse key: importers of a vanished asset, and imports that did not resolve (the
+    // file they name may exist now), are resolved again.
+    const assetGone = (target: string) =>
+      !CODE.test(target) &&
+      !target.split("/").includes("node_modules") &&
+      !existsSync(join(options.root, target));
+    const recheck = (a: FileAnalysis) =>
+      a.imports.some((i) => i.unresolved || (i.resolved && !i.missing && assetGone(i.resolved)));
     // Resolution pass. Deleted targets stay visible (missing: true) for impact analysis.
-    for (const analysis of this.files.values()) {
-      if (reuseResolution && !changed.has(analysis.path)) continue;
+    for (let analysis of [...this.files.values()]) {
+      let before: string | undefined;
+      if (reuseResolution && !changed.has(analysis.path)) {
+        if (!recheck(analysis)) continue;
+        // Resolved into a copy: a long-lived caller compares analyses by identity.
+        before = JSON.stringify([
+          analysis.imports,
+          analysis.dynamicTargets,
+          analysis.dynamicUnmatched,
+        ]);
+        analysis = { ...analysis, imports: analysis.imports.map((i) => ({ ...i })) };
+      }
       const old = targetsOf(replaced.get(analysis.path) ?? analysis);
       delete analysis.dynamicTargets;
       delete analysis.dynamicUnmatched;
@@ -332,15 +353,18 @@ export class SymbolIndex {
         const unmatched: string[] = [];
         for (const h of analysis.dynamicHints) {
           const rel = posix.normalize(posix.join(dir === "." ? "" : dir, h.pattern));
-          if (rel.startsWith("..")) {
-            unmatched.push(h.expr);
-            continue;
+          const match = (p: string) =>
+            p.includes("*")
+              ? options.files.filter((f) => matchGlob(f, p))
+              : wanted.has(p)
+                ? [p]
+                : [];
+          let hits = rel.startsWith("..") ? [] : match(rel);
+          // An aliased pattern (`import.meta.glob("@/pages/*.ts")`).
+          if (!hits.length) {
+            const aliased = options.resolver.resolvePattern?.(analysis.path, h.pattern);
+            if (aliased) hits = match(aliased);
           }
-          const hits = rel.includes("*")
-            ? options.files.filter((f) => matchGlob(f, rel))
-            : wanted.has(rel)
-              ? [rel]
-              : [];
           if (hits.length) for (const f of hits) targets.add(f);
           else unmatched.push(h.expr);
         }
@@ -354,8 +378,21 @@ export class SymbolIndex {
         delete imp.unresolved;
         delete imp.missing;
         const res = options.resolver.resolve(analysis.path, imp.specifier);
-        if (res.resolved) imp.resolved = res.resolved;
-        else if (res.external) imp.external = true;
+        // Code outside the indexed files (a gitignored build, an excluded or generated file) is
+        // no graph node: an edge to it would lead nowhere, so the import is uncertainty.
+        if (
+          res.resolved &&
+          CODE.test(res.resolved) &&
+          !wanted.has(res.resolved) &&
+          !res.resolved.split("/").includes("node_modules")
+        ) {
+          imp.unresolved = `resolves to "${res.resolved}", which is not an indexed source file`;
+          continue;
+        }
+        if (res.resolved) {
+          imp.resolved = res.resolved;
+          if (res.uncertain) imp.unresolved = res.uncertain;
+        } else if (res.external) imp.external = true;
         else {
           if (oldTarget && !wanted.has(oldTarget)) {
             imp.resolved = oldTarget;
@@ -363,6 +400,14 @@ export class SymbolIndex {
           }
           imp.unresolved = res.reason ?? "unresolved";
         }
+      }
+      if (
+        before !== undefined &&
+        before !==
+          JSON.stringify([analysis.imports, analysis.dynamicTargets, analysis.dynamicUnmatched])
+      ) {
+        this.files.set(analysis.path, analysis);
+        this.touch(analysis.path);
       }
     }
     if (contextKey && contextKey !== this.contextKey) {
