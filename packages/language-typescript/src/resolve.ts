@@ -242,6 +242,9 @@ export class TypeScriptResolver implements ModuleResolver {
       return { external: true };
     if (/^[a-z]+:/i.test(specifier) && !/^[a-zA-Z]:[\\/]/.test(specifier))
       return { external: true };
+    // A bundler query (`./icon.svg?raw`, `#web/a.css?inline`, `./w.ts?worker`) names the same file.
+    const query = specifier.indexOf("?");
+    if (query > 0) return this.resolve(fromFile, specifier.slice(0, query));
     const absFrom = join(this.root, fromFile);
     const relative = specifier.startsWith(".") || specifier.startsWith("/");
 
@@ -279,10 +282,21 @@ export class TypeScriptResolver implements ModuleResolver {
     }
     // alias that should resolve inside the project?
     const paths = opts.paths ?? {};
+    const base = opts.baseUrl ?? (opts as { pathsBasePath?: string }).pathsBasePath;
     for (const key of Object.keys(paths)) {
-      const re = new RegExp(`^${key.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replace("*", ".*")}$`);
-      if (re.test(specifier))
-        return { reason: `path alias "${key}" did not resolve "${specifier}"` };
+      const re = new RegExp(`^${key.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replace("*", "(.*)")}$`);
+      const match = re.exec(specifier);
+      if (!match) continue;
+      // TypeScript only maps aliases to modules it can type; a non-code file (`.svg`, `.css`,
+      // `.json` without resolveJsonModule) behind an alias is probed here.
+      for (const target of base ? (paths[key] ?? []) : []) {
+        const out = this.finish(
+          this.probe(join(base as string, target.replace("*", match[1] ?? ""))),
+          specifier,
+        );
+        if (out.resolved) return out;
+      }
+      return { reason: `path alias "${key}" did not resolve "${specifier}"` };
     }
     return { external: true };
   }
