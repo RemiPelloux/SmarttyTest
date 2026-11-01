@@ -648,6 +648,61 @@ export async function runChecks(
   });
 }
 
+// ── Hook scope ─────────────────────────────────────────────────────────────────────────────
+
+/** `hook.runners` / `hook.exclude`: which selected tests the hook itself executes. */
+export interface HookScope {
+  /** Runners the hook executes; undefined: every runner. */
+  runners?: readonly string[];
+  /** Test files (project-relative globs) the hook does not execute. */
+  exclude?: readonly string[];
+}
+
+/** A selected test file the hook does not run: it is left to CI, never reported as passed. */
+export interface LeftToCi {
+  file: string;
+  /** Runner that would run it ("unknown" when no runner collected it). */
+  adapter: string;
+  /** The scope rule that removed it from the hook, e.g. `hook.exclude "e2e/**"`. */
+  rule: string;
+}
+
+/** True when the scope removes nothing (no option set). */
+export const scopeIsEmpty = (scope: HookScope | undefined): boolean =>
+  !scope?.runners && !scope?.exclude?.length;
+
+/** The scope as shown in `hook status`, `doctor` and the hook output. */
+export function describeScope(scope: HookScope | undefined): string[] {
+  const out: string[] = [];
+  if (scope?.runners) out.push(`hook.runners [${scope.runners.join(", ")}]`);
+  if (scope?.exclude?.length)
+    out.push(`hook.exclude [${scope.exclude.map((g) => `"${g}"`).join(", ")}]`);
+  return out;
+}
+
+/**
+ * Selected test files outside the hook scope. A file whose runner is unknown is kept in the hook
+ * (run and reported by the normal path) unless an `exclude` glob names it: a scope never hides a
+ * test that has no runner.
+ */
+export function outsideHookScope(
+  files: readonly { file: string; adapter?: string | undefined }[],
+  scope: HookScope | undefined,
+): LeftToCi[] {
+  if (scopeIsEmpty(scope)) return [];
+  const out: LeftToCi[] = [];
+  for (const { file, adapter } of files) {
+    const glob = scope?.exclude?.find((g) => matchGlob(file, g));
+    if (glob) {
+      out.push({ file, adapter: adapter ?? "unknown", rule: `hook.exclude "${glob}"` });
+      continue;
+    }
+    if (scope?.runners && adapter && !scope.runners.includes(adapter))
+      out.push({ file, adapter, rule: `hook.runners [${scope.runners.join(", ")}]` });
+  }
+  return out;
+}
+
 // ── Records ────────────────────────────────────────────────────────────────────────────────
 
 export interface HookRecord {
@@ -660,6 +715,10 @@ export interface HookRecord {
   tree?: string;
   /** A push that only deleted remote refs: there was no content to test. */
   nothingPushed?: boolean;
+  /** Selected test files the hook scope left to CI (not run, not passed). */
+  leftToCi?: number;
+  /** The scope rules in force, when any. */
+  scope?: string[];
 }
 
 export interface HookRecords {

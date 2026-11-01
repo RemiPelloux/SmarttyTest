@@ -39,7 +39,7 @@ const TOP_KEYS: Record<string, string[] | null> = {
   retries: null,
   adaptive: null,
   cache: null,
-  hook: ["checks", "budgetMs"],
+  hook: ["checks", "budgetMs", "runners", "exclude"],
   parallelGroups: null,
   plugins: null,
   projects: null,
@@ -184,6 +184,17 @@ export function validateConfig(raw: unknown): { errors: ConfigIssue[]; warnings:
       const h = c.hook as Record<string, unknown>;
       if (h.budgetMs !== undefined && !(typeof h.budgetMs === "number" && h.budgetMs > 0))
         err("hook.budgetMs", "must be a positive number");
+      if (h.runners !== undefined) {
+        if (!(isStrArr(h.runners) && h.runners.every((a) => ADAPTERS.includes(a))))
+          err("hook.runners", `must be an array of: ${ADAPTERS.join(", ")}`);
+        else if (!h.runners.length)
+          err(
+            "hook.runners",
+            "must name at least one runner (an empty list would run no test in the hook; remove the option to run every runner)",
+          );
+      }
+      if (h.exclude !== undefined && !isStrArr(h.exclude))
+        err("hook.exclude", "must be an array of glob strings");
       if (h.checks !== undefined) {
         if (!Array.isArray(h.checks)) err("hook.checks", "must be an array");
         else

@@ -192,14 +192,29 @@ async function cmdHookRun(ctx: Ctx): Promise<number> {
           .filter((e) => !["passed", "cached-pass", "skipped", "flaky"].includes(e.status))
           .slice(0, 4)) {
           ctx.out(`${e.file}: ${e.status}`);
+          // A file that never reached a runner has no test records, only its own error.
+          if (!e.tests.length && e.error)
+            for (const l of e.error.split("\n").slice(0, 6)) ctx.out(`  ${l.slice(0, 180)}`);
           for (const test of e.tests.filter((t) => t.error).slice(0, 2))
             ctx.out(`  ${test.error?.message.split("\n")[0]?.slice(0, 180)}`);
         }
+        const left = result.leftToCi;
+        if (left) {
+          ctx.out(
+            `${left.count} selected, not run in the hook (left to CI) by ${left.rules.join(", ")}:`,
+          );
+          for (const l of left.files.slice(0, 10)) ctx.out(`  ${l.file} (${l.adapter})`);
+          if (left.files.length > 10) ctx.out(`  … ${left.files.length - 10} more`);
+        }
         const s = out.report.summary;
         ctx.out(
-          `${s.passed} passed · ${s.failed + s.timedOut} failed · ${s.cached ?? 0} cached (not run) · ${s.skippedBySelection} skipped (not run) · ${formatDuration(result.durationMs)}`,
+          `${s.passed} passed · ${s.failed + s.timedOut} failed · ${s.cached ?? 0} cached (not run) · ${left ? `${left.count} left to CI (not run) · ` : ""}${s.skippedBySelection} skipped (not run) · ${formatDuration(result.durationMs)}`,
         );
-        for (const w of out.report.warnings.slice(0, 4)) ctx.out(w);
+        // The left-to-CI list is printed above; its summary warning would repeat it.
+        for (const w of out.report.warnings
+          .filter((w) => !left || !w.includes("not run in the hook (left to CI)"))
+          .slice(0, 4))
+          ctx.out(w);
         ctx.out("Why: smarttest explain <test>");
       }
     }
@@ -393,6 +408,10 @@ function printRun(ctx: Ctx, report: RunReport, written: Record<string, string>):
       e.status !== "skipped" &&
       e.status !== "cached-pass"
     ) {
+      // A file that never reached a runner has no test records, only its own error.
+      if (!tests.length && e.error)
+        for (const l of e.error.split("\n").slice(0, 6))
+          ctx.out(`      ${t.red("›")} ${l.slice(0, 200)}`);
       for (const f of tests
         .filter((x) => x.status !== "passed" && x.status !== "skipped" && x.status !== "pending")
         .slice(0, 3)) {
@@ -1118,7 +1137,14 @@ async function cmdHook(ctx: Ctx): Promise<number> {
         ...(manager ? { manager } : {}),
         stage: flags["pre-push"] ? "pre-commit" : "pre-push",
       });
-      if (flags.json) ctx.json("hook", { status: plan, other, history });
+      const suggestedScope = await st.hookScopeSuggestion();
+      if (flags.json)
+        ctx.json("hook", {
+          status: plan,
+          other,
+          history,
+          ...(suggestedScope ? { suggestedScope: { runners: suggestedScope } } : {}),
+        });
       else {
         ctx.out(
           `${t.bold("Git hook")} · ${plan.manager} · ${plan.file} ${t.dim(`(${plan.evidence})`)}`,
@@ -1134,6 +1160,14 @@ async function cmdHook(ctx: Ctx): Promise<number> {
         ctx.out(
           `  ${history.runs} recorded runs · median ${formatDuration(history.medianMs)} · slowest ${formatDuration(history.slowestMs)} · ${history.failures} recent failures`,
         );
+        if (history.scope.length)
+          ctx.out(
+            `  ${pad("Scope", 12)}${history.scope.join(", ")} · selected tests outside it are not run in the hook (left to CI)${history.leftToCi ? ` · ${history.leftToCi} in recent runs` : ""}`,
+          );
+        else if (suggestedScope)
+          ctx.out(
+            `  ${pad("Scope", 12)}every runner, including browser specs · to leave them to CI: hook: { runners: [${suggestedScope.map((a) => `"${a}"`).join(", ")}] }`,
+          );
         if ((plan.installed || other.installed) && !history.installedLocally)
           ctx.out("  SmartTest executable missing: install the project's dependencies.");
         for (const b of history.bypasses) ctx.out(`  Bypass ${b.at}: ${b.stage} ${b.reason}`);
@@ -1163,6 +1197,11 @@ async function cmdHook(ctx: Ctx): Promise<number> {
           `  ${t.yellow("▲")} line ${r.line} still runs a whole suite (use --replace): ${t.dim(r.command)}`,
         );
       for (const n of plan.notes) ctx.out(`  ${t.dim("•")} ${n}`);
+      const suggestedScope = await st.hookScopeSuggestion();
+      if (suggestedScope)
+        ctx.out(
+          `  ${t.dim("•")} Playwright/Cypress specs run next to ${suggestedScope.join(", ")}: to keep browser specs in CI and out of the hook, add \`hook: { runners: [${suggestedScope.map((a) => `"${a}"`).join(", ")}] }\` to the SmartTest config (the hook then reports them as left to CI)`,
+        );
     }
     if (flags["dry-run"]) {
       if (flags.json) ctx.json("hook", { plan, applied: [] });

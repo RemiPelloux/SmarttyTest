@@ -25,7 +25,9 @@
     "adapters": {
       "description": "Runners SmartTest may use (default: every detected runner).",
       "type": "array",
-      "items": { "$ref": "#/$defs/adapter" }
+      "items": {
+        "$ref": "#/$defs/adapter"
+      }
     },
     "vcs": {
       "type": "object",
@@ -64,7 +66,9 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "layout": { "$ref": "#/$defs/layout" },
+        "layout": {
+          "$ref": "#/$defs/layout"
+        },
         "directory": {
           "description": "Test directory for the mirror layout (default \"tests\").",
           "type": "string"
@@ -95,7 +99,9 @@
         "additionalProperties": false,
         "required": ["adapter"],
         "properties": {
-          "adapter": { "$ref": "#/$defs/adapter" },
+          "adapter": {
+            "$ref": "#/$defs/adapter"
+          },
           "dir": {
             "description": "Project-relative directory the runner executes from (\"\" = root).",
             "type": "string"
@@ -119,8 +125,13 @@
         "additionalProperties": false,
         "required": ["path", "policy"],
         "properties": {
-          "path": { "description": "Glob of the generated files.", "type": "string" },
-          "policy": { "enum": ["exclude", "test-source", "rebuild-required"] },
+          "path": {
+            "description": "Glob of the generated files.",
+            "type": "string"
+          },
+          "policy": {
+            "enum": ["exclude", "test-source", "rebuild-required"]
+          },
           "from": {
             "description": "Generator inputs (globs). With rebuild-required, a change to an input stands for a change to the outputs.",
             "$ref": "#/$defs/globs"
@@ -134,7 +145,9 @@
     },
     "rules": {
       "type": "array",
-      "items": { "$ref": "#/$defs/rule" }
+      "items": {
+        "$ref": "#/$defs/rule"
+      }
     },
     "retries": {
       "description": "Retries for a failing test file (default 0).",
@@ -148,7 +161,9 @@
     "projects": {
       "description": "Per-project conventions, keyed by directory (\"backend\", \"apps/web\").",
       "type": "object",
-      "additionalProperties": { "$ref": "#/$defs/project" }
+      "additionalProperties": {
+        "$ref": "#/$defs/project"
+      }
     },
     "cache": {
       "description": "Reuse passing results whose inputs are all unchanged (default true; reported as cached-pass).",
@@ -156,7 +171,15 @@
     },
     "parallelGroups": {
       "description": "Runner groups run at the same time: a positive integer, or \"auto\" (default) from the CPU count.",
-      "anyOf": [{ "type": "integer", "minimum": 1 }, { "const": "auto" }]
+      "anyOf": [
+        {
+          "type": "integer",
+          "minimum": 1
+        },
+        {
+          "const": "auto"
+        }
+      ]
     },
     "hook": {
       "description": "Commit-hook behaviour (smarttest run --hook).",
@@ -170,7 +193,10 @@
             "additionalProperties": false,
             "required": ["name", "run"],
             "properties": {
-              "name": { "type": "string", "minLength": 1 },
+              "name": {
+                "type": "string",
+                "minLength": 1
+              },
               "run": {
                 "description": "Shell command run in the project directory; {files} becomes the changed files there.",
                 "type": "string",
@@ -179,13 +205,17 @@
               "projects": {
                 "description": "Only these project directories (\"\" for the root).",
                 "type": "array",
-                "items": { "type": "string" }
+                "items": {
+                  "type": "string"
+                }
               },
               "files": {
                 "description": "Glob, relative to the project, that filters {files}.",
                 "type": "string"
               },
-              "stage": { "enum": ["pre-commit", "pre-push", "both"] }
+              "stage": {
+                "enum": ["pre-commit", "pre-push", "both"]
+              }
             }
           }
         },
@@ -193,13 +223,28 @@
           "description": "Expected hook duration in milliseconds (default 60000).",
           "type": "number",
           "exclusiveMinimum": 0
+        },
+        "runners": {
+          "description": "Runners the hook executes (default: every runner). Selected tests of other runners are reported as left to CI, never as passed.",
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/adapter"
+          }
+        },
+        "exclude": {
+          "description": "Test-file globs the hook never runs; selected matches are reported as left to CI, never as passed.",
+          "$ref": "#/$defs/globs"
         }
       }
     },
     "plugins": {
       "description": "Plugin modules (Plugin SDK v1): paths relative to the project root, or package names.",
       "type": "array",
-      "items": { "type": "string", "minLength": 1 }
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
     },
     "timeoutMs": {
       "description": "Timeout of one runner process in milliseconds (default 600000).",
@@ -218,7 +263,9 @@
         "formats": {
           "description": "Report formats written after a run (default html and json).",
           "type": "array",
-          "items": { "enum": ["html", "json", "junit", "markdown"] }
+          "items": {
+            "enum": ["html", "json", "junit", "markdown"]
+          }
         },
         "outputDir": {
           "description": "Report directory (default .smarttest/reports).",
@@ -234,7 +281,9 @@
   "$defs": {
     "globs": {
       "type": "array",
-      "items": { "type": "string" }
+      "items": {
+        "type": "string"
+      }
     },
     "mode": {
       "enum": ["fast", "balanced", "safe"]
@@ -253,36 +302,65 @@
       "additionalProperties": false,
       "required": ["name", "match"],
       "properties": {
-        "name": { "description": "Unique rule name.", "type": "string", "minLength": 1 },
-        "match": { "$ref": "#/$defs/ruleMatch" },
+        "name": {
+          "description": "Unique rule name.",
+          "type": "string",
+          "minLength": 1
+        },
+        "match": {
+          "$ref": "#/$defs/ruleMatch"
+        },
         "require": {
           "type": "array",
-          "items": { "$ref": "#/$defs/category" }
+          "items": {
+            "$ref": "#/$defs/category"
+          }
         },
         "coverage": {
           "type": "object",
           "additionalProperties": false,
           "properties": {
-            "lines": { "type": "number", "minimum": 0, "maximum": 100 },
-            "branches": { "type": "number", "minimum": 0, "maximum": 100 }
+            "lines": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 100
+            },
+            "branches": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 100
+            }
           }
         },
-        "risk": { "enum": ["low", "medium", "high", "critical"] },
+        "risk": {
+          "enum": ["low", "medium", "high", "critical"]
+        },
         "execution": {
           "type": "object",
           "additionalProperties": false,
           "properties": {
-            "alwaysRunOnAffected": { "type": "boolean" },
-            "mode": { "$ref": "#/$defs/mode" },
-            "retries": { "type": "integer", "minimum": 0 }
+            "alwaysRunOnAffected": {
+              "type": "boolean"
+            },
+            "mode": {
+              "$ref": "#/$defs/mode"
+            },
+            "retries": {
+              "type": "integer",
+              "minimum": 0
+            }
           }
         },
         "generate": {
           "type": "object",
           "additionalProperties": false,
           "properties": {
-            "template": { "type": "string" },
-            "path": { "type": "string" }
+            "template": {
+              "type": "string"
+            },
+            "path": {
+              "type": "string"
+            }
           }
         }
       }
@@ -291,16 +369,36 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "path": { "type": "string" },
-        "package": { "type": "string" },
-        "class": { "type": "string" },
-        "method": { "type": "string" },
-        "function": { "type": "string" },
-        "decorator": { "type": "string" },
-        "visibility": { "enum": ["public", "protected", "private"] },
-        "kind": { "type": "string" },
-        "extends": { "type": "string" },
-        "implements": { "type": "string" }
+        "path": {
+          "type": "string"
+        },
+        "package": {
+          "type": "string"
+        },
+        "class": {
+          "type": "string"
+        },
+        "method": {
+          "type": "string"
+        },
+        "function": {
+          "type": "string"
+        },
+        "decorator": {
+          "type": "string"
+        },
+        "visibility": {
+          "enum": ["public", "protected", "private"]
+        },
+        "kind": {
+          "type": "string"
+        },
+        "extends": {
+          "type": "string"
+        },
+        "implements": {
+          "type": "string"
+        }
       }
     },
     "project": {
@@ -311,14 +409,22 @@
           "type": "object",
           "additionalProperties": false,
           "properties": {
-            "layout": { "$ref": "#/$defs/layout" },
-            "directory": { "type": "string" },
-            "naming": { "type": "string" },
+            "layout": {
+              "$ref": "#/$defs/layout"
+            },
+            "directory": {
+              "type": "string"
+            },
+            "naming": {
+              "type": "string"
+            },
             "path": {
               "description": "Custom location template, e.g. \"backend/src/__tests__/{FileName}.test.{Extension}\".",
               "type": "string"
             },
-            "templates": { "type": "string" }
+            "templates": {
+              "type": "string"
+            }
           }
         },
         "mode": {
@@ -328,7 +434,9 @@
         "rules": {
           "description": "Rules scoped to this project; their paths are relative to it.",
           "type": "array",
-          "items": { "$ref": "#/$defs/rule" }
+          "items": {
+            "$ref": "#/$defs/rule"
+          }
         }
       }
     }

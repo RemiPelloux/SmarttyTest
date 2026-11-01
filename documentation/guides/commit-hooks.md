@@ -37,9 +37,36 @@ The pre-commit command is `smarttest run --staged --hook`; pre-push uses `smartt
 
 Pre-push compares HEAD with the upstream merge-base. With no upstream, it tries the remote's default branch and the conventional `origin/main` and `origin/master` refs. A missing comparison base must broaden selection; it cannot justify ignoring older commits. Push mode checks the current HEAD. A push that only deletes remote branches sends no content: it runs no tests or checks, exits 0 and is recorded as nothing pushed. A push that also sends another commit or ref is refused, because SmartTest will not report a pass for content it did not test; push the checked-out commit (for example `git push origin HEAD`) or check out the ref first.
 
-Browser end-to-end specs are selected like any other test. A spec whose imports cannot be resolved cannot be ruled out, so it is selected on every change; if your hook should not start browsers or reach a deployed environment, exclude those specs (`exclude: ["e2e/**"]`) and run them in CI. Excluded tests are not analysed by any command.
+Browser end-to-end specs are selected like any other test. A spec whose imports cannot be resolved cannot be ruled out, so it is selected on every change. To keep them out of the hook without removing them from `run` and `ci`, set a [hook scope](#hook-scope-browser-specs-in-ci). The top-level `exclude` is not the tool for this: excluded files are not analysed or run by any command.
 
 The compact output shows the changed-file count, selected tests, failing files and their first errors, check results and elapsed time. `smarttest explain <test>` gives the full selection reason.
+
+## Hook scope: browser specs in CI
+
+Playwright and Cypress specs usually need a browser and a deployed environment, which a commit hook does not have. The hook scope restricts what the hook executes; it never changes what is selected:
+
+```ts
+export default defineConfig({
+  hook: {
+    runners: ["vitest"], // the hook runs Vitest only
+    exclude: ["e2e/**"], // and never these files, whatever their runner
+  },
+});
+```
+
+`hook.runners` is an allow-list of runners; `hook.exclude` lists project-relative test-file globs. Either is enough. A selected test outside the scope is **selected, not run in the hook (left to CI)**:
+
+- it stays in the selection (`decision.selectedTests`), has no execution record and is never counted as passed or cached;
+- the hook output lists it with the rule that removed it, and the summary line counts it (`3 passed · 0 failed · … · 2 left to CI (not run)`);
+- `--json` carries it in `hook.leftToCi` (`count`, `rules`, `files` with `file`, `adapter`, `rule`) and in the report's `leftToCi` and `summary.leftToCi`; the HTML and Markdown reports have a "left to CI" section;
+- the hook record in `.smarttest/state/hooks.json` stores the count and the scope, and `smarttest hook status` and `smarttest doctor` show the scope and how many tests it left to CI recently;
+- a run that left tests to CI does not advance the native snapshot baseline: it did not verify the change.
+
+Exit code: the hook succeeds when everything it ran passed (tests and checks), and prints the left-to-CI list. Tests left to CI are not a pass by omission: they are named as not run, and CI must run them. If the scope leaves every selected test to CI, the hook runs no test, exits 0 on passing checks and still prints the list. A test that no runner collects is not affected by `hook.runners` (only an `exclude` glob can name it).
+
+A selected test that no runner executes is different: it was not left out on purpose, so `run`, `ci` and the hook fail with exit code 4 (infrastructure failure). This happens when a file looks like a test but no runner collects it, or when a runner's listing breaks; for example a Playwright spec with a missing static import makes `playwright test --list` fail. The file gets an `infrastructure-error` execution record (`adapter: "none"` when no runner takes it) with the cause, the runner's first error lines are shown with every run until the listing works again (a failed listing is never cached), and the other runners keep their own files. Studio shows such a run as an error. A file left to CI by the scope is the only selected file allowed to have no execution record.
+
+`smarttest run`, `smarttest ci`, `impact`, Studio runs and the editor ignore the scope. `smarttest init` proposes `hook: { runners: [...] }` (the unit runners) in its previewed configuration when it finds Playwright or Cypress next to a unit runner; `smarttest hook install` and `hook status` print the same suggestion when no scope is set, and `doctor` mentions it when a hook is installed.
 
 ## Project checks
 

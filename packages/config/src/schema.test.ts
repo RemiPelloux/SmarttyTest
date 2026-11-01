@@ -185,6 +185,8 @@ const KITCHEN_SINK = {
       { name: "lint", run: "biome check {files}", projects: [""], files: "**/*.ts", stage: "both" },
     ],
     budgetMs: 30_000,
+    runners: ["vitest"],
+    exclude: ["e2e/**"],
   },
   plugins: ["./tools/smarttest-plugin.mjs"],
   timeoutMs: 600_000,

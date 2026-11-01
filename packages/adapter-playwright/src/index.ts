@@ -203,6 +203,22 @@ export class PlaywrightAdapter implements TestAdapter {
           category: "infrastructure",
         },
       );
+    // A spec that fails to load (a missing import, a syntax error) makes Playwright list nothing,
+    // or only part of the suite: the listing cannot be trusted, so discovery fails loudly.
+    const loadErrors = (report.errors ?? []).map((e) => (e.message ?? "").trim()).filter(Boolean);
+    if (loadErrors.length)
+      throw new SmartTestError(
+        `playwright discovery failed: \`playwright test --list\` reported ${loadErrors.length} error(s): ${loadErrors
+          .join("\n")
+          .split("\n")
+          .slice(0, 6)
+          .join("\n")}`,
+        {
+          code: "ST_DISCOVERY_FAILED",
+          category: "infrastructure",
+          hint: "Run `npx playwright test --list` and fix the spec that fails to load.",
+        },
+      );
     const files = [
       ...new Set(
         parsePlaywrightReport(report, this.options.projectRoot, this.options.cwd).map(

@@ -82,6 +82,40 @@ function report(): RunReport {
 }
 
 describe("report engine", () => {
+  it("reports tests left to CI by a hook scope as selected and not run, never passed", () => {
+    const r = report();
+    r.decision.selectedTests.push({
+      testId: "e2e/a.spec.ts",
+      filePath: "e2e/a.spec.ts",
+      reasons: [{ kind: "direct-dependency" as const, message: "unresolved import" }],
+    });
+    r.leftToCi = [{ file: "e2e/a.spec.ts", adapter: "playwright", rule: "hook.runners [vitest]" }];
+    r.summary = summarize(r.decision, r.executions, 5, 1);
+    expect(r.summary.leftToCi).toBe(1);
+    expect(r.summary.selected).toBe(2);
+    expect(r.summary.passed).toBe(1);
+    expect(validateReportIntegrity(r)).toEqual([]);
+    expect(toMarkdown(r)).toContain("1 left to CI (not run)");
+    expect(toMarkdown(r)).toContain("`e2e/a.spec.ts` — playwright · hook.runners [vitest]");
+    expect(toHtml(r)).toContain("Selected, not run in the hook (left to CI)");
+    // A left-to-CI file with a result, or a count that disagrees, is an integrity violation.
+    r.executions.push({
+      file: "e2e/a.spec.ts",
+      adapter: "playwright",
+      status: "passed",
+      durationMs: 1,
+      tests: [],
+    });
+    expect(validateReportIntegrity(r)).toContain(
+      "e2e/a.spec.ts is left to CI but has an execution record",
+    );
+    r.executions.pop();
+    r.summary.leftToCi = 0;
+    expect(validateReportIntegrity(r)).toContain(
+      "summary.leftToCi does not match the files left to CI",
+    );
+  });
+
   it("never counts skipped-by-selection tests as passed", () => {
     const r = report();
     expect(r.summary.passed).toBe(1);
