@@ -10,7 +10,7 @@ import { dirname, join, posix } from "node:path";
 import type { TestLayout } from "@smarttest/config";
 import type { DependencyGraph } from "@smarttest/dependency-graph";
 import type { RulesEngine } from "@smarttest/rules-engine";
-import { exists, matchGlob, SmartTestError } from "@smarttest/shared";
+import { assertNoSymlinkBelow, exists, matchGlob, SmartTestError } from "@smarttest/shared";
 import type { FileAnalysis, SymbolRecord } from "@smarttest/source-parser";
 import { topLevelSymbols } from "@smarttest/source-parser";
 import type { TestCategory } from "@smarttest/test-discovery";
@@ -370,6 +370,9 @@ export async function applyGeneration(
 ): Promise<string[]> {
   const toWrite = items.filter((i) => i.status === "create" && i.content !== undefined);
   for (const i of toWrite) {
+    // Targets come from layout settings in the (repository-controlled) configuration: refuse
+    // `../` and any directory link that would place a generated file outside the project.
+    assertNoSymlinkBelow(root, join(root, i.target));
     if (await exists(join(root, i.target))) {
       throw new SmartTestError(`Refusing to overwrite ${i.target}`, {
         code: "ST_GENERATE_COLLISION",

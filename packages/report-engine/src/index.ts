@@ -162,6 +162,27 @@ const esc = (s: unknown) =>
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
 
+/**
+ * Repository text in the markdown summary (posted to a CI step summary or a pull request): no
+ * markdown syntax (links, images, emphasis, table pipes) and no HTML from file or symbol names.
+ */
+const mdText = (s: unknown) =>
+  esc(
+    String(s)
+      .replace(/[\r\n]+/g, " ")
+      .replace(/[\\`*_[\]()!#|~]/g, "\\$&"),
+  );
+
+/** A code span that a backtick, pipe or newline in the text cannot end or break. */
+const mdCode = (s: unknown) => {
+  const text = String(s)
+    .replace(/[\r\n]+/g, " ")
+    .replace(/\|/g, "\\|");
+  const longest = Math.max(0, ...(text.match(/`+/g) ?? []).map((m) => m.length));
+  const fence = "`".repeat(longest + 1);
+  return longest ? `${fence} ${text} ${fence}` : `${fence}${text}${fence}`;
+};
+
 const xmlEsc = (s: unknown) =>
   esc(s)
     // strip characters that are invalid in XML 1.0
@@ -231,23 +252,23 @@ export function toMarkdown(report: RunReport, htmlLink?: string): string {
   );
   out.push("");
   out.push(
-    `**${s.selected} of ${s.totalTests} test files selected** · mode \`${report.decision.safetyMode}\` · analysis \`${report.decision.analysisStatus}\` · ${esc(report.change.description)}`,
+    `**${s.selected} of ${s.totalTests} test files selected** · mode \`${report.decision.safetyMode}\` · analysis \`${report.decision.analysisStatus}\` · ${mdText(report.change.description)}`,
   );
   if (report.decision.fallbackApplied)
     out.push(
       "",
-      `> ⚠️ Fallback applied: ${esc(report.decision.reasons.find((r) => r.kind === "fallback" || r.kind === "mandatory-trigger")?.message ?? "full suite")}`,
+      `> ⚠️ Fallback applied: ${mdText(report.decision.reasons.find((r) => r.kind === "fallback" || r.kind === "mandatory-trigger")?.message ?? "full suite")}`,
     );
   const failing = report.executions.filter((e) =>
     ["failed", "timed-out", "infrastructure-error"].includes(e.status),
   );
   if (failing.length) {
     out.push("", "| Failing file | Status |", "|---|---|");
-    for (const e of failing) out.push(`| \`${e.file}\` | ${e.status} |`);
+    for (const e of failing) out.push(`| ${mdCode(e.file)} | ${e.status} |`);
   }
   out.push("", "<details><summary>Why these tests?</summary>", "");
   for (const t of report.decision.selectedTests.slice(0, 50))
-    out.push(`- \`${t.filePath}\` — ${esc(t.reasons.map((r) => r.message).join("; "))}`);
+    out.push(`- ${mdCode(t.filePath)} — ${mdText(t.reasons.map((r) => r.message).join("; "))}`);
   if (report.decision.selectedTests.length > 50)
     out.push(`- … ${report.decision.selectedTests.length - 50} more`);
   out.push("", "</details>");

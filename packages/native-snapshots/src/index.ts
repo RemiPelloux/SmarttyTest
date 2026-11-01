@@ -52,6 +52,11 @@ export interface CreateSnapshotOptions {
   gitHead?: string;
 }
 
+/** Snapshot ids as `create` makes them (`snap_<time>_<random>`); never a path. */
+const SNAPSHOT_ID = /^snap_[a-z0-9]+_[a-f0-9]+$/;
+/** A SHA-256 content hash: blob paths are built from it. */
+const HASH = /^[0-9a-f]{64}$/;
+
 export class SnapshotStore implements ChangeProvider {
   readonly id = "native";
   private readonly dir: string;
@@ -67,8 +72,10 @@ export class SnapshotStore implements ChangeProvider {
   }
 
   private async read(id: string): Promise<Snapshot> {
-    const snap = await readJson<Snapshot>(join(this.dir, `${id}.json`));
-    if (!snap) {
+    const snap = SNAPSHOT_ID.test(id)
+      ? await readJson<Snapshot>(join(this.dir, `${id}.json`))
+      : undefined;
+    if (!snap || snap.id !== id) {
       throw new SmartTestError(`Snapshot ${id} not found`, {
         code: "ST_SNAPSHOT_NOT_FOUND",
         category: "usage",
@@ -85,8 +92,11 @@ export class SnapshotStore implements ChangeProvider {
       .map((f) => f.slice(0, -5));
     const out: SnapshotSummary[] = [];
     for (const id of ids) {
+      // The id inside the file names files to delete or rewrite later (prune, markVerified):
+      // it must be the file's own, well-formed name, never a path from the file's content.
+      if (!SNAPSHOT_ID.test(id)) continue;
       const s = await readJson<Snapshot>(join(this.dir, `${id}.json`));
-      if (!s) continue;
+      if (!s || s.id !== id) continue;
       out.push({
         id: s.id,
         createdAt: s.createdAt,
@@ -138,7 +148,7 @@ export class SnapshotStore implements ChangeProvider {
         prev &&
         prev.size === st.size &&
         prev.mtimeMs === st.mtimeMs &&
-        (!storeContent || (await exists(this.blobPath(prev.hash))))
+        (!storeContent || (HASH.test(prev.hash) && (await exists(this.blobPath(prev.hash)))))
       ) {
         out[path] = prev;
         continue;
@@ -153,6 +163,7 @@ export class SnapshotStore implements ChangeProvider {
   }
 
   private blobPath(hash: string): string {
+    if (!HASH.test(hash)) throw new Error(`Invalid content hash in snapshot: ${hash.slice(0, 80)}`);
     return join(this.blobs, hash.slice(0, 2), `${hash}.gz`);
   }
 

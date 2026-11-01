@@ -1,4 +1,4 @@
-import { mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, rm, symlink, writeFile } from "node:fs/promises";
 import { request as httpRequest } from "node:http";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -335,6 +335,56 @@ describe("read models", () => {
     const traversal = await api("/api/reports/..%2F..%2Fpackage.json");
     expect(traversal.res.status).toBe(400);
     expect((traversal.json as StudioApiError).error.code).toBe("ST_STUDIO_FILE");
+  });
+
+  it("does not follow a report symlink out of the store and sandboxes served reports", async () => {
+    const reports = join(root, ".smarttest/reports");
+    await mkdir(reports, { recursive: true });
+    await writeFile(join(root, "secret.txt"), "PRIVATE-KEY-MATERIAL\n");
+    await rm(join(reports, "junit.xml"), { force: true });
+    await symlink(join(root, "secret.txt"), join(reports, "junit.xml"));
+    const leaked = await api("/api/reports/last-run.junit.xml");
+    expect(leaked.res.status).toBe(404);
+    expect(JSON.stringify(leaked.json)).not.toContain("PRIVATE-KEY-MATERIAL");
+    await rm(join(reports, "junit.xml"), { force: true });
+    // A linked reports directory is refused too, not only a linked file.
+    await mkdir(join(root, "elsewhere"), { recursive: true });
+    await writeFile(join(root, "elsewhere", "summary.md"), "PRIVATE-KEY-MATERIAL\n");
+    await rm(reports, { recursive: true, force: true });
+    await symlink(join(root, "elsewhere"), reports, "junction");
+    const viaDir = await api("/api/reports/last-run.md");
+    expect(viaDir.res.status).toBe(404);
+    expect(JSON.stringify(viaDir.json)).not.toContain("PRIVATE-KEY-MATERIAL");
+    await rm(reports, { force: true });
+    await rm(join(root, "elsewhere"), { recursive: true, force: true });
+    await mkdir(reports, { recursive: true });
+    await rm(join(root, "secret.txt"), { force: true });
+
+    await writeFile(join(reports, "report.html"), "<p>report</p>");
+    const html = await api("/api/reports/last-run.html");
+    expect(html.res.status).toBe(200);
+    expect(html.res.headers.get("content-security-policy")).toMatch(/; sandbox$/);
+    await rm(join(reports, "report.html"), { force: true });
+  });
+
+  it("refuses option-like revisions and traversing snapshot ids as change sources", async () => {
+    for (const source of [
+      { kind: "base", ref: "--output=/tmp/pwned" },
+      { kind: "base", ref: "main", target: "-c core.pager=sh" },
+      { kind: "base", ref: "main\nHEAD" },
+      { kind: "snapshot", id: "../../package" },
+      { kind: "snapshot", id: "a/b" },
+    ]) {
+      for (const path of ["/api/refresh", "/api/run"]) {
+        const { res, json } = await api(path, {
+          method: "POST",
+          body: path === "/api/run" ? { scope: "affected", source } : { source },
+          headers: { origin: origin() },
+        });
+        expect(res.status, `${path} ${JSON.stringify(source)}`).toBe(400);
+        expect((json as StudioApiError).error.code).toBe("ST_STUDIO_SOURCE");
+      }
+    }
   });
 
   it("keeps the Studio run id when the core report finishes under its own id", async () => {

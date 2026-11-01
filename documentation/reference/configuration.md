@@ -63,6 +63,8 @@ export default defineConfig({
 
 Unknown keys produce warnings instead of being silently accepted.
 
+The configuration is repository content, so its paths must stay inside the project: `storeDir` (a subdirectory, never the project root), `reports.outputDir`, `tests.directory`, `tests.templates` and `runners[].dir`/`config` are refused when they are absolute or leave the project with `../` (`ST_CONFIG_INVALID`). A command-line `--output` is your own choice and is not restricted. SmartTest also refuses to write its state or reports through a symbolic link inside the project (`ST_UNSAFE_PATH`), and refuses a store that is committed to Git (`ST_STORE_TRACKED`). See the [security review](../architecture/security-review.md).
+
 ## Per-project conventions
 
 ```ts

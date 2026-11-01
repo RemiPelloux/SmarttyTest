@@ -23,6 +23,7 @@ Reference
 Architecture and design
 - [Architecture overview](architecture/overview.md)
 - [Decision records](architecture/adr/README.md)
+- [Security review (1.0.0)](architecture/security-review.md)
 - [Design system](design/design-system.md), [motion](design/motion.md), [Studio design brief](design/studio.md)
 
 Product and planning

@@ -9,6 +9,7 @@ import {
   fileSink,
   formatDuration,
   SmartTestError,
+  terminalSafe,
   toExitCode,
   VERSION,
   writeFileAtomic,
@@ -1694,10 +1695,14 @@ async function cmdReport(ctx: Ctx): Promise<number> {
   return ExitCode.Success;
 }
 
+/** How a file is opened: never through `cmd /c start`, which would run `&`, `|` or `^` in it. */
+export function openCommand(path: string, platform = process.platform): [string, string[]] {
+  const cmd = platform === "darwin" ? "open" : platform === "win32" ? "explorer.exe" : "xdg-open";
+  return [cmd, [path]];
+}
+
 function openFile(path: string): void {
-  const cmd =
-    process.platform === "darwin" ? "open" : process.platform === "win32" ? "cmd" : "xdg-open";
-  const args = process.platform === "win32" ? ["/c", "start", "", path] : [path];
+  const [cmd, args] = openCommand(path);
   try {
     spawn(cmd, args, { detached: true, stdio: "ignore" }).unref();
   } catch {
@@ -1864,10 +1869,11 @@ export async function main(
       positionals,
       root,
       interactive,
+      // Lines carry repository text (test names, paths, runner output): no raw escape sequences.
       out: (line = "") => {
-        if (!jsonMode) io.stdout.write(`${line}\n`);
+        if (!jsonMode) io.stdout.write(`${terminalSafe(line)}\n`);
       },
-      err: (line = "") => io.stderr.write(`${line}\n`),
+      err: (line = "") => io.stderr.write(`${terminalSafe(line)}\n`),
       json: (cmd, data) =>
         io.stdout.write(
           `${JSON.stringify({ schemaVersion: 1, command: cmd, ...((data && typeof data === "object" && !Array.isArray(data) ? data : { data }) as object) }, null, 2)}\n`,
@@ -1888,7 +1894,7 @@ export async function main(
                 ...(flags.verbose && !jsonMode
                   ? [
                       (_r: unknown, formatted: string) =>
-                        void io.stderr.write(`${t.dim(formatted)}\n`),
+                        void io.stderr.write(`${terminalSafe(t.dim(formatted))}\n`),
                     ]
                   : []),
               ],
@@ -1897,7 +1903,7 @@ export async function main(
         }
         if (!jsonMode && !flags.quiet)
           for (const w of opened.loaded.warnings)
-            io.stderr.write(`${t.yellow("▲")} config ${w.path}: ${w.message}\n`);
+            io.stderr.write(terminalSafe(`${t.yellow("▲")} config ${w.path}: ${w.message}\n`));
         return opened;
       },
     };
@@ -1919,12 +1925,14 @@ export async function main(
         `${JSON.stringify({ schemaVersion: 1, error: { code: e.code ?? "ST_INTERNAL", category: e.category ?? "internal", message: e.message, hint: e.hint } }, null, 2)}\n`,
       );
     } else if (error instanceof SmartTestError) {
-      io.stderr.write(`${t.red("✕")} ${t.bold(error.code)}  ${error.message}\n`);
-      if (error.hint) io.stderr.write(`  ${t.dim("hint:")} ${error.hint}\n`);
+      io.stderr.write(terminalSafe(`${t.red("✕")} ${t.bold(error.code)}  ${error.message}\n`));
+      if (error.hint) io.stderr.write(terminalSafe(`  ${t.dim("hint:")} ${error.hint}\n`));
       if (argv.includes("--verbose") && error.cause)
         io.stderr.write(`  ${t.dim(String((error.cause as Error).stack ?? error.cause))}\n`);
     } else {
-      io.stderr.write(`${t.red("✕")} ${t.bold("ST_INTERNAL")}  ${(error as Error).message}\n`);
+      io.stderr.write(
+        terminalSafe(`${t.red("✕")} ${t.bold("ST_INTERNAL")}  ${(error as Error).message}\n`),
+      );
       if (argv.includes("--verbose")) io.stderr.write(`${(error as Error).stack}\n`);
       io.stderr.write(
         `  ${t.dim("This is a SmartTest bug. Please report it with the output of `smarttest doctor --json`.")}\n`,

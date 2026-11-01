@@ -112,7 +112,12 @@ export function parsePlaywrightReport(
   return out;
 }
 
-const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+/**
+ * A file filter as a regular expression. A leading `-` becomes `[-]` (same match), so a spec
+ * file named like an option (`--config=x.spec.ts`) is never read as one.
+ */
+export const escapeRe = (s: string) =>
+  s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/^-/, "[-]");
 
 export class PlaywrightAdapter implements TestAdapter {
   readonly id = "playwright";

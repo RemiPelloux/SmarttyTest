@@ -1,20 +1,23 @@
 /**
  * @smarttest/smart-init — explained, previewable, idempotent and reversible setup (spec §5).
  */
-import { chmod, readFile, rm } from "node:fs/promises";
-import { join } from "node:path";
+import { chmod, readFile, realpath, rm } from "node:fs/promises";
+import { dirname, join, resolve } from "node:path";
 import type { Rule, SmartTestConfig } from "@smarttest/config";
 import { findConfigFile } from "@smarttest/config";
 import type { ProjectProfile } from "@smarttest/project-detector";
 import {
+  assertNoSymlinkBelow,
   detectIndent,
   exists,
   readJson,
   readText,
+  relPosix,
   sha256,
   writeFileAtomic,
   writeJson,
 } from "@smarttest/shared";
+import { detectHookTarget } from "./hooks.js";
 
 export * from "./hooks.js";
 export * from "./migrate.js";
@@ -475,6 +478,9 @@ export async function applyPlan(
     if (fp.action === "skip" || fp.after === undefined) continue;
     if (options.onlyLowRisk && fp.risk !== "low") continue;
     const abs = join(root, fp.path);
+    // A committed directory link (`.husky -> ~/bin`) must not carry a write out of the project.
+    // Paths that leave the project are Git's own hook files, resolved by Git (`../.git/hooks`).
+    if (relPosix(root, abs) !== undefined) assertNoSymlinkBelow(root, dirname(abs));
     const current = await readText(abs);
     if (fp.action === "create" && current !== undefined) continue; // appeared meanwhile — never overwrite
     if (fp.action === "modify" && current !== fp.before) continue; // changed since planning — skip safely
@@ -505,6 +511,30 @@ export interface RollbackResult {
   conflicts: string[];
 }
 
+/**
+ * The journal lives in the store, which repository content can plant: an entry may only name a
+ * file inside the project reached without directory links, or one of Git's own hook files (which
+ * Git may keep outside the project, e.g. a subdirectory project or a linked worktree).
+ */
+async function journalTargetAllowed(root: string, path: string): Promise<boolean> {
+  if (path.includes("\0")) return false;
+  const abs = resolve(root, path);
+  if (relPosix(root, abs) !== undefined) {
+    try {
+      assertNoSymlinkBelow(root, dirname(abs));
+      return true;
+    } catch {
+      return false;
+    }
+  }
+  const real = await realpath(root).catch(() => root);
+  for (const stage of ["pre-commit", "pre-push"] as const) {
+    const hook = (await detectHookTarget(root, "git", stage)).file;
+    if (resolve(root, hook) === abs || resolve(real, hook) === resolve(real, path)) return true;
+  }
+  return false;
+}
+
 /** Undoes init. Files edited after init are reported, never overwritten. */
 export async function rollback(
   root: string,
@@ -515,6 +545,10 @@ export async function rollback(
   const result: RollbackResult = { restored: [], removed: [], conflicts: [] };
   if (!journal) return result;
   for (const e of [...journal.entries].reverse()) {
+    if (typeof e.path !== "string" || !(await journalTargetAllowed(root, e.path))) {
+      result.conflicts.push(`${String(e.path)} (not a file SmartTest set up — left untouched)`);
+      continue;
+    }
     const abs = join(root, e.path);
     const current = await readText(abs);
     if (current === undefined) {

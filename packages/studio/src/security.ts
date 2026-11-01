@@ -45,19 +45,27 @@ export function hostnameOf(hostHeader: string | undefined): string {
   return host;
 }
 
+/**
+ * Port of a Host header: `undefined` when there is none, `NaN` when the part after the colon is
+ * not a plain decimal port (so `127.0.0.1:4173@evil` cannot skip the port check).
+ */
 export function portOf(hostHeader: string | undefined): number | undefined {
   if (!hostHeader) return undefined;
   const value = hostHeader.trim();
+  let rest: string;
   if (value.startsWith("[")) {
     const end = value.indexOf("]");
-    if (end === -1) return undefined;
-    const rest = value.slice(end + 1);
-    if (!rest.startsWith(":")) return undefined;
-    return Number(rest.slice(1)) || undefined;
+    if (end === -1) return Number.NaN;
+    rest = value.slice(end + 1);
+    if (rest === "") return undefined;
+    if (!rest.startsWith(":")) return Number.NaN;
+  } else {
+    const colon = value.lastIndexOf(":");
+    if (colon === -1) return undefined;
+    rest = value.slice(colon);
   }
-  const colon = value.lastIndexOf(":");
-  if (colon === -1) return undefined;
-  return Number(value.slice(colon + 1)) || undefined;
+  const digits = rest.slice(1);
+  return /^\d{1,5}$/.test(digits) ? Number(digits) : Number.NaN;
 }
 
 /** `localhost`, any `127.x.y.z`, and `::1`. Nothing else reaches the server. */
@@ -153,6 +161,15 @@ export function checkHost(hostHeader: string | undefined, port: number): Securit
     };
   }
   const hostPort = portOf(hostHeader);
+  if (hostPort !== undefined && !Number.isFinite(hostPort)) {
+    return {
+      ok: false,
+      status: 400,
+      code: "ST_STUDIO_HOST",
+      message: "Malformed Host header",
+      hint: null,
+    };
+  }
   if (hostPort !== undefined && hostPort !== port) {
     return {
       ok: false,

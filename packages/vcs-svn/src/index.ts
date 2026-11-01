@@ -5,6 +5,7 @@
 import { readdir, stat } from "node:fs/promises";
 import { join } from "node:path";
 import {
+  assertSafeRevision,
   type ChangeSet,
   type FileChange,
   type RevisionRef,
@@ -23,6 +24,15 @@ import {
   describeSource,
   parseUnifiedRanges,
 } from "@smarttest/vcs-core";
+
+/**
+ * `svn cat` arguments for one working-copy file. File names come from the repository: `--` ends
+ * option parsing (a file named `--config-dir=…` is not an option) and a trailing `@` keeps an `@`
+ * in the name from being read as a peg revision.
+ */
+export function catArgs(revision: string, path: string): string[] {
+  return ["cat", "--non-interactive", "-r", revision, "--", path.includes("@") ? `${path}@` : path];
+}
 
 const IGNORED_DIRS = new Set(["node_modules", ".svn", ".git", ".smarttest", "dist", "coverage"]);
 
@@ -101,7 +111,7 @@ export class SvnAdapter implements VersionControlAdapter, ChangeProvider {
   }
 
   async getFileContent(path: string, revision: RevisionRef): Promise<Uint8Array | null> {
-    const r = await runProcess("svn", ["cat", "-r", revision.ref, path, "--non-interactive"], {
+    const r = await runProcess("svn", catArgs(assertSafeRevision(revision.ref), path), {
       cwd: this.projectRoot,
     });
     return r.code === 0 ? Buffer.from(r.stdout, "utf8") : null;
@@ -162,7 +172,8 @@ export class SvnAdapter implements VersionControlAdapter, ChangeProvider {
     let before = "BASE";
     let changeSet: ChangeSet;
     if (source.kind === "base") {
-      before = source.ref;
+      before = assertSafeRevision(source.ref, "Base");
+      if (source.target) assertSafeRevision(source.target, "Target");
       changeSet = await this.collect(
         source.target ? `${source.ref}:${source.target}` : source.ref,
         !source.target,
@@ -173,7 +184,7 @@ export class SvnAdapter implements VersionControlAdapter, ChangeProvider {
       changeSet.targetRevision = "working-copy";
     }
     const readBefore = async (path: string): Promise<string | undefined> => {
-      const r = await runProcess("svn", ["cat", "-r", before, path, "--non-interactive"], {
+      const r = await runProcess("svn", catArgs(before, path), {
         cwd: this.projectRoot,
       });
       return r.code === 0 ? r.stdout : undefined;

@@ -44,6 +44,9 @@ import {
 } from "@smarttest/semantic-diff";
 import type { TestAdapter } from "@smarttest/shared";
 import {
+  assertConfinedWrite,
+  assertNoSymlinkBelow,
+  confineWrites,
   ExitCode,
   exists,
   type Logger,
@@ -51,6 +54,7 @@ import {
   matchGlob,
   readJson,
   readText,
+  runProcess,
   runWithEnvScope,
   type SafetyMode,
   SmartTestError,
@@ -355,16 +359,49 @@ export class SmartTest {
     private readonly mirror?: OpenOptions["mirror"],
   ) {
     this.storeDir = storeDir ?? join(root, loaded.config.storeDir);
+    // Writes into the store and the report directory never pass through a link (spec §30.2).
+    confineWrites(root, this.storeDir);
+    const reports = loaded.config.reports.outputDir;
+    confineWrites(root, isAbsolute(reports) ? reports : join(root, reports));
   }
 
   static async open(options: OpenOptions): Promise<SmartTest> {
     const loaded = await loadConfig(options.root, options.configPath);
-    return new SmartTest(
+    const st = new SmartTest(
       options.root,
       loaded,
       options.logger ?? silentLogger,
       options.storeDir,
       options.mirror,
+    );
+    await st.assertStoreUntracked();
+    return st;
+  }
+
+  /**
+   * The store holds caches that decide what runs: cached passes, the symbol index, traces. Its
+   * content is trusted only because SmartTest wrote it on this machine. A store committed to the
+   * repository (for example by a pull request from a fork) could claim passes or hide
+   * dependencies and so reduce the selection. Such a store is refused, never read.
+   */
+  private async assertStoreUntracked(): Promise<void> {
+    const rel = relative(this.root, this.storeDir).split("\\").join("/");
+    if (!rel || rel.startsWith("..") || isAbsolute(rel)) return;
+    const res = await runProcess(
+      "git",
+      ["-c", "core.quotePath=false", "ls-files", "-z", "--", `${rel}/`],
+      { cwd: this.root },
+    ).catch(() => undefined);
+    if (res?.code !== 0) return; // not a Git repository, or Git is unavailable
+    const tracked = res.stdout.split("\0").filter(Boolean);
+    if (!tracked.length) return;
+    throw new SmartTestError(
+      `${rel}/ is committed to the repository (${tracked.length} tracked file(s), e.g. ${tracked[0]}). SmartTest will not trust local state that comes from the repository content.`,
+      {
+        code: "ST_STORE_TRACKED",
+        category: "configuration",
+        hint: `Remove it from version control and ignore it: \`git rm -r --cached ${rel}\`, then add \`${rel}/\` to .gitignore. In CI, do not run SmartTest on a pull request that commits it.`,
+      },
     );
   }
 
@@ -2343,6 +2380,7 @@ export class SmartTest {
           .split(/\r?\n/)
           .some((l) => l.trim().replace(/^\//, "").replace(/\/$/, "") === storeRel)
       ) {
+        assertNoSymlinkBelow(this.root, gi); // a committed `.gitignore` link must not be followed
         await wf(gi, `${text}${text && !text.endsWith("\n") ? "\n" : ""}${storeRel}/\n`);
         fixed.push(`.gitignore: ignore ${storeRel}/`);
       }
@@ -2694,8 +2732,10 @@ export class SmartTest {
       selectedMs: Math.round(v.selectedDurationMs + v.analysisOverheadMs),
     };
     const { appendFile, mkdir } = await import("node:fs/promises");
+    const shadowLog = join(this.storeDir, "shadow", "history.jsonl");
+    assertConfinedWrite(shadowLog); // appendFile follows a link at the file itself
     await mkdir(join(this.storeDir, "shadow"), { recursive: true });
-    await appendFile(join(this.storeDir, "shadow", "history.jsonl"), `${JSON.stringify(record)}\n`);
+    await appendFile(shadowLog, `${JSON.stringify(record)}\n`);
     return { record, validation: v };
   }
 
