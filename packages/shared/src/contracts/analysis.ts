@@ -134,8 +134,15 @@ export interface ResolveResult {
   resolved?: string;
   external?: boolean;
   reason?: string;
+  /**
+   * With `resolved`: the import may load another file too (export conditions or tsconfig projects
+   * that disagree). The edge is kept and the reason becomes uncertainty.
+   */
+  uncertain?: string;
 }
 
 export interface ModuleResolver {
   resolve(fromFile: string, specifier: string): ResolveResult;
+  /** A glob pattern written with an alias (`@/pages/*.ts`) as a root-relative pattern. */
+  resolvePattern?(fromFile: string, pattern: string): string | undefined;
 }
