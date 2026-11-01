@@ -249,7 +249,8 @@ export async function benchmarkHistory(
       ).length;
       // Classify failures the selection did not include: regression missed, or already failing?
       const failingFull = failing(full);
-      const notSelected = failingFull.filter((f) => !selected.includes(f));
+      const selectedSet = new Set(selected);
+      const notSelected = failingFull.filter((f) => !selectedSet.has(f));
       const preexisting: string[] = [];
       const missed: string[] = [];
       if (notSelected.length) {

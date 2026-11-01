@@ -8,7 +8,6 @@ import {
   shortHash,
   writeFileAtomic,
 } from "@smarttest/shared";
-import ts from "typescript";
 import { resolveConfig } from "./defaults.js";
 import type { ResolvedConfig, SmartTestConfig } from "./types.js";
 import { type ConfigIssue, validateConfig } from "./validate.js";
@@ -48,6 +47,8 @@ async function importConfigModule(root: string, file: string): Promise<unknown> 
     /^\s*import\s+(?:type\s+)?\{[^}]*\}\s+from\s+["'](?:@tkmremi\/smarttest|smarttest|@smarttest\/config)["'];?\s*$/gm,
     "",
   );
+  // TypeScript (about 9 MB) is loaded only here: a JSON configuration never needs it.
+  const { default: ts } = await import("typescript");
   const js = ts.transpileModule(`const defineConfig = (c) => c;\n${stripped}`, {
     compilerOptions: {
       module: ts.ModuleKind.ESNext,

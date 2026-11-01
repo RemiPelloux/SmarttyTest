@@ -159,9 +159,10 @@ export async function executeGroups(
       // Failures in files the runner ran beyond the selection (a Playwright setup project, a file
       // its config adds): they are not this selection's tests, but the run failed, so they block it.
       const outside: TestExecution[] = [];
+      const pendingSet = new Set(pending);
       for (const exec of run.executions) {
         const file = fileOfTestId(exec.testId);
-        if (!pending.includes(file)) {
+        if (!pendingSet.has(file)) {
           if (FAILING.has(exec.status) && exec.status !== "cancelled") outside.push(exec);
           continue; // a passing result of a file beyond the selection is not reported
         }
@@ -274,8 +275,16 @@ export async function executeGroups(
       ];
     }
     const groupDuration = performance.now() - groupStart;
+    // Each file's executions, in the order they were recorded (one pass, not one per file).
+    const byFile = new Map<string, TestExecution[]>();
+    for (const e of byId.values()) {
+      const file = fileOfTestId(e.testId);
+      const list = byFile.get(file);
+      if (list) list.push(e);
+      else byFile.set(file, [e]);
+    }
     for (const f of group.files) {
-      const tests = [...byId.values()].filter((e) => fileOfTestId(e.testId) === f);
+      const tests = byFile.get(f) ?? [];
       if (!results.has(f)) {
         const status = aggregateStatus(tests);
         const failing = tests.find((t) => t.error);
@@ -290,9 +299,10 @@ export async function executeGroups(
         });
       }
     }
+    const inGroup = new Set(group.files);
     if (
       [...results.values()].some(
-        (r) => group.files.includes(r.file) && (r.status === "failed" || r.status === "timed-out"),
+        (r) => inGroup.has(r.file) && (r.status === "failed" || r.status === "timed-out"),
       )
     )
       failedGroup = true;

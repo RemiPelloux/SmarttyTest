@@ -146,7 +146,9 @@ export class DependencyGraph {
   private forwardClosure = new Map<string, Set<string>>();
   private exportCache = new Map<string, Map<string, string>>();
   private localCache = new Map<string, Map<string, LocalTarget>>();
-  private reachingUncertainty: Set<string> | undefined;
+  /** Files reaching uncertainty → how many uncertain files they reach (computed on first use). */
+  private reachingUncertainty: Map<string, number> | undefined;
+  private importersByFile: Map<string, string[]> | undefined;
   readonly uncertainty = new Map<string, string[]>();
   readonly deletedFiles = new Set<string>();
   private edgeCount = 0;
@@ -684,6 +686,7 @@ export class DependencyGraph {
     }
     this.forwardClosure.clear();
     this.reachingUncertainty = undefined;
+    this.importersByFile = undefined;
     this.edgeCount -= removed;
     for (const f of set) this.buildFile(f, this.files.get(f) as FileAnalysis);
     return true;
@@ -1084,33 +1087,182 @@ export class DependencyGraph {
     return out;
   }
 
-  /** Files whose transitive imports include a file with uncertainty (computed once, reverse BFS). */
-  private filesReachingUncertainty(): Set<string> {
-    if (this.reachingUncertainty) return this.reachingUncertainty;
+  /** Importers of each file: the `forward` edges reversed (computed once). */
+  private reverseForward(): Map<string, string[]> {
+    if (this.importersByFile) return this.importersByFile;
     const reverse = new Map<string, string[]>();
     for (const [from, tos] of this.forward)
-      for (const to of tos) reverse.set(to, [...(reverse.get(to) ?? []), from]);
-    const out = new Set<string>(this.uncertainty.keys());
-    const queue = [...out];
-    for (let i = 0; i < queue.length; i++) {
-      for (const importer of reverse.get(queue[i] as string) ?? []) {
-        if (!out.has(importer)) {
-          out.add(importer);
-          queue.push(importer);
-        }
+      for (const to of tos) {
+        const list = reverse.get(to);
+        if (list) list.push(from);
+        else reverse.set(to, [from]);
       }
+    this.importersByFile = reverse;
+    return reverse;
+  }
+
+  /**
+   * Files whose transitive imports (`dependenciesOf`) include a file matching `matches`, in one
+   * backward pass instead of a closure per file. A matching file is in the result only when it
+   * also reaches another matching file, or itself through a cycle: callers that select a file
+   * matching on its own test that separately.
+   */
+  filesDependingOn(matches: (file: string) => boolean): Set<string> {
+    const reverse = this.reverseForward();
+    const out = new Set<string>();
+    const queue: string[] = [];
+    for (const [file, importers] of reverse) {
+      if (!matches(file)) continue;
+      for (const i of importers)
+        if (!out.has(i)) {
+          out.add(i);
+          queue.push(i);
+        }
     }
-    this.reachingUncertainty = out;
+    for (let q = 0; q < queue.length; q++)
+      for (const i of reverse.get(queue[q] as string) ?? [])
+        if (!out.has(i)) {
+          out.add(i);
+          queue.push(i);
+        }
     return out;
   }
 
-  /** Files (incl. the file itself) with uncertainty reachable from a file. */
-  uncertaintyReachableFrom(file: string): { file: string; reasons: string[] }[] {
-    if (!this.uncertainty.size || !this.filesReachingUncertainty().has(file)) return [];
+  /**
+   * For each file reaching uncertainty, how many files with uncertainty it reaches (itself
+   * included). One backward pass finds the files reaching any; then each strongly connected
+   * component of them, dependencies first (Tarjan), carries the set of uncertain files it reaches
+   * as a bit set: its own, and those of the components it imports.
+   */
+  private uncertaintyCounts(): Map<string, number> {
+    if (this.reachingUncertainty) return this.reachingUncertainty;
+    const reverse = this.reverseForward();
+    const origins = [...this.uncertainty.keys()];
+    const reach = new Set<string>(origins);
+    const queue = [...origins];
+    for (let q = 0; q < queue.length; q++)
+      for (const importer of reverse.get(queue[q] as string) ?? [])
+        if (!reach.has(importer)) {
+          reach.add(importer);
+          queue.push(importer);
+        }
+    const nodes = [...reach];
+    const id = new Map(nodes.map((n, i) => [n, i]));
+    const succ = nodes.map((n) => {
+      const out: number[] = [];
+      for (const to of this.forward.get(n) ?? []) {
+        const j = id.get(to);
+        if (j !== undefined) out.push(j);
+      }
+      return out;
+    });
+    const words = Math.ceil(origins.length / 32);
+    const bitOf = new Map(origins.map((o, i) => [id.get(o) as number, i]));
+    const n = nodes.length;
+    const index = new Int32Array(n).fill(-1);
+    const low = new Int32Array(n);
+    const comp = new Int32Array(n).fill(-1);
+    const onStack = new Uint8Array(n);
+    const stack: number[] = [];
+    const bits: Uint32Array[] = [];
+    const counts = new Map<string, number>();
+    let next = 0;
+    for (let start = 0; start < n; start++) {
+      if (index[start] !== -1) continue;
+      // Iterative Tarjan: each frame is a node and the position in its successors.
+      const frames: [number, number][] = [[start, 0]];
+      index[start] = low[start] = next++;
+      stack.push(start);
+      onStack[start] = 1;
+      while (frames.length) {
+        const frame = frames[frames.length - 1] as [number, number];
+        const v = frame[0];
+        const edges = succ[v] as number[];
+        if (frame[1] < edges.length) {
+          const w = edges[frame[1]++] as number;
+          if (index[w] === -1) {
+            index[w] = low[w] = next++;
+            stack.push(w);
+            onStack[w] = 1;
+            frames.push([w, 0]);
+          } else if (onStack[w]) low[v] = Math.min(low[v] as number, index[w] as number);
+          continue;
+        }
+        frames.pop();
+        const parent = frames[frames.length - 1];
+        if (parent) low[parent[0]] = Math.min(low[parent[0]] as number, low[v] as number);
+        if (low[v] !== index[v]) continue;
+        // v roots a component; every component it imports is complete.
+        const c = bits.length;
+        const set = new Uint32Array(words);
+        const members: number[] = [];
+        let w: number;
+        do {
+          w = stack.pop() as number;
+          onStack[w] = 0;
+          comp[w] = c;
+          members.push(w);
+        } while (w !== v);
+        for (const m of members) {
+          const b = bitOf.get(m);
+          if (b !== undefined) set[b >>> 5] = (set[b >>> 5] as number) | (1 << (b & 31));
+          for (const s of succ[m] as number[]) {
+            const other = comp[s] as number;
+            if (other === c) continue;
+            const from = bits[other] as Uint32Array;
+            for (let k = 0; k < words; k++) set[k] = (set[k] as number) | (from[k] as number);
+          }
+        }
+        bits.push(set);
+        let count = 0;
+        for (let k = 0; k < words; k++) {
+          let x = set[k] as number;
+          while (x) {
+            x &= x - 1;
+            count++;
+          }
+        }
+        for (const m of members) counts.set(nodes[m] as string, count);
+      }
+    }
+    this.reachingUncertainty = counts;
+    return counts;
+  }
+
+  /** How many files with uncertainty a file reaches, itself included. */
+  uncertaintyCount(file: string): number {
+    return this.uncertainty.size ? (this.uncertaintyCounts().get(file) ?? 0) : 0;
+  }
+
+  /**
+   * Files (incl. the file itself) with uncertainty reachable from a file, in `dependenciesOf`
+   * order. `limit` stops after that many. The walk enters only files that reach uncertainty
+   * (a file that does not cannot lead to one), and stops once every uncertain file it reaches is
+   * found, so the order matches a walk of the whole closure without building or keeping it.
+   */
+  uncertaintyReachableFrom(
+    file: string,
+    limit = Number.POSITIVE_INFINITY,
+  ): { file: string; reasons: string[] }[] {
+    if (!this.uncertainty.size) return [];
+    const counts = this.uncertaintyCounts();
+    const want = Math.min(counts.get(file) ?? 0, limit);
+    if (want <= 0) return [];
     const out: { file: string; reasons: string[] }[] = [];
-    for (const f of [file, ...this.dependenciesOf(file)]) {
+    const own = this.uncertainty.get(file);
+    if (own) out.push({ file, reasons: own });
+    // Same traversal as `dependenciesOf` (stack, same push order), pruned to files reaching
+    // uncertainty: a pruned file's imports never reach it either, so the order of the rest holds.
+    const seen = new Set<string>();
+    const stack = [...(this.forward.get(file) ?? [])];
+    while (stack.length && out.length < want) {
+      const f = stack.pop() as string;
+      if (seen.has(f) || f === file) continue;
+      seen.add(f);
+      if (!counts.has(f)) continue;
       const u = this.uncertainty.get(f);
       if (u) out.push({ file: f, reasons: u });
+      for (const n of this.forward.get(f) ?? []) stack.push(n);
     }
     return out;
   }

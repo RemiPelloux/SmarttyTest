@@ -7,14 +7,10 @@
 import { readFile, stat } from "node:fs/promises";
 import { dirname, isAbsolute, join, posix, relative } from "node:path";
 import type { RunnerHit } from "@smarttest/impact-engine";
-import {
-  type ConfigPath,
-  type RunnerConfigFacts,
-  readNodeTestScript,
-  readRunnerConfig,
-} from "@smarttest/language-typescript";
+import type { ConfigPath, RunnerConfigFacts } from "@smarttest/language-typescript";
 import type { ChangeSet } from "@smarttest/shared";
 import type { RunnerRoot } from "@smarttest/test-discovery";
+import { languages } from "./languages.js";
 
 export interface RunnerInputs {
   root: RunnerRoot;
@@ -77,6 +73,7 @@ export async function readRunnerInputs(
   projectRoot: string,
   root: RunnerRoot,
 ): Promise<RunnerInputs> {
+  const { readRunnerConfig, readNodeTestScript } = (await languages()).ts;
   const out: RunnerInputs = {
     root,
     label: runnerLabel(root),
