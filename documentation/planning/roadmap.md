@@ -219,4 +219,6 @@ TypeScript 7 stays a watch item: 7.0.2 ships an `unstable/*` parser API, and the
 - Cloud and team analytics (PRD Release 5).
 - Other languages (PRD Release 6). The edge-provider SDK in 1.0.0 is designed for them.
 
+Next: [Roadmap to 1.5.0](roadmap-1.5.md).
+
 Working agreements: [Definition of Ready and Done](definition-of-ready-and-done.md) · [risks](risks.md).
