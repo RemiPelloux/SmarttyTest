@@ -35,6 +35,8 @@ await build({
     "parse-worker": join(root, "packages/core/src/parse-worker.ts"),
     "plugin-sdk": join(root, "packages/plugin-sdk/src/index.ts"),
     "plugin-sdk-conformance": join(root, "packages/plugin-sdk/src/conformance.ts"),
+    // `smarttest/playwright`: the page fixture that records browser coverage for `--coverage`.
+    playwright: join(root, "packages/adapter-playwright/src/coverage.ts"),
   },
   outdir: join(out, "dist"),
   bundle: true,
@@ -88,6 +90,17 @@ export declare function defineConfig(config: SmartTestConfig): SmartTestConfig;
 export declare function main(argv: readonly string[]): Promise<number>;
 `;
 await writeFile(join(out, "dist/index.d.ts"), types);
+await writeFile(
+  join(out, "dist/playwright.d.ts"),
+  `/** Set by \`smarttest run --coverage\` for Playwright groups: where the page fixture writes V8 coverage. */
+export declare const BROWSER_COVERAGE_ENV = "SMARTTEST_BROWSER_COVERAGE_DIR";
+/**
+ * Wraps Playwright's \`test\` so its \`page\` fixture records Chromium JS coverage on a SmartTest
+ * coverage run: \`export const test = withBrowserCoverage(base)\`. Chromium only; does nothing otherwise.
+ */
+export declare function withBrowserCoverage<T>(base: { extend(fixtures: { page: unknown }): T }): T;
+`,
+);
 
 // Plugin SDK declarations: emitted from the sources, with `@smarttest/shared` replaced by the
 // public contracts only (primitives and contracts/*, which hold types and nothing else).
@@ -174,6 +187,7 @@ const manifest = {
       types: "./dist/types/plugin-sdk/conformance.d.ts",
       default: "./dist/plugin-sdk-conformance.js",
     },
+    "./playwright": { types: "./dist/playwright.d.ts", default: "./dist/playwright.js" },
     "./schemas/*": "./schemas/*",
     "./package.json": "./package.json",
   },

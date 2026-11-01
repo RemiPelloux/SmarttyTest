@@ -26,6 +26,7 @@ import {
   sseWrite,
   stringField,
 } from "./http.js";
+import { impactMapOf } from "./impact-map.js";
 import { RunManager } from "./runs.js";
 import {
   assertLoopbackHost,
@@ -41,8 +42,10 @@ import {
   fileIndexOf,
   isIndexedFile,
   type LastRunFacts,
+  type LineCoverageSet,
   loadCoverage,
   loadLastRun,
+  NO_LINE_COVERAGE,
   overviewOf,
   readLastRunReport,
   type Snapshot,
@@ -111,6 +114,9 @@ class Studio {
   private inflight: { source: ChangeSource | null; promise: Promise<Snapshot> } | null = null;
   private last: LastRunFacts = EMPTY_LAST;
   private coverage: Snapshot["coverage"] = null;
+  private lineCoverage: LineCoverageSet = NO_LINE_COVERAGE;
+  /** Modification times the line coverage was read at; unchanged files are not parsed again. */
+  private lineCoverageStamp = "";
   private source: ChangeSource | null = null;
   private readonly clients = new Set<ServerResponse>();
   private heartbeat: NodeJS.Timeout | null = null;
@@ -158,6 +164,7 @@ class Studio {
       },
       flaky,
     };
+    await this.loadLineCoverage();
     if (coverage) this.coverage = coverage;
     else if (run?.coverage)
       this.coverage = {
@@ -171,6 +178,22 @@ class Studio {
           files: run.coverage.files,
         },
       };
+  }
+
+  private async loadLineCoverage(): Promise<void> {
+    const runs = join(this.st.storeDir, "runs");
+    const stamps = await Promise.all(
+      ["coverage-lines.json", "browser-coverage-lines.json"].map((name) =>
+        stat(join(runs, name)).then(
+          (info) => `${info.mtimeMs}:${info.size}`,
+          () => "-",
+        ),
+      ),
+    );
+    const stamp = stamps.join("|");
+    if (stamp === this.lineCoverageStamp) return;
+    this.lineCoverage = await this.st.lineCoverage().catch(() => NO_LINE_COVERAGE);
+    this.lineCoverageStamp = stamp;
   }
 
   async ensureSnapshot(): Promise<Snapshot> {
@@ -200,7 +223,13 @@ class Studio {
       const view = await this.st.traceView(analysis.input, analysis.index);
       // Runs started outside Studio (terminal, commit hook) change the last run and coverage.
       await this.loadRunState();
-      const snapshot = await buildSnapshot(this.st, view, this.coverage, analysis);
+      const snapshot = await buildSnapshot(
+        this.st,
+        view,
+        this.coverage,
+        analysis,
+        this.lineCoverage,
+      );
       // An analysis of a source that was replaced meanwhile answers its caller only.
       if (!sameSource(wanted, this.source)) return snapshot;
       this.snapshot = snapshot;
@@ -511,6 +540,14 @@ function apiRoutes(studio: Studio): ApiRoute[] {
       handler: async (_req, res) => {
         const { snapshot } = await studio.current();
         sendJson(res, 200, snapshot.impact);
+      },
+    },
+    {
+      pattern: /^\/api\/impact\/map$/,
+      methods: ["GET"],
+      handler: async (_req, res) => {
+        const { snapshot } = await studio.current();
+        sendJson(res, 200, impactMapOf(snapshot));
       },
     },
     {

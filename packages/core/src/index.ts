@@ -2,6 +2,12 @@
  * @smarttest/core — orchestration API used by the CLI (and later Studio).
  */
 
+export type {
+  BranchCoverage,
+  LineCoverageFile,
+  LineCoverageOrigin,
+  LineCoverageReport,
+} from "@smarttest/coverage-engine";
 export type { ProjectProfile } from "@smarttest/project-detector";
 export type { FileExecution, RunReport, RunSummary } from "@smarttest/report-engine";
 export { ExitCode, SmartTestError, toExitCode, VERSION } from "@smarttest/shared";

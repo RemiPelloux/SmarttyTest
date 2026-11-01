@@ -2,6 +2,7 @@
  * Studio's shell: pairing, routing, data loading, the one live run, and keyboard access.
  * The screens themselves live in screens.js and screens-b.js; both receive this context.
  */
+import { EMPTY_FILTERS } from "./map.js";
 import { isRunActive, renderRun, runVerdict } from "./run.js";
 import { renderImpact, renderOverview } from "./screens.js";
 import { filteredTests, renderSource, renderTests, renderTrust } from "./screens-b.js";
@@ -36,6 +37,7 @@ const state = {
     files: null,
     source: null,
     impactSource: null,
+    impactMap: null,
   },
   loading: new Set(),
   errors: new Map(),
@@ -48,6 +50,11 @@ const state = {
   impactFile: null,
   impactTest: null,
   impactSourcePath: null,
+  /** "files" (one changed file at a time) or "map" (the graph of every path). */
+  impactView: "files",
+  mapFilters: { ...EMPTY_FILTERS },
+  /** Which coverage the source viewer marks: "auto", "istanbul", "browser-v8" or "off". */
+  coverageOrigin: "auto",
   run: null,
   runOpen: false,
   runVerdict: null,
@@ -94,6 +101,36 @@ const actions = {
       fk,
       onClick: () => run(scope),
     }),
+  coverageRunButton: () =>
+    button({
+      label: "Run with coverage",
+      iconName: "play",
+      size: "btn--small",
+      disabled: isRunActive(state.run),
+      fk: "run-coverage",
+      title: "Run the affected tests with the runner's coverage on (selected scope)",
+      onClick: () => run("affected", undefined, { coverage: true }),
+    }),
+  setImpactView: (view) => {
+    state.impactView = view === "map" ? "map" : "files";
+    history.replaceState(null, "", state.impactView === "map" ? "/impact?view=map" : "/impact");
+    if (state.impactView === "map" && !state.data.impactMap) void loadMap();
+    render();
+  },
+  setMapFilter: (key, value) => {
+    state.mapFilters = { ...state.mapFilters, [key]: value };
+    render();
+  },
+  clearMapFilters: () => {
+    state.mapFilters = { ...EMPTY_FILTERS };
+    render();
+    document.getElementById("map-change")?.focus();
+  },
+  loadMap: () => loadMap(),
+  setCoverageOrigin: (origin) => {
+    state.coverageOrigin = origin;
+    render();
+  },
   refresh,
   load: (view, force = true) => load(view, { force }),
   run,
@@ -474,6 +511,9 @@ async function load(view, { force = false, quiet = false } = {}) {
         state.impactFile = files[0]?.path ?? null;
     } else if (view === "impact") {
       if (force) state.data.impactSource = null;
+      if (new URLSearchParams(location.search).get("view") === "map") state.impactView = "map";
+      // The map comes from the same snapshot: reload it with the impact once it was asked for.
+      if (state.impactView === "map" || state.data.impactMap) void loadMap();
       state.data.impact = await api("/api/impact");
       const files = state.data.impact.change.files ?? [];
       if (!state.impactFile || !files.some((file) => file.path === state.impactFile))
@@ -526,6 +566,38 @@ async function loadSource(path) {
       state.sourceLoading = false;
       render();
     }
+  }
+}
+
+let mapRequest = 0;
+
+async function loadMap() {
+  const request = ++mapRequest;
+  state.errors.delete("impact-map");
+  try {
+    const map = await api("/api/impact/map");
+    if (request !== mapRequest) return;
+    state.data.impactMap = map;
+    // A filter naming something the new analysis no longer has would hide every path.
+    const known = {
+      change: new Set(
+        map.changed
+          .flatMap((c) => [`file:${c.file}`, `node:${c.id}`])
+          .concat(map.nodes.filter((n) => n.role === "evidence").map((n) => `node:${n.id}`)),
+      ),
+      test: new Set(map.paths.map((p) => p.test)),
+      kind: new Set(map.edgeKinds),
+      confidence: new Set(map.confidences),
+    };
+    for (const key of Object.keys(known))
+      if (state.mapFilters[key] && !known[key].has(state.mapFilters[key]))
+        state.mapFilters = { ...state.mapFilters, [key]: "" };
+  } catch (error) {
+    if (request !== mapRequest) return;
+    if (handleApiError(error, { quiet: true })) return;
+    state.errors.set("impact-map", error);
+  } finally {
+    if (request === mapRequest) render();
   }
 }
 
@@ -605,7 +677,7 @@ function closeRun() {
   runOpener = null;
 }
 
-async function run(scope, file) {
+async function run(scope, file, { coverage = false } = {}) {
   if (isRunActive(state.run)) {
     toast("A run is already in progress in this Studio session", "fail");
     return;
@@ -613,6 +685,7 @@ async function run(scope, file) {
   try {
     const body = { scope };
     if (file) body.file = file;
+    if (coverage) body.coverage = true;
     rememberRunOpener();
     const started = await api("/api/run", { method: "POST", body });
     state.run = started.run;
@@ -1079,6 +1152,7 @@ async function start() {
     files: null,
     source: null,
     impactSource: null,
+    impactMap: null,
   };
   state.errors.clear();
   state.run = null;

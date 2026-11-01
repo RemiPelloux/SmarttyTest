@@ -17,6 +17,7 @@ import {
   pct,
   plural,
   relativeTime,
+  segmented,
   selectionMark,
   statusMark,
   tabPanel,
@@ -694,6 +695,107 @@ export function renderTrust(ctx) {
   );
 }
 
+const ORIGIN_WORDS = { istanbul: "Runner", "browser-v8": "Browser" };
+
+/** The coverage the viewer marks: the reader's choice, else the first one that matches the file. */
+export function activeCoverage(state, source) {
+  const list = source?.coverage ?? [];
+  if (!list.length || state.coverageOrigin === "off") return null;
+  const chosen = list.find((c) => c.origin === state.coverageOrigin);
+  if (chosen) return chosen;
+  return list.find((c) => c.state === "current") ?? list[0];
+}
+
+/** Per line: hits, and branch arms that ran out of all arms, for the coverage on screen. */
+function coverageLines(coverage) {
+  const hits = new Map();
+  const branches = new Map();
+  if (coverage?.state !== "current") return { hits, branches };
+  for (const line of coverage.lines) hits.set(line.n, line.hits);
+  for (const b of coverage.branches) {
+    const prev = branches.get(b.line) ?? { covered: 0, total: 0 };
+    branches.set(b.line, { covered: prev.covered + b.covered, total: prev.total + b.total });
+  }
+  return { hits, branches };
+}
+
+function coverageBar(ctx, source, coverage) {
+  const list = source.coverage ?? [];
+  const runButton = ctx.actions.coverageRunButton();
+  if (!list.length)
+    return h(
+      "div",
+      { class: "source__coverage source__coverage--empty" },
+      h(
+        "p",
+        { class: "source__coverage-text" },
+        "No coverage run recorded. Lines are marked covered only from a run that measured them; a fresh trace (the dot) says a unit ran, not which lines.",
+      ),
+      runButton,
+    );
+  const items = [
+    ...list.map((c) => ({ id: c.origin, label: ORIGIN_WORDS[c.origin] ?? c.origin })),
+    { id: "off", label: "Off" },
+  ];
+  const pressed = coverage ? coverage.origin : "off";
+  const changed = coverage?.changed;
+  const summary = !coverage
+    ? "Coverage marks are off."
+    : coverage.state !== "current"
+      ? coverage.note
+      : changed
+        ? `Changed lines: ${num(changed.covered)} covered · ${num(changed.uncovered)} not covered · ${num(changed.notMeasured)} hold no statement${changed.branches ? ` · branches ${num(changed.branchesCovered)} of ${num(changed.branches)} ran` : ""}.`
+        : "This file has no changed line; marks show what the run executed.";
+  return h(
+    "div",
+    { class: "source__coverage" },
+    h(
+      "div",
+      { class: "source__coverage-head" },
+      h(
+        "span",
+        { class: "source__coverage-label" },
+        coverage
+          ? `Observed coverage · ${coverage.scope === "full" ? "full suite" : "selected tests only"} · ${relativeTime(coverage.collectedAt)}`
+          : "Observed coverage",
+      ),
+      segmented({
+        label: "Coverage shown",
+        active: pressed,
+        items,
+        onSelect: (id) => ctx.actions.setCoverageOrigin(id),
+      }),
+      runButton,
+    ),
+    h("p", { class: "source__coverage-text" }, summary),
+    coverage && coverage.state === "current"
+      ? h("p", { class: "source__coverage-text source__coverage-text--note" }, coverage.note)
+      : null,
+  );
+}
+
+function coverageCell(n, lines) {
+  const hits = lines.hits.get(n);
+  const branch = lines.branches.get(n);
+  if (hits === undefined && !branch) return { cell: "", words: null, tone: null };
+  const parts = [];
+  const words = [];
+  let tone = null;
+  if (hits !== undefined) {
+    parts.push(hits > 0 ? `${hits > 999 ? "999+" : hits}×` : "0×");
+    words.push(hits > 0 ? `covered ${hits} ${hits === 1 ? "time" : "times"}` : "not covered");
+    tone = hits > 0 ? "hit" : "miss";
+  }
+  if (branch?.total) {
+    if (branch.covered < branch.total) {
+      parts.push(`${branch.covered}/${branch.total}`);
+      if (tone !== "miss") tone = "partial";
+    }
+    words.push(`branches ${branch.covered} of ${branch.total} ran`);
+  }
+  return { cell: parts.join(" "), words: words.join(", "), tone };
+}
+
 export function renderSource(ctx) {
   const { state } = ctx;
   const index = state.data.files;
@@ -705,6 +807,9 @@ export function renderSource(ctx) {
   const visible = all.slice(0, MAX_SOURCE_FILES);
   const path = state.sourcePath ?? visible[0]?.path ?? null;
   const source = state.data.source && state.data.source.path === path ? state.data.source : null;
+  const coverage = activeCoverage(state, source);
+  const covLines = coverageLines(coverage);
+  const coverageOn = coverage?.state === "current";
   const changed = source ? new Set(source.changedLines ?? []) : new Set();
   const unitStarts = new Map();
   if (source) for (const unit of source.units) unitStarts.set(unit.startLine, unit);
@@ -813,6 +918,7 @@ export function renderSource(ctx) {
           )
         : null,
     ),
+    source?.exists ? coverageBar(ctx, source, coverage) : null,
     !source
       ? state.sourceLoading || (path && !state.errors.get("source-file"))
         ? loading("Reading the file…")
@@ -842,14 +948,16 @@ export function renderSource(ctx) {
             },
             h(
               "div",
-              { class: "code" },
+              { class: `code${coverageOn ? " code--coverage" : ""}` },
               source.lines.map((line) => {
                 const unit = unitStarts.get(line.n);
+                const cov = coverageOn ? coverageCell(line.n, covLines) : null;
                 // Colour marks a line for the eye; the same facts are spoken as words.
                 const marks = [
                   unit ? `start of ${unit.name}` : null,
                   changed.has(line.n) ? "changed" : null,
                   unit?.observedBy.length ? "ran under a fresh trace" : null,
+                  cov?.words ?? null,
                 ].filter(Boolean);
                 return h(
                   "div",
@@ -857,6 +965,16 @@ export function renderSource(ctx) {
                     class: `code__line${changed.has(line.n) ? " code__line--changed" : ""}${unit ? " code__line--unit" : ""}${unit?.observedBy.length ? " code__line--observed" : ""}`,
                   },
                   h("span", { class: "code__n" }, line.n),
+                  coverageOn
+                    ? h(
+                        "span",
+                        {
+                          class: `code__cov${cov?.tone ? ` code__cov--${cov.tone}` : ""}`,
+                          "aria-hidden": "true",
+                        },
+                        cov?.cell ?? "",
+                      )
+                    : null,
                   h(
                     "span",
                     { class: "code__t" },
@@ -891,6 +1009,28 @@ export function renderSource(ctx) {
         h("span", { class: "legend-swatch legend-swatch--unit" }),
         "a rule marks where a unit starts",
       ),
+      coverageOn
+        ? [
+            h(
+              "span",
+              null,
+              h("span", { class: "legend-text legend-text--hit" }, "3×"),
+              "line ran 3 times",
+            ),
+            h(
+              "span",
+              null,
+              h("span", { class: "legend-text legend-text--miss" }, "0×"),
+              "line never ran",
+            ),
+            h(
+              "span",
+              null,
+              h("span", { class: "legend-text legend-text--partial" }, "1/2"),
+              "branch arms that ran",
+            ),
+          ]
+        : null,
     ),
   );
 
@@ -906,7 +1046,7 @@ export function renderSource(ctx) {
         h("strong", null, plural(changedFiles, "changed file")),
         " and ",
         h("strong", null, plural(testFiles, "test file")),
-        " in the graph. Lines are marked only where the diff or a fresh trace proves something.",
+        " in the graph. Lines are marked only where the diff, a fresh trace or a coverage run proves something.",
       ),
       actions: [ctx.actions.refreshButton(), ctx.actions.runButton("affected")],
     }),
