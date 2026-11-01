@@ -68,4 +68,42 @@ module.exports.extra = function extra() { return 1; };`,
     expect(sym(base.replace("return 1", "return 2"), "C")?.shellHash).toBe(a?.shellHash);
     expect(sym(base.replace("x = 1", "x = 2"), "C")?.shellHash).not.toBe(a?.shellHash);
   });
+
+  it("a declared type does not hide the class constructed by the initializer", () => {
+    const src = `import { MemRepo, Repo, Base, Sub } from "./r";
+const shared: Repo = new MemRepo();
+export function local() { const r: Repo = new MemRepo(); return r.find(); }
+export function base() { const s: Base = new Sub(); return s.m(); }
+export function mod() { return shared.find(); }
+export class Svc {
+  private repo: Repo = new MemRepo();
+  get() { return this.repo.find(); }
+  hand() { return register(this.repo); }
+}`;
+    expect(sym(src, "local")?.uses).toEqual(["MemRepo.constructor", "MemRepo.find", "Repo.find"]);
+    expect(sym(src, "base")?.uses).toEqual(["Base.m", "Sub.constructor", "Sub.m"]);
+    expect(sym(src, "mod")?.uses).toEqual(["MemRepo.find", "Repo.find"]);
+    expect(sym(src, "Svc.get")?.uses).toEqual(["MemRepo.find", "Repo.find"]);
+    // `this.repo` handed out: any member of its class is reachable.
+    expect(sym(src, "Svc.hand")?.escapes).toEqual(["MemRepo", "Repo", "register"]);
+  });
+
+  it("records the classes of module-level instances", () => {
+    const src = `import { MemRepo, Repo } from "./r";
+export const a = new MemRepo();
+export const b: Repo = new MemRepo();
+export const c: Repo = make();
+export const d = make();
+export default new MemRepo();`;
+    expect(sym(src, "a")?.instanceOf).toEqual(["MemRepo"]);
+    expect(sym(src, "b")?.instanceOf).toEqual(["MemRepo", "Repo"]);
+    expect(sym(src, "c")?.instanceOf).toEqual(["Repo"]);
+    expect(sym(src, "d")?.instanceOf).toBeUndefined();
+    expect(sym(src, "default")?.instanceOf).toEqual(["MemRepo"]);
+  });
+
+  it("records what an interface extends", () => {
+    const src = "export interface A {}\nexport interface B extends A, C<number> { f(): void }";
+    expect(sym(src, "B")?.implements).toEqual(["A", "C"]);
+  });
 });

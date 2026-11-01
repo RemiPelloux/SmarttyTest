@@ -495,6 +495,8 @@ export class DependencyGraph {
           if (r && r.unit !== WHOLE) {
             this.addDep(key(r.file, r.unit), dep());
             this.countMemberEdge(file);
+            for (const c of this.topSymbol(r.file, r.unit)?.instanceOf ?? [])
+              this.linkInstance(r.file, c, undefined, dep());
           } else this.addFileDep(t.file, dep("medium"));
         }
         continue;
@@ -503,7 +505,27 @@ export class DependencyGraph {
         this.addFileDep(t.file, dep("medium"));
         continue;
       }
-      const isClass = this.topSymbol(t.file, t.unit)?.kind === "class";
+      const sym = this.topSymbol(t.file, t.unit);
+      // A module-level instance (`export const repo = new MemRepo()`): its users reach the
+      // members of its class, not only its construction.
+      // A name that is neither used through a member nor escapes is only referenced (a type
+      // position, or a same-file use already resolved to the class by the analyzer).
+      if (sym && sym.kind !== "class" && sym.instanceOf?.length) {
+        this.addDep(key(t.file, t.unit), dep());
+        if (escaped.has(name) || members?.size) {
+          const reached = escaped.has(name) ? undefined : members;
+          for (const c of sym.instanceOf) this.linkInstance(t.file, c, reached, dep());
+        }
+        continue;
+      }
+      // Members used through an interface or type: linked per member, so a change to an
+      // implementation of that member reaches them (see `supertypes`).
+      if (sym && isTypeOnly(sym) && !escaped.has(name) && members?.size) {
+        this.addDep(key(t.file, t.unit), dep());
+        for (const m of members) this.addDep(key(t.file, `${t.unit}.${m}`), dep());
+        continue;
+      }
+      const isClass = sym?.kind === "class";
       if (!isClass || escaped.has(name) || !members?.size) {
         this.addDep(key(t.file, t.unit), dep());
         continue;
@@ -514,6 +536,64 @@ export class DependencyGraph {
         this.addDep(mk ?? key(t.file, t.unit), dep());
       }
     }
+  }
+
+  /**
+   * Links a user of an instance of `cls` (named in `file`) to the members it uses, or to the whole
+   * class when `members` is undefined or empty (the instance escapes: any member is reachable).
+   */
+  private linkInstance(
+    file: string,
+    cls: string,
+    members: ReadonlySet<string> | undefined,
+    d: Dep,
+  ): void {
+    const t = this.localTarget(file, cls);
+    if (!t) return;
+    if ("namespace" in t || t.unit === WHOLE) {
+      this.addFileDep(t.file, { ...d, confidence: "medium" });
+      return;
+    }
+    const sym = this.topSymbol(t.file, t.unit);
+    if (!members?.size || !sym) {
+      this.addDep(key(t.file, t.unit), d);
+      return;
+    }
+    for (const m of members) {
+      const mk =
+        sym.kind === "class"
+          ? this.memberKey(t.file, t.unit, m)
+          : isTypeOnly(sym)
+            ? key(t.file, `${t.unit}.${m}`)
+            : undefined;
+      this.addDep(mk ?? key(t.file, t.unit), d);
+    }
+  }
+
+  /**
+   * Classes and interfaces a class or interface extends or implements, transitively. A call
+   * through a receiver typed by one of them may run this type's member.
+   */
+  private supertypes(
+    file: string,
+    sym: SymbolRecord,
+    seen = new Set<string>(),
+  ): { file: string; unit: string }[] {
+    const out: { file: string; unit: string }[] = [];
+    for (const raw of [sym.extends, ...(sym.implements ?? [])]) {
+      const name = raw?.split(/[<(]/)[0]?.trim();
+      if (!name || !/^[A-Za-z_$][\w$]*$/.test(name)) continue;
+      const t = this.localTarget(file, name);
+      if (!t || "namespace" in t || t.unit === WHOLE) continue;
+      const k = key(t.file, t.unit);
+      if (seen.has(k)) continue;
+      seen.add(k);
+      out.push({ file: t.file, unit: t.unit });
+      const s = this.topSymbol(t.file, t.unit);
+      if (s && (s.kind === "class" || s.kind === "interface"))
+        out.push(...this.supertypes(t.file, s, seen));
+    }
+    return out;
   }
 
   private linkResources(from: string, resources: readonly string[] | undefined): void {
@@ -1169,8 +1249,15 @@ export class DependencyGraph {
         // only file-level dependents and re-exporters below
       } else if (unit.includes(".")) {
         const cls = unit.slice(0, unit.indexOf("."));
+        const member = unit.slice(cls.length + 1);
+        const sym = a ? this.topSymbol(file, cls) : undefined;
         pushDeps(k, k);
-        pushDeps(key(file, cls), k); // imprecise users of the class
+        if (!sym || !isTypeOnly(sym)) pushDeps(key(file, cls), k); // imprecise users of the class
+        // Overrides and implementations: a call through a receiver typed by a base class or an
+        // interface (`repo: Repo`, `const s: Base = …`) may run this member.
+        if (sym && member !== INIT && (sym.kind === "class" || sym.kind === "interface"))
+          for (const sup of this.supertypes(file, sym))
+            pushDeps(key(sup.file, `${sup.unit}.${member}`), k);
       } else {
         const sym = a ? this.topSymbol(file, unit) : undefined;
         if (sym?.kind === "class" && a) {
@@ -1336,6 +1423,11 @@ export class DependencyGraph {
     lines.push("}");
     return lines.join("\n");
   }
+}
+
+/** Interfaces and type aliases (not enums): they have no runtime members of their own. */
+function isTypeOnly(s: SymbolRecord): boolean {
+  return s.kind === "interface" || (s.kind === "type" && s.signature !== "enum");
 }
 
 function posixNormalize(p: string): string {

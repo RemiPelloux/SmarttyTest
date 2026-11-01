@@ -3,11 +3,18 @@ import { sha256 } from "@smarttest/shared";
 import type { FileAnalysis, ImportRecord, SymbolRecord } from "@smarttest/source-parser";
 import { LOCALE_PATH, unitOf } from "@smarttest/source-parser";
 import ts from "typescript";
-import { collectMemberUses, type MemberUses, moduleScope, thisScope } from "./member-uses.js";
+import {
+  classesOf,
+  collectMemberUses,
+  type MemberUses,
+  moduleScope,
+  thisScope,
+} from "./member-uses.js";
+import { ProcessScripts } from "./processes.js";
 import { catalogKeys, collectResources, MODEL_MODULES } from "./resources.js";
 import { StaticPathEvaluator } from "./static-path.js";
 
-export const ANALYZER_VERSION = "ts-11";
+export const ANALYZER_VERSION = "ts-12";
 
 function scriptKind(path: string): ts.ScriptKind {
   if (path.endsWith(".tsx")) return ts.ScriptKind.TSX;
@@ -20,27 +27,156 @@ function scriptKind(path: string): ts.ScriptKind {
 const hash = (s: string) => sha256(s).slice(0, 16);
 
 /** Hash of the token stream: identical for comment/whitespace-only edits. */
-const scanners = new Map<boolean, ts.Scanner>();
 export function tokenHash(text: string, jsx: boolean): string {
-  let scanner = scanners.get(jsx);
-  if (!scanner) {
-    scanner = ts.createScanner(
-      ts.ScriptTarget.Latest,
-      true,
-      jsx ? ts.LanguageVariant.JSX : ts.LanguageVariant.Standard,
-    );
-    scanners.set(jsx, scanner);
+  const sf = ts.createSourceFile(
+    jsx ? "t.tsx" : "t.ts",
+    text,
+    ts.ScriptTarget.Latest,
+    true,
+    jsx ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
+  );
+  return new TokenHasher(sf, jsx).hash(sf);
+}
+
+/**
+ * JSX text as React reads it: lines are trimmed, blank lines dropped and the rest joined by a
+ * space. Text on a single line is kept as written.
+ */
+function jsxTextValue(raw: string): string {
+  if (!/[\r\n]/.test(raw)) return raw;
+  const lines = raw.split(/\r\n|\n|\r/);
+  const out: string[] = [];
+  lines.forEach((line, i) => {
+    let l = line;
+    if (i > 0) l = l.replace(/^[ \t]+/, "");
+    if (i < lines.length - 1) l = l.replace(/[ \t]+$/, "");
+    if (l) out.push(l);
+  });
+  return out.join(" ");
+}
+
+const scanners = new Map<boolean, ts.Scanner>();
+const SEP = "\u0001";
+
+/** JSX nodes made of other nodes: hashed as markers around their parts. */
+const JSX_STRUCTURE = new Set([
+  ts.SyntaxKind.JsxElement,
+  ts.SyntaxKind.JsxSelfClosingElement,
+  ts.SyntaxKind.JsxFragment,
+  ts.SyntaxKind.JsxOpeningElement,
+  ts.SyntaxKind.JsxClosingElement,
+  ts.SyntaxKind.JsxOpeningFragment,
+  ts.SyntaxKind.JsxClosingFragment,
+  ts.SyntaxKind.JsxAttributes,
+  ts.SyntaxKind.JsxAttribute,
+  ts.SyntaxKind.JsxSpreadAttribute,
+  ts.SyntaxKind.JsxExpression,
+]);
+
+/**
+ * Token hashes of the nodes of one file: identical for comment- and whitespace-only edits.
+ *
+ * Tokens are read the way the parser reads them: the text after `}` in `${a}, ${b}` is template
+ * text, `/a//b/` is a regular expression (not a comment), and JSX text is text (the scanner alone
+ * would read `<p>http://x</p>` as code and a comment), so an edit inside them is never mistaken for
+ * formatting.
+ */
+class TokenHasher {
+  /** Positions of the `}` that resumes a template's text. */
+  private readonly templateParts = new Set<number>();
+  /** Positions of regular expression literals. */
+  private readonly regexps = new Set<number>();
+  /** JSX elements and fragments, by position. */
+  private readonly jsxAt = new Map<number, ts.Node>();
+
+  constructor(
+    private readonly sf: ts.SourceFile,
+    private readonly jsx: boolean,
+  ) {
+    const visit = (n: ts.Node): void => {
+      if (ts.isTemplateSpan(n)) this.templateParts.add(n.literal.getStart(sf));
+      else if (ts.isRegularExpressionLiteral(n)) this.regexps.add(n.getStart(sf));
+      else if (ts.isJsxElement(n) || ts.isJsxSelfClosingElement(n) || ts.isJsxFragment(n))
+        this.jsxAt.set(n.getStart(sf), n);
+      ts.forEachChild(n, visit);
+    };
+    visit(sf);
   }
-  scanner.setText(text);
-  let acc = "";
-  let token = scanner.scan();
-  let guard = 0;
-  while (token !== ts.SyntaxKind.EndOfFileToken && guard++ < 1_000_000) {
-    acc += `${scanner.getTokenText()}\u0001`;
-    token = scanner.scan();
+
+  /** Hash of a node's tokens; `skip` nodes (method bodies) count as `{}`. */
+  hash(node: ts.Node, skip?: ReadonlySet<ts.Node>): string {
+    const skipAt = new Map<number, number>();
+    for (const b of skip ?? []) skipAt.set(b.getStart(this.sf), b.getEnd());
+    return hash(this.scan(node.getStart(this.sf), node.getEnd(), skipAt));
   }
-  scanner.setText(undefined);
-  return hash(acc);
+
+  private scanner(): ts.Scanner {
+    let scanner = scanners.get(this.jsx);
+    if (!scanner) {
+      scanner = ts.createScanner(
+        ts.ScriptTarget.Latest,
+        true,
+        this.jsx ? ts.LanguageVariant.JSX : ts.LanguageVariant.Standard,
+      );
+      scanners.set(this.jsx, scanner);
+    }
+    return scanner;
+  }
+
+  private scan(start: number, end: number, skipAt: ReadonlyMap<number, number>): string {
+    const scanner = this.scanner();
+    let acc = "";
+    let pos = start;
+    let guard = 0;
+    // The scanner is shared: JSX parts scan their own ranges, so it is set up again after them.
+    scanner.setText(this.sf.text, pos, end - pos);
+    let token = scanner.scan();
+    while (token !== ts.SyntaxKind.EndOfFileToken && guard++ < 1_000_000) {
+      const at = scanner.getTokenStart();
+      const skipEnd = skipAt.get(at);
+      const jsx = this.jsxAt.get(at);
+      if (skipEnd !== undefined || jsx) {
+        if (skipEnd !== undefined) acc += `{${SEP}}${SEP}`;
+        else acc += this.jsxTokens(jsx as ts.Node, skipAt);
+        pos = skipEnd ?? (jsx as ts.Node).getEnd();
+        scanner.setText(this.sf.text, pos, end - pos);
+        token = scanner.scan();
+        continue;
+      }
+      if (token === ts.SyntaxKind.CloseBraceToken && this.templateParts.has(at))
+        scanner.reScanTemplateToken(false);
+      else if (
+        (token === ts.SyntaxKind.SlashToken || token === ts.SyntaxKind.SlashEqualsToken) &&
+        this.regexps.has(at)
+      )
+        scanner.reScanSlashToken();
+      acc += `${scanner.getTokenText()}${SEP}`;
+      token = scanner.scan();
+    }
+    scanner.setText(undefined);
+    return acc;
+  }
+
+  /** JSX: markers around its structure, its text as React reads it, the code inside scanned. */
+  private jsxTokens(node: ts.Node, skipAt: ReadonlyMap<number, number>): string {
+    let acc = "";
+    const walk = (n: ts.Node): void => {
+      if (ts.isJsxText(n)) {
+        const text = jsxTextValue(n.getText(this.sf));
+        if (text) acc += `${text}${SEP}`;
+        return;
+      }
+      if (JSX_STRUCTURE.has(n.kind)) {
+        acc += `<${n.kind}${SEP}`;
+        ts.forEachChild(n, walk);
+        acc += `>${n.kind}${SEP}`;
+        return;
+      }
+      acc += this.scan(n.getStart(this.sf), n.getEnd(), skipAt);
+    };
+    walk(node);
+    return acc;
+  }
 }
 
 function hasModifier(node: ts.Node, kind: ts.SyntaxKind): boolean {
@@ -81,24 +217,138 @@ function collectRefs(node: ts.Node, out: Set<string>): void {
   visit(node);
 }
 
+/** `vi.*` / `jest.*` calls that name a module. */
+const MOCK_CALLS = new Set([
+  "mock",
+  "doMock",
+  "unmock",
+  "doUnmock",
+  "dontMock",
+  "deepUnmock",
+  "requireActual",
+  "importActual",
+  "requireMock",
+  "importMock",
+]);
+
+/** Globals a mock factory may call without reaching the module it replaces. */
+const INERT_GLOBALS = new Set([
+  "Array",
+  "Boolean",
+  "Date",
+  "Error",
+  "JSON",
+  "Map",
+  "Math",
+  "Number",
+  "Object",
+  "Promise",
+  "RangeError",
+  "Set",
+  "String",
+  "Symbol",
+  "TypeError",
+  "WeakMap",
+  "WeakSet",
+  "structuredClone",
+]);
+
+/** The identifier a call chain starts from: `vi` in `vi.fn().mockReturnValue(1)`. */
+function chainRoot(e: ts.Expression): ts.Expression {
+  let cur = e;
+  for (;;) {
+    if (ts.isPropertyAccessExpression(cur) || ts.isElementAccessExpression(cur))
+      cur = cur.expression;
+    else if (ts.isCallExpression(cur) || ts.isNonNullExpression(cur)) cur = cur.expression;
+    else if (ts.isParenthesizedExpression(cur) || ts.isAsExpression(cur)) cur = cur.expression;
+    else return cur;
+  }
+}
+
+const REAL_MODULE_CALLS =
+  /^(require|requireActual|importActual|importOriginal|requireMock|importMock)$/;
+
 /**
+ * Whether code may load a real module: an import or require, `importActual`-like calls, or a call
+ * to anything other than the mocking API (`vi.fn()`…), builtins, names declared inside the code
+ * itself, or `safe` names (top-level `vi.fn()` / `vi.hoisted(…)` values). A helper could reach the
+ * real module, so any other call counts.
+ */
+function mayLoadModules(root: ts.Node, safe: ReadonlySet<string>): boolean {
+  const local = new Set<string>();
+  const declare = (n: ts.Node): void => {
+    if (
+      (ts.isVariableDeclaration(n) ||
+        ts.isParameter(n) ||
+        ts.isFunctionDeclaration(n) ||
+        ts.isBindingElement(n)) &&
+      n.name &&
+      ts.isIdentifier(n.name)
+    )
+      local.add(n.name.text);
+    ts.forEachChild(n, declare);
+  };
+  declare(root);
+  let found = false;
+  const visit = (n: ts.Node): void => {
+    if (found) return;
+    if (ts.isCallExpression(n) || ts.isNewExpression(n)) {
+      const callee = n.expression;
+      if (callee.kind === ts.SyntaxKind.ImportKeyword) {
+        found = true;
+        return;
+      }
+      for (let c: ts.Expression = callee; ; ) {
+        const name = ts.isPropertyAccessExpression(c)
+          ? c.name.text
+          : ts.isIdentifier(c)
+            ? c.text
+            : undefined;
+        if (name && REAL_MODULE_CALLS.test(name)) {
+          found = true;
+          return;
+        }
+        if (ts.isPropertyAccessExpression(c) || ts.isCallExpression(c)) c = c.expression;
+        else break;
+      }
+      const r = chainRoot(callee);
+      const ok =
+        ts.isIdentifier(r) &&
+        (["vi", "jest"].includes(r.text) ||
+          INERT_GLOBALS.has(r.text) ||
+          local.has(r.text) ||
+          safe.has(r.text));
+      if (!ok) {
+        found = true;
+        return;
+      }
+    }
+    ts.forEachChild(n, visit);
+  };
+  visit(root);
+  return found;
+}
+
+/**
+ * How a `vi.*` / `jest.*` call treats the module it names.
  * "factory": the module is replaced by a factory that never loads it; "actual": the real module is
- * loaded (requireActual, importActual, or a factory taking `importOriginal`); "auto": automock or
- * spy options (the real module is evaluated); "unmock".
+ * loaded (requireActual, importActual, a factory taking `importOriginal`, or one calling code that
+ * could); "auto": automock, spy options, or a mock that does not cover the file's static imports
+ * (`doMock` is not hoisted, a `mock` call nested in a block runs after them); "unmock".
  */
 function mockKind(
   name: string,
   second: ts.Expression | undefined,
+  hoisted: boolean,
+  safe: ReadonlySet<string>,
 ): "factory" | "auto" | "actual" | "unmock" {
   if (name === "requireActual" || name === "importActual") return "actual";
-  if (name === "unmock") return "unmock";
-  if (!second) return "auto";
+  if (name === "unmock" || name === "doUnmock" || name === "dontMock" || name === "deepUnmock")
+    return "unmock";
+  if (name !== "mock" || !hoisted || !second) return "auto";
   if (ts.isArrowFunction(second) || ts.isFunctionExpression(second)) {
     if (second.parameters.length) return "actual";
-    const text = second.body.getText();
-    return /\b(requireActual|importActual|importOriginal|require\s*\()/.test(text)
-      ? "actual"
-      : "factory";
+    return mayLoadModules(second.body, safe) ? "actual" : "factory";
   }
   return "auto";
 }
@@ -124,23 +374,18 @@ function functionSignature(node: ts.SignatureDeclarationBase, sf: ts.SourceFile)
 }
 
 /** Token hash of a class with method, accessor and constructor bodies removed. */
-function classShellHash(cls: ts.ClassDeclaration, sf: ts.SourceFile, jsx: boolean): string {
-  const start = cls.getStart(sf);
-  let text = cls.getText(sf);
-  const bodies = cls.members
-    .map((m) =>
-      ts.isMethodDeclaration(m) ||
-      ts.isGetAccessorDeclaration(m) ||
-      ts.isSetAccessorDeclaration(m) ||
-      ts.isConstructorDeclaration(m)
-        ? m.body
-        : undefined,
+function classShellHash(cls: ts.ClassDeclaration, tokens: TokenHasher): string {
+  const bodies = new Set<ts.Node>();
+  for (const m of cls.members)
+    if (
+      (ts.isMethodDeclaration(m) ||
+        ts.isGetAccessorDeclaration(m) ||
+        ts.isSetAccessorDeclaration(m) ||
+        ts.isConstructorDeclaration(m)) &&
+      m.body
     )
-    .filter((b): b is ts.Block => !!b)
-    .sort((a, b) => b.getStart(sf) - a.getStart(sf));
-  for (const b of bodies)
-    text = `${text.slice(0, b.getStart(sf) - start)}{}${text.slice(b.getEnd() - start)}`;
-  return tokenHash(text, jsx);
+      bodies.add(m.body);
+  return tokens.hash(cls, bodies);
 }
 
 /**
@@ -258,12 +503,12 @@ function declarationRunsCode(stmt: ts.Statement, bound: ReadonlySet<string>): bo
 export function analyzeSource(path: string, content: string): FileAnalysis {
   const kind = scriptKind(path);
   const sf = ts.createSourceFile(path, content, ts.ScriptTarget.Latest, true, kind);
+  const tokens = new TokenHasher(sf, kind === ts.ScriptKind.TSX || kind === ts.ScriptKind.JSX);
   // Resource reads (env, models, translations) are only looked for when the text can contain one.
   const scanResources =
     /process\.env|import\.meta\.env|\.entities\.|\bprisma\b|\bdb\.|(?:^|[^\w$.])\$?t[(),]|\.t\b|translate\(|i18n|useTranslation|withTranslation|getFixedT|\.goto\(|\.visit\(|request\./.test(
       content,
     );
-  const jsx = kind === ts.ScriptKind.TSX || kind === ts.ScriptKind.JSX;
   const language =
     kind === ts.ScriptKind.JS || kind === ts.ScriptKind.JSX ? "javascript" : "typescript";
   const imports: ImportRecord[] = [];
@@ -293,7 +538,7 @@ export function analyzeSource(path: string, content: string): FileAnalysis {
       signature?: string;
       visibility?: SymbolRecord["visibility"];
       heritage?: { extends?: string; implements?: string[] };
-      thisTypes?: Map<string, string>;
+      thisTypes?: Map<string, string[]>;
       memberUses?: MemberUses;
       /** Classes: only these parts (decorators) count for refs and resources; members carry theirs. */
       shell?: ts.Node[];
@@ -312,7 +557,7 @@ export function analyzeSource(path: string, content: string): FileAnalysis {
       exportNames: opts.exportNames ?? [],
       range: range(node, sf),
       signature: opts.signature ?? "",
-      tokenHash: tokenHash(text, jsx),
+      tokenHash: tokens.hash(node),
       textHash: hash(text),
       refs: [...refs].sort(),
       decorators: decoratorsOf(node, sf),
@@ -422,7 +667,7 @@ export function analyzeSource(path: string, content: string): FileAnalysis {
   }
   /** Records the module-evaluation code of a declaration (see `SymbolRecord.evalHash`). */
   const evaluates = (rec: SymbolRecord, node: ts.Node) => {
-    rec.evalHash = tokenHash(node.getText(sf), jsx);
+    rec.evalHash = tokens.hash(node);
   };
 
   for (const stmt of sf.statements) {
@@ -528,6 +773,8 @@ export function analyzeSource(path: string, content: string): FileAnalysis {
             : "property",
           { exportNames: ["default"] },
         );
+        const inst = classesOf(undefined, stmt.expression);
+        if (inst.length) rec.instanceOf = inst;
         if (!isInert(stmt.expression, bound)) evaluates(rec, stmt);
       }
       continue;
@@ -569,7 +816,7 @@ export function analyzeSource(path: string, content: string): FileAnalysis {
           superUses: [],
         },
       });
-      classRec.shellHash = classShellHash(stmt, sf, jsx);
+      classRec.shellHash = classShellHash(stmt, tokens);
       // Decorators, static initializers and blocks run when the module loads: the class shell
       // (bodies of methods removed) is that code.
       if (classRunsCode(stmt, bound)) classRec.evalHash = classRec.shellHash;
@@ -618,9 +865,14 @@ export function analyzeSource(path: string, content: string): FileAnalysis {
       ts.isEnumDeclaration(stmt)
     ) {
       const name = stmt.name.text;
+      // An interface's `extends` list is recorded as `implements`: the types it is a subtype of.
+      const supers = ts.isInterfaceDeclaration(stmt)
+        ? (stmt.heritageClauses ?? []).flatMap((h) => h.types.map((t) => t.expression.getText(sf)))
+        : [];
       const rec = addSymbol(stmt, name, ts.isInterfaceDeclaration(stmt) ? "interface" : "type", {
         exportNames: exportNamesFor(stmt, name),
         signature: ts.isEnumDeclaration(stmt) ? "enum" : "",
+        heritage: { implements: supers },
       });
       if (ts.isEnumDeclaration(stmt)) {
         if (declarationRunsCode(stmt, bound)) evaluates(rec, stmt);
@@ -695,6 +947,10 @@ export function analyzeSource(path: string, content: string): FileAnalysis {
             exportNames: exported ? [name] : [],
             signature: sig,
           });
+          if (ts.isIdentifier(decl.name)) {
+            const inst = classesOf(decl.type, init);
+            if (inst.length) rec.instanceOf = inst;
+          }
           // Destructuring reads properties (getters) and iterators: only a plain name is inert.
           if (
             !hasModifier(stmt, ts.SyntaxKind.DeclareKeyword) &&
@@ -717,14 +973,45 @@ export function analyzeSource(path: string, content: string): FileAnalysis {
     for (const u of tu.uses) topUses.add(u);
     for (const e of tu.escapes) topEscapes.add(e);
     if (scanResources) for (const r of collectResources(stmt)) topResources.add(r);
-    topTokens.push(tokenHash(stmt.getText(sf), jsx));
+    topTokens.push(tokens.hash(stmt));
     const text = stmt.getText(sf);
     if (/\b(?:module\.exports|exports\.[A-Za-z_$])/.test(text)) cjs = true;
   }
 
+  // Top-level values a mock factory may use without loading modules: `const m = vi.fn()`,
+  // `const mocks = vi.hoisted(() => ({ … }))`.
+  const mockSafe = new Set<string>();
+  for (const stmt of sf.statements) {
+    if (!ts.isVariableStatement(stmt)) continue;
+    for (const d of stmt.declarationList.declarations) {
+      const init = d.initializer;
+      if (!init || !ts.isCallExpression(init)) continue;
+      const r = chainRoot(init.expression);
+      if (!ts.isIdentifier(r) || !["vi", "jest"].includes(r.text)) continue;
+      if (mayLoadModules(init, mockSafe)) continue;
+      const names: string[] = [];
+      const collect = (b: ts.BindingName): void => {
+        if (ts.isIdentifier(b)) names.push(b.text);
+        else for (const el of b.elements) if (ts.isBindingElement(el)) collect(el.name);
+      };
+      collect(d.name);
+      for (const n of names) mockSafe.add(n);
+    }
+  }
+
   // Nested require/import()/jest.mock/vi.mock anywhere in the file.
   const seen = new Set(imports.map((i) => `${i.kind}:${i.specifier}:${i.line}`));
+  const processes = new ProcessScripts(imports, sf, path, pathEval);
   const visit = (n: ts.Node): void => {
+    // Worker and child-process scripts: an edge to the script, or uncertainty.
+    if (ts.isCallExpression(n) || ts.isNewExpression(n)) {
+      const run = processes.scriptOf(n);
+      if (run) {
+        const expr = `line ${lineOf(n) + 1}: ${n.getText(sf).slice(0, 80)}`;
+        if ("pattern" in run) dynamicHints.push({ pattern: run.pattern, line: lineOf(n), expr });
+        else dynamicUnresolved.push(expr);
+      }
+    }
     if (ts.isCallExpression(n)) {
       const callee = n.expression;
       const arg = n.arguments[0];
@@ -737,10 +1024,7 @@ export function analyzeSource(path: string, content: string): FileAnalysis {
         ts.isIdentifier(callee.expression) &&
         ["jest", "vi"].includes(callee.expression.text)
       ) {
-        if (
-          ["mock", "doMock", "requireActual", "importActual", "unmock"].includes(callee.name.text)
-        )
-          kind = "mock";
+        if (MOCK_CALLS.has(callee.name.text)) kind = "mock";
       }
       // Vite's import.meta.glob("./dir/*.ts" | [...]) imports every matching file.
       if (
@@ -793,7 +1077,16 @@ export function analyzeSource(path: string, content: string): FileAnalysis {
               bindings: [],
               typeOnly: false,
               line: lineOf(n),
-              ...(kind === "mock" ? { mock: mockKind(mockName, n.arguments[1]) } : {}),
+              ...(kind === "mock"
+                ? {
+                    mock: mockKind(
+                      mockName,
+                      n.arguments[1],
+                      ts.isExpressionStatement(n.parent) && ts.isSourceFile(n.parent.parent),
+                      mockSafe,
+                    ),
+                  }
+                : {}),
             } as ImportRecord);
           }
           if (kind === "require") cjs = true;

@@ -83,6 +83,11 @@ export interface SymbolRecord {
   visibility?: "public" | "protected" | "private";
   extends?: string;
   implements?: string[];
+  /**
+   * Module-level values: the classes the value is an instance of (`export const repo = new
+   * MemRepo()`, `const r: Repo = …`). Users of `repo.find` then reach `MemRepo.find`.
+   */
+  instanceOf?: string[];
 }
 
 export interface FileAnalysis {

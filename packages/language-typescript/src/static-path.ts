@@ -30,18 +30,21 @@ export class StaticPathEvaluator {
   /**
    * Like evaluate(), but only for paths built from the file's location (`__dirname`,
    * `import.meta.url`…). Plain strings given to `fs` are relative to the working directory.
+   * `directory`: the path may be a bare directory (`resolve(__dirname, "..")`).
    */
-  evaluateAnchored(node: ts.Expression): string | undefined {
+  evaluateAnchored(node: ts.Expression, directory = false): string | undefined {
     this.anchored = false;
-    const r = this.evaluate(node);
+    const r = this.evaluate(node, directory);
     return this.anchored ? r : undefined;
   }
 
   /** A path (relative to the file's directory, may contain `*`), or undefined when nothing is known. */
-  evaluate(node: ts.Expression): string | undefined {
+  evaluate(node: ts.Expression, directory = false): string | undefined {
     const raw = this.eval(node);
     if (raw === undefined) return undefined;
     const cleaned = raw.replace(/^file:\/\//, "").replace(/\*+/g, "*");
+    if (directory && !cleaned.startsWith("/") && /^[./]*$/.test(cleaned))
+      return posix.normalize(cleaned || ".");
     if (!/[A-Za-z0-9_-]/.test(cleaned.replace(/\*/g, ""))) return undefined; // nothing literal left
     if (cleaned.startsWith("/")) return undefined; // absolute paths outside our knowledge
     const trailing = cleaned.endsWith("/") ? "/" : "";

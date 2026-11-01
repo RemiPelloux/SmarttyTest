@@ -3,7 +3,7 @@
     "vitest"
   ],
   "vcs": "git",
-  "testFiles": 17,
+  "testFiles": 19,
   "mutations": [
     {
       "file": ".env.test",
@@ -59,6 +59,22 @@
       "replace": "* xs.length",
       "expectFailing": [
         "tests/stats.test.ts"
+      ]
+    },
+    {
+      "file": "scripts/lib/math.mjs",
+      "find": "n * 2",
+      "replace": "n * 3",
+      "expectFailing": [
+        "tests/jobs.test.ts"
+      ]
+    },
+    {
+      "file": "src/workers/square.mjs",
+      "find": "workerData * workerData",
+      "replace": "workerData + workerData",
+      "expectFailing": [
+        "tests/squares.test.ts"
       ]
     }
   ]
