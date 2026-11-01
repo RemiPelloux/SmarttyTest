@@ -33,6 +33,22 @@ describe("CLI argument builders", () => {
     expect(runAffectedArgs(base)).toContain("--json");
   });
 
+  it("scopes impact and run to files with --only=<path>", () => {
+    expect(impactArgs(base, ["src/a.ts"])).toEqual([
+      "impact",
+      "--uncommitted",
+      "--only=src/a.ts",
+      "--mode",
+      "balanced",
+      "--json",
+    ]);
+    // The `=` form keeps an option-looking file name a value.
+    expect(runAffectedArgs(base, ["-x.ts"])).toContain("--only=-x.ts");
+    expect(impactArgs(base, [])).not.toContain("--only");
+    expect(() => impactArgs(base, [""])).toThrow(/--only/);
+    expect(() => runAffectedArgs(base, ["a\0b"])).toThrow(/--only/);
+  });
+
   it("builds explain targets and refuses option-looking input", () => {
     expect(explainTarget("src/a.ts")).toBe("src/a.ts#*");
     expect(explainTarget("src/a.ts", "A.run")).toBe("src/a.ts#A.run");

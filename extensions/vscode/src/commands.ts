@@ -1,18 +1,13 @@
 import * as vscode from "vscode";
-import { explainArgs, explainTarget, impactArgs, runAffectedArgs } from "./cli/commands.js";
+import { impactArgs, runAffectedArgs } from "./cli/commands.js";
 import { launchOptions } from "./cli/executable.js";
 import { runCli } from "./cli/runner.js";
-import {
-  parseExplainJson,
-  parseImpactJson,
-  parseRunJson,
-  type RunResult,
-} from "./core/contracts.js";
-import { CancelledError, isCancelledError } from "./core/errors.js";
+import { parseImpactJson, parseRunJson, type RunResult } from "./core/contracts.js";
+import { CancelledError, isCancelledError, SmartTestExtensionError } from "./core/errors.js";
 import { hoverMarkdown } from "./core/hover.js";
 import { toProjectPath } from "./core/paths.js";
 import { lensTitle, summarizeFile } from "./core/protection.js";
-import { type FileReach, fileReach, fileRunDetail, verdict } from "./core/results.js";
+import { fileRunDetail, fileScope, ONLY_UNSUPPORTED, verdict } from "./core/results.js";
 import { bindingAtPosition, matchUnitsToSymbols } from "./core/symbols.js";
 import type { SmartTestCodeLensProvider } from "./providers/code-lens.js";
 import { documentSymbols } from "./providers/util.js";
@@ -26,6 +21,34 @@ export interface CommandDependencies {
   readonly status: SmartTestStatusBar;
   readonly results: SmartTestResultsProvider;
   readonly codeLens: SmartTestCodeLensProvider;
+}
+
+/** The last run-command notifications, for the Test-mode API (the real-host test reads them). */
+const notices: string[] = [];
+
+export function recentNotices(): readonly string[] {
+  return [...notices];
+}
+
+interface NoticeAction {
+  readonly title: string;
+  readonly run: () => unknown;
+}
+
+/** Shows a notification without waiting for it; an action runs when its button is clicked. */
+function notify(level: "info" | "warning" | "error", message: string, ...actions: NoticeAction[]) {
+  notices.push(message);
+  if (notices.length > 20) notices.shift();
+  const titles = actions.map((action) => action.title);
+  const shown =
+    level === "error"
+      ? vscode.window.showErrorMessage(message, ...titles)
+      : level === "warning"
+        ? vscode.window.showWarningMessage(message, ...titles)
+        : vscode.window.showInformationMessage(message, ...titles);
+  void shown.then((choice) => {
+    void actions.find((action) => action.title === choice)?.run();
+  });
 }
 
 function seekDocument(arg: unknown): vscode.Uri | undefined {
@@ -214,6 +237,19 @@ export function registerCommands(
       );
       return;
     }
+    // "For this file" scopes the change set to the file (`--only`): only the tests its changes
+    // affect are selected and run. The dependency analysis still covers the whole project.
+    let projectPath: string | undefined;
+    if (forFile && document) {
+      projectPath = toProjectPath(folder.uri.fsPath, document.uri.fsPath);
+      if (!projectPath || projectPath === ".") {
+        void vscode.window.showInformationMessage(
+          "SmartTest: this file is not inside its workspace folder.",
+        );
+        return;
+      }
+    }
+    const only = projectPath ? [projectPath] : undefined;
     let resolution: ReturnType<ExtensionState["resolveFolder"]>;
     try {
       resolution = state.resolveFolder(folder);
@@ -229,8 +265,8 @@ export function registerCommands(
       await vscode.window.withProgress(
         {
           location: vscode.ProgressLocation.Notification,
-          title: forFile
-            ? "SmartTest: running tests affected by this change set"
+          title: projectPath
+            ? `SmartTest: running tests affected by ${projectPath}`
             : "SmartTest: running affected tests",
           cancellable: true,
         },
@@ -240,47 +276,56 @@ export function registerCommands(
           try {
             // Impact first: an empty selection must not record a (passing) run, which would also
             // advance a native snapshot baseline.
-            progress.report({ message: "analysing the change set" });
-            const impactResult = await runCli({
-              ...launchOptions(resolution.launcher, impactArgs(settings)),
-              cwd: folder.uri.fsPath,
-              signal: controller.signal,
-              timeoutMs: settings.analysisTimeoutMs,
+            progress.report({
+              message: projectPath
+                ? `analysing the changes in ${projectPath}`
+                : "analysing the change set",
             });
+            let impactResult: Awaited<ReturnType<typeof runCli>>;
+            try {
+              impactResult = await runCli({
+                ...launchOptions(resolution.launcher, impactArgs(settings, only)),
+                cwd: folder.uri.fsPath,
+                signal: controller.signal,
+                timeoutMs: settings.analysisTimeoutMs,
+              });
+            } catch (error) {
+              // An older CLI rejects `--only` as a usage error: never widen to the whole change set.
+              if (only && error instanceof SmartTestExtensionError && error.cliCode === "ST_USAGE")
+                state.output.appendLine(`[runAffected/impact --only] ${error.message}`);
+              else throw error;
+              status.setBusy(undefined);
+              notify("error", ONLY_UNSUPPORTED);
+              return;
+            }
             const impact = parseImpactJson(impactResult.stdout);
-            if (impact.decision.selectedTests.length === 0) {
+            if (projectPath) {
+              const scoped = fileScope(impact, projectPath);
+              if (scoped.kind !== "run") {
+                status.setBusy(undefined);
+                status.setRun(undefined);
+                const target = document?.uri;
+                if (scoped.kind === "unchanged" && target)
+                  notify("info", scoped.message, {
+                    title: "Show Protection",
+                    run: () => vscode.commands.executeCommand("smarttest.showImpact", target),
+                  });
+                else notify(scoped.kind === "unsupported" ? "error" : "info", scoped.message);
+                return;
+              }
+            } else if (impact.decision.selectedTests.length === 0) {
               status.setBusy(undefined);
               status.setRun(undefined);
-              void vscode.window.showInformationMessage(
+              notify(
+                "info",
                 `SmartTest selected no tests for ${impact.description}. Nothing was run; this is not a pass.`,
               );
               return;
             }
 
-            let reach: FileReach | undefined;
-            if (forFile && document) {
-              const projectPath = toProjectPath(folder.uri.fsPath, document.uri.fsPath);
-              if (!projectPath) throw new Error("The active file is outside its workspace folder.");
-              try {
-                const explanation = await runCli({
-                  ...launchOptions(resolution.launcher, explainArgs(explainTarget(projectPath))),
-                  cwd: folder.uri.fsPath,
-                  signal: controller.signal,
-                  timeoutMs: settings.analysisTimeoutMs,
-                });
-                reach = fileReach(parseExplainJson(explanation.stdout));
-              } catch (error) {
-                if (isCancelledError(error)) throw error;
-                const message = error instanceof Error ? error.message : String(error);
-                state.output.appendLine(`[runAffected/explain] ${message}`);
-                // A failed explain is "could not determine", never "no test reaches it".
-                reach = { known: false, reason: message };
-              }
-            }
-
             progress.report({ message: "running selected tests" });
             const runResult = await runCli({
-              ...launchOptions(resolution.launcher, runAffectedArgs(settings)),
+              ...launchOptions(resolution.launcher, runAffectedArgs(settings, only)),
               cwd: folder.uri.fsPath,
               signal: controller.signal,
               timeoutMs: settings.runTimeoutMs,
@@ -299,7 +344,7 @@ export function registerCommands(
               integrityIssues: report.integrityIssues,
               exitCode: runResult.exitCode,
             });
-            announceRun(report, runResult.exitCode, reach);
+            announceRun(report, runResult.exitCode, projectPath);
           } finally {
             runControllers.delete(controller);
           }
@@ -421,23 +466,23 @@ export function registerCommands(
   return abortRuns;
 }
 
-function announceRun(result: RunResult, exitCode: number, reach: FileReach | undefined): void {
+function announceRun(result: RunResult, exitCode: number, projectPath: string | undefined): void {
   const report = result.report;
   const outcome = verdict(report, { integrityIssues: result.integrityIssues, exitCode });
   const detail =
-    reach === undefined
+    projectPath === undefined
       ? `${report.decision.selectedTests.length} test(s) selected.`
-      : fileRunDetail(reach, report);
+      : fileRunDetail(report, projectPath);
   const message = `SmartTest: ${outcome.headline}. ${detail}${
     outcome.details.length > 0 ? ` ${outcome.details.join(" ")}` : ""
   }`;
-  const openResults = "Show Results";
-  const then = (choice: string | undefined): void => {
-    if (choice === openResults) void vscode.commands.executeCommand("smarttest.results.focus");
+  const openResults: NoticeAction = {
+    title: "Show Results",
+    run: () => vscode.commands.executeCommand("smarttest.results.focus"),
   };
-  if (outcome.state === "failed")
-    void vscode.window.showErrorMessage(message, openResults).then(then);
-  else if (outcome.state === "passed")
-    void vscode.window.showInformationMessage(message, openResults).then(then);
-  else void vscode.window.showWarningMessage(message, openResults).then(then);
+  notify(
+    outcome.state === "failed" ? "error" : outcome.state === "passed" ? "info" : "warning",
+    message,
+    openResults,
+  );
 }

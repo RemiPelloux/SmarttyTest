@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { join, relative } from "node:path";
+import { isAbsolute, join, relative, resolve, sep } from "node:path";
 // Types only: the engine (and TypeScript) is loaded lazily, so --help/--version start instantly.
 import type { ChangeSource, CommitBenchmark, RunReport, SmartTest } from "@smarttest/core";
 import type { SafetyMode } from "@smarttest/shared";
@@ -96,12 +96,37 @@ function sourceOf(flags: Flags): ChangeSource | undefined {
 
 const rel = (ctx: Ctx, p: string) => relative(ctx.root, p) || ".";
 
+/**
+ * `--only <path>` (repeatable): project-relative paths for the engine. Absolute paths and
+ * `./`-relative ones resolve against the project root; anything outside it is a usage error.
+ */
+function onlyOf(ctx: Ctx): string[] | undefined {
+  const values = ctx.flags.only;
+  if (!values?.length) return undefined;
+  return values.map((value) => {
+    const absolute = isAbsolute(value) ? value : resolve(ctx.root, value);
+    const path = relative(ctx.root, absolute);
+    if (!value.trim() || !path || path === ".." || path.startsWith(`..${sep}`) || isAbsolute(path))
+      throw new SmartTestError(`--only ${value} is not a file or directory inside the project`, {
+        code: "ST_USAGE",
+        category: "usage",
+        hint: "Pass a path under the project root, e.g. --only src/cart.ts",
+      });
+    return path.split(sep).join("/");
+  });
+}
+
 // ── run / impact / explain / validate ─────────────────────────────────────────────────────
 
 async function cmdHookRun(ctx: Ctx): Promise<number> {
   const { flags } = ctx;
   const source = sourceOf(flags);
-  if (flags.all || flags.shard || (source && source.kind !== "staged" && source.kind !== "push"))
+  if (
+    flags.all ||
+    flags.shard ||
+    flags.only?.length ||
+    (source && source.kind !== "staged" && source.kind !== "push")
+  )
     throw new SmartTestError("--hook requires --staged or --push and a complete selection", {
       code: "ST_USAGE",
       category: "usage",
@@ -197,7 +222,13 @@ async function cmdRun(ctx: Ctx): Promise<number> {
       code: "ST_USAGE",
       category: "usage",
     });
+  if (flags.all && flags.only?.length)
+    throw new SmartTestError("--only restricts the change set; it cannot be combined with --all", {
+      code: "ST_USAGE",
+      category: "usage",
+    });
   if (flags.hook) return cmdHookRun(ctx);
+  const only = onlyOf(ctx);
   const st = await ctx.open();
   const ac = new AbortController();
   const onSigint = () => {
@@ -230,6 +261,7 @@ async function cmdRun(ctx: Ctx): Promise<number> {
     const outcome = await st.run({
       ...(source ? { source } : {}),
       ...(mode ? { mode } : {}),
+      ...(only ? { only } : {}),
       all: !!flags.all,
       ...(flags["no-cache"] ? { cache: false } : {}),
       ...(shard ? { shard } : {}),
@@ -245,7 +277,7 @@ async function cmdRun(ctx: Ctx): Promise<number> {
           ? { formats: [...st.config.reports.formats, "markdown"] }
           : {}),
       ...(flags.output ? { outputDir: flags.output } : {}),
-      command: `run ${flags.all ? "--all" : "--affected"}`,
+      command: `run ${flags.all ? "--all" : "--affected"}${only ? only.map((p) => ` --only ${p}`).join("") : ""}`,
       onAnalysis: (a) => {
         spinner.stop();
         if (flags.json || flags.quiet) return;
@@ -406,16 +438,22 @@ function printRun(ctx: Ctx, report: RunReport, written: Record<string, string>):
 
 async function cmdImpact(ctx: Ctx): Promise<number> {
   const { t, flags } = ctx;
+  const only = onlyOf(ctx);
   const st = await ctx.open();
   const source = sourceOf(flags);
   const mode = modeOf(flags);
-  const a = await st.analyze({ ...(source ? { source } : {}), ...(mode ? { mode } : {}) });
+  const a = await st.analyze({
+    ...(source ? { source } : {}),
+    ...(mode ? { mode } : {}),
+    ...(only ? { only } : {}),
+  });
   if (flags.json) {
     ctx.json("impact", {
       description: a.input.description,
       changeSet: a.input.changeSet,
       decision: a.decision,
       timings: a.timings,
+      ...(a.scope ? { only: a.scope } : {}),
     });
     return ExitCode.Success;
   }
