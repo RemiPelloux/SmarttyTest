@@ -3,19 +3,16 @@
 ## Requirements
 
 - Node.js 22.12 or newer
-- A JavaScript or TypeScript project that uses Jest, Vitest or `node --test` (several runners and several projects in one repository are fine)
+- A JavaScript or TypeScript project that uses Jest, Vitest, `node --test`, Playwright or Cypress (several runners and several projects in one repository are fine)
 - Git is optional; without it SmartTest uses local snapshots
 
 ## Install
 
-SmartTest is not on npm yet. Build the package from this repository and install the tarball:
-
 ```bash
-git clone https://github.com/RemiPelloux/SmarttyTest && cd SmarttyTest
-corepack enable && pnpm install && pnpm build && pnpm release:pack
-# in your project:
-npm install -D /path/to/SmarttyTest/packages/cli/.publish/smarttest-0.8.0.tgz
+npm install -D smarttest     # or: pnpm add -D smarttest · yarn add -D smarttest
 ```
+
+To try an unreleased build, run `pnpm install && pnpm build && pnpm release:pack` in a clone of [the repository](https://github.com/RemiPelloux/SmarttyTest) and install the tarball it writes to `packages/cli/.publish/`.
 
 If your repository has no root `package.json` (several independent projects), add a minimal one for repository tooling, as LeadsIt does.
 

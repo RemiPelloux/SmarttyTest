@@ -2,6 +2,58 @@
 
 All notable changes are documented here. Releases are managed with [Changesets](https://github.com/changesets/changesets). The project follows [Semantic Versioning](https://semver.org/).
 
+## [1.0.0] — stable
+
+1.0.0 freezes SmartTest's public contracts. From this release, the config schema, exit codes and `--json` schemas of the frozen commands only change in a major version ([contracts](documentation/reference/contracts.md)).
+
+### Added
+
+- Frozen contracts: a published JSON Schema for the config file (`smarttest/schemas/config.v1.schema.json`), v1 schemas for every frozen `--json` command (`run`, `impact`, `scan`, `explain`, `ci --dry-run`, `doctor`, `shard`, `flaky`, `validate-selection`, `hook`, `sync`) and the error document, and pinned exit codes. Tests check real CLI output against the schemas and fail on schema/type/validator drift. Commands not listed are documented as experimental.
+- Plugin SDK 1.0 (`smarttest/plugin-sdk`): versioned (`apiVersion: 1`) runner, VCS, language and edge-provider contracts, and a conformance kit (`smarttest/plugin-sdk/conformance`) that every built-in adapter passes. Edge-provider plugins are listed in the new `plugins` config option. They can only add tests to a selection, and what they cannot resolve is uncertainty. A failing provider fails the run (`ST_PLUGIN_FAILED`).
+- Hook scope: `hook.runners` and `hook.exclude` keep browser specs out of commit hooks and leave them to CI. Tests outside the scope are reported as "left to CI", in the output, `--json`, reports, hook history, `hook status` and `doctor`, and never as passed. `init` proposes the scope when it finds Playwright or Cypress next to a unit runner.
+- `smarttest impact|run --only <path>`: selects the tests affected by the changes in one file or directory. The dependency analysis is not restricted, so unresolved relationships of that file still select tests. The VS Code command "Run Affected Tests for This File" uses it.
+- Studio: impact map with filters (change, test, edge kind, confidence) and export (JSON, SVG, DOT), line and branch coverage in the source viewer (observed, labelled stale when the file changed), and Chromium browser coverage for Playwright through `smarttest/playwright`'s `withBrowserCoverage`.
+- The dependency graph is saved between runs (`.smarttest/state/graph.json`) and is used only when it provably matches the current files, config and version. Small edits write index deltas instead of the whole index.
+- [Security review](documentation/architecture/security-review.md) of file writes, process execution, Studio, plugins and saved state.
+- State files that decide selection (index, graph, discovery, result cache, traces) are signed with an HMAC under a per-user key (`~/.cache/smarttest/state.key`), or `SMARTTEST_STATE_KEY` in CI. A file without a valid signature is ignored and rebuilt, so forged or foreign state can never shrink a selection. The first run after upgrading rebuilds state once.
+- CI on GitHub Actions runs `pnpm verify` on Linux, Windows and macOS, the VS Code extension's real-host test on all three, real Cypress 16, and Studio in real Safari, VoiceOver and NVDA.
+- [Benchmarks on six real repositories](documentation/case-studies/benchmarks-1.0.md), LeadsIt and OpenPro's front end included: 0 missed failures. The 0.5.0 and 0.8.0 targets were re-measured and are not met.
+
+### Changed
+
+- A selected test file that no runner executes now fails `run`, `ci` and the hook with exit code 4, for example when `playwright test --list` cannot load a spec. It used to pass with a warning. Playwright listing errors are shown with the runner's own lines.
+- Config paths (`storeDir`, `reports.outputDir`, `tests.directory`, `tests.templates`, runner `dir`/`config`) must stay inside the project, and `storeDir` cannot be the project root.
+- SmartTest refuses a `.smarttest/` store that Git tracks (`ST_STORE_TRACKED`), so a pull request cannot commit a fake result cache or index. It refuses symbolic links below the project root on its write paths (`ST_UNSAFE_PATH`) and revisions that look like options (`ST_UNSAFE_REVISION`).
+- `init --json` and `migrate --json` without `--yes` print one JSON document instead of two.
+- Vitest writes coverage even when a test fails, as Jest already did.
+
+### Performance
+
+- Synthetic repositories ([results](benchmarks/RESULTS.md)): warm end-to-end analysis at 10,000 modules takes 734 ms (was 1.35 s); cold start at 2,000 modules takes 656 ms. Both are under the 1 s targets. On LeadsIt, a cold scan takes 1.73 s (was 3.6 s) and a warm `impact` 0.48 s.
+
+### Fixed
+
+- Security fixes SR-01 to SR-21 ([review](documentation/architecture/security-review.md)):
+  - redirected writes through committed symbolic links;
+  - config paths that escape the project, including `storeDir: ".."` with `uninstall`;
+  - `init --rollback` journal paths;
+  - snapshot ids;
+  - option injection into `svn cat`, `hg cat` and Git refs;
+  - terminal escape sequences in test output;
+  - Windows `--open` quoting;
+  - markdown injection in the CI summary;
+  - CSV formula injection, Host port checks and report downloads in Studio;
+  - a missing VS Code trust gate;
+  - plugin paths outside the project, `--only` paths with `..`, DOT export comments, malformed coverage files, and absolute paths in browser coverage.
+- Config validation now checks project rules, `snapshots.*`, `reports.outputDir`, rule `generate`, `execution.retries`, `execution.alwaysRunOnAffected` and `match.visibility`.
+- Playwright's filename fallback no longer claims files that a working runner collects.
+- Watch mode rebuilds its graph after a tsconfig change.
+- macOS and Windows: results were lost when the runner reported a path spelled differently from SmartTest's (`/var` vs `/private/var`, Windows short names like `RUNNER~1`); Studio returned 404 for reports there. pnpm's relative symlinks in the hook checkout and fixtures broke behind a Windows junction.
+- Cypress, found on a real install: test ids, missing skipped tests, failure text in CDATA, and specs that fail to load are now reported correctly.
+- `init --yes` no longer writes its hook into a dependency when Git's hooks path points into `node_modules` (`ST_HOOK_PATH_IN_DEPENDENCY`); a hook it must not edit is a warning, not a failure.
+- `benchmark` counted the baseline twice when one folder has two Vitest configs; `init` names each config.
+- The repository's own pre-push hook unsets Git's local environment variables, so `pnpm verify` run from it can no longer write test commits into the repository.
+
 ## [0.9.0] — hooks and interfaces
 
 ### Added

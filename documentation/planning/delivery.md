@@ -1,4 +1,4 @@
-# Delivery log: 0.3.0 to 0.9.0
+# Delivery log: 0.3.0 to 1.0.0
 
 What was actually delivered against the [roadmap](roadmap.md), sprint by sprint. The foundation sprints S0 to S10 (0.1.0 and 0.2.0) are in the [foundation backlog](foundation/sprints.md). Planning is in story points; one sprint is about 40 points. There are no dates: a sprint is a unit of work, and a version ships when its gate is met or the gap is written down.
 
@@ -15,7 +15,8 @@ Status words: **done** (shipped and tested), **partial** (shipped with a stated 
 | 0.7.0 Adaptation and E2E   | S19–S20    | 84      | 76                    | 8 not done (TypeScript 7)             | met        | `v0.7.0` (`ec5d3a9`) |
 | 0.8.0 Speed                | S21–S23    | 105     | 79 done, 13 partial   | 13 not done (type-checker resolution) | not met    | `v0.8.0` (`a5d958f`) |
 | 0.9.0 Hooks and interfaces | S24–S26    | 116     | 36 done, 80 partial   | —                                     | partly met | `v0.9.0`             |
-| Total                      | 16 sprints | 630     | 451 done, 137 partial | 42                                    |            |                      |
+| 1.0.0 Stable               | S27        | 52      | 52                    | —                                     | met        | `v1.0.0`             |
+| Total                      | 17 sprints | 682     | 503 done, 137 partial | 42                                    |            |                      |
 
 Tests grew from 124 (0.2.0) to 434 repository tests plus 114 extension tests (0.9.0); the regression harness grew from 4 to 9 fixtures, all at 0 missed failures in BALANCED and SAFE mode.
 
@@ -175,7 +176,45 @@ Validation round (same tag, 2026-10-31): the limits listed after the feature rev
 
 Gate: partly met. Features and limitations above are shipped explicitly as alpha; accessibility, complete keyboard/visual review, extension-host validation and remaining interface capabilities carry into 1.0.0. Source highlights indicate observed unit execution, not measured line coverage. Per-file results stream as each runner group finishes; cached results arrive with the summary.
 
-## Carried into 1.0.0
+## S27 · 1.0.0 Stable
+
+Goal: freeze the public contracts, publish benchmarks, review security, and close the gates carried from 0.6.0 to 0.9.0.
+
+| Story                                          | Pts | Status                                                                                                                                                                                                                                                                                                                                                                                               |
+| ---------------------------------------------- | --- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Plugin SDK 1.0                                 | 13  | done: `apiVersion: 1` runner, VCS, language and edge-provider contracts; conformance kit run against every built-in adapter; edge-provider plugins (`plugins` config) with a fixture in the regression harness ([ADR-0010](../architecture/adr/0010-plugin-sdk-v1.md)). Only edge providers can be loaded as plugins; third-party runner/VCS/language registration is a later, non-breaking addition |
+| Freeze public contracts                        | 5   | done: config JSON Schema with a drift test against the type and the validator, v1 schemas for 11 frozen `--json` commands plus the error document, pinned exit codes, semver policy and migration notes ([contracts](../reference/contracts.md))                                                                                                                                                     |
+| Published benchmarks on five real repositories | 13  | done: six repositories, 0 missed failures ([benchmarks](../case-studies/benchmarks-1.0.md)). The 0.5.0 target (traces cut selection by 20%) and the 0.8.0 target (30% less than 0.7.0) were re-measured and are **not met**: traces added tests instead of removing them, and replay time is within noise of 0.7.0                                                                                   |
+| Performance                                    | 8   | done: warm end-to-end analysis at 10,000 modules 734 ms (was 1.35 s), cold start at 2,000 modules 656 ms; graph persisted and validated between runs. LeadsIt cold scan 1.73 s (was 3.6 s), warm `impact` 0.48 s. The §31.3 in-process `analyze` target (< 500 ms) is still missed at 10,000 modules (654 ms)                                                                                        |
+| Security review                                | 8   | done: 21 findings (4 high), all fixed with regression tests; accepted risks recorded ([review](../architecture/security-review.md))                                                                                                                                                                                                                                                                  |
+| Documentation complete                         | 5   | done: contracts, plugins, security review, benchmarks, CI guidance for the state key; install docs moved to npm                                                                                                                                                                                                                                                                                      |
+
+Carried gates closed in this version:
+
+- **npm.** [ADR-0007](../architecture/adr/0007-name-license-distribution.md) accepted: `smarttest`, Apache-2.0, published from a local `pnpm release:publish`.
+- **macOS and Windows.** `pnpm verify` runs in CI on Linux, Windows and macOS. The first run had 86 failures on macOS and 142 on Windows. The real bugs were paths spelled differently from the runner's (`/var` vs `/private/var`, `RUNNER~1`) and pnpm's relative symlinks behind a junction. One test is skipped on Windows (signal cleanup; Windows has no POSIX signals).
+- **Cypress.** A CI job installs Cypress 16.1.1 in `fixtures/projects/cypress-e2e` and runs it through SmartTest. It found four adapter bugs (test ids, missing skipped tests, CDATA failure text, specs that fail to load), all fixed.
+- **Studio with real assistive technology.** CI runs Studio in real Safari (axe and keyboard), VoiceOver with Safari and NVDA with Chrome, through Guidepup, and keeps the spoken logs. NVDA announces landmarks, headings, run progress, the verdict and results. On hosted runners VoiceOver does not record live-region announcements at all (a plain calibration page is not heard either), so run progress and verdict are advisories there, not gated checks.
+- **Hook scope.** `hook.runners` and `hook.exclude` leave browser specs to CI. They are reported as left to CI, never as passed.
+- **Extension file scope.** `--only` restricts the change set, not the analysis.
+- **Studio.** The impact map has filters and JSON, SVG and DOT export. The source viewer shows line and branch coverage. Chromium browser coverage is collected for Playwright.
+- **Defect closed for the gate.** A selected test that no runner executes (for example, when `playwright test --list` fails) made the run pass with a warning. It now fails with exit code 4.
+
+Gate: met. No open defect is known that can make a failing test be skipped. The regression harness and all six real-repository replays are at 0 missed failures.
+
+## After 1.0.0
+
+| Item                                                                                                     | From         | Status                                                                   |
+| -------------------------------------------------------------------------------------------------------- | ------------ | ------------------------------------------------------------------------ |
+| 20% observed-execution reduction, 30% speed target                                                       | 0.5.0, 0.8.0 | re-measured at 1.0.0, not met; kept as goals, not gates                  |
+| In-process `analyze` under 500 ms at 10,000 modules (§31.3)                                              | 0.8.0        | 654 ms; next step: a slimmer or lazily loaded index                      |
+| Browser coverage through source maps (bundled or transpiled scripts), pages beyond the `page` fixture    | 1.0.0        | Chromium, unbundled files only                                           |
+| Studio: full-screen design sign-off in both themes, forced colours, text spacing, VoiceOver live regions | 0.9.0        | needs a human review; automated checks pass                              |
+| Third-party runner, VCS and language adapters as plugins                                                 | 1.0.0        | contracts frozen and conformance-tested; registration not exposed        |
+| TypeScript 7                                                                                             | 0.7.0        | 7.0.2 ships an `unstable/*` parser API; not adopted while it is unstable |
+| Type-checker resolution                                                                                  | 0.3.0, 0.8.0 | after 1.0.0                                                              |
+
+## Carried into 1.0.0 (closed in S27)
 
 | Item                                                                                                    | From         | Now in                      |
 | ------------------------------------------------------------------------------------------------------- | ------------ | --------------------------- |

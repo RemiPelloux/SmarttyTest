@@ -2,7 +2,7 @@
   "name": "smarttest-vscode",
   "displayName": "SmartTest",
   "description": "See which tests protect each function, run the tests a change affects, and read the reasons without leaving VS Code. Uses your local smarttest executable; nothing leaves the machine.",
-  "version": "0.9.0",
+  "version": "1.0.0",
   "publisher": "smarttest",
   "license": "Apache-2.0",
   "private": true,

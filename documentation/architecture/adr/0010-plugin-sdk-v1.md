@@ -1,6 +1,6 @@
 # ADR-0010: Plugin SDK v1 and edge providers
 
-- **Status:** Proposed (1.0.0)
+- **Status:** Accepted (1.0.0)
 - **Related:** roadmap 1.0.0, PRD §27, §27.7, §32.2, ADR-0004, ADR-0005, ADR-0006, [Plugins guide](../../guides/plugins.md), [Public contracts](../../reference/contracts.md)
 
 ## Context

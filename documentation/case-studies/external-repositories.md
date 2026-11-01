@@ -4,7 +4,7 @@
 
 The 0.6.0 adoption check: take repositories SmartTest has never seen, run `smarttest init --yes`, change nothing in the generated configuration, and replay their recent history with `smarttest benchmark --commits 12`. A failure that the selection did not include counts as a miss unless it also fails on the parent commit.
 
-The CLI was run from the packed build (`packages/cli/.publish/dist/bin.js`), since the package is not on npm yet. Dependencies were installed with each project's own lockfile.
+The CLI was run from the packed build (`packages/cli/.publish/dist/bin.js`), since the package was not on npm at the time. Dependencies were installed with each project's own lockfile.
 
 | Repository                                                            | Runner                      | Test files | Commits            | Full runs | SmartTest | Saved | Test files run | Full-suite fallbacks | Missed | Already failing |
 | --------------------------------------------------------------------- | --------------------------- | ---------- | ------------------ | --------- | --------- | ----- | -------------- | -------------------- | ------ | --------------- |
@@ -33,6 +33,6 @@ All five were set up by `init --yes` without configuration edits, and none had a
 
 ## Not covered yet
 
-- The package is not on npm, so "installed from npm" could not be checked.
+- The package was not on npm at the time, so "installed from npm" could not be checked.
 - Only Linux was used. macOS and Windows are not validated.
 - Next.js and Wasp were not among the external repositories (Wasp is covered by LeadsIt).

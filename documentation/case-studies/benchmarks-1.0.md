@@ -4,7 +4,7 @@ The 1.0.0 benchmark story: at least five real repositories, LeadsIt included, re
 
 ## How it was measured
 
-- The CLI is the 1.0.0 candidate built from this repository and packed with `pnpm bundle:cli` (`packages/cli/.publish/dist/bin.js`), since the package is not on npm yet. It includes the persisted graph, the hook scope and the 1.0.0 security fixes.
+- The CLI is the 1.0.0 candidate built from this repository and packed with `pnpm bundle:cli` (`packages/cli/.publish/dist/bin.js`), measured before publication. It includes the persisted graph, the hook scope and the 1.0.0 security fixes.
 - Every repository is a fresh clone. The four public ones were installed with their own lockfile (`npm ci`, `pnpm install --frozen-lockfile`) and set up with `smarttest init --yes`, configuration unchanged. LeadsIt keeps its committed configuration. OpenPro's front end was set up with `init --yes`, plus one edit, described below.
 - LeadsIt and OpenPro are private. They were cloned with `git clone --no-hardlinks`, and the `node_modules` directories were copied from the working copies (real copies, not symlinks). The originals were not touched.
 - `benchmark` replays each commit in a temporary worktree. It times a full run, a project-gated run (the suites of every project the commit touched, as a per-project hook would run them) and SmartTest (analysis included), all on the same checkout. A failure the selection left out counts as missed unless it also fails on the parent commit, in which case it counts as "already failing".
@@ -111,4 +111,4 @@ No selection bug was found: 0 missed failures everywhere.
 
 - The 0.5.0 and 0.8.0 targets are not met, as described above.
 - macOS and Windows were not used here.
-- The package is not on npm yet. The CLI was run from the packed build.
+- The CLI was run from the packed build, before the npm release.

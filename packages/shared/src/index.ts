@@ -25,4 +25,4 @@ export * from "./proc.js";
 export * from "./state.js";
 export * from "./text.js";
 
-export const VERSION = "0.9.0";
+export const VERSION = "1.0.0";

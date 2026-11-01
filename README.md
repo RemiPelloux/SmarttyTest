@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <img alt="Status: alpha 0.9.0" src="https://img.shields.io/badge/status-alpha%200.9.0-FBBF24?style=flat-square&amp;labelColor=0E1530">
+  <a href="https://www.npmjs.com/package/smarttest"><img alt="npm: smarttest 1.0.0" src="https://img.shields.io/badge/npm-smarttest%201.0.0-34D399?style=flat-square&amp;labelColor=0E1530"></a>
   <a href="LICENSE"><img alt="License: Apache-2.0" src="https://img.shields.io/badge/license-Apache--2.0-8B5CF6?style=flat-square&amp;labelColor=0E1530"></a>
   <img alt="Node 22.12 or newer" src="https://img.shields.io/badge/node-22.12%2B-34D399?style=flat-square&amp;labelColor=0E1530">
   <img alt="Runners: Jest, Vitest, node:test, Playwright, Cypress" src="https://img.shields.io/badge/runners-Jest%20%7C%20Vitest%20%7C%20node%3Atest%20%7C%20Playwright%20%7C%20Cypress-22D3EE?style=flat-square&amp;labelColor=0E1530">
@@ -15,7 +15,7 @@ SmartTest runs only the tests a change can affect. It builds a dependency graph 
 
 Documentation site: [remipelloux.github.io/SmarttyTest](https://remipelloux.github.io/SmarttyTest/). It has a live example of the selection on the first screen.
 
-Status: 0.9.0 alpha. It runs in the pre-commit hook of [LeadsIt](documentation/case-studies/leadsit.md). This release adds staged-content isolation, pre-push hooks, checks for affected projects, [SmartTest Studio](documentation/guides/studio.md) and a [VS Code extension](extensions/vscode/README.md). It is not on npm yet (the package name is still being decided, [ADR-0007](documentation/architecture/adr/0007-name-license-distribution.md)). Remaining release gates and validation limits are recorded in the [roadmap](documentation/planning/roadmap.md) and [delivery log](documentation/planning/delivery.md).
+Status: 1.0.0, stable. Its config schema, exit codes and `--json` output are [frozen contracts](documentation/reference/contracts.md) that only change in a major version. It runs in the pre-commit hook of [LeadsIt](documentation/case-studies/leadsit.md) and has been replayed on [six real repositories](documentation/case-studies/benchmarks-1.0.md) with 0 missed failures. CI checks it on Linux, Windows and macOS. Known limits are in the [delivery log](documentation/planning/delivery.md).
 
 ## Usage
 
@@ -38,7 +38,7 @@ npx smarttest trace               # record which code each test runs; later sele
 npx smarttest benchmark           # replay recent commits: full run vs SmartTest, with misses checked
 ```
 
-Until the package is published, build it from this repository (see [Development](#development)) and install the tarball: `pnpm release:pack`, then `npm install -D <path>/smarttest-0.9.0.tgz`.
+Install it in a project with `npm install -D smarttest` (or `pnpm add -D smarttest`). To try an unreleased build, run `pnpm release:pack` in this repository and install the tarball it writes.
 
 ## How it works
 

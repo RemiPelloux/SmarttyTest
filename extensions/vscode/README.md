@@ -2,7 +2,7 @@
 
 See which tests protect each function, run the tests a change affects, and read SmartTest's reasons without leaving the editor. The extension calls the **local** `smarttest` executable. It makes no network requests and sends nothing anywhere.
 
-This is the 0.9.0 extension. It consumes the public `--json` contracts of SmartTest 0.8.0+ (`schemaVersion: 1`). For installation, trust and a manual smoke-test checklist, see the [VS Code guide](../../documentation/guides/vscode.md).
+This is the 1.0.0 extension. It consumes the public `--json` contracts of SmartTest 0.8.0+ (`schemaVersion: 1`). For installation, trust and a manual smoke-test checklist, see the [VS Code guide](../../documentation/guides/vscode.md).
 
 ## Requirements
 
@@ -100,7 +100,7 @@ pnpm install                            # at the repository root
 pnpm --dir extensions/vscode typecheck
 pnpm --dir extensions/vscode test
 pnpm --dir extensions/vscode build      # dist/extension.cjs
-pnpm --dir extensions/vscode package    # reproducible smarttest-vscode-0.9.0.vsix
+pnpm --dir extensions/vscode package    # reproducible smarttest-vscode-1.0.0.vsix
 pnpm --dir extensions/vscode package:check
 pnpm --dir extensions/vscode verify     # typecheck + tests + build + manifest/package checks
 ```

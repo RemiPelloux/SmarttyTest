@@ -6,41 +6,41 @@ The dependency graph is the product. Most of this roadmap makes it more precise 
 
 Planning is in story points. One sprint is about 40 points. Each version has an exit gate; a version ships when the gate is met, not on a date.
 
-## Where 0.9.0 stands
+## Where 1.0.0 stands
 
-- Released: 0.3.0 to 0.9.0 on top of the [foundation backlog](foundation/README.md). Sprint-by-sprint results, partial items and what moved: [delivery log](delivery.md).
-- Graph today: files, top-level symbols and class members; imports, re-exports, barrels, workspace packages, CommonJS, inheritance; environment keys, Prisma models, translation keys, assets, snapshots, manual mocks, Wasp operations, Next.js routes and the URLs end-to-end specs visit; runtime traces as observed evidence. Unresolved relationships are uncertainty and select the test.
-- Runners: Jest, Vitest, `node --test`, Playwright, Cypress. Version control: Git, Subversion, Mercurial, native snapshots.
-- Real-world checks: LeadsIt (706 tests) and four public repositories set up with `init --yes`, 0 missed failures in every replay.
-- Still open before 1.0.0: npm publication (name decision), macOS and Windows validation, cold start and warm analysis at 2,000+ modules, and the 0.5.0/0.8.0 performance targets, which were not reached on LeadsIt.
+- Released: 0.3.0 to 1.0.0 on top of the [foundation backlog](foundation/README.md). Sprint-by-sprint results, partial items and what moved: [delivery log](delivery.md).
+- 1.0.0 freezes the config schema, exit codes and `--json` contracts ([contracts](../reference/contracts.md)) and the Plugin SDK v1. It is published on npm as `smarttest`.
+- Graph: files, top-level symbols and class members; imports, re-exports, barrels, workspace packages, CommonJS, inheritance; environment keys, Prisma models, translation keys, assets, snapshots, manual mocks, Wasp operations, Next.js routes and the URLs end-to-end specs visit; edges from plugins; runtime traces as observed evidence. Unresolved relationships are uncertainty and select the test. The graph is persisted between runs.
+- Runners: Jest, Vitest, `node --test`, Playwright, Cypress (checked against a real install). Version control: Git, Subversion, Mercurial, native snapshots. CI on Linux, Windows and macOS.
+- Real-world checks: [six repositories](../case-studies/benchmarks-1.0.md), LeadsIt and OpenPro's front end included, 0 missed failures.
+- Not reached: the 0.5.0 (20% fewer tests from traces) and 0.8.0 (30% faster) targets, and the §31.3 in-process analysis target at 10,000 modules. See "After 1.0.0" in the delivery log.
 
 ## When is it usable
 
-| Who                                                                                                               | Usable from           | What is missing before that                                                                                                  |
-| ----------------------------------------------------------------------------------------------------------------- | --------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| A team that installs the tarball (like LeadsIt)                                                                   | now, 0.9.0            | Nothing for Linux; install is `npm install -D <tarball>`                                                                     |
-| Anyone, with `npm install -D smarttest`                                                                           | the first npm release | The package name and licence decision (ADR-0007). Publication can happen as soon as it is decided, without waiting for 1.0.0 |
-| Teams whose daily contact is the commit hook                                                                      | 0.9.0, sprint S24     | Staged-content runs, pre-push mode, project checks, time budget                                                              |
-| People who prefer a UI to the CLI                                                                                 | 0.9.0, S25–S26        | SmartTest Studio and the VS Code extension                                                                                   |
-| Teams that need guarantees: frozen config and `--json` contracts, macOS and Windows checked, published benchmarks | 1.0.0                 | Contracts freeze, cross-platform validation, security review                                                                 |
+| Who                                                                                                               | Usable from       | What is missing before that                                        |
+| ----------------------------------------------------------------------------------------------------------------- | ----------------- | ------------------------------------------------------------------ |
+| A team that installs the tarball (like LeadsIt)                                                                   | 0.9.0             | Nothing for Linux; install is `npm install -D <tarball>`           |
+| Anyone, with `npm install -D smarttest`                                                                           | 1.0.0             | Done: ADR-0007 accepted, published as `smarttest`                  |
+| Teams whose daily contact is the commit hook                                                                      | 0.9.0, sprint S24 | Staged-content runs, pre-push mode, project checks, time budget    |
+| People who prefer a UI to the CLI                                                                                 | 0.9.0, S25–S26    | SmartTest Studio and the VS Code extension                         |
+| Teams that need guarantees: frozen config and `--json` contracts, macOS and Windows checked, published benchmarks | 1.0.0             | Done: contracts frozen, Linux/Windows/macOS in CI, security review |
 
 ## Overview
 
-| Version | Theme                | Points                | Gate                                                                                                         |
-| ------- | -------------------- | --------------------- | ------------------------------------------------------------------------------------------------------------ |
-| 0.3.0   | Precise graph        | 83                    | Released (13 pts moved to 0.8.0): member-level selection, CommonJS symbols, graph queries                    |
-| 0.4.0   | Complete graph       | 84                    | Released (8 pts moved to 0.7.0): env, asset, Wasp, Prisma, translation, mock and snapshot edges              |
-| 0.5.0   | Runtime evidence     | 71                    | Released: traces, hybrid selection, Shadow Mode; reduction target not reached on LeadsIt                     |
-| 0.6.0   | Adoption             | 66                    | Released: hooks, `smarttest ci`, per-project conventions, five repositories at 0 misses; npm publish blocked |
-| 0.7.0   | Adaptation and E2E   | 84                    | Released: sync, watch, migrate, Playwright and Cypress, Next.js routes; TypeScript 7 not available           |
-| 0.8.0   | Speed                | 105                   | Released: result cache, parallel groups, shards, flaky history, SVN and Mercurial; 30% target not reached    |
-| 0.9.0   | Hooks and interfaces | 116                   | Implemented: commit hooks, local Studio and VS Code; validation limits in the delivery log                   |
-| 1.0.0   | Stable               | 52                    | Frozen contracts, published benchmarks, security review                                                      |
-|         | Remaining            | 52 plus carried gates | Stable contracts, performance and remaining validation ([delivery log](delivery.md))                         |
+| Version | Theme                | Points | Gate                                                                                                         |
+| ------- | -------------------- | ------ | ------------------------------------------------------------------------------------------------------------ |
+| 0.3.0   | Precise graph        | 83     | Released (13 pts moved to 0.8.0): member-level selection, CommonJS symbols, graph queries                    |
+| 0.4.0   | Complete graph       | 84     | Released (8 pts moved to 0.7.0): env, asset, Wasp, Prisma, translation, mock and snapshot edges              |
+| 0.5.0   | Runtime evidence     | 71     | Released: traces, hybrid selection, Shadow Mode; reduction target not reached on LeadsIt                     |
+| 0.6.0   | Adoption             | 66     | Released: hooks, `smarttest ci`, per-project conventions, five repositories at 0 misses; npm publish blocked |
+| 0.7.0   | Adaptation and E2E   | 84     | Released: sync, watch, migrate, Playwright and Cypress, Next.js routes; TypeScript 7 not available           |
+| 0.8.0   | Speed                | 105    | Released: result cache, parallel groups, shards, flaky history, SVN and Mercurial; 30% target not reached    |
+| 0.9.0   | Hooks and interfaces | 116    | Released: commit hooks, local Studio and VS Code; validation limits in the delivery log                      |
+| 1.0.0   | Stable               | 52     | Released: frozen contracts, Plugin SDK v1, six benchmarks at 0 misses, security review, npm                  |
 
 ## Graph model
 
-| Layer          | 0.2.0                                              | 0.9.0 (now)                                                                                                                                  | 1.0.0                                                                |
+| Layer          | 0.2.0                                              | 0.9.0                                                                                                                                        | 1.0.0 (now)                                                          |
 | -------------- | -------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
 | Nodes          | files, top-level symbols, tests                    | plus methods and accessors, env keys, Prisma models, translation keys, routes, assets, snapshots, manual mocks                               | same, plus fixtures as first-class nodes                             |
 | Code edges     | imports, re-exports, barrels, top-level references | plus member access through local inference, inheritance and `super`, CommonJS symbols, fluent `this`, Wasp operations, constructor injection | plus edge-provider plugins (SDK 1.0); type-checked calls after 1.0.0 |
@@ -192,7 +192,7 @@ Studio must be a well-designed product, not a dashboard template. It is built wi
 
 **Gate:** run, explain, inspect impact and read coverage without the CLI; the design skill's linter and inspector pass with 0 failures at 1440, 768 and 390 pixels, and the screenshot critique is recorded; WCAG 2.2 AA in both themes and full keyboard use; local security review of Studio passed.
 
-## 1.0.0: Stable (52 pts, plus items carried from 0.6.0 to 0.9.0)
+## 1.0.0: Stable (52 pts, plus items carried from 0.6.0 to 0.9.0), released
 
 | Story                                                                                                                                                                         | Pts |
 | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --- |
@@ -204,11 +204,11 @@ Studio must be a well-designed product, not a dashboard template. It is built wi
 | Documentation complete                                                                                                                                                        | 5   |
 | Carried: publish on npm (needs ADR-0007), `pnpm verify` on macOS and Windows, Cypress adapter checked against a real install                                                  | —   |
 
-Carried from 0.9.0: a Studio pass with a real screen reader (NVDA, VoiceOver) and real Safari, full-screen design signoff in both themes, and a hook-only runner scope so browser specs can stay in CI. Done in the 0.9.0 validation round: the extension in a real VS Code host (also in CI on Linux, Windows and macOS), an automated WCAG 2.2 AA and keyboard audit in three browser engines, and before/after hook measurements on OpenPro's front end. Studio has path-based impact inspection and unit trace annotations; graph filtering/export, line/branch coverage and browser coverage collection remain open. The extension's file command currently runs the whole affected change set and identifies the file's intersection; true file-scoped selection remains open.
+Every story and carried gate above is done; the [delivery log](delivery.md#s27--100-stable) records the numbers, the targets that are still not reached, and what remains after 1.0.0 (browser coverage through source maps, a human design sign-off of Studio, VoiceOver live regions on hosted runners).
 
-TypeScript 7 stays a watch item: the analyzer moves when TypeScript 7 offers a parser API usable from Node.
+TypeScript 7 stays a watch item: 7.0.2 ships an `unstable/*` parser API, and the analyzer moves when that API is stable.
 
-**Gate:** all of the above, and no open defect that can make a failing test be skipped.
+**Gate:** all of the above, and no open defect that can make a failing test be skipped. Met.
 
 ---
 

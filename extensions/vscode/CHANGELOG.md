@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.0.0
 
 - "Run Affected Tests for This File" now selects and runs only the tests affected by that file's changes, through `smarttest impact|run --only <file>` (SmartTest 1.0.0+). It used to run the whole change set and report the file's intersection. Only the changed set is restricted: a test that an unresolved import could connect to the file is still run. The notification names the other changed files that were left out.
 - A file with no change runs nothing and is reported as such, never as a pass, with **Show Protection** to open the tests that protect it.

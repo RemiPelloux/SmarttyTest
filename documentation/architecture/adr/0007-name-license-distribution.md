@@ -1,6 +1,6 @@
 # ADR-0007: Name, license and distribution
 
-- **Status:** Proposed. To be finalised by **ST-011** in Sprint 0
+- **Status:** Accepted (1.0.0, 2026-11-01). Proposed in Sprint 0 (ST-011)
 - **Related:** ST-011, ST-099, PRD §29, §40
 
 ## Context
@@ -14,11 +14,12 @@ The spec uses "SmartTest" as a working name and asks for npm availability to be 
 - The `@smarttest` scope is unverified. Create the npm org to reserve it.
 - No trademark search has been done yet.
 
-## Proposed decision
+## Decision
 
 - CLI package **`smarttest`** (bin `smarttest`). Internal packages under **`@smarttest/*`**.
 - **Apache-2.0** for the open-source core. It includes an explicit patent grant, which suits enterprise adoption and an open-core model. Cloud and enterprise code live in separate, closed repositories.
-- Publish locally with `pnpm release:publish` after `pnpm verify`. There is no hosted CI, so no npm provenance attestation. Pre-releases go to the `next` tag.
+- Publish locally with `pnpm release:publish` after `pnpm verify`. CI (GitHub Actions) checks every push on Linux, Windows and macOS, but publishing stays a local, manual step, so there is no npm provenance attestation yet. Pre-releases go to the `next` tag.
+- 1.0.0 is the first npm release, published as `smarttest`.
 
 ## Fallbacks
 

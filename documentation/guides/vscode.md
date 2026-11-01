@@ -12,10 +12,10 @@ pnpm build
 pnpm extension:pack
 ```
 
-This writes `extensions/vscode/smarttest-vscode-0.9.0.vsix`. Install it with VS Code's Extensions view (**… → Install from VSIX…**) or:
+This writes `extensions/vscode/smarttest-vscode-1.0.0.vsix`. Install it with VS Code's Extensions view (**… → Install from VSIX…**) or:
 
 ```bash
-code --install-extension extensions/vscode/smarttest-vscode-0.9.0.vsix
+code --install-extension extensions/vscode/smarttest-vscode-1.0.0.vsix
 ```
 
 Reload the window after installing. For extension development, run `pnpm --dir extensions/vscode build`, open `extensions/vscode` in VS Code and press F5; VS Code starts an Extension Development Host.
