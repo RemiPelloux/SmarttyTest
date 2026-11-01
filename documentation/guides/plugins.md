@@ -26,7 +26,10 @@ TypeScript and JavaScript imports, references and many conventions (environment 
 
 ```js
 // tools/sql-edges.mjs
-const CALL = /\bquery\(\s*(?:"([\w-]+)"|([^)]*))\)/g;
+// A call to the `query` helper: its first argument, as a string literal (group 2) or as code
+// (group 3). Further arguments are ignored. Not matched: the helper's own definition
+// (`function query(`) and other objects' methods (`pool.query(`).
+const CALL = /(?<![\w.$]|function\s*)query\(\s*(?:(["'`])([\w-]+)\1|([^,)]*))/g;
 
 /** @type {import("smarttest/plugin-sdk").EdgeProvider} */
 const sqlEdges = {
@@ -37,13 +40,17 @@ const sqlEdges = {
     const all = new Set(await ctx.listFiles());
     const edges = [];
     const unresolved = [];
-    for (const file of ctx.files) {
+    for (const file of [...ctx.files].sort()) {
       if (ctx.isTest(file) || !file.startsWith("src/")) continue;
       for (const m of ((await ctx.readFile(file)) ?? "").matchAll(CALL)) {
-        const to = m[1] ? `sql/${m[1]}.sql` : undefined;
-        if (to && all.has(to))
-          edges.push({ from: file, to, kind: "REFERENCES", confidence: "high" });
-        else unresolved.push({ file, reason: `query(${m[1] ?? m[2]}) reads no known file` });
+        const name = m[2];
+        if (!name) {
+          unresolved.push({ file, reason: `query(${m[3]?.trim()}) is not a literal name` });
+          continue;
+        }
+        const to = `sql/${name}.sql`;
+        if (all.has(to)) edges.push({ from: file, to, kind: "REFERENCES", confidence: "high" });
+        else unresolved.push({ file, reason: `query("${name}") has no ${to}` });
       }
     }
     return { edges, unresolved };
@@ -163,8 +170,19 @@ interface LanguageAnalyzer {
 | `checkEdgeProvider(provider, fixture)`     | `root`, `files`, `allFiles`, `expectedEdges`, `expectedUnresolved`                                 |
 | `checkPlugin(plugin, fixtures?)`           | the default export, and an edge-provider fixture per provider id                                   |
 
+The provider reads `files` from disk, relative to `root` (through `ctx.readFile`), so the fixture needs those files under `root`. `allFiles` is only the listing `ctx.listFiles()` returns: files that are listed but never read, like the SQL file here, do not need to exist. Keep a small fixture project next to the test:
+
+```text
+test/fixtures/sql-app/
+  src/db.ts      export function query(name: string, ...args: unknown[]) { … }
+  src/users.ts   export const findUser = (id: string) => query("find-user", id);
+  src/report.ts  export const run = (name: string) => query(name);
+```
+
 ```ts
+// test/sql-edges.test.ts
 import { test } from "node:test";
+import { fileURLToPath } from "node:url";
 import { assertConformance, checkPlugin } from "smarttest/plugin-sdk/conformance";
 import plugin from "../tools/sql-edges.mjs";
 
@@ -172,16 +190,21 @@ test("sql-edges conforms to the plugin API", async () => {
   const report = await checkPlugin(plugin, {
     edgeProviders: {
       "sql-queries": {
-        root: process.cwd(),
-        files: ["src/users.ts"],
-        allFiles: ["src/users.ts", "sql/find-user.sql"],
+        root: fileURLToPath(new URL("./fixtures/sql-app/", import.meta.url)),
+        files: ["src/db.ts", "src/users.ts", "src/report.ts"],
+        allFiles: ["src/db.ts", "src/users.ts", "src/report.ts", "sql/find-user.sql"],
         expectedEdges: [{ from: "src/users.ts", to: "sql/find-user.sql" }],
+        // The query name in report.ts is only known at run time. db.ts defines `query`
+        // and is not reported.
+        expectedUnresolved: ["src/report.ts"],
       },
     },
   });
   assertConformance(report);
 });
 ```
+
+With `root: process.cwd()` and no `src/users.ts` there, the provider reads nothing and the expected edge is missing.
 
 The kit checks identity and `apiVersion`, that every capability is declared, the shape of every result (relative POSIX paths, known kinds and statuses), determinism, the expectations of your fixture, and declarations against behaviour: a runner that discovers tests without declaring `discovery` fails, so does a provider that points outside the analysed sources without declaring `nonSourceFiles`.
 

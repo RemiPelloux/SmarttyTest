@@ -211,6 +211,8 @@ for (const [src, out] of assetsToCopy) {
   await cp(join(ROOT, src), join(DIST, out));
 }
 await writeFile(join(DIST, "assets/search.json"), JSON.stringify(searchIndex));
+// The `--json` and config schemas, so their `$id` URLs (…/SmarttyTest/schemas/<name>) resolve.
+await cp(join(ROOT, "packages/cli/schemas"), join(DIST, "schemas"), { recursive: true });
 
 // Landing page: the docs list is generated from the sidebar groups.
 const minutesOf = (p) => docsList.find((d) => d.sitePath === p)?.minutes ?? 1;

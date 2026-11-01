@@ -15,6 +15,8 @@ SmartTest follows [semantic versioning](https://semver.org) from 1.0.0. This pag
 
 The schemas ship in the package: `node_modules/smarttest/schemas/<name>.v1.schema.json`, also importable as `smarttest/schemas/<name>.v1.schema.json`.
 
+`smarttest/studio` exports `startStudio(options)` ([Studio guide](../guides/studio.md#embedding-and-assets)): its options and handle follow the semver policy below, while what Studio shows is not a contract.
+
 Not public, and free to change in any release: everything under `.smarttest/` (index, graph, traces, history, caches, logs; SmartTest rebuilds what it cannot read), the HTML report's layout, human-readable terminal output, log messages, and the `@smarttest/*` workspace packages, which are bundled into `smarttest` and not published.
 
 ### `--json` documents
@@ -55,6 +57,8 @@ Consumers should ignore fields they do not know and tolerate new values in enume
 | 70   | `internal`       | A SmartTest bug                                                                 |
 
 Errors also carry a stable `code` such as `ST_CONFIG_INVALID` or `ST_GIT_BASE_MISSING`. A code is never renamed, reused for another condition, or moved to another category within a major version.
+
+A write that needs confirmation and gets neither `--yes` nor a prompt (non-interactive, or `--json`) exits 3 with `ST_INIT_CONFIRMATION_REQUIRED` (`init`, `sync`, `migrate`), `ST_HOOK_CONFIRMATION_REQUIRED` (`hook install`, `hook uninstall`; 0.x used `ST_INIT_CONFIRMATION_REQUIRED` there) or `ST_CONFIRMATION_REQUIRED` (`uninstall`).
 
 ## Semver policy
 

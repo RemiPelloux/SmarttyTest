@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://smarttest.dev/schemas/config.v1.json",
+  "$id": "https://remipelloux.github.io/SmarttyTest/schemas/config.v1.schema.json",
   "title": "smarttest.config (v1)",
   "description": "SmartTest configuration (smarttest.config.json, or the object passed to defineConfig in smarttest.config.ts). Every option is optional. Unknown keys are reported as warnings by SmartTest and rejected here so editors catch typos.",
   "type": "object",

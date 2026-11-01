@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://smarttest.dev/schemas/hook.v1.json",
+  "$id": "https://remipelloux.github.io/SmarttyTest/schemas/hook.v1.schema.json",
   "title": "smarttest hook --json (v1)",
   "description": "One of three documents: `hook status`, `hook install` and `hook uninstall`.",
   "type": "object",

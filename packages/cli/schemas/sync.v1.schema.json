@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://smarttest.dev/schemas/sync.v1.json",
+  "$id": "https://remipelloux.github.io/SmarttyTest/schemas/sync.v1.schema.json",
   "title": "smarttest sync --json (v1)",
   "type": "object",
   "required": ["schemaVersion", "command", "drift", "manual", "changes"],

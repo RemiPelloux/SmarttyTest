@@ -99,7 +99,7 @@ describe("published schemas", () => {
     for (const f of files) {
       const s = JSON.parse(await readFile(join(SCHEMAS, f), "utf8")) as JsonSchema;
       expect(s.$schema, f).toBe("https://json-schema.org/draft/2020-12/schema");
-      expect(s.$id, f).toBe(`https://smarttest.dev/schemas/${f.replace(".schema.json", ".json")}`);
+      expect(s.$id, f).toBe(`https://remipelloux.github.io/SmarttyTest/schemas/${f}`);
       // Every keyword, in every subschema, is one the validator implements.
       expect(() => assertSupportedSchema(s), f).not.toThrow();
     }

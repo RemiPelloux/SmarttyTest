@@ -2,8 +2,10 @@
  * A SmartTest plugin (Plugin SDK v1): `query("name")` reads sql/<name>.sql at run time, which
  * static analysis cannot see. This edge provider links each caller to the SQL file it reads.
  * A query name that is not a string literal, or that has no file, is reported as unresolved.
+ * Only the first argument names the file; the helper's own definition (`function query(`) and
+ * other objects' methods (`pool.query(`) are not calls to it.
  */
-const CALL = /\bquery\(\s*(?:"([\w-]+)"|'([\w-]+)'|([^)]*))\)/g;
+const CALL = /(?<![\w.$]|function\s*)query\(\s*(?:(["'`])([\w-]+)\1|([^,)]*))/g;
 
 /** @type {import("smarttest/plugin-sdk").EdgeProvider} */
 const sqlEdges = {
@@ -15,10 +17,10 @@ const sqlEdges = {
     const edges = [];
     const unresolved = [];
     for (const file of [...ctx.files].sort()) {
-      if (ctx.isTest(file) || !file.startsWith("src/") || file === "src/db.ts") continue;
+      if (ctx.isTest(file) || !file.startsWith("src/")) continue;
       const text = (await ctx.readFile(file)) ?? "";
       for (const m of text.matchAll(CALL)) {
-        const name = m[1] ?? m[2];
+        const name = m[2];
         if (!name) {
           unresolved.push({ file, reason: `query(${m[3]?.trim()}) is not a literal name` });
           continue;

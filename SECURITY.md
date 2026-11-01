@@ -10,10 +10,10 @@ We aim to acknowledge reports within **3 business days** and to agree a disclosu
 
 ## Supported versions
 
-| Version          | Supported    |
-| ---------------- | ------------ |
-| pre-1.0 (`next`) | Best effort  |
-| 1.x              | Yes, from GA |
+| Version | Supported |
+| ------- | --------- |
+| 1.x     | Yes       |
+| < 1.0   | No        |
 
 ## Scope highlights
 

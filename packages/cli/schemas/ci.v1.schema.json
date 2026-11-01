@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://smarttest.dev/schemas/ci.v1.json",
+  "$id": "https://remipelloux.github.io/SmarttyTest/schemas/ci.v1.schema.json",
   "title": "smarttest ci --dry-run --json (v1)",
   "description": "The plan printed by `smarttest ci --dry-run --json`. Without --dry-run, `smarttest ci --json` runs the tests and prints a run document (run.v1.schema.json).",
   "type": "object",

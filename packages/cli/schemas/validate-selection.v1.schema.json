@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://smarttest.dev/schemas/validate-selection.v1.json",
+  "$id": "https://remipelloux.github.io/SmarttyTest/schemas/validate-selection.v1.schema.json",
   "title": "smarttest validate-selection --json (v1)",
   "type": "object",
   "required": [

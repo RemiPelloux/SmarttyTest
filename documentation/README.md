@@ -30,8 +30,8 @@ Architecture and design
 
 Product and planning
 - [Specification (PRD)](product/PRD.md)
-- [Roadmap to 1.0.0](planning/roadmap.md)
-- [Delivery log (0.3.0 to 0.9.0)](planning/delivery.md)
+- [Roadmap](planning/roadmap.md)
+- [Delivery log (0.3.0 to 1.0.0)](planning/delivery.md)
 - [Foundation backlog](planning/foundation/README.md)
 - [Case study: LeadsIt](case-studies/leadsit.md)
 - [External repositories](case-studies/external-repositories.md) (0.6.0)

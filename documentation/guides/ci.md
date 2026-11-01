@@ -34,14 +34,15 @@ Reports are written to `.smarttest/reports/` (`junit.xml`, `report.html`, `repor
 
 ## Exit codes
 
-| Code | Meaning                                                                     | Usual CI handling      |
-| ---- | --------------------------------------------------------------------------- | ---------------------- |
-| 0    | all selected tests passed                                                   | pass                   |
-| 1    | a test failed or timed out                                                  | fail                   |
-| 2    | invalid command or flag                                                     | fail, fix the pipeline |
-| 3    | configuration problem                                                       | fail                   |
-| 4    | infrastructure problem (runner missing, Git base not found)                 | fail or retry          |
-| 5    | policy failure (`validate-selection`, `shadow` or `benchmark` found a miss) | fail                   |
+| Code | Meaning                                                                          | Usual CI handling      |
+| ---- | -------------------------------------------------------------------------------- | ---------------------- |
+| 0    | all selected tests passed                                                        | pass                   |
+| 1    | a test failed or timed out                                                       | fail                   |
+| 2    | invalid command or flag                                                          | fail, fix the pipeline |
+| 3    | configuration problem                                                            | fail                   |
+| 4    | infrastructure problem (runner missing, Git base not found)                      | fail or retry          |
+| 5    | policy failure (`validate-selection`, `shadow` or `benchmark` found a miss)      | fail                   |
+| 70   | internal error: a SmartTest bug, such as a report that fails its integrity check | fail, report the bug   |
 
 ## Example: GitLab CI
 
