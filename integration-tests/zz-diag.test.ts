@@ -1,49 +1,37 @@
 // TEMPORARY Windows diagnostics (removed before merge).
-import { spawnSync } from "node:child_process";
-import { readFileSync, realpathSync } from "node:fs";
+import { existsSync, lstatSync, readdirSync, readlinkSync, realpathSync } from "node:fs";
 import { join } from "node:path";
-import { SmartTest } from "@smarttest/core";
 import { it } from "vitest";
-import { materialize } from "./helpers.js";
+import { FIXTURES, materialize } from "./helpers.js";
+
+const tryIt = (label: string, fn: () => unknown) => {
+  try {
+    console.log("DIAG", label, JSON.stringify(fn()));
+  } catch (e) {
+    console.log("DIAG", label, "THROWS", String(e));
+  }
+};
 
 it.runIf(process.platform === "win32")(
   "diag",
   async () => {
-    for (const [name, bin] of [
-      ["no-vcs-vitest", "node_modules/vitest/vitest.mjs"],
-      ["express-cjs-jest", "node_modules/jest/bin/jest.js"],
-    ] as const) {
-      const dir = await materialize(name);
-      console.log("DIAG dir", dir, realpathSync.native(dir));
-      const out = await (await SmartTest.open({ root: dir })).run({ formats: ["json"] });
-      console.log("DIAG run", name, JSON.stringify(out.report.executions).slice(0, 3000));
-      const args =
-        name === "no-vcs-vitest"
-          ? [
-              "run",
-              "--reporter=json",
-              `--outputFile=${join(dir, "r.json")}`,
-              join(realpathSync.native(dir), "tests", "math.test.ts"),
-            ]
-          : ["--json", `--outputFile=${join(dir, "r.json")}`];
-      const r = spawnSync(process.execPath, [join(dir, bin), ...args], {
-        cwd: realpathSync.native(dir),
-        encoding: "utf8",
-      });
-      console.log(
-        "DIAG spawn",
-        name,
-        r.status,
-        r.error,
-        r.stdout.slice(0, 2000),
-        r.stderr.slice(0, 3000),
-      );
-      try {
-        console.log("DIAG report", readFileSync(join(dir, "r.json"), "utf8").slice(0, 1500));
-      } catch (e) {
-        console.log("DIAG no report", String(e));
-      }
-    }
+    const src = join(FIXTURES, "no-vcs-vitest", "node_modules");
+    tryIt("src exists", () => existsSync(src));
+    tryIt("src list", () => readdirSync(src));
+    tryIt("src vitest lstat", () => lstatSync(join(src, "vitest")).isSymbolicLink());
+    tryIt("src vitest link", () => readlinkSync(join(src, "vitest")));
+    tryIt("src vitest real", () => realpathSync.native(join(src, "vitest")));
+    tryIt("src vitest.mjs", () => existsSync(join(src, "vitest", "vitest.mjs")));
+    const dir = await materialize("no-vcs-vitest");
+    const nm = join(dir, "node_modules");
+    tryIt("dst lstat", () => [lstatSync(nm).isSymbolicLink(), lstatSync(nm).isDirectory()]);
+    tryIt("dst link", () => readlinkSync(nm));
+    tryIt("dst list", () => readdirSync(nm));
+    tryIt("dst vitest.mjs", () => existsSync(join(nm, "vitest", "vitest.mjs")));
+    tryIt("dst vitest real", () => realpathSync.native(join(nm, "vitest")));
+    tryIt("dst canonical vitest.mjs", () =>
+      existsSync(join(realpathSync.native(dir), "node_modules", "vitest", "vitest.mjs")),
+    );
   },
   120_000,
 );

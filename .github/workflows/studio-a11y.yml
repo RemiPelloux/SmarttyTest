@@ -1,0 +1,108 @@
+name: Studio accessibility
+
+# Studio in real Safari (safaridriver + axe-core + keyboard checks) and with real screen readers
+# (Guidepup: VoiceOver with Safari on macOS, NVDA with Chrome on Windows). The Playwright engine
+# audit stays `pnpm studio:a11y`; these jobs cover what an engine build cannot.
+# Scripts: scripts/studio-a11y/real/ (own package.json + package-lock, outside the pnpm workspace).
+
+on:
+  push:
+    branches: [main, "ci/**"]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: studio-a11y-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  safari:
+    name: Safari (axe + keyboard)
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - run: npm ci --no-audit --no-fund
+        working-directory: scripts/studio-a11y/real
+      - name: Allow WebDriver to drive Safari
+        run: sudo safaridriver --enable
+      - name: Studio in Safari
+        working-directory: scripts/studio-a11y/real
+        run: node safari.mjs --out "$RUNNER_TEMP/studio-safari"
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: studio-safari
+          path: ${{ runner.temp }}/studio-safari
+          if-no-files-found: ignore
+
+  voiceover:
+    name: VoiceOver + Safari
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - run: npm ci --no-audit --no-fund
+        working-directory: scripts/studio-a11y/real
+      # guidepup/setup-action 0.21.0: enables AppleScript control of VoiceOver.
+      - uses: guidepup/setup-action@acf1a64cc26292ebe0db6a28d1341bd1bae93c65
+        with:
+          record: true
+      - name: Studio with VoiceOver
+        working-directory: scripts/studio-a11y/real
+        run: node screen-reader.mjs --out "$RUNNER_TEMP/studio-voiceover"
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: studio-voiceover-spoken-log
+          path: |
+            ${{ runner.temp }}/studio-voiceover
+            recordings
+          if-no-files-found: ignore
+
+  nvda:
+    name: NVDA + Chrome
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      # Keep fixtures byte-identical to the repository (no CRLF conversion on Windows).
+      - run: git config --global core.autocrlf false
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - run: npm ci --no-audit --no-fund
+        working-directory: scripts/studio-a11y/real
+      # guidepup/setup-action 0.21.0: installs a portable NVDA with the Guidepup add-on.
+      - uses: guidepup/setup-action@acf1a64cc26292ebe0db6a28d1341bd1bae93c65
+      - name: Studio with NVDA
+        working-directory: scripts/studio-a11y/real
+        run: node screen-reader.mjs --out "${{ runner.temp }}/studio-nvda"
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: studio-nvda-spoken-log
+          path: ${{ runner.temp }}/studio-nvda
+          if-no-files-found: ignore
