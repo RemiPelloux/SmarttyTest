@@ -10,7 +10,7 @@
 import { createHash } from "node:crypto";
 import { readdir, readFile, realpath } from "node:fs/promises";
 import { isAbsolute, join, resolve, sep } from "node:path";
-import { readJson, relPosixReported } from "@smarttest/shared";
+import { readJson, relPosix, relPosixReported } from "@smarttest/shared";
 import type { CoverageScope } from "./index.js";
 
 export const LINE_COVERAGE_SCHEMA = 1;
