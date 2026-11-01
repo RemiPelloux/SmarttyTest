@@ -28,6 +28,9 @@ export default defineConfig({
       "integration-tests/**/*.test.ts",
     ],
     passWithNoTests: true,
+    // Process start-up, git and Git for Windows' sh are several times slower on Windows runners:
+    // tests that take 3-5 s on Linux brush past the 5 s default there.
+    testTimeout: process.platform === "win32" ? 30_000 : 5_000,
     coverage: {
       provider: "v8",
       include: ["packages/*/src/**"],
