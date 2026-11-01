@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -159,6 +159,34 @@ describe("browser V8 line detail", () => {
     expect(reasons["http://127.0.0.1:5173/src/nosource.js"]).toMatch(/did not report/);
     expect(Object.keys(reasons).some((u) => u.includes("passwd"))).toBe(true);
     expect(Object.keys(report?.files ?? {}).some((f) => f.includes("passwd"))).toBe(false);
+  });
+
+  it("reports project-relative paths when the root is reached through a link (SR-21)", async () => {
+    await writeFile(join(root, "src/pick.js"), source);
+    // A file outside the project with the very source the browser reports.
+    const outside = await mkdtemp(join(tmpdir(), "st-outside-"));
+    await writeFile(join(outside, "x.js"), source);
+    const dir = join(root, "v8");
+    await mkdir(dir);
+    await writeFile(
+      join(dir, "t.json"),
+      JSON.stringify({
+        entries: [
+          { url: "http://127.0.0.1:5173/src/pick.js", source, functions },
+          { url: `http://127.0.0.1:5173/@fs${outside}/x.js`, source, functions },
+          { url: `file://${outside}/x.js`, source, functions },
+        ],
+      }),
+    );
+    const linked = `${root}-link`;
+    await symlink(root, linked, "junction");
+    try {
+      const report = await ingestBrowserV8([dir], linked, "selected", "r");
+      expect(Object.keys(report?.files ?? {})).toEqual(["src/pick.js"]);
+    } finally {
+      await rm(linked, { force: true });
+      await rm(outside, { recursive: true, force: true });
+    }
   });
 
   it("returns undefined when no browser wrote a dump", async () => {

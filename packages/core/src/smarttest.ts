@@ -65,6 +65,7 @@ import {
   mapLimit,
   matchGlob,
   readJson,
+  readStateJson,
   readText,
   runProcess,
   runWithEnvScope,
@@ -75,6 +76,7 @@ import {
   walkFiles,
   writeFileAtomic,
   writeJson,
+  writeStateJson,
 } from "@smarttest/shared";
 import {
   applyPlan,
@@ -839,7 +841,8 @@ export class SmartTest {
     const cachePath = join(this.storeDir, "state", "discovery.json");
     const cache = options.fresh
       ? {}
-      : ((await readJson<Record<string, string[]>>(cachePath)) ?? {});
+      : // Authenticated: a planted cache could list no test files for a runner.
+        ((await readStateJson<Record<string, string[]>>(cachePath)) ?? {});
     const nextCache: Record<string, string[]> = {};
     // Runners are asked in parallel; a runner whose config sets nothing about test files is not
     // asked at all: its default patterns are applied here (no process start).
@@ -908,7 +911,7 @@ export class SmartTest {
       }
       perRoot.set(rootKey(root), count);
     }
-    await writeJson(cachePath, nextCache);
+    await writeStateJson(cachePath, nextCache);
     const tests = [...assignment.keys()].sort();
     const unassigned = staticCandidates.filter((f) => !assignment.has(f));
     return { tests, unassigned, roots, assignment, warnings, perRoot };

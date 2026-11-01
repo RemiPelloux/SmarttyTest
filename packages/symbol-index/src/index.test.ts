@@ -129,3 +129,23 @@ describe("SymbolIndex persistence", () => {
     expect((await state(root, "index.json"))?.baseId).not.toBe(base?.baseId);
   });
 });
+
+describe("SymbolIndex trust (SR-16)", () => {
+  it("never uses an index or delta it did not write, even with matching hashes and stats", async () => {
+    const root = await project({ "a.ts": 'import "./b"', "b.ts": "1" });
+    await update(root, ["a.ts", "b.ts"]);
+    // A crafted index: the right content hash and stats for a.ts, but its import of b.ts removed
+    // (that edge would select a.ts's tests when b.ts changes). Written without the MAC.
+    const stored = (await state(root, "index.json")) as {
+      files: Record<string, FileAnalysis>;
+    };
+    stored.files["a.ts"] = { ...(stored.files["a.ts"] as FileAnalysis), imports: [] };
+    await writeFile(join(root, ".smarttest", "state", "index.json"), JSON.stringify(stored));
+    const loaded = await SymbolIndex.load(join(root, ".smarttest"));
+    expect(loaded.size).toBe(0);
+    expect(loaded.loadWarnings.join()).toMatch(/rebuilt/);
+    const { index, stats } = await update(root, ["a.ts", "b.ts"]);
+    expect(stats.parsed).toBe(2);
+    expect(index.get("a.ts")?.imports.map((i) => i.resolved)).toEqual(["b.ts"]);
+  });
+});

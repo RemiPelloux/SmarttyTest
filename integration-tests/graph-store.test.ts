@@ -6,6 +6,7 @@
 import { readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { type Analysis, SmartTest } from "@smarttest/core";
+import { writeStateFile } from "@smarttest/shared";
 import { describe, expect, it } from "vitest";
 import { edit, materialize } from "./helpers.js";
 
@@ -18,6 +19,7 @@ async function analyzeBoth(dir: string) {
   const stored = await st.analyze();
   const how = { build: st.lastGraphBuild, miss: st.lastGraphStoreMiss };
   const saved = await readFile(graphFile(dir), "utf8");
+  const savedMac = await readFile(`${graphFile(dir)}.mac`, "utf8");
   await rm(graphFile(dir));
   const ref = await SmartTest.open({ root: dir });
   const reference = await ref.analyze();
@@ -26,6 +28,7 @@ async function analyzeBoth(dir: string) {
   expect(stored.graph.stats).toEqual(reference.graph.stats);
   // Put back what the stored run left, so the next step starts from it.
   await writeFile(graphFile(dir), saved);
+  await writeFile(`${graphFile(dir)}.mac`, savedMac);
   return { ...how, analysis: stored };
 }
 
@@ -116,6 +119,8 @@ describe("persisted dependency graph", () => {
         /^stale: graph format changed/,
       ],
       ["garbage", "not json at all", /^corrupt/],
+      // The same good content, but not written by this machine (no valid MAC, SR-16).
+      ["written elsewhere", good, /^corrupt: not written by this machine/],
       ["empty", "", /^corrupt/],
       ["truncated", good.slice(0, Math.floor(good.length * 0.7)), /^corrupt/],
       [
@@ -130,7 +135,11 @@ describe("persisted dependency graph", () => {
       ],
     ];
     for (const [name, text, reason] of cases) {
-      await writeFile(graphFile(dir), text);
+      // Every other case is authenticated, so it reaches the checks it is about.
+      if (name === "written elsewhere") {
+        await writeFile(graphFile(dir), text);
+        await rm(`${graphFile(dir)}.mac`);
+      } else await writeStateFile(graphFile(dir), text);
       const st = await SmartTest.open({ root: dir });
       const a = await st.analyze();
       expect(st.lastGraphBuild, name).toBe("built");

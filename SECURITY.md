@@ -38,7 +38,11 @@ Repository content cannot redirect SmartTest itself:
 - **Option injection.** Revision and file names cannot be read as options by `git`, `svn` or `hg`.
 - **Rendering.** Terminal output and the markdown summary are stripped of escape sequences and markup.
 
-State restored from a CI cache is still trusted. Never restore a cache saved by an untrusted pull request into a trusted job.
+Caches that decide what runs (the index, the graph, test discovery, cached passes, traces) carry an HMAC under a key outside the project. A planted or foreign file is rebuilt, never trusted.
+
+To keep a CI cache useful across jobs, give the jobs that save and restore it the same `SMARTTEST_STATE_KEY` secret (32 characters or more). Never expose that secret to jobs that run a fork's code.
+
+Plugins (`plugins`) are code too. A path plugin must be a file inside the project.
 
 The VS Code extension does nothing in Restricted Mode, and `smarttest.executablePath` is a restricted setting.
 

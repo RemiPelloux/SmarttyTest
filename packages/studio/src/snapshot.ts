@@ -11,7 +11,7 @@ import { join, resolve, sep } from "node:path";
 import type { Analysis, FlakyEntry, LineCoverageReport, SmartTest } from "@smarttest/core";
 import type { ProjectProfile } from "@smarttest/project-detector";
 import type { RunReport, RunSummary } from "@smarttest/report-engine";
-import { mapLimit, readJson, type SafetyMode } from "@smarttest/shared";
+import { mapLimit, readJson, readStateJson, type SafetyMode } from "@smarttest/shared";
 import { type SymbolRecord, unitOf } from "@smarttest/source-parser";
 import type {
   StudioChange,
@@ -376,7 +376,13 @@ export function sourceCoverageOf(
     report.scope === "full" ? "full suite" : "selected tests only, not whole-project coverage";
   const what = report.origin === "browser-v8" ? "Browser (Chromium V8)" : "Runner";
   const lower = report.origin === "browser-v8" ? "browser (Chromium V8)" : "runner";
-  const entry = report.files[path];
+  // The report is read from runner output in the store: never trust its shape (own keys only,
+  // arrays where arrays are expected), so a crafted file cannot break the source view.
+  const raw = Object.hasOwn(report.files, path) ? report.files[path] : undefined;
+  const entry =
+    raw && typeof raw === "object" && Array.isArray(raw.lines) && Array.isArray(raw.branches)
+      ? raw
+      : undefined;
   if (!entry)
     return {
       ...base,
@@ -397,15 +403,17 @@ export function sourceCoverageOf(
       note: `This file changed after ${lower} coverage was collected (run ${report.runId}), so its line numbers no longer match and no line is marked. Run with coverage again.`,
     };
   const lines = entry.lines
-    .filter(([n]) => Number.isInteger(n) && n >= 1)
+    .filter((l) => Array.isArray(l) && Number.isInteger(l[0]) && l[0] >= 1)
     .map(([n, hits]) => ({ n, hits: Math.max(0, Number(hits) || 0) }));
   const byLine = new Map(lines.map((l) => [l.n, l.hits]));
-  const branches = entry.branches.map((b) => ({
-    line: b.line,
-    type: b.type,
-    covered: b.arms.filter((n) => n > 0).length,
-    total: b.arms.length,
-  }));
+  const branches = entry.branches
+    .filter((b) => b && Number.isInteger(b.line) && Array.isArray(b.arms))
+    .map((b) => ({
+      line: b.line,
+      type: String(b.type),
+      covered: b.arms.filter((n) => Number(n) > 0).length,
+      total: b.arms.length,
+    }));
   const changedSet = new Set(changedLines);
   let covered = 0;
   let uncovered = 0;
@@ -549,7 +557,7 @@ export function runFromReport(
 export async function cacheInfo(
   storeDir: string,
 ): Promise<{ files: number; results: number; lastCached: number; integrityIssues: string[] }> {
-  const cache = await readJson<{ version: number; files: Record<string, unknown[]> }>(
+  const cache = await readStateJson<{ version: number; files: Record<string, unknown[]> }>(
     join(storeDir, "cache", "results.json"),
   );
   const files = cache?.version === 1 ? Object.keys(cache.files) : [];

@@ -7,6 +7,15 @@ The 1.0.0 release gate "Security review: file writes, process execution, Studio"
 - **File writes**: the store (`.smarttest/`), reports, the config loader's temporary file, `init`, `migrate`, `uninstall` and `rollback`, hook installation into `.git/hooks`, husky, lefthook and simple-git-hooks, test generation, native snapshots, logs and the shadow log. Also the commit hook's temporary checkout and its `node_modules` mirror, and atomic writes (`packages/shared/src/fs.ts`).
 - **Process execution**: the runner adapters, `hook.checks` and its `{files}` substitution, Git, Subversion and Mercurial invocations, `smarttest ci`, opening a report, and the environment children inherit. Also the VS Code extension's executable resolution and Restricted Mode.
 - **Studio** (`packages/studio`): binding, the session token, Host and Origin checks, CSP and headers, the source, report and export endpoints, the run endpoint, and rendering in `web/js`.
+- **Second pass, over the merged `main`**:
+  - the plugin loader and edge providers (`packages/core/src/plugins.ts`, `dependency-graph`);
+  - the persisted graph (`graph-store.ts`) and index deltas;
+  - every other state file that decides what runs;
+  - the Studio impact map with its JSON, SVG and DOT exports;
+  - line, branch and browser coverage (`coverage-lines.json`);
+  - `--only` (`scope.ts`);
+  - the hook scope (`hook.runners`, `hook.exclude`);
+  - the `smarttest/playwright` browser coverage fixture and its URL-to-file mapping.
 - **Dependencies**: `scripts/release/audit.mjs` (npm audit of the packed CLI), `scripts/release/sbom.mjs`, and `pnpm audit` of the workspace.
 
 ## Threat model
@@ -43,6 +52,14 @@ Running a repository's tests runs its code. So does loading a `smarttest.config.
 | SR-13 | Low      | Studio       | A malformed Host port skipped the port check                                                      | Fixed  |
 | SR-14 | Low      | Studio       | Option-like revisions and traversing snapshot ids as change sources                               | Fixed  |
 | SR-15 | Low      | Studio       | Report download followed links; served reports shared Studio's origin                             | Fixed  |
+| SR-16 | High     | Selection    | Persisted state (index and delta, graph, discovery, result cache, traces) could be forged         | Fixed  |
+| SR-17 | Medium   | Plugins      | Path plugins could be loaded from outside the project                                             | Fixed  |
+| SR-18 | Low      | `--only`     | `src/../../x` passed the outside-the-project check                                                | Fixed  |
+| SR-19 | Low      | Studio       | DOT export: a line break in the change description left its comment line                          | Fixed  |
+| SR-20 | Low      | Studio       | A malformed `coverage-lines.json` entry broke the source view                                     | Fixed  |
+| SR-21 | Low      | Coverage     | Browser coverage reported absolute paths when the root sat below a link                           | Fixed  |
+
+SR-01 to SR-15 come from the first pass, on the tree before the persisted graph, plugins, the impact map and line coverage landed. SR-16 to SR-21 come from the second pass over the merged `main`.
 
 ### SR-01: committed symbolic links redirect writes (high)
 
@@ -241,6 +258,98 @@ Four gaps were found and fixed:
 - **SR-14.** `/api/refresh` and `/api/run` passed `source.ref` and `source.target` unchecked, and a `source.id` such as `../../x`. These needed the token. Revisions and snapshot ids are now validated, in addition to SR-04 and SR-05. Test: `packages/studio/src/server.test.ts`.
 - **SR-15.** Report downloads followed a link such as `reports/junit.xml -> ~/.ssh/id_rsa`. Served report HTML, which contains repository text, ran on Studio's origin. Downloads now refuse any link below the project root, including a linked `reports/` or store directory. Reports are served with the Studio CSP plus `sandbox`, so they get an opaque origin and no scripts. Test: `packages/studio/src/server.test.ts`.
 
+### SR-16: persisted state could be forged (high)
+
+**What happened.** SR-06 refuses a store committed to Git, but six files decide what runs:
+
+- the symbol index, `state/index.json`, and its delta, `state/index-delta.json`;
+- the persisted graph, `state/graph.json`;
+- the discovery cache, `state/discovery.json`;
+- the result cache, `cache/results.json`;
+- traces, `state/traces.json`.
+
+These files also arrive without being committed: from a CI cache, a copied directory, or a Subversion, Mercurial or no-VCS project (AR-5). Every check on them was against public data:
+
+- The index reuses an analysis when the file's size and mtime match, so a forged entry with no imports drops an edge.
+- The graph header holds content hashes and a SHA-256 of its own body. A forger recomputes all of them for a body with edges removed.
+- The discovery cache maps a key, which hashes public inputs, to the test files of a runner. A forged entry with an empty list hides every test of that runner, even from `--all`.
+
+Any of these turns a CI run green without running the affected tests.
+
+**Fix.** These six files are now authenticated (`packages/shared/src/state.ts`):
+
+- Each file is written with a sibling `<file>.mac`, an HMAC-SHA256 over its exact bytes and its name.
+- The key is `SMARTTEST_STATE_KEY` when it is set (at least 32 characters). Otherwise it is a random per-user key in `<user cache dir>/smarttest/state.key` (mode 0600), outside every project.
+- A missing or wrong MAC reads as no file, so the state is rebuilt: a cold run, never a smaller selection.
+- Restoring a CI cache keeps its benefit only when the saving and restoring jobs share `SMARTTEST_STATE_KEY` as a secret. Fork jobs receive no secrets, so anything a fork wrote, or anything restored into a fork's job, is rebuilt.
+- Studio's cache counts read the cache the same way.
+- The first run after upgrading rebuilds state once.
+
+**Tests:**
+
+- `packages/shared/src/state.test.ts`.
+- `packages/symbol-index/src/index.test.ts`, "SymbolIndex trust".
+- `packages/core/src/graph-store.test.ts`: "never restores a graph this machine did not write".
+- `packages/core/src/state-trust.test.ts`.
+- `integration-tests/security.test.ts`: "does not let a planted discovery cache hide test files".
+
+**Checked and already safe:**
+
+- A restored graph and the index are parsed as JSON only: no code runs, and malformed parts make the graph unusable rather than half-used.
+- History, durations, timings and hook records only order, shard or report. The adaptive policy can only widen the selection, to every test.
+
+### SR-17: plugins outside the project (medium)
+
+**What happened.** `plugins` entries that start with `.` or are absolute were resolved with `resolve(root, spec)`. So `../shared/evil.mjs`, `/tmp/x.mjs` or a link inside the project that leads out was imported and run.
+
+**Fix.**
+
+- Path plugins must resolve, by real path, to a file inside the project (`ST_PLUGIN_OUTSIDE_PROJECT`, exit 3), and the configuration validator refuses absolute and `../` entries.
+- Package names still resolve from the project's `node_modules`.
+- What was already safe, and is now documented in `documentation/guides/plugins.md`:
+  - Provider output only adds edges, and `unresolved` becomes uncertainty.
+  - A throwing or malformed provider fails the analysis with `ST_PLUGIN_FAILED`. It is never treated as "no edges".
+  - `ctx.readFile` refuses paths outside the project.
+
+**Test:** `packages/core/src/plugins.test.ts`.
+
+**Loading on CI forks:** see AR-2.
+
+### SR-18: `--only` traversal (low)
+
+**What happened.** `normalizeScopePath` checked for `../` before normalising, so `src/../../x` passed. The value is the user's own command-line flag and only filters the change set, so this was a correctness gap rather than an escalation.
+
+**Fix.** The path is normalised first.
+
+**Test:** `packages/core/src/scope.test.ts`.
+
+**Hook scope (`hook.runners`, `hook.exclude`), reviewed with no finding:**
+
+- It applies only to the hook's own run. `run` and `ci` ignore it.
+- Every file it removes stays selected and is reported as "left to CI", never as passed.
+- It is read from the configuration under test, so it is the committer's own setting.
+
+### SR-19 and SR-20: impact map export and line coverage in Studio (low)
+
+**What was checked.**
+
+- The impact map, its JSON export and the on-screen SVG are built with `createElementNS`, `setAttribute` and text nodes. The SVG export serialises that DOM, so names cannot inject markup or scripts.
+- DOT identifiers and labels are quoted with `JSON.stringify`.
+
+**SR-19.** The DOT export's first line is a `//` comment that holds the change description, and the description can contain repository text: refs and `--only` paths. A line break in it ended the comment and added DOT statements. Graphviz attributes such as `image=` read local files when the graph is rendered. Line breaks and control characters are now folded into the comment. Test: `packages/studio/src/repository-data.test.ts`.
+
+**SR-20.** `runs/coverage-lines.json` comes from runner output. A malformed entry (no arrays) or a key such as `constructor` threw in `sourceCoverageOf` and broke the source view. Entries are now read as own keys only, with their shape checked. Test: `packages/studio/src/repository-data.test.ts`.
+
+**Checked and already safe:** coverage is shown only for files the source endpoint has already validated, and only when the file's SHA-256 matches the measured one.
+
+### SR-21: browser coverage URL mapping (low)
+
+**What was checked.** The `smarttest/playwright` fixture writes dumps under a hashed name into the directory SmartTest gives it. `ingestBrowserV8` maps `http(s)`, `/@fs/` and `file:` URLs to candidate files. It reads a file only when its real path is inside the project's real path, and uses it only when the browser's source is byte for byte that file. So encoded `../`, `/@fs/` outside the project and `file:` URLs outside it are never read, which was already tested.
+
+**SR-21.** When the project root was reached through a link, the real file path was made relative to the unresolved root. Coverage then fell back to the absolute path, which leaked it into the report and Studio. Paths are now relative to the root's real path, and dropped if that fails.
+
+**Test:** `packages/coverage-engine/src/lines.test.ts`, "reports project-relative paths when the root is reached through a link". It also covers `/@fs/` and `file:` URLs outside the project.
+
 ## Accepted risks
 
 - **AR-1. Project code runs with the user's permissions.** Several things execute project code by design:
@@ -252,12 +361,21 @@ Four gaps were found and fixed:
   This is the same trust as `npm test`. SmartTest does not sandbox it, and the temporary checkout isolates Git state, not processes.
 
   In CI, run fork pull requests without secrets: use `pull_request`, not `pull_request_target`, and never run SmartTest on a fork's code in a job that holds deploy credentials. SECURITY.md states this.
-- **AR-2. Plugins.** 1.0.0 has no `plugins` option. Adapters are bundled and chosen from a fixed list (`vitest`, `jest`, `node`, `playwright`, `cypress`), and `@smarttest/plugin-sdk` serves only those. Third-party plugins are a post-1.0 feature and will need their own review, including a rule for whether project-local plugins load in CI on forks.
+- **AR-2. Plugins run their code, including in CI on forks.** The `plugins` option loads edge-provider modules: a file inside the project (SR-17) or an installed package. Loading one runs it with the user's permissions, exactly like loading a TypeScript configuration, and a pull request can add one.
+
+  Disabling plugins on forks would not help. Without its plugins a project loses edges, so a "safe" no-plugin mode would have to select every test. The fork's tests run its code anyway. The answer is the same as AR-1: run fork pull requests without secrets.
+
+  Provider output can only add tests, and a failing provider fails the analysis.
 - **AR-3. Races with local processes.** The link checks (SR-01, SR-15, Studio source reads) look at the filesystem before acting. A local process that swaps a directory for a link in between is not defended against. Other local users of the machine are outside the file-write threat model; they could equally edit the repository.
-- **AR-4. Untracked state is trusted.** SR-06 refuses state committed to Git. State restored from a CI cache, or copied in another way, is still trusted. Rules for CI caches:
+- **AR-4. State written under the same key is trusted.** Since SR-16, state is used only with a valid MAC. Anyone who holds the key can still write state that is trusted: the developer's own user account, or a CI job that holds the `SMARTTEST_STATE_KEY` secret. The rest is ordinary secret hygiene:
+  - Give the secret only to jobs that run trusted code.
+  - Never expose it to `pull_request_target` jobs that check out a fork.
+  - Remember that the per-user key file protects nothing from other processes of the same user.
+
+  Rules for CI caches:
   - Do not restore a store saved by an untrusted pull-request job into a trusted job. GitHub Actions scopes caches saved by pull requests to that pull request.
   - Use `--no-cache` or `safe` mode (traces never rule out tests in `safe`, ADR-0008) where cached passes must not count.
-- **AR-5. Tracked-store detection covers Git only.** Subversion, Mercurial and native-snapshot projects are not checked for a committed store. Snapshot ids and hashes are validated (SR-04) and writes are confined (SR-01), but a planted result cache or index in those repositories is still read.
+- **AR-5. Tracked-store detection covers Git only.** Subversion, Mercurial and native-snapshot projects are not checked for a committed store. Snapshot ids and hashes are validated (SR-04) and writes are confined (SR-01). Since SR-16 a planted result cache, index, graph, discovery cache or traces file is not read there either, because it has no valid MAC. What remains untrusted-but-read is non-selecting state: history, durations, hook records and reports, which only order, shard or display.
 - **AR-6. Development dependency advisories.** `pnpm audit` of the workspace reports 1 low and 2 moderate advisories: `deepmerge`, `minimatch` and `glob`, all through `jest` in the `express-cjs-jest` test fixture. They are not shipped and have no patched release in that dependency range.
 
   The published package's runtime dependencies: `scripts/release/audit.mjs` reports 0 advisories. The CycloneDX SBOM lists 31 bundled packages and 1 runtime dependency.
@@ -265,10 +383,11 @@ Four gaps were found and fixed:
 
 ## Not reviewed
 
-- **`packages/core/src/graph-store.ts` and index deltas.** They are not in this tree. Today the persisted graph state is the symbol index (`state/index.json`), which SR-01 and SR-06 cover. The new store needs the same review when it lands: confined writes, refused when tracked, and a crafted file must never drop an edge without a fallback.
 - **AI and cloud features (§30.3, §30.5).** Not part of 1.0.0.
 - **The publishing pipeline.** npm provenance, signing and CI workflow hardening (§30.6) are release tasks, not code.
 - **Platform-specific paths not executed here.** The review ran on Linux:
   - Windows junction behaviour is covered by the same `lstat` checks and the existing Windows CI. The `explorer.exe` change (SR-09) was not run on Windows.
   - Mercurial is not installed on the review machine, so SR-05 for `hg` is covered by argument tests only.
 - **Third-party runners.** Jest, Vitest, Playwright and Cypress themselves, and what they do with their own configuration files.
+- **Third-party plugins.** The code of any plugin a project lists, and packages it resolves from `node_modules`, is the project's code (AR-2). The review covers the loader and what SmartTest does with provider output, not the plugins.
+- **Resource exhaustion.** Very large coverage dumps, graphs or reports from repository content can slow or exhaust memory. This is a denial of service against the project's own CI, not an integrity problem.

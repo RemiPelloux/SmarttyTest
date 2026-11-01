@@ -1,8 +1,9 @@
-import { mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DependencyGraph } from "@smarttest/dependency-graph";
 import { analyzeSource } from "@smarttest/language-typescript";
+import { sha256 } from "@smarttest/shared";
 import type { FileAnalysis } from "@smarttest/source-parser";
 import { describe, expect, it } from "vitest";
 import { GraphStore, PATCHED_FILES_BEFORE_SAVE } from "./graph-store.js";
@@ -104,5 +105,23 @@ describe("GraphStore", () => {
     expect(new GraphStore(dir, { mode: "balanced" }, {}).load(files, isTest)).toMatchObject({
       status: "corrupt",
     });
+  });
+
+  it("never restores a graph this machine did not write, even with a consistent header (SR-16)", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "st-graph-store-"));
+    const files = project(3);
+    const store = () => new GraphStore(dir, { mode: "balanced" }, {});
+    await store().save(new DependencyGraph(files, isTest), files);
+    expect(store().load(files, isTest).status).toBe("loaded");
+    // The header's checks are over public data: recompute them for a body with an edge renamed.
+    const text = await readFile(store().path, "utf8");
+    const nl = text.indexOf("\n");
+    const header = JSON.parse(text.slice(0, nl)) as { body: string };
+    const body = text.slice(nl + 1).replace(/"src\/m1\.ts"/g, '"src/mX.ts"');
+    header.body = sha256(body);
+    await writeFile(store().path, `${JSON.stringify(header)}\n${body}`);
+    expect(store().load(files, isTest)).toMatchObject({ status: "corrupt" });
+    await rm(`${store().path}.mac`);
+    expect(store().load(files, isTest)).toMatchObject({ status: "corrupt" });
   });
 });

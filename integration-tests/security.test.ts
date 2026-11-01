@@ -3,7 +3,7 @@
  * repository content (a fork's pull request) must not redirect SmartTest's writes or plant state
  * that reduces the selection.
  */
-import { mkdir, mkdtemp, readdir, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { prepareCi, SmartTest } from "@smarttest/core";
@@ -49,6 +49,27 @@ describe("state planted by repository content", () => {
     const st = await SmartTest.open({ root: dir });
     await expect(st.analyze()).rejects.toMatchObject({ code: "ST_UNSAFE_PATH" });
     expect(await readdir(outside)).toEqual([]);
+  });
+});
+
+describe("caches restored from elsewhere (SR-16)", () => {
+  it("does not let a planted discovery cache hide test files", async () => {
+    const dir = await materialize("ts-lib-vitest");
+    dirs.push(dir);
+    const st = await SmartTest.open({ root: dir });
+    const { index } = await st.analyze();
+    const found = (await st.discoverTests(index)).tests;
+    expect(found.length).toBeGreaterThan(0);
+    // Same keys (they are hashes of public data), every runner listing no test file.
+    const path = join(dir, ".smarttest", "state", "discovery.json");
+    const cache = JSON.parse(await readFile(path, "utf8")) as Record<string, string[]>;
+    await writeFile(
+      path,
+      JSON.stringify(Object.fromEntries(Object.keys(cache).map((k) => [k, []]))),
+    );
+    const again = await SmartTest.open({ root: dir });
+    const { index: index2 } = await again.analyze();
+    expect((await again.discoverTests(index2)).tests).toEqual(found);
   });
 });
 
