@@ -2009,11 +2009,26 @@ export class SmartTest {
     });
     // Offer the Git hook, replacing the full-suite test steps the hook runs today.
     if (profile.vcs.provider === "git") {
+      // A hook SmartTest must not edit (shared, owned by a dependency, not a shell script) leaves
+      // the rest of the setup intact: init reports it and goes on without the hook.
       const hook = await planHookInstall(this.root, {
         replace: true,
         testCommands: profile.testCommands,
+      }).catch((error: unknown) => {
+        if (
+          error instanceof SmartTestError &&
+          ["ST_HOOK_PATH_OUTSIDE_REPO", "ST_HOOK_PATH_IN_DEPENDENCY", "ST_HOOK_NOT_SHELL"].includes(
+            error.code,
+          )
+        ) {
+          plan.warnings.push(
+            `Git hook not installed: ${error.message}. ${error.hint ?? ""}`.trim(),
+          );
+          return undefined;
+        }
+        throw error;
       });
-      if (!hook.installed) {
+      if (hook && !hook.installed) {
         plan.files.push(hook.plan);
         if (hook.replaced.length)
           plan.warnings.push(
@@ -2088,12 +2103,17 @@ export class SmartTest {
     }
     for (const r of roots) {
       try {
+        // Each root is listed with its own config: vitest.config.ts and vitest.stryker.config.ts in
+        // one directory collect different files.
         const cases = await this.createAdapter({
           adapter: r.adapter,
           dir: r.dir,
           files: [],
-        }).discover();
-        messages.push(`${r.adapter} (${r.dir || "."}) discovers ${cases.length} test file(s)`);
+          ...(r.configFile ? { configFile: r.configFile } : {}),
+          ...(r.patterns ? { patterns: r.patterns } : {}),
+        } as Group).discover();
+        const where = r.configFile ?? (r.dir || ".");
+        messages.push(`${r.adapter} (${where}) discovers ${cases.length} test file(s)`);
       } catch (error) {
         ok = false;
         messages.push(

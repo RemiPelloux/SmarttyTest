@@ -39,6 +39,11 @@ export interface HookTarget {
   stage: HookStage;
   /** A `core.hooksPath` outside the repository: SmartTest refuses to write there. */
   outside?: string;
+  /**
+   * A `core.hooksPath` inside an installed dependency (`node_modules/…`), as set by tools such as
+   * `@borderless/ts-scripts`: the file belongs to the package and is replaced on the next install.
+   */
+  dependency?: string;
 }
 
 export interface HookPlan extends HookTarget {
@@ -132,6 +137,7 @@ function gitHookTarget(root: string, stage: HookStage): HookTarget {
     evidence: custom ? `core.hooksPath ${hooksPath}` : `Git hooks directory ${shown}`,
     stage,
     ...(custom && !inside(realpathSync(top), abs) ? { outside: abs } : {}),
+    ...(custom && /(?:^|\/)node_modules\//.test(file) ? { dependency: abs } : {}),
   };
 }
 
@@ -429,6 +435,15 @@ export async function planHookInstall(
         code: "ST_HOOK_PATH_OUTSIDE_REPO",
         category: "usage",
         hint: "Hooks shared by several repositories are not edited per project. Add `npx --no-install smarttest run --staged --hook` (or `--push`) to that hook yourself, or use a hooks directory inside the repository.",
+      },
+    );
+  if (target.dependency)
+    throw new SmartTestError(
+      `core.hooksPath points into an installed dependency (${target.dependency}); SmartTest will not write there`,
+      {
+        code: "ST_HOOK_PATH_IN_DEPENDENCY",
+        category: "usage",
+        hint: "A file under node_modules belongs to its package and is replaced on the next install. Point core.hooksPath at a directory the repository owns, or add `npx --no-install smarttest run --staged --hook` (or `--push`) where that package lets you configure its hook.",
       },
     );
   const current = await readText(join(root, target.file));
