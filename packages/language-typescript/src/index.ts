@@ -6,7 +6,7 @@ import type { Analyzer, FileAnalysis } from "@smarttest/source-parser";
 import { ANALYZER_VERSION, analyzeSource } from "./analyze.js";
 
 export { ANALYZER_VERSION, analyzeSource, tokenHash } from "./analyze.js";
-export { TypeScriptResolver, type WorkspaceEntry } from "./resolve.js";
+export { RESOLVER_VERSION, TypeScriptResolver, type WorkspaceEntry } from "./resolve.js";
 
 export const typescriptAnalyzer: Analyzer = {
   apiVersion: 1,

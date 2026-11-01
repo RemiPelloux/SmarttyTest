@@ -2,6 +2,14 @@
 
 All notable changes are documented here. Releases are managed with [Changesets](https://github.com/changesets/changesets). The project follows [Semantic Versioning](https://semver.org/).
 
+## Unreleased
+
+### Fixed
+
+- Path aliases in a referenced tsconfig are followed. A `tsconfig.json` that only lists `references` (Vite's React template) keeps its `paths` in `tsconfig.app.json`; SmartTest took every `@hooks/…`-style import for an npm package and dropped it, with no warning. OpenPro's admin lost 4,021 of its 9,065 dependency edges and its front end about 22,000; a change to a hook imported through an alias could select no test.
+- A bare import that is neither a path alias nor an installed package is unresolved (its dependents cannot be ruled out), never silently external. Framework modules (`wasp/…`, `$app/…`, `#imports`) and projects with nothing installed keep the old behaviour.
+- Upgrading SmartTest redoes the stored import resolution when the resolver changed.
+
 ## [1.0.1] — patch
 
 The first projects on 1.0.0 (Galdia, LeadsIt, four OpenPro repositories) showed one selection bug and three smaller ones. No contract changes.

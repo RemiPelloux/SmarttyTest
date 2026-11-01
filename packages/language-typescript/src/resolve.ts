@@ -11,7 +11,11 @@ export interface WorkspaceEntry {
   manifest: { exports?: unknown; main?: string; module?: string; source?: string; types?: string };
 }
 
+/** Bumped when resolution changes, so stored resolutions are redone (2: tsconfig references). */
+export const RESOLVER_VERSION = 2;
 const BUILTINS = new Set(builtinModules);
+/** Modules a framework generates or serves (Wasp's SDK, SvelteKit, Nuxt): not npm installs. */
+const FRAMEWORK_MODULES = new Set(["wasp", "$app", "$env", "$service-worker", "#app", "#imports"]);
 /**
  * Reads tsconfig files (and what they extend) without listing the project's files: only the
  * compiler options are used, and `include` globbing costs a directory walk of the whole project.
@@ -92,9 +96,9 @@ function toSource(
 }
 
 export class TypeScriptResolver implements ModuleResolver {
-  private optionsByDir = new Map<string, ts.CompilerOptions>();
+  private optionsByDir = new Map<string, ts.CompilerOptions[]>();
   private caches = new Map<ts.CompilerOptions, ts.ModuleResolutionCache>();
-  private configByPath = new Map<string, ts.CompilerOptions>();
+  private configByPath = new Map<string, ts.CompilerOptions[]>();
   private readonly workspaces: (WorkspaceEntry & { abs: string })[];
   private readonly realRoot: string;
   // File-system lookups are memoized for the lifetime of the resolver (one index update).
@@ -154,51 +158,91 @@ export class TypeScriptResolver implements ModuleResolver {
     return relPosix(this.realRoot, real) ?? relPosix(this.root, abs);
   }
 
-  private optionsFor(absDir: string): ts.CompilerOptions {
+  /**
+   * The nearest config's options, then those of the projects it references: a solution-style
+   * `tsconfig.json` (`files: []` and `references`, Vite's template) keeps its `paths` in
+   * `tsconfig.app.json`.
+   */
+  private optionsFor(absDir: string): ts.CompilerOptions[] {
     const cached = this.optionsByDir.get(absDir);
     if (cached) return cached;
-    let opts: ts.CompilerOptions | undefined;
+    let list: ts.CompilerOptions[] | undefined;
     let dir = absDir;
     for (;;) {
       for (const name of ["tsconfig.json", "jsconfig.json"]) {
         const p = join(dir, name);
         if (existsSync(p)) {
-          opts = this.configByPath.get(p);
-          if (!opts) {
-            const read = ts.readConfigFile(p, (f) => ts.sys.readFile(f));
-            const parsed = ts.parseJsonConfigFileContent(
-              read.config ?? {},
-              OPTIONS_ONLY_HOST,
-              dir,
-              undefined,
-              p,
-            );
-            opts = { ...parsed.options, allowJs: true, resolveJsonModule: true };
-            if (
-              opts.moduleResolution === undefined ||
-              opts.moduleResolution === ts.ModuleResolutionKind.Classic
-            ) {
-              opts.moduleResolution = ts.ModuleResolutionKind.Bundler;
-              opts.module = ts.ModuleKind.ESNext;
-            }
-            this.configByPath.set(p, opts);
+          list = this.configByPath.get(p);
+          if (!list) {
+            list = this.readOptions(p, new Set());
+            this.configByPath.set(p, list);
           }
           break;
         }
       }
-      if (opts || toPosix(dir) === toPosix(this.root)) break;
+      if (list || toPosix(dir) === toPosix(this.root)) break;
       const parent = dirname(dir);
       if (parent === dir) break;
       dir = parent;
     }
-    const finalOpts = opts ?? {
-      allowJs: true,
-      resolveJsonModule: true,
-      moduleResolution: ts.ModuleResolutionKind.Bundler,
-      module: ts.ModuleKind.ESNext,
-    };
-    this.optionsByDir.set(absDir, finalOpts);
-    return finalOpts;
+    const finalList = list ?? [
+      {
+        allowJs: true,
+        resolveJsonModule: true,
+        moduleResolution: ts.ModuleResolutionKind.Bundler,
+        module: ts.ModuleKind.ESNext,
+      },
+    ];
+    this.optionsByDir.set(absDir, finalList);
+    return finalList;
+  }
+
+  private readOptions(p: string, seen: Set<string>): ts.CompilerOptions[] {
+    if (seen.has(p)) return [];
+    seen.add(p);
+    const read = ts.readConfigFile(p, (f) => ts.sys.readFile(f));
+    const parsed = ts.parseJsonConfigFileContent(
+      read.config ?? {},
+      OPTIONS_ONLY_HOST,
+      dirname(p),
+      undefined,
+      p,
+    );
+    const opts: ts.CompilerOptions = { ...parsed.options, allowJs: true, resolveJsonModule: true };
+    if (
+      opts.moduleResolution === undefined ||
+      opts.moduleResolution === ts.ModuleResolutionKind.Classic
+    ) {
+      opts.moduleResolution = ts.ModuleResolutionKind.Bundler;
+      opts.module = ts.ModuleKind.ESNext;
+    }
+    const refs = (parsed.projectReferences ?? []).flatMap((r) => {
+      const f = ts.resolveProjectReferencePath(r);
+      return existsSync(f) ? this.readOptions(f, seen) : [];
+    });
+    return [opts, ...refs];
+  }
+
+  /**
+   * An installed package of that name, from the importing file up: in `node_modules`, in pnpm's
+   * store (a package one workspace installs), or under Yarn PnP (assumed). Without any
+   * `node_modules` (not installed yet) nothing can be told apart, so every package counts.
+   */
+  private installed(absFrom: string, specifier: string): boolean {
+    const parts = specifier.split("/");
+    const name = specifier.startsWith("@") ? parts.slice(0, 2).join("/") : (parts[0] as string);
+    if (FRAMEWORK_MODULES.has(parts[0] as string)) return true;
+    let anyInstall = false;
+    for (let dir = dirname(absFrom); ; dir = dirname(dir)) {
+      const modules = join(dir, "node_modules");
+      if (this.host.directoryExists?.(modules)) {
+        anyInstall = true;
+        if (this.host.directoryExists?.(join(modules, name))) return true;
+        if (this.host.directoryExists?.(join(modules, ".pnpm", "node_modules", name))) return true;
+      }
+      if (this.isFile(join(dir, ".pnp.cjs"))) return true;
+      if (dirname(dir) === dir) return !anyInstall;
+    }
   }
 
   private cacheFor(opts: ts.CompilerOptions): ts.ModuleResolutionCache {
@@ -266,12 +310,14 @@ export class TypeScriptResolver implements ModuleResolver {
       }
     }
 
-    const opts = this.optionsFor(dirname(absFrom));
-    const res = ts.resolveModuleName(specifier, absFrom, opts, this.host, this.cacheFor(opts));
-    const resolved = res.resolvedModule;
-    if (resolved && !(resolved.isExternalLibraryImport && !this.rel(resolved.resolvedFileName))) {
-      const out = this.finish(resolved.resolvedFileName, specifier);
-      if (out.resolved || out.external) return out;
+    const optionsList = this.optionsFor(dirname(absFrom));
+    for (const opts of optionsList) {
+      const res = ts.resolveModuleName(specifier, absFrom, opts, this.host, this.cacheFor(opts));
+      const resolved = res.resolvedModule;
+      if (resolved && !(resolved.isExternalLibraryImport && !this.rel(resolved.resolvedFileName))) {
+        const out = this.finish(resolved.resolvedFileName, specifier);
+        if (out.resolved || out.external) return out;
+      }
     }
     if (relative) {
       const abs = this.probe(join(dirname(absFrom), specifier));
@@ -281,23 +327,33 @@ export class TypeScriptResolver implements ModuleResolver {
         : { reason: `relative import "${specifier}" does not resolve to a file` };
     }
     // alias that should resolve inside the project?
-    const paths = opts.paths ?? {};
-    const base = opts.baseUrl ?? (opts as { pathsBasePath?: string }).pathsBasePath;
-    for (const key of Object.keys(paths)) {
-      const re = new RegExp(`^${key.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replace("*", "(.*)")}$`);
-      const match = re.exec(specifier);
-      if (!match) continue;
-      // TypeScript only maps aliases to modules it can type; a non-code file (`.svg`, `.css`,
-      // `.json` without resolveJsonModule) behind an alias is probed here.
-      for (const target of base ? (paths[key] ?? []) : []) {
-        const out = this.finish(
-          this.probe(join(base as string, target.replace("*", match[1] ?? ""))),
-          specifier,
+    let aliasMiss: string | undefined;
+    for (const opts of optionsList) {
+      const paths = opts.paths ?? {};
+      const base = opts.baseUrl ?? (opts as { pathsBasePath?: string }).pathsBasePath;
+      for (const key of Object.keys(paths)) {
+        const re = new RegExp(
+          `^${key.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replace("*", "(.*)")}$`,
         );
-        if (out.resolved) return out;
+        const match = re.exec(specifier);
+        if (!match) continue;
+        // TypeScript only maps aliases to modules it can type; a non-code file (`.svg`, `.css`,
+        // `.json` without resolveJsonModule) behind an alias is probed here.
+        for (const target of base ? (paths[key] ?? []) : []) {
+          const out = this.finish(
+            this.probe(join(base as string, target.replace("*", match[1] ?? ""))),
+            specifier,
+          );
+          if (out.resolved) return out;
+        }
+        aliasMiss ??= `path alias "${key}" did not resolve "${specifier}"`;
       }
-      return { reason: `path alias "${key}" did not resolve "${specifier}"` };
     }
+    if (aliasMiss) return { reason: aliasMiss };
+    // A bare name that is no alias and no installed package (an alias only a bundler config
+    // declares) is unresolved, never "external": its dependents cannot be ruled out.
+    if (!this.installed(absFrom, specifier))
+      return { reason: `"${specifier}" is neither a path alias nor an installed package` };
     return { external: true };
   }
 }

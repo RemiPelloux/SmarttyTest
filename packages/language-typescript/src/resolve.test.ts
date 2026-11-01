@@ -60,4 +60,45 @@ describe("TypeScriptResolver", () => {
       reason: 'path alias "#web/*" did not resolve "#web/missing.svg"',
     });
   });
+
+  // OpenPro's admin: Vite's template keeps `paths` in tsconfig.app.json, referenced from a
+  // tsconfig.json with no options. `@hooks/…` was taken for an npm package: 44% of the graph lost.
+  it("follows the references of a solution-style tsconfig.json to their paths", async () => {
+    const root = await project({
+      "tsconfig.json": JSON.stringify({
+        files: [],
+        references: [{ path: "./tsconfig.app.json" }, { path: "./tsconfig.node.json" }],
+      }),
+      "tsconfig.app.json": JSON.stringify({
+        compilerOptions: { baseUrl: ".", paths: { "@hooks/*": ["src/hooks/*"] } },
+        include: ["src"],
+      }),
+      "tsconfig.node.json": JSON.stringify({ include: ["vite.config.ts"] }),
+      "src/hooks/useThing.ts": "export {};",
+      "src/pages/Page.tsx": "export {};",
+    });
+    const r = new TypeScriptResolver(root);
+    expect(r.resolve("src/pages/Page.tsx", "@hooks/useThing")).toEqual({
+      resolved: "src/hooks/useThing.ts",
+    });
+  });
+
+  it("reports a bare import that is no alias and no installed package as unresolved", async () => {
+    const root = await project({
+      "tsconfig.json": JSON.stringify({ compilerOptions: {} }),
+      "src/a.ts": "export {};",
+      "node_modules/real-pkg/package.json": JSON.stringify({ name: "real-pkg", main: "index.js" }),
+      "node_modules/real-pkg/index.js": "",
+      "node_modules/.pnpm/node_modules/@scope/stored/package.json": JSON.stringify({
+        name: "@scope/stored",
+      }),
+    });
+    const r = new TypeScriptResolver(root);
+    expect(r.resolve("src/a.ts", "@hooks/useThing")).toEqual({
+      reason: '"@hooks/useThing" is neither a path alias nor an installed package',
+    });
+    expect(r.resolve("src/a.ts", "real-pkg")).toEqual({ external: true });
+    expect(r.resolve("src/a.ts", "@scope/stored/sub")).toEqual({ external: true });
+    expect(r.resolve("src/a.ts", "node:fs")).toEqual({ external: true });
+  });
 });

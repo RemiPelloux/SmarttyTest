@@ -29,7 +29,11 @@ import {
 } from "@smarttest/dependency-graph";
 import { decideImpact, explainTest, type ImpactResult } from "@smarttest/impact-engine";
 import { javascriptAnalyzer } from "@smarttest/language-javascript";
-import { TypeScriptResolver, typescriptAnalyzer } from "@smarttest/language-typescript";
+import {
+  RESOLVER_VERSION,
+  TypeScriptResolver,
+  typescriptAnalyzer,
+} from "@smarttest/language-typescript";
 import { SnapshotStore } from "@smarttest/native-snapshots";
 import { detectProject, type ProjectProfile } from "@smarttest/project-detector";
 import {
@@ -715,13 +719,14 @@ export class SmartTest {
       ...profile.workspaces.map((w) => `${w.dir}/package.json`),
     ];
     const { readFile } = await import("node:fs/promises");
-    const contextKey = (
+    // RESOLVER_VERSION: a SmartTest upgrade that resolves differently re-resolves every import.
+    const contextKey = `${RESOLVER_VERSION}\n${(
       await Promise.all(
         contextFiles.map(
           async (f) => `${f}:${await readFile(join(this.root, f), "utf8").catch(() => "")}`,
         ),
       )
-    ).join("\n");
+    ).join("\n")}`;
     this.resolver = resolver;
     const files = await this.sourceFiles(gitFiles);
     const pool =
