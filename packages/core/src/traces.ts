@@ -6,11 +6,15 @@
 import { readdir, readFile, rm } from "node:fs/promises";
 import { join, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
-import { readStateJson, sha256, writeStateJson } from "@smarttest/shared";
+import { readStateFile, removeStateFile, sha256, writeStateChunks } from "@smarttest/shared";
 import type { FileAnalysis } from "@smarttest/source-parser";
 
-/** 2: traces record the environment variables their files read (`env`, `envAny`). */
-export const TRACE_STORE_VERSION = 2;
+/**
+ * 2: traces record the environment variables their files read (`env`, `envAny`).
+ * 3: stored compact, with shared tables of paths, hashes and function-name lists (`TraceFile`);
+ * older stores are not read, so traces are recorded again.
+ */
+export const TRACE_STORE_VERSION = 3;
 
 export interface TestTrace {
   /** ISO time of collection. */
@@ -86,14 +90,168 @@ export async function readV8Coverage(
   return { executed, known };
 }
 
-export async function loadTraces(storeDir: string): Promise<TraceStore | undefined> {
-  // Authenticated: outside SAFE mode a fresh trace can rule a test out.
-  const s = await readStateJson<TraceStore>(join(storeDir, "state", "traces.json"));
-  return s?.version === TRACE_STORE_VERSION ? s : undefined;
+/**
+ * How `traces.json` is stored. A thousand tests loading the same few hundred files repeated every
+ * path, hash and function list per test (99 MB of JSON for 1,000 tests × 300 files, close to the
+ * longest string V8 can hold at 3,000 × 500). Each is stored once in a table here; a test lists
+ * index pairs: `h` [file, hash]…, `x` (executed) and `k` (known) [file, names]….
+ */
+interface TraceFile {
+  version: number;
+  env: string;
+  files: string[];
+  hashes: string[];
+  names: string[][];
+  tests: Record<
+    string,
+    {
+      at: string;
+      status: "passed" | "failed";
+      env?: Record<string, string>;
+      envAny?: boolean;
+      h: number[];
+      x: number[];
+      k: number[];
+    }
+  >;
 }
 
-export async function saveTraces(storeDir: string, store: TraceStore): Promise<void> {
-  await writeStateJson(join(storeDir, "state", "traces.json"), store);
+class Table<T> {
+  readonly items: T[] = [];
+  private readonly ids = new Map<string, number>();
+  constructor(private readonly key: (item: T) => string) {}
+  id(item: T): number {
+    const k = this.key(item);
+    let id = this.ids.get(k);
+    if (id === undefined) {
+      id = this.items.length;
+      this.items.push(item);
+      this.ids.set(k, id);
+    }
+    return id;
+  }
+}
+
+/** The store in its stored form, as JSON text in pieces of about `chunkSize` characters. */
+export function* encodeTraces(store: TraceStore, chunkSize = 1 << 20): Generator<string> {
+  const files = new Table<string>((f) => f);
+  const hashes = new Table<string>((h) => h);
+  const names = new Table<string[]>((n) => JSON.stringify(n));
+  const tests: [string, TraceFile["tests"][string]][] = [];
+  const pairs = (rec: Record<string, string[]>) =>
+    Object.entries(rec).flatMap(([f, n]) => [files.id(f), names.id(n)]);
+  for (const [id, t] of Object.entries(store.tests)) {
+    tests.push([
+      id,
+      {
+        at: t.at,
+        status: t.status,
+        ...(t.env ? { env: t.env } : {}),
+        ...(t.envAny ? { envAny: true } : {}),
+        h: Object.entries(t.fileHashes).flatMap(([f, h]) => [files.id(f), hashes.id(h)]),
+        x: pairs(t.executed),
+        k: pairs(t.known),
+      },
+    ]);
+  }
+  let buf = `{"version":${JSON.stringify(store.version)},"env":${JSON.stringify(store.env)}`;
+  const tables: [string, unknown[]][] = [
+    ["files", files.items],
+    ["hashes", hashes.items],
+    ["names", names.items],
+  ];
+  for (const [key, items] of tables) {
+    buf += `,"${key}":[`;
+    for (const [i, item] of items.entries()) {
+      buf += `${i ? "," : ""}${JSON.stringify(item)}`;
+      if (buf.length >= chunkSize) {
+        yield buf;
+        buf = "";
+      }
+    }
+    buf += "]";
+  }
+  buf += ',"tests":{';
+  for (const [i, [id, t]] of tests.entries()) {
+    buf += `${i ? "," : ""}${JSON.stringify(id)}:${JSON.stringify(t)}`;
+    if (buf.length >= chunkSize) {
+      yield buf;
+      buf = "";
+    }
+  }
+  yield `${buf}}}\n`;
+}
+
+/** The stored form back as a store; undefined when it is not a well-formed current store. */
+export function decodeTraces(text: string): TraceStore | undefined {
+  let raw: TraceFile;
+  try {
+    raw = JSON.parse(text) as TraceFile;
+  } catch {
+    return undefined;
+  }
+  if (
+    raw?.version !== TRACE_STORE_VERSION ||
+    typeof raw.env !== "string" ||
+    !Array.isArray(raw.files) ||
+    !Array.isArray(raw.hashes) ||
+    !Array.isArray(raw.names) ||
+    !raw.tests ||
+    typeof raw.tests !== "object"
+  )
+    return undefined;
+  const record = <V>(pairs: unknown, values: readonly V[]): Record<string, V> | undefined => {
+    if (!Array.isArray(pairs) || pairs.length % 2) return undefined;
+    const out: Record<string, V> = {};
+    for (let i = 0; i < pairs.length; i += 2) {
+      const file = raw.files[pairs[i] as number];
+      const value = values[pairs[i + 1] as number];
+      if (typeof file !== "string" || value === undefined) return undefined;
+      out[file] = value;
+    }
+    return out;
+  };
+  const tests: Record<string, TestTrace> = {};
+  for (const [id, t] of Object.entries(raw.tests)) {
+    const fileHashes = record(t?.h, raw.hashes);
+    const executed = record(t?.x, raw.names);
+    const known = record(t?.k, raw.names);
+    // A damaged entry is dropped: the test is then untraced, which never rules it out.
+    if (!fileHashes || !executed || !known) continue;
+    tests[id] = {
+      at: t.at,
+      status: t.status,
+      fileHashes,
+      ...(t.env ? { env: t.env } : {}),
+      ...(t.envAny ? { envAny: true } : {}),
+      executed,
+      known,
+    };
+  }
+  return { version: raw.version, env: raw.env, tests };
+}
+
+export async function loadTraces(storeDir: string): Promise<TraceStore | undefined> {
+  // Authenticated: outside SAFE mode a fresh trace can rule a test out. Unreadable (damaged,
+  // forged, from another version, too large to read): no traces, so they rule nothing out.
+  const text = await readStateFile(join(storeDir, "state", "traces.json")).catch(() => undefined);
+  return text === undefined ? undefined : decodeTraces(text);
+}
+
+/**
+ * Saves the store compact and in pieces, so no single string has to hold it. A store that still
+ * cannot be written is not saved: the error is returned for a warning. The previous file is
+ * removed (it no longer says what the tests ran), so the traces are recorded again next time.
+ */
+export async function saveTraces(storeDir: string, store: TraceStore): Promise<Error | undefined> {
+  const path = join(storeDir, "state", "traces.json");
+  try {
+    await writeStateChunks(path, encodeTraces(store));
+    return undefined;
+  } catch (error) {
+    await removeStateFile(path).catch(() => undefined);
+    return error instanceof Error ? error : new Error(String(error));
+  }
 }
 
 export async function hashFile(root: string, file: string): Promise<string | undefined> {

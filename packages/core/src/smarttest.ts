@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { existsSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
+import { readFile as readFileText } from "node:fs/promises";
 import { availableParallelism, tmpdir } from "node:os";
 import { isAbsolute, join, relative } from "node:path";
 import { CypressAdapter } from "@smarttest/adapter-cypress";
@@ -64,7 +65,7 @@ import {
   mapLimit,
   matchGlob,
   readJson,
-  readStateJson,
+  readStateFile,
   readText,
   runProcess,
   runWithEnvScope,
@@ -79,7 +80,7 @@ import {
   walkFiles,
   writeFileAtomic,
   writeJson,
-  writeStateJson,
+  writeStateFile,
 } from "@smarttest/shared";
 import {
   applyPlan,
@@ -122,6 +123,14 @@ import type { ChangeAnalysisInput, ChangeSource } from "@smarttest/vcs-core";
 import { GitAdapter } from "@smarttest/vcs-git";
 import { HgAdapter } from "@smarttest/vcs-hg";
 import { SvnAdapter } from "@smarttest/vcs-svn";
+import {
+  type AdaptiveTimings,
+  adaptiveApplies,
+  fullSuiteMeasured,
+  nextAdaptiveTimings,
+  typicalAnalysisMs,
+} from "./adaptive.js";
+import { decodeDecisionRecord, encodeDecisionRecord } from "./decision-store.js";
 import { FOREIGN_STATE, GraphStore, surfaceOf } from "./graph-store.js";
 import {
   assertPushIsHead,
@@ -175,6 +184,7 @@ import {
   type HistoryStore,
   loadHistory,
   loadResultCache,
+  pruneHistory,
   recentlyFailingFiles,
   recordRun,
   resultKey,
@@ -287,6 +297,11 @@ export interface Analysis {
   assignment: Map<string, RunnerRoot>;
   decision: ImpactResult;
   timings: Record<string, number>;
+  /**
+   * The trace view the analysis used (`null`: no traces), for callers that show it (Studio): it
+   * is read once. Absent when the analysis did not read traces.
+   */
+  traces?: TraceView | null;
   /** Present when the change set was restricted with `only`. */
   scope?: ChangeScope;
 }
@@ -565,7 +580,7 @@ export class SmartTest {
   async profile(gitFiles?: readonly string[]): Promise<ProjectProfile> {
     this.profileCache ??= await detectProject(this.root, {
       isTestFile: this.isTest,
-      ...(gitFiles ? { files: await walkFiles(this.root, { gitFiles }) } : {}),
+      ...(gitFiles ? { files: await walkFiles(this.root, { gitFiles }), gitFiles } : {}),
     });
     return this.profileCache;
   }
@@ -716,10 +731,17 @@ export class SmartTest {
   /** Why the persisted graph could not be used last time (diagnostics). */
   lastGraphStoreMiss: string | undefined;
 
-  async loadIndex(): Promise<{ index: SymbolIndex; stats: UpdateStats }> {
+  async loadIndex(
+    options: {
+      /** A `gitProjectFiles` listing the caller took moments ago (`doctor`): not listed again. */
+      gitFiles?: readonly string[];
+    } = {},
+  ): Promise<{ index: SymbolIndex; stats: UpdateStats }> {
     // One project listing serves detection and the source file set; Git lists while the index
     // is read.
-    const listing = gitProjectFiles(this.root);
+    const listing = options.gitFiles
+      ? Promise.resolve(options.gitFiles)
+      : gitProjectFiles(this.root);
     const lang = languages();
     const index =
       this.keepWarm && this.indexCache ? this.indexCache : await SymbolIndex.load(this.storeDir);
@@ -993,10 +1015,15 @@ export class SmartTest {
       };
     }
     const cachePath = join(this.storeDir, "state", "discovery.json");
-    const cache = options.fresh
-      ? {}
-      : // Authenticated: a planted cache could list no test files for a runner.
-        ((await readStateJson<Record<string, string[]>>(cachePath)) ?? {});
+    // Authenticated: a planted cache could list no test files for a runner.
+    const cachedText = await readStateFile(cachePath).catch(() => undefined);
+    let stored: Record<string, string[]> | undefined;
+    try {
+      stored = cachedText === undefined ? undefined : JSON.parse(cachedText);
+    } catch {
+      stored = undefined;
+    }
+    const cache = options.fresh ? {} : (stored ?? {});
     const nextCache: Record<string, string[]> = {};
     // Runners are asked in parallel; a runner whose config sets nothing about test files is not
     // asked at all: its default patterns are applied here (no process start).
@@ -1091,7 +1118,9 @@ export class SmartTest {
       }
       perRoot.set(rootKey(root), count);
     }
-    await writeStateJson(cachePath, nextCache);
+    // Written only when it changed: most runs find the same listing.
+    const nextText = `${JSON.stringify(nextCache)}\n`;
+    if (nextText !== cachedText) await writeStateFile(cachePath, nextText);
     const tests = [...assignment.keys()].sort();
     const { unassigned, helpers } = split(staticCandidates.filter((f) => !assignment.has(f)));
     return { tests, unassigned, helpers, roots, assignment, warnings, perRoot };
@@ -1272,10 +1301,16 @@ export class SmartTest {
       decision.warnings.push(
         `${unassigned.length} file(s) look like tests but no runner collects them, so they never run (e.g. ${unassigned.slice(0, 2).join(", ")})`,
       );
-    // Compact: with thousands of selected tests and their dependency paths this file is large.
+    // Compact, paths in a shared prefix tree: with thousands of selected tests and their
+    // dependency paths this file is large (decision-store.ts).
     await writeFileAtomic(
       join(this.storeDir, "runs", "last-decision.json"),
-      `${JSON.stringify({ createdAt: new Date().toISOString(), description: input.description, fingerprint: await this.changeFingerprint(input), decision })}\n`,
+      encodeDecisionRecord({
+        createdAt: new Date().toISOString(),
+        description: input.description,
+        fingerprint: await this.changeFingerprint(input),
+        decision,
+      }),
     );
     this.logger.info("impact decision", {
       source: input.description,
@@ -1300,6 +1335,7 @@ export class SmartTest {
       assignment,
       decision,
       timings,
+      traces: traceView ?? null,
       ...(scope ? { scope } : {}),
     };
   }
@@ -1704,8 +1740,18 @@ export class SmartTest {
     const n = Math.max(1, Math.min(options.concurrency ?? 4, jobs.length));
     await Promise.all(Array.from({ length: n }, () => worker()));
     await cleanDir(tmp);
-    await saveTraces(this.storeDir, store);
-    return { traced: total - failed.length, failed, kept: Object.keys(store.tests).length, store };
+    const notSaved = await saveTraces(this.storeDir, store);
+    if (notSaved) {
+      const warning = `Traces could not be saved (${notSaved.message}): they are recorded again next time`;
+      this.logger.warn(warning);
+      options.onProgress?.(warning);
+    }
+    return {
+      traced: total - failed.length,
+      failed,
+      kept: notSaved ? 0 : Object.keys(store.tests).length,
+      store,
+    };
   }
 
   private async semanticDiffs(
@@ -1869,19 +1915,11 @@ export class SmartTest {
     // Adaptive policy: when the whole suite ran faster last time than an analysis usually takes,
     // running everything is both cheaper and complete.
     const statsPath = join(this.storeDir, "state", "timings.json");
-    const recorded =
-      (await readJson<{ analysisMs?: number[]; fullRunMs?: number }>(statsPath)) ?? {};
-    const typicalAnalysis = recorded.analysisMs?.length
-      ? [...recorded.analysisMs].sort((a, b) => a - b)[Math.floor(recorded.analysisMs.length / 2)]
-      : undefined;
+    const recorded = (await readJson<AdaptiveTimings>(statsPath)) ?? {};
+    const typicalAnalysis = typicalAnalysisMs(recorded);
     // A scoped run (`only`) is meant to be small: running everything would defeat it.
     const adaptive =
-      !options.all &&
-      !options.only &&
-      this.config.adaptive !== false &&
-      recorded.fullRunMs !== undefined &&
-      typicalAnalysis !== undefined &&
-      recorded.fullRunMs < typicalAnalysis;
+      !options.all && !options.only && this.config.adaptive !== false && adaptiveApplies(recorded);
     const analysis =
       options.analysis ??
       (await this.analyze({
@@ -2123,7 +2161,13 @@ export class SmartTest {
       ...cachedExecutions,
       ...uncollected,
     ].sort((a, b) => a.file.localeCompare(b.file));
-    // Record fresh passing results in the cache and every fresh result in the history.
+    // Record fresh passing results in the cache and every fresh result in the history. Per-test
+    // state of files that no longer exist (deleted, renamed tests) is dropped: it only grows.
+    let live: Set<string> | undefined;
+    const liveFiles = () => {
+      live ??= new Set([...analysis.testFiles, ...analysis.index.entries().keys()]);
+      return live;
+    };
     if (resultCache) {
       for (const f of summary.files) {
         const key = keys.get(f.file);
@@ -2142,12 +2186,13 @@ export class SmartTest {
             tests: f.tests,
           });
       }
-      await saveResultCache(this.storeDir, resultCache);
+      await saveResultCache(this.storeDir, resultCache, liveFiles());
     }
     recordRun(
       history,
       summary.files.flatMap((f) => f.tests),
     );
+    pruneHistory(history, liveFiles());
     await saveHistory(this.storeDir, history);
     // Duration history: estimate what skipping saved, then record fresh measurements.
     const skipped = analysis.decision.skippedTests.map((t) => t.filePath);
@@ -2162,24 +2207,28 @@ export class SmartTest {
     for (const e of summary.files)
       if (e.status !== "cancelled" && e.status !== "infrastructure-error")
         durations[e.file] = Math.round(e.durationMs);
-    await writeJson(durationsPath, durations);
+    for (const f of Object.keys(durations)) if (!liveFiles().has(f)) delete durations[f];
+    await writeFileAtomic(durationsPath, `${JSON.stringify(durations)}\n`);
     // Timings for the adaptive policy: typical analysis time, and the last full-suite wall time.
+    // The full-suite time counts only when the whole suite really ran (see `fullSuiteMeasured`).
     const fullRun =
       analysis.decision.skippedTests.length === 0 &&
       analysis.testFiles.length > 0 &&
       !cachedExecutions.length &&
       !leftToCi.length &&
-      !options.shard;
-    await writeJson(statsPath, {
-      analysisMs: adaptive
-        ? (recorded.analysisMs ?? [])
-        : [...(recorded.analysisMs ?? []), Math.round(analysisMs)].slice(-7),
-      ...(fullRun
-        ? { fullRunMs: Math.round(timings["test execution"] ?? 0) }
-        : recorded.fullRunMs !== undefined
-          ? { fullRunMs: recorded.fullRunMs }
-          : {}),
-    });
+      !uncollected.length &&
+      !options.shard &&
+      fullSuiteMeasured(summary, { bail: !!options.bail, aborted: !!options.signal?.aborted });
+    await writeJson(
+      statsPath,
+      nextAdaptiveTimings(recorded, {
+        adaptive,
+        analysisMs,
+        fullRun,
+        fullRunMs: timings["test execution"] ?? 0,
+        at: new Date(),
+      }),
+    );
     const durationMs = Object.values(timings).reduce((a, b) => a + b, 0);
     const report: RunReport = {
       schemaVersion: 1,
@@ -2323,12 +2372,16 @@ export class SmartTest {
   ) {
     let saved = options.fresh
       ? undefined
-      : await readJson<{
-          decision: ImpactResult;
-          description: string;
-          createdAt?: string;
-          fingerprint?: string;
-        }>(join(this.storeDir, "runs", "last-decision.json"));
+      : await readFileText(join(this.storeDir, "runs", "last-decision.json"), "utf8").then(
+          (text) =>
+            decodeDecisionRecord<{
+              decision: ImpactResult;
+              description: string;
+              createdAt?: string;
+              fingerprint?: string;
+            }>(text),
+          () => undefined,
+        );
     // The last decision explains the last run only while the change and the mode are the same:
     // after an edit (or with another mode or source) it would explain a selection that no longer
     // applies, so the change is analysed again.
@@ -3076,7 +3129,9 @@ export class SmartTest {
         hint: `Run \`git rm -r --cached ${this.trackedStore.dir}\` and ignore ${this.trackedStore.dir}/ (\`smarttest doctor --fix\` adds the entry and offers to run the command).`,
       });
     }
-    const profile = await this.profile();
+    // One project listing serves detection and the index below.
+    const listing = (await gitProjectFiles(this.root)) ?? undefined;
+    const profile = await this.profile(listing);
     {
       const drift = detectDrift(this.config, this.loaded.raw, profile);
       if (drift.length)
@@ -3209,7 +3264,7 @@ export class SmartTest {
     for (const u of profile.vcs.unsupported)
       out.push({ severity: "warn", check: "vcs", message: u });
     try {
-      const { index, stats } = await this.loadIndex();
+      const { index, stats } = await this.loadIndex(listing ? { gitFiles: listing } : {});
       const s = index.stats();
       out.push({
         severity: "ok",
@@ -3474,6 +3529,7 @@ export class SmartTest {
     assertConfinedWrite(shadowLog); // appendFile follows a link at the file itself
     await mkdir(join(this.storeDir, "shadow"), { recursive: true });
     await appendFile(shadowLog, `${JSON.stringify(record)}\n`);
+    await capShadowLog(shadowLog);
     return { record, validation: v };
   }
 
@@ -3507,8 +3563,9 @@ export class SmartTest {
   }
 
   async scan() {
-    const profile = await this.profile();
+    // The index lists the project once and detects the project from that listing.
     const { index, stats } = await this.loadIndex();
+    const profile = await this.profile();
     const graph = this.buildGraph(index);
     const { tests, unassigned } = await this.discoverTests(index);
     const unresolved: { file: string; specifier: string; reason: string }[] = [];
@@ -3534,6 +3591,36 @@ export class SmartTest {
       dynamic,
     };
   }
+}
+
+/** Shadow Mode keeps its most recent records: the log is trimmed once it passes this size. */
+export const SHADOW_LOG_MAX_BYTES = 2 * 1024 * 1024;
+export const SHADOW_LOG_KEEP_RECORDS = 2_000;
+
+/** Trims the Shadow Mode log to its most recent records once it is too large (atomically). */
+export async function capShadowLog(
+  path: string,
+  maxBytes = SHADOW_LOG_MAX_BYTES,
+  keep = SHADOW_LOG_KEEP_RECORDS,
+): Promise<void> {
+  const { readFile, stat } = await import("node:fs/promises");
+  const size = await stat(path).then(
+    (s) => s.size,
+    () => 0,
+  );
+  if (size <= maxBytes) return;
+  const lines = (await readFile(path, "utf8")).split("\n").filter(Boolean);
+  // Never more than half the limit after trimming, so it is not trimmed again on the next run.
+  let start = Math.max(0, lines.length - keep);
+  let bytes = 0;
+  for (let i = lines.length - 1; i >= start; i--) {
+    bytes += Buffer.byteLength(lines[i] as string) + 1;
+    if (bytes > maxBytes / 2 && i < lines.length - 1) {
+      start = i + 1;
+      break;
+    }
+  }
+  await writeFileAtomic(path, `${lines.slice(start).join("\n")}\n`);
 }
 
 const memoised = new WeakSet<ChangeAnalysisInput["readBefore"]>();

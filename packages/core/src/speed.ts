@@ -8,8 +8,8 @@ import {
   readStateJson,
   sha256,
   type TestExecution,
-  writeJson,
-  writeStateJson,
+  writeFileAtomic,
+  writeStateFile,
 } from "@smarttest/shared";
 
 // ── History ─────────────────────────────────────────────────────────────────────────────────
@@ -21,6 +21,8 @@ export interface TestHistory {
   failures: number;
   flaky: number;
   lastFailureAt?: string;
+  /** When the test last ran (ISO): the oldest go first when the history is over its cap. */
+  lastRunAt?: string;
 }
 
 export interface HistoryStore {
@@ -40,8 +42,37 @@ export async function loadHistory(storeDir: string): Promise<HistoryStore> {
   return s?.version === 1 ? s : { version: 1, tests: {} };
 }
 
+/** Tests the history keeps at most (the most recently run). */
+export const HISTORY_MAX_TESTS = 20_000;
+
+/** The test file of a test ID (`file::suite > name`). */
+export function testFileOf(testId: string): string {
+  const at = testId.indexOf("::");
+  return at < 0 ? testId : testId.slice(0, at);
+}
+
+/**
+ * Keeps the history bounded: tests of files that are no longer tests (deleted, renamed) are
+ * dropped, and beyond `max` tests the least recently run go first.
+ */
+export function pruneHistory(
+  store: HistoryStore,
+  testFiles: Iterable<string>,
+  max = HISTORY_MAX_TESTS,
+): void {
+  const current = new Set(testFiles);
+  for (const id of Object.keys(store.tests))
+    if (!current.has(testFileOf(id))) delete store.tests[id];
+  const ids = Object.keys(store.tests);
+  if (ids.length <= max) return;
+  const at = (id: string) => store.tests[id]?.lastRunAt ?? "";
+  for (const id of ids.sort((a, b) => at(b).localeCompare(at(a)) || a.localeCompare(b)).slice(max))
+    delete store.tests[id];
+}
+
+/** Compact JSON: the history is read by SmartTest, not by people. */
 export async function saveHistory(storeDir: string, store: HistoryStore): Promise<void> {
-  await writeJson(join(storeDir, "state", "history.json"), store);
+  await writeFileAtomic(join(storeDir, "state", "history.json"), `${JSON.stringify(store)}\n`);
 }
 
 /** Records one run's executions (cached results are not new evidence and are not recorded). */
@@ -57,6 +88,7 @@ export function recordRun(
     store.tests[e.testId] = h;
     h.recent = `${h.recent}${c}`.slice(-30);
     h.runs++;
+    h.lastRunAt = at;
     if (c === "F" || c === "T") {
       h.failures++;
       h.lastFailureAt = at;
@@ -189,8 +221,20 @@ export async function loadResultCache(storeDir: string): Promise<ResultCache> {
   return s?.version === 1 ? s : { version: 1, files: {} };
 }
 
-export async function saveResultCache(storeDir: string, cache: ResultCache): Promise<void> {
-  await writeStateJson(join(storeDir, "cache", "results.json"), cache);
+/**
+ * Saves the cache, compact and signed. With `testFiles`, results of files that are no longer
+ * tests (deleted, renamed) are dropped: they could never be used again.
+ */
+export async function saveResultCache(
+  storeDir: string,
+  cache: ResultCache,
+  testFiles?: Iterable<string>,
+): Promise<void> {
+  if (testFiles) {
+    const current = new Set(testFiles);
+    for (const file of Object.keys(cache.files)) if (!current.has(file)) delete cache.files[file];
+  }
+  await writeStateFile(join(storeDir, "cache", "results.json"), `${JSON.stringify(cache)}\n`);
 }
 
 export function cacheGet(cache: ResultCache, file: string, key: string): CachedResult | undefined {

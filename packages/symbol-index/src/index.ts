@@ -35,6 +35,11 @@ interface IndexFile {
   baseId?: string;
   contextKey?: string;
   stats?: Record<string, [number, number]>;
+  /**
+   * The listed files that have no analysis (assets, files no analyzer supports, unreadable
+   * files): with the analysed files, the file set the stored resolutions were computed against.
+   */
+  others?: string[];
   files: Record<string, FileAnalysis>;
 }
 
@@ -47,6 +52,59 @@ interface IndexDelta {
   baseId: string;
   stats: Record<string, [number, number] | null>;
   files: Record<string, FileAnalysis | null>;
+  /** Replaces the base's `others` when present. */
+  others?: string[];
+}
+
+/**
+ * The name a path segment or specifier segment is looked up by: what precedes its first dot,
+ * lower-cased (case-insensitive file systems). `f0.test.ts`, `f0.js` and `F0` share `f0`.
+ */
+function nameKey(segment: string): string {
+  const bare = segment.replace(/^\.+/, "");
+  const dot = bare.indexOf(".");
+  return (dot < 0 ? bare : bare.slice(0, dot)).toLowerCase();
+}
+
+/**
+ * Every name an import can reach a file by: its own name and the name of each directory above it
+ * (`./a` finds `a/index.ts`, a directory's `package.json` can name any file below it).
+ */
+function lookupNames(file: string): string[] {
+  return file.split("/").map(nameKey);
+}
+
+/**
+ * Whether a new file (one of `added`, see `lookupNames`) could change what `specifier` resolves
+ * to. Conservative: a resolver probes the specifier's own last name (with extensions, as a
+ * directory, through `rootDirs`), so a relative import, or an alias that keeps that name
+ * (`@lib/*` → `src/*`, `baseUrl`, a package subpath), can only reach a new file of that name.
+ * A mapping that does not keep it (an exact alias, a package entry, a package outside the
+ * project, a bare one-segment name), or an alias whose first target is not the file it resolved
+ * to (an earlier target in its list may now exist), could reach a new file of any name: resolved
+ * again. `firstTarget` is the alias's first target, when the resolver can say (`resolvePattern`).
+ */
+function mayNameAdded(
+  specifier: string,
+  resolved: string | undefined,
+  added: ReadonlySet<string>,
+  firstTarget: () => string | undefined,
+): boolean {
+  const path = specifier.replace(/[?#].*$/, "").replace(/\/+$/, "");
+  const last = path.slice(path.lastIndexOf("/") + 1);
+  if (!last || last === "." || last === "..") return true;
+  const key = nameKey(last);
+  if (added.has(key)) return true;
+  if (specifier.startsWith(".") || specifier.startsWith("/")) return false;
+  if (!resolved || !path.includes("/")) return true;
+  const segs = resolved.split("/");
+  const name = nameKey(segs[segs.length - 1] ?? "");
+  const kept = name === key || (name === "index" && nameKey(segs[segs.length - 2] ?? "") === key);
+  if (!kept) return true;
+  const first = firstTarget();
+  if (first === undefined) return false;
+  const stem = (p: string) => p.replace(/\.[^./]*$/, "").replace(/\/index$/, "");
+  return stem(first) !== stem(resolved) && stem(first) !== resolved.replace(/\/index\.[^./]*$/, "");
 }
 
 /** A delta grows up to this many paths (or 2% of the files) before the full index is rewritten. */
@@ -96,6 +154,10 @@ export class SymbolIndex {
   private changedPaths = new Set<string>();
   private baseId: string | undefined;
   private warnings: string[] = [];
+  /** See `IndexFile.others`; undefined when unknown (an index written before it was recorded). */
+  private others: string[] | undefined;
+  /** `others` differs from the full index's: deltas carry it. */
+  private othersInDelta = false;
 
   private constructor(private readonly storePath: string | undefined) {}
 
@@ -124,6 +186,7 @@ export class SymbolIndex {
         for (const [k, v] of Object.entries(data.stats ?? {})) idx.fileStats.set(k, v);
         idx.contextKey = data.contextKey;
         idx.baseId = data.baseId;
+        if (Array.isArray(data.others)) idx.others = data.others;
         if (data.baseId) await idx.applyDelta(data.baseId);
       } else {
         idx.warnings.push(
@@ -159,6 +222,10 @@ export class SymbolIndex {
       else this.fileStats.delete(k);
       this.changedPaths.add(k);
     }
+    if (Array.isArray(delta.others)) {
+      this.others = delta.others;
+      this.othersInDelta = true;
+    }
     // Same order as a full write.
     if (added) this.files = new Map([...this.files].sort(([a], [b]) => a.localeCompare(b)));
   }
@@ -185,6 +252,7 @@ export class SymbolIndex {
         delta.files[p] = this.files.get(p) ?? null;
         delta.stats[p] = this.fileStats.get(p) ?? null;
       }
+      if (this.othersInDelta && this.others) delta.others = this.others;
       await writeStateFile(deltaPath, JSON.stringify(delta));
       this.dirty = false;
       return;
@@ -195,6 +263,7 @@ export class SymbolIndex {
       baseId,
       ...(this.contextKey ? { contextKey: this.contextKey } : {}),
       stats: Object.fromEntries(this.fileStats),
+      ...(this.others ? { others: this.others } : {}),
       files: Object.fromEntries([...this.files].sort(([a], [b]) => a.localeCompare(b))),
     };
     // Compact JSON: the index is a cache, not a document meant for humans.
@@ -203,6 +272,7 @@ export class SymbolIndex {
     await removeStateFile(deltaPath);
     this.baseId = baseId;
     this.changedPaths.clear();
+    this.othersInDelta = false;
     this.fullyDirty = false;
     this.dirty = false;
   }
@@ -223,12 +293,19 @@ export class SymbolIndex {
     const started = performance.now();
     const read = options.read ?? ((p: string) => readFile(join(options.root, p), "utf8"));
     const wanted = new Set(options.files);
-    // Resolution can be reused only when neither the file set nor the resolution config changed.
-    const fileSetKey = sha256(options.files.join("\n"));
+    // Stored resolutions are reused while the resolution config is the same. When files were added
+    // or removed, only the imports those files can affect are resolved again (see `redo` below).
     const contextKey = options.contextKey
-      ? sha256(`${options.contextKey}|${fileSetKey}`)
+      ? sha256(`incremental-file-set\u0000${options.contextKey}`)
       : undefined;
-    const reuseResolution = !!contextKey && contextKey === this.contextKey;
+    // The file set the stored resolutions were computed against.
+    const previousFiles = this.others ? new Set([...this.files.keys(), ...this.others]) : undefined;
+    const reuseResolution = !!contextKey && contextKey === this.contextKey && !!previousFiles;
+    const addedFiles = previousFiles ? options.files.filter((f) => !previousFiles.has(f)) : [];
+    const removedFiles = new Set<string>();
+    for (const f of previousFiles ?? []) if (!wanted.has(f)) removedFiles.add(f);
+    const fileSetChanged = addedFiles.length > 0 || removedFiles.size > 0;
+    const addedNames = new Set(addedFiles.flatMap(lookupNames));
     // Previous resolution targets (to keep deleted targets visible), read before re-resolving:
     // from the replaced analysis of a re-parsed file, else from the analysis itself.
     const replaced = new Map<string, FileAnalysis>();
@@ -329,20 +406,35 @@ export class SymbolIndex {
       !CODE.test(target) &&
       !target.split("/").includes("node_modules") &&
       !existsSync(join(options.root, target));
-    const recheck = (a: FileAnalysis) =>
-      a.imports.some((i) => i.unresolved || (i.resolved && !i.missing && assetGone(i.resolved)));
+    // An import whose stored resolution may no longer hold: one that did not resolve, one whose
+    // target is gone, and, when files were added, one whose specifier could name a new file.
+    const redo = (from: string, i: FileAnalysis["imports"][number]) =>
+      !!i.unresolved ||
+      (!!i.resolved && !i.missing && (removedFiles.has(i.resolved) || assetGone(i.resolved))) ||
+      (addedFiles.length > 0 &&
+        mayNameAdded(i.specifier, i.resolved, addedNames, () =>
+          options.resolver.resolvePattern?.(from, i.specifier),
+        ));
     // Resolution pass. Deleted targets stay visible (missing: true) for impact analysis.
     for (let analysis of [...this.files.values()]) {
       let before: string | undefined;
+      /** Imports to resolve again; undefined: all of them. */
+      let only: Set<FileAnalysis["imports"][number]> | undefined;
       if (reuseResolution && !changed.has(analysis.path)) {
-        if (!recheck(analysis)) continue;
+        const from = analysis.path;
+        const stale = analysis.imports.filter((i) => redo(from, i));
+        // A glob (`import.meta.glob`) matches against the file set.
+        const globs = fileSetChanged && !!analysis.dynamicHints?.length;
+        if (!stale.length && !globs) continue;
         // Resolved into a copy: a long-lived caller compares analyses by identity.
         before = JSON.stringify([
           analysis.imports,
           analysis.dynamicTargets,
           analysis.dynamicUnmatched,
         ]);
-        analysis = { ...analysis, imports: analysis.imports.map((i) => ({ ...i })) };
+        const copies = new Map(analysis.imports.map((i) => [i, { ...i }]));
+        only = new Set(stale.map((i) => copies.get(i) as FileAnalysis["imports"][number]));
+        analysis = { ...analysis, imports: analysis.imports.map((i) => copies.get(i) ?? i) };
       }
       const old = targetsOf(replaced.get(analysis.path) ?? analysis);
       delete analysis.dynamicTargets;
@@ -373,6 +465,7 @@ export class SymbolIndex {
         if (unmatched.length) analysis.dynamicUnmatched = unmatched;
       }
       for (const imp of analysis.imports) {
+        if (only && !only.has(imp)) continue;
         const oldTarget = old?.get(`${imp.kind}|${imp.specifier}`);
         delete imp.resolved;
         delete imp.external;
@@ -413,6 +506,16 @@ export class SymbolIndex {
     }
     if (contextKey && contextKey !== this.contextKey) {
       this.contextKey = contextKey;
+      this.dirty = true;
+    }
+    const others = options.files.filter((f) => !this.files.has(f));
+    if (
+      !this.others ||
+      others.length !== this.others.length ||
+      others.some((f, i) => f !== this.others?.[i])
+    ) {
+      this.others = others;
+      this.othersInDelta = true;
       this.dirty = true;
     }
     // Every file was re-resolved: only a full write records that.

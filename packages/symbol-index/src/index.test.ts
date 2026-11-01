@@ -1,7 +1,7 @@
 import { statSync } from "node:fs";
-import { mkdtemp, readFile, rm, utimes, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readFile, rm, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, posix } from "node:path";
 import { sha256 } from "@smarttest/shared";
 import type { Analyzer, FileAnalysis, ModuleResolver } from "@smarttest/source-parser";
 import { describe, expect, it } from "vitest";
@@ -240,5 +240,147 @@ describe("SymbolIndex resolution", () => {
     });
     expect(index.get("a.ts")?.dynamicTargets).toEqual(["p1.ts", "p2.ts"]);
     expect(index.get("a.ts")?.dynamicUnmatched).toBeUndefined();
+  });
+});
+
+describe("SymbolIndex: adding or removing files re-resolves only what they can affect", () => {
+  /** Imports are `import "<specifier>"` lines, any specifier. */
+  const anyImports: Analyzer = {
+    ...analyzer,
+    analyze: (path, content) => ({
+      ...analyzer.analyze(path, ""),
+      hash: sha256(content),
+      imports: [...content.matchAll(/\bimport\s+"([^"]+)"/g)].map((m, line) => ({
+        specifier: m[1] as string,
+        kind: "side-effect",
+        bindings: [],
+        typeOnly: false,
+        line,
+      })) as FileAnalysis["imports"],
+    }),
+  };
+  /**
+   * TypeScript-like, on disk: a relative import tries `x.ts`, then `x/index.ts`; `@x` is an exact
+   * alias with two targets in order; `@lib/*` tries `override/*` before `lib/*`; `pkg` is a
+   * package outside the project unless `vendor/shim.ts` exists (an alias with a local fallback).
+   */
+  const tsLike = (root: string, calls: string[]): ModuleResolver => {
+    const file = (p: string) =>
+      statSync(join(root, p), { throwIfNoEntry: false })?.isFile() ? p : undefined;
+    const probe = (base: string) => file(`${base}.ts`) ?? file(`${base}/index.ts`);
+    return {
+      resolve: (from, spec) => {
+        calls.push(`${from}>${spec}`);
+        let out: string | undefined;
+        if (spec.startsWith(".")) {
+          const dir = from.includes("/") ? from.slice(0, from.lastIndexOf("/")) : "";
+          out = probe(posix.join(dir, spec));
+        } else if (spec === "@x") out = file("src/x-local.ts") ?? file("src/x.ts");
+        else if (spec.startsWith("@lib/")) {
+          const rest = spec.slice(5).replace(/\.js$/, "");
+          out = probe(`override/${rest}`) ?? probe(`lib/${rest}`);
+        } else if (spec === "pkg")
+          return file("vendor/shim.ts") ? { resolved: "vendor/shim.ts" } : { external: true };
+        return out ? { resolved: out } : { reason: "not found" };
+      },
+    };
+  };
+  const run = async (root: string, files: string[], calls: string[] = []) => {
+    const index = await SymbolIndex.load(join(root, ".smarttest"));
+    const stats = await index.update({
+      root,
+      files,
+      analyzers: [anyImports],
+      resolver: tsLike(root, calls),
+      contextKey: "ctx",
+    });
+    await index.save();
+    return { index, stats, calls };
+  };
+  const resolvedOf = (index: SymbolIndex, file: string) =>
+    index.get(file)?.imports.map((i) => i.resolved ?? (i.external ? "external" : i.unresolved));
+
+  it("a new file that shadows an existing resolution is found, through relative paths and aliases", async () => {
+    const root = await mkdtemp(join(tmpdir(), "st-index-add-"));
+    const write = async (p: string, c = "") => {
+      await mkdir(join(root, p, ".."), { recursive: true });
+      await writeFile(join(root, p), c);
+    };
+    await write("src/a/index.ts");
+    await write("src/x.ts");
+    await write("lib/m/f.ts");
+    await write("src/other.ts");
+    await write(
+      "src/main.ts",
+      'import "./a"\nimport "@x"\nimport "@lib/m/f.js"\nimport "./other"\nimport "pkg"\n',
+    );
+    const base = ["lib/m/f.ts", "src/a/index.ts", "src/main.ts", "src/other.ts", "src/x.ts"];
+    const first = await run(root, base);
+    expect(resolvedOf(first.index, "src/main.ts")).toEqual([
+      "src/a/index.ts",
+      "src/x.ts",
+      "lib/m/f.ts",
+      "src/other.ts",
+      "external",
+    ]);
+    // `src/a.ts` now wins over `src/a/index.ts`; an earlier exact-alias target and an earlier
+    // `@lib/*` target appear; a local file now stands for a package.
+    const shadows = ["override/m/f/index.ts", "src/a.ts", "src/x-local.ts", "vendor/shim.ts"];
+    for (const f of shadows) await write(f);
+    const files = [...base, ...shadows].sort();
+    const second = await run(root, files);
+    expect(second.stats.resolvedAll).toBeUndefined();
+    expect(resolvedOf(second.index, "src/main.ts")).toEqual([
+      "src/a.ts",
+      "src/x-local.ts",
+      "override/m/f/index.ts",
+      "src/other.ts",
+      "vendor/shim.ts",
+    ]);
+    // `./other` cannot name any new file: its resolution was kept, not computed again.
+    expect(second.calls).not.toContain("src/main.ts>./other");
+    // Exactly what a full resolution from scratch gives.
+    const fresh = await mkdtemp(join(tmpdir(), "st-index-fresh-"));
+    await cp(root, fresh, { recursive: true });
+    await rm(join(fresh, ".smarttest"), { recursive: true, force: true });
+    const scratch = await run(fresh, files);
+    expect(scratch.stats.resolvedAll).toBe(true);
+    const sorted = (i: SymbolIndex) =>
+      JSON.stringify([...i.entries()].sort(([a], [b]) => a.localeCompare(b)));
+    expect(sorted(scratch.index)).toBe(sorted(second.index));
+    // Removing the shadowing files brings the earlier resolutions back.
+    for (const f of shadows) await rm(join(root, f));
+    const third = await run(root, base);
+    expect(resolvedOf(third.index, "src/main.ts")).toEqual([
+      "src/a/index.ts",
+      "src/x.ts",
+      "lib/m/f.ts",
+      "src/other.ts",
+      "external",
+    ]);
+    // The stored index (full write and delta) agrees after a reload, and nothing is resolved.
+    const reloaded = await run(root, base);
+    expect(snapshot(reloaded.index)).toBe(snapshot(third.index));
+    expect(reloaded.calls).toEqual([]);
+  });
+
+  it("adding an unrelated file resolves none of the existing imports again", async () => {
+    const files: Record<string, string> = {};
+    for (let i = 0; i < 30; i++) files[`f${i}.ts`] = i ? `import "./f${i - 1}"\n` : "";
+    const root = await project(files);
+    const names = Object.keys(files).sort();
+    await run(root, names);
+    await writeFile(join(root, "zzz.ts"), 'import "./f3"\n');
+    const { calls, index } = await run(root, [...names, "zzz.ts"].sort());
+    expect(calls).toEqual(["zzz.ts>./f3"]);
+    expect(index.get("zzz.ts")?.imports[0]?.resolved).toBe("f3.ts");
+    // Removing an imported file resolves its importers again (the edge stays, missing).
+    await rm(join(root, "f10.ts"));
+    const after = await run(root, [...names.filter((f) => f !== "f10.ts"), "zzz.ts"].sort());
+    expect(after.calls).toEqual(["f11.ts>./f10"]);
+    expect(after.index.get("f11.ts")?.imports[0]).toMatchObject({
+      resolved: "f10.ts",
+      missing: true,
+    });
   });
 });
