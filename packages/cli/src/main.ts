@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { join, relative } from "node:path";
+import { isAbsolute, join, relative, resolve, sep } from "node:path";
 // Types only: the engine (and TypeScript) is loaded lazily, so --help/--version start instantly.
 import type { ChangeSource, CommitBenchmark, RunReport, SmartTest } from "@smarttest/core";
 import type { SafetyMode } from "@smarttest/shared";
@@ -9,6 +9,7 @@ import {
   fileSink,
   formatDuration,
   SmartTestError,
+  terminalSafe,
   toExitCode,
   VERSION,
   writeFileAtomic,
@@ -96,12 +97,37 @@ function sourceOf(flags: Flags): ChangeSource | undefined {
 
 const rel = (ctx: Ctx, p: string) => relative(ctx.root, p) || ".";
 
+/**
+ * `--only <path>` (repeatable): project-relative paths for the engine. Absolute paths and
+ * `./`-relative ones resolve against the project root; anything outside it is a usage error.
+ */
+function onlyOf(ctx: Ctx): string[] | undefined {
+  const values = ctx.flags.only;
+  if (!values?.length) return undefined;
+  return values.map((value) => {
+    const absolute = isAbsolute(value) ? value : resolve(ctx.root, value);
+    const path = relative(ctx.root, absolute);
+    if (!value.trim() || !path || path === ".." || path.startsWith(`..${sep}`) || isAbsolute(path))
+      throw new SmartTestError(`--only ${value} is not a file or directory inside the project`, {
+        code: "ST_USAGE",
+        category: "usage",
+        hint: "Pass a path under the project root, e.g. --only src/cart.ts",
+      });
+    return path.split(sep).join("/");
+  });
+}
+
 // ── run / impact / explain / validate ─────────────────────────────────────────────────────
 
 async function cmdHookRun(ctx: Ctx): Promise<number> {
   const { flags } = ctx;
   const source = sourceOf(flags);
-  if (flags.all || flags.shard || (source && source.kind !== "staged" && source.kind !== "push"))
+  if (
+    flags.all ||
+    flags.shard ||
+    flags.only?.length ||
+    (source && source.kind !== "staged" && source.kind !== "push")
+  )
     throw new SmartTestError("--hook requires --staged or --push and a complete selection", {
       code: "ST_USAGE",
       category: "usage",
@@ -167,14 +193,29 @@ async function cmdHookRun(ctx: Ctx): Promise<number> {
           .filter((e) => !["passed", "cached-pass", "skipped", "flaky"].includes(e.status))
           .slice(0, 4)) {
           ctx.out(`${e.file}: ${e.status}`);
+          // A file that never reached a runner has no test records, only its own error.
+          if (!e.tests.length && e.error)
+            for (const l of e.error.split("\n").slice(0, 6)) ctx.out(`  ${l.slice(0, 180)}`);
           for (const test of e.tests.filter((t) => t.error).slice(0, 2))
             ctx.out(`  ${test.error?.message.split("\n")[0]?.slice(0, 180)}`);
         }
+        const left = result.leftToCi;
+        if (left) {
+          ctx.out(
+            `${left.count} selected, not run in the hook (left to CI) by ${left.rules.join(", ")}:`,
+          );
+          for (const l of left.files.slice(0, 10)) ctx.out(`  ${l.file} (${l.adapter})`);
+          if (left.files.length > 10) ctx.out(`  … ${left.files.length - 10} more`);
+        }
         const s = out.report.summary;
         ctx.out(
-          `${s.passed} passed · ${s.failed + s.timedOut} failed · ${s.cached ?? 0} cached (not run) · ${s.skippedBySelection} skipped (not run) · ${formatDuration(result.durationMs)}`,
+          `${s.passed} passed · ${s.failed + s.timedOut} failed · ${s.cached ?? 0} cached (not run) · ${left ? `${left.count} left to CI (not run) · ` : ""}${s.skippedBySelection} skipped (not run) · ${formatDuration(result.durationMs)}`,
         );
-        for (const w of out.report.warnings.slice(0, 4)) ctx.out(w);
+        // The left-to-CI list is printed above; its summary warning would repeat it.
+        for (const w of out.report.warnings
+          .filter((w) => !left || !w.includes("not run in the hook (left to CI)"))
+          .slice(0, 4))
+          ctx.out(w);
         ctx.out("Why: smarttest explain <test>");
       }
     }
@@ -197,7 +238,13 @@ async function cmdRun(ctx: Ctx): Promise<number> {
       code: "ST_USAGE",
       category: "usage",
     });
+  if (flags.all && flags.only?.length)
+    throw new SmartTestError("--only restricts the change set; it cannot be combined with --all", {
+      code: "ST_USAGE",
+      category: "usage",
+    });
   if (flags.hook) return cmdHookRun(ctx);
+  const only = onlyOf(ctx);
   const st = await ctx.open();
   const ac = new AbortController();
   const onSigint = () => {
@@ -230,6 +277,7 @@ async function cmdRun(ctx: Ctx): Promise<number> {
     const outcome = await st.run({
       ...(source ? { source } : {}),
       ...(mode ? { mode } : {}),
+      ...(only ? { only } : {}),
       all: !!flags.all,
       ...(flags["no-cache"] ? { cache: false } : {}),
       ...(shard ? { shard } : {}),
@@ -245,7 +293,7 @@ async function cmdRun(ctx: Ctx): Promise<number> {
           ? { formats: [...st.config.reports.formats, "markdown"] }
           : {}),
       ...(flags.output ? { outputDir: flags.output } : {}),
-      command: `run ${flags.all ? "--all" : "--affected"}`,
+      command: `run ${flags.all ? "--all" : "--affected"}${only ? only.map((p) => ` --only ${p}`).join("") : ""}`,
       onAnalysis: (a) => {
         spinner.stop();
         if (flags.json || flags.quiet) return;
@@ -361,6 +409,10 @@ function printRun(ctx: Ctx, report: RunReport, written: Record<string, string>):
       e.status !== "skipped" &&
       e.status !== "cached-pass"
     ) {
+      // A file that never reached a runner has no test records, only its own error.
+      if (!tests.length && e.error)
+        for (const l of e.error.split("\n").slice(0, 6))
+          ctx.out(`      ${t.red("›")} ${l.slice(0, 200)}`);
       for (const f of tests
         .filter((x) => x.status !== "passed" && x.status !== "skipped" && x.status !== "pending")
         .slice(0, 3)) {
@@ -406,16 +458,22 @@ function printRun(ctx: Ctx, report: RunReport, written: Record<string, string>):
 
 async function cmdImpact(ctx: Ctx): Promise<number> {
   const { t, flags } = ctx;
+  const only = onlyOf(ctx);
   const st = await ctx.open();
   const source = sourceOf(flags);
   const mode = modeOf(flags);
-  const a = await st.analyze({ ...(source ? { source } : {}), ...(mode ? { mode } : {}) });
+  const a = await st.analyze({
+    ...(source ? { source } : {}),
+    ...(mode ? { mode } : {}),
+    ...(only ? { only } : {}),
+  });
   if (flags.json) {
     ctx.json("impact", {
       description: a.input.description,
       changeSet: a.input.changeSet,
       decision: a.decision,
       timings: a.timings,
+      ...(a.scope ? { only: a.scope } : {}),
     });
     return ExitCode.Success;
   }
@@ -799,8 +857,8 @@ async function cmdMigrate(ctx: Ctx): Promise<number> {
     ...(flags.dir !== undefined ? { dir: flags.dir } : {}),
   });
   const { previewDiff } = await import("@smarttest/smart-init");
-  if (flags.json && (flags["dry-run"] || !flags.yes)) ctx.json("migrate", { plan });
-  else {
+  if (flags.json && (flags["dry-run"] || !plan.files.length)) ctx.json("migrate", { plan });
+  else if (!flags.json) {
     ctx.out(`${t.bold("Migrate Jest → Vitest")} · ${plan.files.length} file(s)`);
     for (const f of plan.files) {
       ctx.out(
@@ -814,7 +872,7 @@ async function cmdMigrate(ctx: Ctx): Promise<number> {
   }
   if (!plan.files.length || flags["dry-run"]) return ExitCode.Success;
   if (!flags.yes) {
-    if (!ctx.interactive)
+    if (!ctx.interactive || flags.json)
       throw new SmartTestError("migrate needs confirmation", {
         code: "ST_INIT_CONFIRMATION_REQUIRED",
         category: "configuration",
@@ -944,9 +1002,10 @@ async function cmdInit(ctx: Ctx): Promise<number> {
     ]);
   }
   const plan = await st.initPlan(overrides);
-  if (flags.json && (flags["dry-run"] || !flags.yes)) {
+  // --json prints exactly one document: the plan (dry run), the result, or an error.
+  if (flags.json && flags["dry-run"]) {
     ctx.json("init", { plan });
-    if (flags["dry-run"]) return ExitCode.Success;
+    return ExitCode.Success;
   }
   if (!flags.json) {
     ctx.out(`${t.cyan("Detected:")} ${plan.summary}`);
@@ -977,11 +1036,11 @@ async function cmdInit(ctx: Ctx): Promise<number> {
   const pending = plan.files.filter((f) => f.action !== "skip");
   if (!pending.length) {
     if (!flags.json) ctx.out(t.green("\n✓ Already initialised — nothing to change."));
-    else if (flags.yes) ctx.json("init", { plan, applied: [] });
+    else ctx.json("init", { plan, applied: [] });
     return ExitCode.Success;
   }
   if (!flags.yes && !flags.auto) {
-    if (!ctx.interactive) {
+    if (!ctx.interactive || flags.json) {
       throw new SmartTestError("init needs confirmation", {
         code: "ST_INIT_CONFIRMATION_REQUIRED",
         category: "configuration",
@@ -1079,7 +1138,14 @@ async function cmdHook(ctx: Ctx): Promise<number> {
         ...(manager ? { manager } : {}),
         stage: flags["pre-push"] ? "pre-commit" : "pre-push",
       });
-      if (flags.json) ctx.json("hook", { status: plan, other, history });
+      const suggestedScope = await st.hookScopeSuggestion();
+      if (flags.json)
+        ctx.json("hook", {
+          status: plan,
+          other,
+          history,
+          ...(suggestedScope ? { suggestedScope: { runners: suggestedScope } } : {}),
+        });
       else {
         ctx.out(
           `${t.bold("Git hook")} · ${plan.manager} · ${plan.file} ${t.dim(`(${plan.evidence})`)}`,
@@ -1095,6 +1161,14 @@ async function cmdHook(ctx: Ctx): Promise<number> {
         ctx.out(
           `  ${history.runs} recorded runs · median ${formatDuration(history.medianMs)} · slowest ${formatDuration(history.slowestMs)} · ${history.failures} recent failures`,
         );
+        if (history.scope.length)
+          ctx.out(
+            `  ${pad("Scope", 12)}${history.scope.join(", ")} · selected tests outside it are not run in the hook (left to CI)${history.leftToCi ? ` · ${history.leftToCi} in recent runs` : ""}`,
+          );
+        else if (suggestedScope)
+          ctx.out(
+            `  ${pad("Scope", 12)}every runner, including browser specs · to leave them to CI: hook: { runners: [${suggestedScope.map((a) => `"${a}"`).join(", ")}] }`,
+          );
         if ((plan.installed || other.installed) && !history.installedLocally)
           ctx.out("  SmartTest executable missing: install the project's dependencies.");
         for (const b of history.bypasses) ctx.out(`  Bypass ${b.at}: ${b.stage} ${b.reason}`);
@@ -1124,6 +1198,11 @@ async function cmdHook(ctx: Ctx): Promise<number> {
           `  ${t.yellow("▲")} line ${r.line} still runs a whole suite (use --replace): ${t.dim(r.command)}`,
         );
       for (const n of plan.notes) ctx.out(`  ${t.dim("•")} ${n}`);
+      const suggestedScope = await st.hookScopeSuggestion();
+      if (suggestedScope)
+        ctx.out(
+          `  ${t.dim("•")} Playwright/Cypress specs run next to ${suggestedScope.join(", ")}: to keep browser specs in CI and out of the hook, add \`hook: { runners: [${suggestedScope.map((a) => `"${a}"`).join(", ")}] }\` to the SmartTest config (the hook then reports them as left to CI)`,
+        );
     }
     if (flags["dry-run"]) {
       if (flags.json) ctx.json("hook", { plan, applied: [] });
@@ -1694,10 +1773,14 @@ async function cmdReport(ctx: Ctx): Promise<number> {
   return ExitCode.Success;
 }
 
+/** How a file is opened: never through `cmd /c start`, which would run `&`, `|` or `^` in it. */
+export function openCommand(path: string, platform = process.platform): [string, string[]] {
+  const cmd = platform === "darwin" ? "open" : platform === "win32" ? "explorer.exe" : "xdg-open";
+  return [cmd, [path]];
+}
+
 function openFile(path: string): void {
-  const cmd =
-    process.platform === "darwin" ? "open" : process.platform === "win32" ? "cmd" : "xdg-open";
-  const args = process.platform === "win32" ? ["/c", "start", "", path] : [path];
+  const [cmd, args] = openCommand(path);
   try {
     spawn(cmd, args, { detached: true, stdio: "ignore" }).unref();
   } catch {
@@ -1864,10 +1947,11 @@ export async function main(
       positionals,
       root,
       interactive,
+      // Lines carry repository text (test names, paths, runner output): no raw escape sequences.
       out: (line = "") => {
-        if (!jsonMode) io.stdout.write(`${line}\n`);
+        if (!jsonMode) io.stdout.write(`${terminalSafe(line)}\n`);
       },
-      err: (line = "") => io.stderr.write(`${line}\n`),
+      err: (line = "") => io.stderr.write(`${terminalSafe(line)}\n`),
       json: (cmd, data) =>
         io.stdout.write(
           `${JSON.stringify({ schemaVersion: 1, command: cmd, ...((data && typeof data === "object" && !Array.isArray(data) ? data : { data }) as object) }, null, 2)}\n`,
@@ -1888,7 +1972,7 @@ export async function main(
                 ...(flags.verbose && !jsonMode
                   ? [
                       (_r: unknown, formatted: string) =>
-                        void io.stderr.write(`${t.dim(formatted)}\n`),
+                        void io.stderr.write(`${terminalSafe(t.dim(formatted))}\n`),
                     ]
                   : []),
               ],
@@ -1897,7 +1981,7 @@ export async function main(
         }
         if (!jsonMode && !flags.quiet)
           for (const w of opened.loaded.warnings)
-            io.stderr.write(`${t.yellow("▲")} config ${w.path}: ${w.message}\n`);
+            io.stderr.write(terminalSafe(`${t.yellow("▲")} config ${w.path}: ${w.message}\n`));
         return opened;
       },
     };
@@ -1919,12 +2003,14 @@ export async function main(
         `${JSON.stringify({ schemaVersion: 1, error: { code: e.code ?? "ST_INTERNAL", category: e.category ?? "internal", message: e.message, hint: e.hint } }, null, 2)}\n`,
       );
     } else if (error instanceof SmartTestError) {
-      io.stderr.write(`${t.red("✕")} ${t.bold(error.code)}  ${error.message}\n`);
-      if (error.hint) io.stderr.write(`  ${t.dim("hint:")} ${error.hint}\n`);
+      io.stderr.write(terminalSafe(`${t.red("✕")} ${t.bold(error.code)}  ${error.message}\n`));
+      if (error.hint) io.stderr.write(terminalSafe(`  ${t.dim("hint:")} ${error.hint}\n`));
       if (argv.includes("--verbose") && error.cause)
         io.stderr.write(`  ${t.dim(String((error.cause as Error).stack ?? error.cause))}\n`);
     } else {
-      io.stderr.write(`${t.red("✕")} ${t.bold("ST_INTERNAL")}  ${(error as Error).message}\n`);
+      io.stderr.write(
+        terminalSafe(`${t.red("✕")} ${t.bold("ST_INTERNAL")}  ${(error as Error).message}\n`),
+      );
       if (argv.includes("--verbose")) io.stderr.write(`${(error as Error).stack}\n`);
       io.stderr.write(
         `  ${t.dim("This is a SmartTest bug. Please report it with the output of `smarttest doctor --json`.")}\n`,

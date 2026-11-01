@@ -114,11 +114,23 @@ export interface ImpactDecision {
   };
 }
 
+/** `--only` (SmartTest 1.0.0+): the change set restricted to some paths before selection. */
+export interface ChangeScope {
+  readonly paths: readonly string[];
+  /** Changed files kept. */
+  readonly matched: readonly string[];
+  /** Requested paths with no change: nothing is selected for them. */
+  readonly unchanged: readonly string[];
+  /** Other changed files, left out. */
+  readonly excluded: readonly string[];
+}
+
 export interface ImpactResult {
   readonly description: string;
   readonly changeSet: ChangeSet;
   readonly decision: ImpactDecision;
   readonly timings?: Readonly<Record<string, number>>;
+  readonly only?: ChangeScope;
 }
 
 export interface TestExecution {
@@ -164,7 +176,11 @@ export interface RunReport {
   readonly finishedAt: string;
   readonly project: string;
   readonly mode: SafetyMode;
-  readonly change: { readonly description: string; readonly changeSet: ChangeSet };
+  readonly change: {
+    readonly description: string;
+    readonly changeSet: ChangeSet;
+    readonly only?: ChangeScope;
+  };
   readonly decision: ImpactDecision;
   readonly executions: readonly FileExecution[];
   readonly summary: RunSummary;
@@ -359,6 +375,19 @@ export function parseJsonEnvelope(stdout: string, expectedCommand?: string): Cli
   return envelope as CliEnvelope;
 }
 
+function parseScope(value: unknown, path: string): { only?: ChangeScope } {
+  if (value === undefined) return {};
+  const record = asRecord(value, path);
+  return {
+    only: {
+      paths: asStringArray(record.paths, `${path}.paths`),
+      matched: asStringArray(record.matched, `${path}.matched`),
+      unchanged: asStringArray(record.unchanged, `${path}.unchanged`),
+      excluded: asStringArray(record.excluded, `${path}.excluded`),
+    },
+  };
+}
+
 function parseChangeSet(value: unknown, path: string): ChangeSet {
   const record = asRecord(value, path);
   const changes = asArray(record.changes, `${path}.changes`).map((item, index) => {
@@ -484,6 +513,7 @@ export function parseImpactJson(stdout: string): ImpactResult {
     description: asString(envelope.description, "$.description"),
     changeSet: parseChangeSet(envelope.changeSet, "$.changeSet"),
     decision: parseDecision(envelope.decision, "$.decision"),
+    ...parseScope(envelope.only, "$.only"),
     ...(envelope.timings === undefined
       ? {}
       : {
@@ -656,6 +686,7 @@ export function parseRunJson(stdout: string): RunResult {
     change: {
       description: asString(changeValue.description, "$.report.change.description"),
       changeSet: parseChangeSet(changeValue.changeSet, "$.report.change.changeSet"),
+      ...parseScope(changeValue.only, "$.report.change.only"),
     },
     decision: parseDecision(reportValue.decision, "$.report.decision"),
     executions,

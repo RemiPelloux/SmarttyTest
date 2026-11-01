@@ -26,11 +26,29 @@ We aim to acknowledge reports within **3 business days** and to agree a disclosu
 
 ## Local execution and Studio
 
-Project configuration, hook checks and tests execute code with the current user's permissions. Use SmartTest only in repositories you trust; temporary checkout isolation preserves Git state but is not a process sandbox. The VS Code extension refuses execution in an untrusted workspace.
+A TypeScript or JavaScript configuration file, hook checks and tests execute code with the current user's permissions, like `npm test`. Use SmartTest only in repositories whose code you would run. The temporary checkout isolates Git state, but it is not a process sandbox.
 
-Studio binds to loopback, checks Host and Origin, requires an unpredictable session token and restricts mutations to JSON POST requests. It serves bundled assets under a restrictive Content Security Policy. Source reads check real paths against the project root, including symlink replacements since the last analysis; this is not protection against a local process racing filesystem renames. Report downloads use an explicit filename allowlist. Do not expose the port through a public tunnel or share the printed token URL.
+In CI, run pull requests from forks without secrets: use `pull_request`, not `pull_request_target`, and never in a job that holds deploy credentials.
 
-The 0.9.0 tests cover these API boundaries, path traversal, symlinks, cancellation and shutdown. A broader security review remains a 1.0.0 release gate.
+Repository content cannot redirect SmartTest itself:
+
+- **Configuration paths.** `storeDir`, `reports.outputDir`, generator paths and runner paths must stay inside the project.
+- **Symbolic links.** State, reports, logs, generated tests and hooks are never written through a link inside the project.
+- **Committed state.** A store committed to Git is refused (`ST_STORE_TRACKED`), so planted caches cannot turn tests into passes.
+- **Option injection.** Revision and file names cannot be read as options by `git`, `svn` or `hg`.
+- **Rendering.** Terminal output and the markdown summary are stripped of escape sequences and markup.
+
+State restored from a CI cache is still trusted. Never restore a cache saved by an untrusted pull request into a trusted job.
+
+The VS Code extension does nothing in Restricted Mode, and `smarttest.executablePath` is a restricted setting.
+
+Studio binds to loopback and checks Host and Origin, which prevents DNS rebinding. It requires an unpredictable session token. The token is compared in constant time, passed in a header and never sent in a URL query or a Referer. Mutations are restricted to JSON POST requests, and bundled assets are served under a restrictive Content Security Policy.
+
+Source reads check real paths against the project root. Report downloads use an explicit filename allowlist and refuse links. Served reports are sandboxed.
+
+None of this protects against a local process racing filesystem renames. Do not expose the port through a public tunnel or share the printed token URL.
+
+The 1.0.0 [security review](documentation/architecture/security-review.md) records the threat model, the findings and their fixes, the accepted risks, and what was not reviewed.
 
 ## Our commitments
 

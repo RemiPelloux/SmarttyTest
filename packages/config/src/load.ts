@@ -1,7 +1,13 @@
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { readFile, rm } from "node:fs/promises";
 import { isAbsolute, join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { exists, SmartTestError, shortHash } from "@smarttest/shared";
+import {
+  assertNoSymlinkBelow,
+  exists,
+  SmartTestError,
+  shortHash,
+  writeFileAtomic,
+} from "@smarttest/shared";
 import ts from "typescript";
 import { resolveConfig } from "./defaults.js";
 import type { ResolvedConfig, SmartTestConfig } from "./types.js";
@@ -49,10 +55,11 @@ async function importConfigModule(root: string, file: string): Promise<unknown> 
     },
     fileName: file,
   }).outputText;
-  const tmpDir = join(root, ".smarttest", "tmp");
-  await mkdir(tmpDir, { recursive: true });
-  const tmp = join(tmpDir, `config.${shortHash(js)}.mjs`);
-  await writeFile(tmp, js);
+  const tmp = join(root, ".smarttest", "tmp", `config.${shortHash(js)}.mjs`);
+  // The name is predictable: a committed `.smarttest/tmp` link (or a link at the file itself)
+  // would otherwise make this write land anywhere, e.g. over ~/.bashrc.
+  assertNoSymlinkBelow(root, tmp);
+  await writeFileAtomic(tmp, js);
   try {
     const mod = (await import(pathToFileURL(tmp).href)) as { default?: unknown };
     return mod.default ?? mod;
@@ -79,6 +86,7 @@ export async function loadConfig(root: string, explicitPath?: string): Promise<L
   try {
     raw = await importConfigModule(root, path);
   } catch (cause) {
+    if (cause instanceof SmartTestError && cause.code === "ST_UNSAFE_PATH") throw cause;
     throw new SmartTestError(`Could not load ${path}: ${(cause as Error).message}`, {
       code: "ST_CONFIG_LOAD_FAILED",
       category: "configuration",

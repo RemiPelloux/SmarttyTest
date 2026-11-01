@@ -238,6 +238,59 @@ const trusted = (): Test[] => {
         );
       },
     ],
+    [
+      "Run Affected Tests for This File runs only that file's tests",
+      async () => {
+        // A second changed file, behaviour-preserving; src/money.js is still broken.
+        const document = await vscode.workspace.openTextDocument(fileUri("src", "slug.js"));
+        await vscode.window.showTextDocument(document);
+        const text = document.getText();
+        const from = text.indexOf("text.toLowerCase().trim()");
+        assert.ok(from >= 0, `unexpected src/slug.js:\n${text}`);
+        const edit = new vscode.WorkspaceEdit();
+        edit.replace(
+          document.uri,
+          new vscode.Range(document.positionAt(from), document.positionAt(from + 25)),
+          "text.trim().toLowerCase()",
+        );
+        assert.equal(await vscode.workspace.applyEdit(edit), true);
+        assert.equal(await document.save(), true);
+        await until("the results view to mark the run out of date", () =>
+          api.results().some((node) => node.label === "Out of date") ? true : undefined,
+        );
+        await until("the refresh after the save", () =>
+          api.status().text.includes("protected") ? true : undefined,
+        );
+
+        await vscode.commands.executeCommand("smarttest.runAffectedForFile", document.uri);
+        const results = api.results();
+        // The broken src/money.js is outside the scope: its failing test is not run.
+        assert.equal(results[0]?.label, "1 test(s) passed", JSON.stringify(results));
+        assert.deepEqual(
+          results.filter((node) => node.label.endsWith(".test.js")).map((node) => node.label),
+          ["test/slug.test.js"],
+        );
+        assert.match(
+          api.notices().at(-1) ?? "",
+          /1 test\(s\) selected for the changes in src\/slug\.js\. 1 other changed file\(s\) were not considered/,
+        );
+      },
+    ],
+    [
+      "Run Affected Tests for This File says an unchanged file has no change",
+      async () => {
+        const before = api.results();
+        await vscode.commands.executeCommand(
+          "smarttest.runAffectedForFile",
+          fileUri("src", "cart.js"),
+        );
+        assert.match(
+          api.notices().at(-1) ?? "",
+          /^SmartTest: src\/cart\.js has no change in .*Nothing was run; this is not a pass\.$/,
+        );
+        assert.deepEqual(api.results(), before, "the results view changed without a run");
+      },
+    ],
   ];
 };
 

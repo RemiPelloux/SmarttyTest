@@ -455,6 +455,8 @@ async function detectRunners(
   return out;
 }
 
+const SOURCE_EXTS = [".ts", ".tsx", ".js", ".jsx", ".mts", ".mjs", ".cjs", ".cts"];
+
 async function detectTests(
   _root: string,
   files: string[],
@@ -462,6 +464,15 @@ async function detectTests(
 ): Promise<TestConvention> {
   const tests = files.filter(isTest);
   const fileSet = new Set(files);
+  const byStem = new Map<string, string[]>();
+  for (const f of files) {
+    const e = SOURCE_EXTS.find((x) => f.endsWith(x));
+    if (!e) continue;
+    const stem = f.slice(0, -e.length);
+    const list = byStem.get(stem);
+    if (list) list.push(f);
+    else byStem.set(stem, [f]);
+  }
   let colocated = 0;
   const testDirs = new Map<string, number>();
   for (const t of tests) {
@@ -474,12 +485,13 @@ async function detectTests(
         "$1",
       ),
     ];
-    const candidates = bases.flatMap((b) =>
-      [".ts", ".tsx", ".js", ".jsx", ".mts", ".mjs", ".cjs", ".cts"].map((e) =>
-        b.replace(/\.[cm]?[jt]sx?$/, e),
-      ),
-    );
-    if (candidates.some((c) => fileSet.has(c) && c !== t)) colocated++;
+    // A source file with the same name in any source extension (looked up by stem).
+    const isColocated = bases.some((b) => {
+      const stem = b.replace(/\.[cm]?[jt]sx?$/, "");
+      if (stem === b) return b !== t && fileSet.has(b);
+      return byStem.get(stem)?.some((c) => c !== t) ?? false;
+    });
+    if (isColocated) colocated++;
     const top = t.split("/")[0] ?? "";
     if (["test", "tests", "__tests__", "spec", "e2e"].includes(top))
       testDirs.set(top, (testDirs.get(top) ?? 0) + 1);
@@ -712,6 +724,8 @@ async function detectCi(root: string): Promise<Evidence[]> {
 
 export interface DetectOptions {
   isTestFile?: (path: string) => boolean;
+  /** The project files as `walkFiles(root)` lists them, when the caller already has them. */
+  files?: string[];
 }
 
 /** Full project detection. Read-only: never writes anything. */
@@ -721,7 +735,7 @@ export async function detectProject(
 ): Promise<ProjectProfile> {
   const warnings: string[] = [];
   const manifest = await readJson<PackageManifest>(join(root, "package.json"));
-  const files = await walkFiles(root);
+  const files = options.files ?? (await walkFiles(root));
   const workspaces = await detectWorkspaces(root, manifest);
   if (!manifest && !workspaces.length) warnings.push("No package.json found in this project");
   const manifests = [

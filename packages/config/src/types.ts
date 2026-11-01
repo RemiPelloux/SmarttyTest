@@ -65,6 +65,17 @@ export interface HookConfig {
   checks?: HookCheckConfig[];
   /** Expected hook duration; above it the hook explains what makes it slow (default 60000). */
   budgetMs?: number;
+  /**
+   * Runners the hook executes (default: every runner). Selected tests of other runners are not
+   * run by the hook: they are reported as "selected, not run in the hook (left to CI)".
+   * `smarttest run` and `smarttest ci` are not affected.
+   */
+  runners?: AdapterId[];
+  /**
+   * Test files (project-relative globs) the hook does not execute, e.g. `["e2e/**"]`. Selected
+   * matches are reported as left to CI, never as passed. `run` and `ci` are not affected.
+   */
+  exclude?: string[];
 }
 
 /** Conventions of one sub-project (a directory), overriding the top-level settings inside it. */
@@ -116,6 +127,11 @@ export interface SmartTestConfig {
   parallelGroups?: number | "auto";
   /** Commit-hook behaviour (`smarttest run --hook`). */
   hook?: HookConfig;
+  /**
+   * Plugin modules (Plugin SDK v1): paths relative to the project root, or package names. Each
+   * module's default export is a `SmartTestPlugin` (see documentation/guides/plugins.md).
+   */
+  plugins?: string[];
   timeoutMs?: number;
   workers?: number;
   reports?: { formats?: ReportFormat[]; outputDir?: string };
@@ -146,7 +162,14 @@ export interface ResolvedConfig {
   projects: Record<string, ProjectConfig>;
   cache: boolean;
   parallelGroups: number | "auto";
-  hook: { checks: HookCheckConfig[]; budgetMs: number };
+  hook: {
+    checks: HookCheckConfig[];
+    budgetMs: number;
+    /** Undefined: the hook runs every runner. */
+    runners?: AdapterId[];
+    exclude: string[];
+  };
+  plugins: string[];
   timeoutMs: number;
   workers?: number;
   reports: { formats: ReportFormat[]; outputDir: string };

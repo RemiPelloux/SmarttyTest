@@ -23,12 +23,15 @@ export const COMMANDS: Record<string, { summary: string; usage: string; flags?: 
   impact: {
     summary: "Compute which tests a change affects, without running them",
     usage:
-      "smarttest impact [--base <ref> | --staged | --uncommitted | --since-snapshot] [--mode fast|balanced|safe] [--json]",
+      "smarttest impact [--base <ref> | --staged | --uncommitted | --since-snapshot] [--only <path>] [--mode fast|balanced|safe] [--json]",
+    flags: [
+      "--only <path>  only the changes in this file or directory (repeatable); the dependency analysis still covers the project",
+    ],
   },
   run: {
     summary: "Run affected tests (default) or the full suite",
     usage:
-      "smarttest run [--affected | --all] [--base <ref>] [--mode m] [--coverage] [--retries n] [--timeout ms] [--format html|json|junit|markdown]",
+      "smarttest run [--affected | --all] [--base <ref>] [--only <path>] [--mode m] [--coverage] [--retries n] [--timeout ms] [--format html|json|junit|markdown]",
     flags: [
       "--affected  analyse changes and run affected tests (default)",
       "--all  full suite through the same pipeline",
@@ -39,6 +42,7 @@ export const COMMANDS: Record<string, { summary: string; usage: string; flags?: 
       "--hook  fail-fast hook profile with affected-project checks and duration records",
       "--uncommitted  local Git working-tree changes",
       "--since-snapshot  compare with the latest native snapshot",
+      "--only <path>  only the changes in this file or directory (repeatable); tests other changes affect are not run",
       "--coverage  collect coverage (scope: selected or full)",
       "--retries n  retry failures; a pass after retry is reported as flaky",
       "--no-cache  run tests even when a validated cached pass exists",

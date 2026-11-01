@@ -1,5 +1,8 @@
+import { mkdir, mkdtemp, readdir, rm, symlink } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { applyTokens, targetPath } from "./index.js";
+import { applyGeneration, applyTokens, targetPath } from "./index.js";
 
 const opts = { directory: "tests", type: "unit" as const };
 
@@ -38,5 +41,37 @@ describe("targetPath", () => {
   });
   it("rejects unknown tokens", () => {
     expect(() => applyTokens("{Nope}.ts", { FileName: "x" })).toThrow(/Unknown naming token/);
+  });
+});
+
+describe("applyGeneration (SR-02)", () => {
+  const item = (target: string) => ({
+    source: "src/a.ts",
+    target,
+    status: "create" as const,
+    reason: "",
+    template: "unit",
+    symbols: [],
+    content: "test('x', () => {});\n",
+  });
+
+  it("refuses targets outside the project or behind a directory link", async () => {
+    const base = await mkdtemp(join(tmpdir(), "st-gen-"));
+    try {
+      const root = join(base, "repo");
+      await mkdir(join(root, "src"), { recursive: true });
+      await mkdir(join(base, "autostart"));
+      await symlink(join(base, "autostart"), join(root, "tests"), "junction");
+      await expect(applyGeneration(root, [item("tests/a.test.ts")])).rejects.toMatchObject({
+        code: "ST_UNSAFE_PATH",
+      });
+      await expect(applyGeneration(root, [item("../escape.test.ts")])).rejects.toMatchObject({
+        code: "ST_UNSAFE_PATH",
+      });
+      expect(await readdir(join(base, "autostart"))).toEqual([]);
+      expect(await applyGeneration(root, [item("src/a.test.ts")])).toEqual(["src/a.test.ts"]);
+    } finally {
+      await rm(base, { recursive: true, force: true });
+    }
   });
 });

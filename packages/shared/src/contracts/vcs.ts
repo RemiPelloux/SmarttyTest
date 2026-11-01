@@ -34,6 +34,21 @@ export interface ChangeSet {
   warnings: string[];
 }
 
+/**
+ * A change set restricted to some paths (`--only`). Only the changed set is restricted: the
+ * dependency analysis still covers the whole project, so unresolved relationships still select.
+ */
+export interface ChangeScope {
+  /** Requested project-relative paths (a file, or a directory and everything under it). */
+  paths: string[];
+  /** Changed files kept: they match a requested path. */
+  matched: string[];
+  /** Requested paths that match no changed file: nothing is selected for them. */
+  unchanged: string[];
+  /** Changed files left out: their tests were not considered. */
+  excluded: string[];
+}
+
 export interface VersionControlCapabilities {
   branches: Capability;
   stagedChanges: Capability;
@@ -43,7 +58,10 @@ export interface VersionControlCapabilities {
   fileContentAtRevision: Capability;
 }
 
+/** A version-control adapter (Plugin SDK v1, frozen at 1.0.0). */
 export interface VersionControlAdapter {
+  /** Plugin API version this adapter implements. */
+  readonly apiVersion: 1;
   readonly id: string;
   detect(root: string): Promise<boolean>;
   getWorkingState(): Promise<WorkingState>;

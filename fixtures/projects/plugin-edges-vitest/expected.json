@@ -1,0 +1,25 @@
+{
+  "runners": ["vitest"],
+  "vcs": "git",
+  "testFiles": 3,
+  "mutations": [
+    {
+      "file": "sql/find-user.sql",
+      "find": "id = ?",
+      "replace": "email = ?",
+      "expectFailing": ["tests/users.test.ts"]
+    },
+    {
+      "file": "sql/list-orders.sql",
+      "find": "DESC",
+      "replace": "ASC",
+      "expectFailing": ["tests/orders.test.ts"]
+    },
+    {
+      "file": "src/orders.ts",
+      "find": "return rows.length;",
+      "replace": "return rows.length + 1;",
+      "expectFailing": ["tests/orders.test.ts"]
+    }
+  ]
+}

@@ -13,6 +13,9 @@
  *   - skip link, landmarks and heading order;
  *   - a live run: progress and the final verdict are announced through a live region that was
  *     already in the page (a region inserted with its text is not reliably announced);
+ *   - the impact map (view switch, filters, live result count, Clear filters) and the source
+ *     viewer's observed coverage marks (spoken in words, switchable off), after one real coverage
+ *     run of the change;
  *   - prefers-reduced-motion: no animation or transition longer than 10 ms;
  *   - reflow at 320 px and 640 px wide (400% and 200% zoom of a 1280 px window): no horizontal
  *     page scroll, and no focused control hidden behind the fixed navigation;
@@ -50,9 +53,11 @@ const ENGINES = { chromium, firefox, webkit };
 const SCREENS = [
   { id: "overview", path: "/overview", title: "Overview" },
   { id: "impact", path: "/impact", title: "Impact" },
+  { id: "impact-map", path: "/impact?view=map", title: "Impact", ready: ".map__svg" },
   { id: "tests", path: "/tests", title: "Tests" },
   { id: "trust", path: "/trust", title: "Trust" },
-  { id: "source", path: "/source", title: "Source" },
+  // The fixture's coverage run marks the changed file's lines.
+  { id: "source", path: "/source", title: "Source", ready: ".code--coverage" },
 ];
 
 const { values: args } = parseArgs({
@@ -475,6 +480,7 @@ class Combo {
       screen.title,
       { timeout: 90_000 },
     );
+    if (screen.ready) await page.waitForSelector(screen.ready, { timeout: 90_000 });
     await page.waitForTimeout(200);
   }
 
@@ -776,7 +782,79 @@ class Combo {
       await this.walk(page, screen.id);
       if (screen.id === "tests") await this.testsScreen(page);
       if (screen.id === "impact") await this.impactScreen(page);
+      if (screen.id === "impact-map") await this.mapScreen(page);
+      if (screen.id === "source") await this.coverageScreen(page);
     }
+  }
+
+  /** The map's view switch, filters and live result count, all from the keyboard. */
+  async mapScreen(page) {
+    await this.open(
+      page,
+      SCREENS.find((s) => s.id === "impact"),
+    );
+    const toMap = page.locator('[data-fk="seg:Impact view:map"]');
+    await toMap.focus();
+    await page.keyboard.press("Enter");
+    try {
+      await page.waitForSelector(".map__svg", { timeout: 30_000 });
+    } catch {
+      return this.fail("impact-map", "keyboard", "Enter on the Map switch does not show the map");
+    }
+    const kept = await page.evaluate(() => document.activeElement?.dataset?.fk ?? "");
+    if (kept !== "seg:Impact view:map")
+      this.fail("impact-map", "focus-management", `switching to the map moves focus to "${kept}"`);
+    await page.evaluate(() => window.__a11y.installLive());
+    const kind = page.locator("#map-kind");
+    await kind.focus();
+    const options = await kind.locator("option").count();
+    if (options < 2) return this.advise("impact-map", "filters", "only one edge kind to filter by");
+    await kind.selectOption({ index: 1 });
+    await page.waitForTimeout(900);
+    const focused = await page.evaluate(() => document.activeElement?.id ?? "");
+    if (focused !== "map-kind")
+      this.fail("impact-map", "focus-management", `a filter change moves focus to "${focused}"`);
+    const said = (await page.evaluate(() => window.__live))
+      .filter((e) => e.kind === "announced")
+      .map((e) => e.text);
+    if (!said.some((t) => /path|No path/.test(t)))
+      this.fail("impact-map", "aria-live", "filtering the map does not announce the result count");
+    await this.axe(page, "impact-map-filtered");
+    await this.snapshot(page, "impact-map-filtered");
+    await this.targets(page, "impact-map-filtered");
+    const clear = page.locator('[data-fk="map-clear"]');
+    if (!(await clear.count()))
+      return this.fail("impact-map", "filters", "no Clear filters control while a filter is set");
+    await clear.focus();
+    await page.keyboard.press("Enter");
+    await page.waitForTimeout(200);
+    const after = await page.evaluate(() => document.activeElement?.id ?? "");
+    if (after !== "map-change")
+      this.fail("impact-map", "focus-management", `Clear filters leaves focus on "${after}"`);
+  }
+
+  /** Observed coverage marks are spoken in words and can be switched off from the keyboard. */
+  async coverageScreen(page) {
+    const words = await page.evaluate(
+      () =>
+        [...document.querySelectorAll(".code__line .visually-hidden")]
+          .map((el) => el.textContent)
+          .filter((t) => /covered|not covered|branches/.test(t)).length,
+    );
+    if (!words)
+      this.fail("source", "coverage", "covered and uncovered lines are not announced in words");
+    const off = page.locator('[data-fk="seg:Coverage shown:off"]');
+    if (!(await off.count())) return this.fail("source", "coverage", "no way to turn marks off");
+    await off.focus();
+    await page.keyboard.press("Enter");
+    await page.waitForTimeout(200);
+    if (await page.locator(".code--coverage").count())
+      this.fail("source", "coverage", "Off does not remove the coverage marks");
+    await this.axe(page, "source-coverage-off");
+    const on = page.locator('[data-fk="seg:Coverage shown:istanbul"]');
+    await on.focus();
+    await page.keyboard.press("Enter");
+    await page.waitForTimeout(200);
   }
 
   async impactScreen(page) {
@@ -790,7 +868,10 @@ class Combo {
   }
 
   async testsScreen(page) {
-    await this.open(page, SCREENS[2]);
+    await this.open(
+      page,
+      SCREENS.find((s) => s.id === "tests"),
+    );
     await page.evaluate(() => window.__a11y.installLive());
     const tab = page.locator('[role="tab"][aria-selected="true"]');
     await tab.focus();
@@ -1019,6 +1100,11 @@ async function main() {
     pathToFileURL(join(ROOT, "packages/studio/dist/index.js")).href
   );
   const fixture = await makeFixture();
+  // One real coverage run of the change, so the source viewer has observed lines to mark.
+  const { SmartTest } = await import(pathToFileURL(join(ROOT, "packages/core/dist/index.js")).href);
+  const st = await SmartTest.open({ root: fixture, storeDir: join(fixture, ".smarttest") });
+  const covered = await st.run({ coverage: true, formats: ["json"] });
+  if (!covered.report.coverage) throw new Error("The fixture's coverage run wrote no coverage");
   const handle = await startStudio({
     root: fixture,
     port: 0,

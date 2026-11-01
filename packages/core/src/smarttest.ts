@@ -14,8 +14,19 @@ import {
   loadConfig,
   type ResolvedConfig,
 } from "@smarttest/config";
-import { type CoverageReport, ingestIstanbul } from "@smarttest/coverage-engine";
-import { DependencyGraph, nextRoutes } from "@smarttest/dependency-graph";
+import {
+  type CoverageReport,
+  ingestBrowserV8,
+  ingestIstanbul,
+  ingestIstanbulLines,
+  type LineCoverageReport,
+} from "@smarttest/coverage-engine";
+import {
+  DependencyGraph,
+  type GraphOptions,
+  nextRoutes,
+  type ProvidedGraphInput,
+} from "@smarttest/dependency-graph";
 import { decideImpact, explainTest, type ImpactResult } from "@smarttest/impact-engine";
 import { javascriptAnalyzer } from "@smarttest/language-javascript";
 import { TypeScriptResolver, typescriptAnalyzer } from "@smarttest/language-typescript";
@@ -42,21 +53,27 @@ import {
   isPrismaSchema,
   type ResourceChange,
 } from "@smarttest/semantic-diff";
-import type { TestAdapter } from "@smarttest/shared";
+import type { ChangeScope, TestAdapter } from "@smarttest/shared";
 import {
+  assertConfinedWrite,
+  assertNoSymlinkBelow,
+  confineWrites,
   ExitCode,
   exists,
+  gitProjectFiles,
   type Logger,
   mapLimit,
   matchGlob,
   readJson,
   readText,
+  runProcess,
   runWithEnvScope,
   type SafetyMode,
   SmartTestError,
   sha256,
   silentLogger,
   walkFiles,
+  writeFileAtomic,
   writeJson,
 } from "@smarttest/shared";
 import {
@@ -75,6 +92,7 @@ import {
   renderSetupReport,
   rollback,
   type SetupPlan,
+  suggestHookRunners,
 } from "@smarttest/smart-init";
 import type { Analyzer, FileAnalysis } from "@smarttest/source-parser";
 import { LOCALE_PATH } from "@smarttest/source-parser";
@@ -99,19 +117,23 @@ import type { ChangeAnalysisInput, ChangeSource } from "@smarttest/vcs-core";
 import { GitAdapter } from "@smarttest/vcs-git";
 import { HgAdapter } from "@smarttest/vcs-hg";
 import { SvnAdapter } from "@smarttest/vcs-svn";
+import { GraphStore, surfaceOf } from "./graph-store.js";
 import {
   assertPushIsHead,
   type CheckResult,
   commitsWithoutHook,
+  describeScope,
   GIT_HOOK_ENV,
   type HookRecords,
   hookInvocations,
   isHookContext,
   isolate,
+  type LeftToCi,
   loadHookRecords,
   median,
   normalizeProject,
   onlyDeletions,
+  outsideHookScope,
   type PushRef,
   planChecks,
   projectPaths,
@@ -123,6 +145,8 @@ import {
   unknownCheckProjects,
 } from "./hook.js";
 import { ParsePool, parallelParsingAvailable } from "./parse-pool.js";
+import { type LoadedPlugin, loadPlugins, runEdgeProviders } from "./plugins.js";
+import { nothingInScope, restrictChanges, scopeWarnings, unchangedScopeDecision } from "./scope.js";
 import {
   cacheGet,
   cachePut,
@@ -171,6 +195,11 @@ export interface AnalyzeOptions {
   everything?: { reason: string };
   /** A ready-made change set (watch mode) instead of `source`. */
   input?: ChangeAnalysisInput;
+  /**
+   * Restrict the changed set to these project-relative paths (files or directories) before
+   * selection (`--only`). The dependency analysis is not restricted.
+   */
+  only?: readonly string[];
 }
 
 export interface Analysis {
@@ -188,6 +217,8 @@ export interface Analysis {
   assignment: Map<string, RunnerRoot>;
   decision: ImpactResult;
   timings: Record<string, number>;
+  /** Present when the change set was restricted with `only`. */
+  scope?: ChangeScope;
 }
 
 export interface RunOptions extends AnalyzeOptions {
@@ -198,6 +229,11 @@ export interface RunOptions extends AnalyzeOptions {
   shard?: { index: number; total: number };
   /** Stop starting runner groups after one fails. */
   bail?: boolean;
+  /**
+   * Apply the hook scope (`hook.runners`, `hook.exclude`): selected tests outside it are not run
+   * and are reported as left to CI. Internal to `runHook`; `run` and `ci` never set it.
+   */
+  hookScope?: boolean;
   /** Reuse an analysis computed by the caller (benchmark) instead of analysing again. */
   analysis?: Analysis;
   /**
@@ -269,6 +305,11 @@ export interface HookOutcome {
   checks: CheckResult[];
   /** Hook configuration problems (a check that can never run), shown with the result. */
   warnings: string[];
+  /**
+   * Selected test files the hook scope (`hook.runners`, `hook.exclude`) did not run: selected,
+   * not run in the hook, left to CI. Never counted as passed.
+   */
+  leftToCi?: { count: number; rules: string[]; files: LeftToCi[] };
   durationMs: number;
 }
 
@@ -355,16 +396,49 @@ export class SmartTest {
     private readonly mirror?: OpenOptions["mirror"],
   ) {
     this.storeDir = storeDir ?? join(root, loaded.config.storeDir);
+    // Writes into the store and the report directory never pass through a link (spec §30.2).
+    confineWrites(root, this.storeDir);
+    const reports = loaded.config.reports.outputDir;
+    confineWrites(root, isAbsolute(reports) ? reports : join(root, reports));
   }
 
   static async open(options: OpenOptions): Promise<SmartTest> {
     const loaded = await loadConfig(options.root, options.configPath);
-    return new SmartTest(
+    const st = new SmartTest(
       options.root,
       loaded,
       options.logger ?? silentLogger,
       options.storeDir,
       options.mirror,
+    );
+    await st.assertStoreUntracked();
+    return st;
+  }
+
+  /**
+   * The store holds caches that decide what runs: cached passes, the symbol index, traces. Its
+   * content is trusted only because SmartTest wrote it on this machine. A store committed to the
+   * repository (for example by a pull request from a fork) could claim passes or hide
+   * dependencies and so reduce the selection. Such a store is refused, never read.
+   */
+  private async assertStoreUntracked(): Promise<void> {
+    const rel = relative(this.root, this.storeDir).split("\\").join("/");
+    if (!rel || rel.startsWith("..") || isAbsolute(rel)) return;
+    const res = await runProcess(
+      "git",
+      ["-c", "core.quotePath=false", "ls-files", "-z", "--", `${rel}/`],
+      { cwd: this.root },
+    ).catch(() => undefined);
+    if (res?.code !== 0) return; // not a Git repository, or Git is unavailable
+    const tracked = res.stdout.split("\0").filter(Boolean);
+    if (!tracked.length) return;
+    throw new SmartTestError(
+      `${rel}/ is committed to the repository (${tracked.length} tracked file(s), e.g. ${tracked[0]}). SmartTest will not trust local state that comes from the repository content.`,
+      {
+        code: "ST_STORE_TRACKED",
+        category: "configuration",
+        hint: `Remove it from version control and ignore it: \`git rm -r --cached ${rel}\`, then add \`${rel}/\` to .gitignore. In CI, do not run SmartTest on a pull request that commits it.`,
+      },
     );
   }
 
@@ -379,18 +453,23 @@ export class SmartTest {
 
   isTest = (path: string): boolean => isTestFile(path, this.config.tests.match);
 
-  async profile(): Promise<ProjectProfile> {
-    this.profileCache ??= await detectProject(this.root, { isTestFile: this.isTest });
+  /** `gitFiles`: a `gitProjectFiles` listing taken by the caller (saves listing twice). */
+  async profile(gitFiles?: readonly string[]): Promise<ProjectProfile> {
+    this.profileCache ??= await detectProject(this.root, {
+      isTestFile: this.isTest,
+      ...(gitFiles ? { files: await walkFiles(this.root, { gitFiles }) } : {}),
+    });
     return this.profileCache;
   }
 
-  async sourceFiles(): Promise<string[]> {
+  async sourceFiles(gitFiles?: readonly string[]): Promise<string[]> {
     const generatedExcludes = this.config.generated
       .filter((g) => g.policy === "exclude")
       .map((g) => g.path);
     return walkFiles(this.root, {
       include: this.config.include,
       exclude: [...this.config.exclude, ...generatedExcludes],
+      ...(gitFiles ? { gitFiles } : {}),
     });
   }
 
@@ -521,12 +600,21 @@ export class SmartTest {
   private indexCache: SymbolIndex | undefined;
   private graphCache: { graph: DependencyGraph; index: SymbolIndex; e2e: string } | undefined;
   private lastIndexChange: { changed: string[]; structural: boolean } | undefined;
-  /** How the last graph was obtained ("patched" or "built"), for diagnostics. */
-  lastGraphBuild: "patched" | "built" | undefined;
+  /**
+   * How the last graph was obtained, for diagnostics: "built" from the analyses, "loaded" from the
+   * persisted graph, or "patched" (the persisted or in-memory graph, patched for changed files).
+   */
+  lastGraphBuild: "patched" | "built" | "loaded" | undefined;
+  /** Why the persisted graph could not be used last time (diagnostics). */
+  lastGraphStoreMiss: string | undefined;
 
   async loadIndex(): Promise<{ index: SymbolIndex; stats: UpdateStats }> {
+    // One project listing serves detection and the source file set; Git lists while the index
+    // is read.
+    const listing = gitProjectFiles(this.root);
     const index =
       this.keepWarm && this.indexCache ? this.indexCache : await SymbolIndex.load(this.storeDir);
+    const gitFiles = await listing;
     const before = this.keepWarm ? new Map(index.entries()) : undefined;
     // Cold start (no index, or one from another analyzer version) of a large project: parser
     // threads start before files are read, so their start-up overlaps with reading.
@@ -534,7 +622,7 @@ export class SmartTest {
     const cold =
       index.size === 0 ||
       (sample !== undefined && !ANALYZERS.some((a) => a.version === sample.analyzerVersion));
-    const profile = await this.profile();
+    const profile = await this.profile(gitFiles);
     for (const w of index.loadWarnings) this.logger.warn(w);
     const resolver = new TypeScriptResolver(
       this.root,
@@ -554,7 +642,7 @@ export class SmartTest {
       )
     ).join("\n");
     this.resolver = resolver;
-    const files = await this.sourceFiles();
+    const files = await this.sourceFiles(gitFiles);
     const pool =
       cold && files.length >= 300 && parallelParsingAvailable() ? new ParsePool() : undefined;
     const stats = await index
@@ -574,28 +662,17 @@ export class SmartTest {
       })
       .finally(() => pool?.close());
     await index.save();
+    await this.runPlugins(index);
     if (before) {
       // Changes other files can see (imports, exports, declarations) need a full graph rebuild.
-      const surface = (x: FileAnalysis) =>
-        JSON.stringify([
-          x.importsHash,
-          x.localExports,
-          x.symbols.map((y) => [
-            y.qualifiedName,
-            y.kind,
-            y.exportNames,
-            y.parent ?? "",
-            y.extends ?? "",
-          ]),
-          x.catalogKeys ? Object.keys(x.catalogKeys) : [],
-        ]);
       const changed: string[] = [];
-      let structural = before.size !== index.size;
+      // Re-resolved in place (tsconfig paths, package manifests): other files may now point elsewhere.
+      let structural = before.size !== index.size || !!stats.resolvedAll;
       for (const [p, a] of index.entries()) {
         const old = before.get(p);
         if (old === a) continue;
         changed.push(p);
-        if (!old || surface(old) !== surface(a)) structural = true;
+        if (!old || surfaceOf(old) !== surfaceOf(a)) structural = true;
       }
       this.lastIndexChange = { changed, structural };
       this.indexCache = index;
@@ -603,11 +680,32 @@ export class SmartTest {
     return { index, stats };
   }
 
+  private pluginsLoaded: Promise<LoadedPlugin[]> | undefined;
+  /** Output of the plugin edge providers for the current index (recomputed on each load). */
+  private provided: (ProvidedGraphInput & { warnings: string[] }) | undefined;
+
+  /** Plugins from the `plugins` option, loaded once per instance. */
+  plugins(): Promise<LoadedPlugin[]> {
+    this.pluginsLoaded ??= loadPlugins(this.root, this.config.plugins);
+    return this.pluginsLoaded;
+  }
+
+  private async runPlugins(index: SymbolIndex): Promise<void> {
+    if (!this.config.plugins.length) return;
+    this.provided = await runEdgeProviders(await this.plugins(), {
+      root: this.root,
+      files: [...index.entries().keys()],
+      isTest: this.isTest,
+      listFiles: () => this.allFiles(),
+    });
+  }
+
   buildGraph(index: SymbolIndex, e2eTests?: ReadonlySet<string>): DependencyGraph {
     const e2e = [...(e2eTests ?? [])].sort().join("|");
     const cached = this.graphCache;
     if (
       this.keepWarm &&
+      !this.provided &&
       cached &&
       cached.index === index &&
       cached.e2e === e2e &&
@@ -627,6 +725,10 @@ export class SmartTest {
   }
 
   private buildGraphFresh(index: SymbolIndex, e2eTests?: ReadonlySet<string>): DependencyGraph {
+    return new DependencyGraph(index.entries(), this.isTest, this.graphOptions(index, e2eTests));
+  }
+
+  private graphOptions(index: SymbolIndex, e2eTests?: ReadonlySet<string>): GraphOptions {
     const files = [...index.entries().keys()];
     // Next.js projects: directories with a next.config, or the root when Next.js was detected.
     const nextRoots = new Set(
@@ -636,10 +738,53 @@ export class SmartTest {
     );
     if (this.profileCache?.frameworks.some((f) => f.value === "Next.js")) nextRoots.add("");
     const routes = nextRoots.size ? nextRoutes(files, [...nextRoots]) : [];
-    return new DependencyGraph(index.entries(), this.isTest, {
+    return {
       ...(routes.length ? { routes } : {}),
       ...(e2eTests?.size ? { e2eTests } : {}),
-    });
+      ...(this.provided
+        ? { provided: { edges: this.provided.edges, unresolved: this.provided.unresolved } }
+        : {}),
+    };
+  }
+
+  /**
+   * The graph for an analysis, persisted between runs (`.smarttest/state/graph.json`): restored
+   * when it provably matches the current analyses, patched for files whose content changed but
+   * whose surface did not, rebuilt otherwise (see graph-store.ts). Watch mode keeps its in-memory
+   * graph instead.
+   */
+  private async analysisGraph(
+    index: SymbolIndex,
+    e2eTests: ReadonlySet<string>,
+  ): Promise<DependencyGraph> {
+    // Plugin edges are not part of the store's key: with plugins, always rebuild.
+    if (this.provided || (this.keepWarm && this.graphCache))
+      return this.buildGraph(index, e2eTests);
+    const options = this.graphOptions(index, e2eTests);
+    const store = new GraphStore(this.storeDir, this.config, options);
+    const loaded = store.load(index.entries(), this.isTest);
+    let graph: DependencyGraph;
+    if (loaded.status === "loaded" || loaded.status === "patched") {
+      graph = loaded.graph;
+      this.lastGraphBuild = loaded.status;
+      this.lastGraphStoreMiss = undefined;
+    } else {
+      graph = new DependencyGraph(index.entries(), this.isTest, options);
+      this.lastGraphBuild = "built";
+      this.lastGraphStoreMiss = `${loaded.status}: ${loaded.reason}`;
+      this.logger.debug("graph store not used", { status: loaded.status, reason: loaded.reason });
+    }
+    if (GraphStore.shouldSave(loaded))
+      await store
+        .save(graph, index.entries())
+        .catch((error: Error) =>
+          this.logger.debug("graph store not written", { error: error.message }),
+        );
+    if (this.keepWarm) {
+      this.graphCache = { graph, index, e2e: [...e2eTests].sort().join("|") };
+      this.lastIndexChange = { changed: [], structural: false };
+    }
+    return graph;
   }
 
   /**
@@ -711,6 +856,7 @@ export class SmartTest {
           ),
         );
         let files = cache[key];
+        let failed = false;
         if (!files) files = await staticDefaultDiscovery(this.root, root, cfg, pkg, candidates);
         if (!files) {
           try {
@@ -724,23 +870,40 @@ export class SmartTest {
               } as Group).discover()
             ).map((t) => t.filePath);
           } catch (error) {
+            // The first lines of the runner's own error say which file broke the listing.
             warnings.push(
-              `${root.adapter} (${root.dir || "."}) discovery failed — using filename patterns: ${(error as Error).message.split("\n")[0]}`,
+              `${root.adapter} (${root.dir || "."}) discovery failed — using filename patterns: ${(
+                error as Error
+              ).message
+                .split("\n")
+                .slice(0, 6)
+                .join("\n")}`,
             );
             files = candidates;
+            failed = true;
           }
         }
-        return { root, key, files };
+        return { root, key, files, failed };
       }),
     );
-    for (const { root, key, files } of listed) {
-      nextCache[key] = files;
+    // Runners whose listing worked claim their files first. A runner whose listing failed falls
+    // back to filename patterns and only takes files no working runner collects: a broken
+    // Playwright listing must not take the unit tests away from their own runner.
+    const ordered = [...listed.filter((l) => !l.failed), ...listed.filter((l) => l.failed)];
+    const listedBy = new Map<string, boolean>();
+    for (const { root, key, files, failed } of ordered) {
+      // A fallback is not cached: the failure must be reported again until it is fixed.
+      if (!failed) nextCache[key] = files;
       let count = 0;
       for (const f of files) {
         if (!analysedSet.has(f)) continue; // excluded by smarttest config
-        // Several runners may collect the same file: the deepest project owns it.
         const prev = assignment.get(f);
-        if (!prev || root.dir.length > prev.dir.length) assignment.set(f, root);
+        if (failed && prev && listedBy.get(f)) continue;
+        // Several runners may collect the same file: the deepest project owns it.
+        if (!prev || root.dir.length > prev.dir.length) {
+          assignment.set(f, root);
+          listedBy.set(f, !failed);
+        }
         count++;
       }
       perRoot.set(rootKey(root), count);
@@ -755,10 +918,21 @@ export class SmartTest {
 
   async analyze(options: AnalyzeOptions = {}): Promise<Analysis> {
     const timings: Record<string, number> = {};
-    const input = options.input
-      ? this.withoutOwnState(options.input)
-      : await timed(timings, "change detection", () => this.changeInput(options.source));
-    const { index, stats } = await timed(timings, "index update", () => this.loadIndex());
+    // Change detection (VCS processes) and the index update are independent: run them together
+    // (both settle before an error is reported, so nothing keeps writing after it).
+    const [changed, updated] = await Promise.allSettled([
+      options.input
+        ? this.withoutOwnState(options.input)
+        : timed(timings, "change detection", () => this.changeInput(options.source)),
+      timed(timings, "index update", () => this.loadIndex()),
+    ]);
+    if (changed.status === "rejected") throw changed.reason;
+    if (updated.status === "rejected") throw updated.reason;
+    const detected = changed.value;
+    const scoped = options.only ? restrictChanges(detected, options.only) : undefined;
+    const input = scoped?.input ?? detected;
+    const scope = scoped?.scope;
+    const { index, stats } = updated.value;
     if (options.everything) {
       const { tests, unassigned, roots, assignment } = await this.discoverTests(index);
       const reason = { kind: "fallback" as const, message: options.everything.reason };
@@ -771,7 +945,7 @@ export class SmartTest {
         safetyMode: options.mode ?? this.config.mode,
         requestedMode: options.mode ?? this.config.mode,
         reasons: [reason],
-        warnings: [],
+        warnings: scope ? scopeWarnings(scope, input.changeSet.completeness) : [],
         fallbackApplied: true,
         details: { triggers: [], seeds: [], trivialSkipped: [], ignored: [], uncertainty: [] },
       } satisfies ImpactResult;
@@ -788,6 +962,7 @@ export class SmartTest {
         assignment,
         decision,
         timings,
+        ...(scope ? { scope } : {}),
       };
     }
     const {
@@ -802,34 +977,41 @@ export class SmartTest {
         .filter(([, r]) => r.adapter === "playwright" || r.adapter === "cypress")
         .map(([t]) => t),
     );
-    const graph = await timed(timings, "graph build", () => this.buildGraph(index, e2eTests));
+    const graph = await timed(timings, "graph build", () => this.analysisGraph(index, e2eTests));
     const graphDiff: { file: string; added: string[]; removed: string[] }[] = [];
     const resources = new Map<string, ResourceChange>();
     const diffs = await timed(timings, "semantic diff", () =>
       this.semanticDiffs(input, index, graphDiff, resources),
     );
     const traceView = await this.traceView(input, index);
-    const decision = await timed(timings, "impact analysis", () =>
-      decideImpact({
-        ...(traceView?.size ? { traces: traceView } : {}),
-        changeSet: input.changeSet,
-        diffs,
-        graph,
-        files: index.entries(),
-        testFiles: tests,
-        isTest: this.isTest,
-        mode: options.mode ?? this.config.mode,
-        triggers: [...BUILTIN_TRIGGERS, ...this.config.triggers],
-        rules: new RulesEngine(effectiveRules(this.config)),
-        packageOf: this.packageOf,
-        resources,
-        generated: this.config.generated
-          .filter((g) => g.policy === "rebuild-required" && g.from?.length)
-          .map((g) => ({ path: g.path, from: g.from ?? [] })),
-      }),
+    const decision = await timed(timings, "impact analysis", async () =>
+      scope && nothingInScope(scope, input.changeSet.completeness)
+        ? unchangedScopeDecision(tests, scope, options.mode ?? this.config.mode)
+        : decideImpact({
+            ...(traceView?.size ? { traces: traceView } : {}),
+            changeSet: input.changeSet,
+            diffs,
+            graph,
+            files: index.entries(),
+            testFiles: tests,
+            isTest: this.isTest,
+            mode: options.mode ?? this.config.mode,
+            triggers: [...BUILTIN_TRIGGERS, ...this.config.triggers],
+            // A plugin module inside the project decides edges: changing it widens to everything.
+            globalTriggers: this.config.plugins
+              .filter((p) => p.startsWith("./"))
+              .map((p) => p.slice(2)),
+            rules: new RulesEngine(effectiveRules(this.config)),
+            packageOf: this.packageOf,
+            resources,
+            generated: this.config.generated
+              .filter((g) => g.policy === "rebuild-required" && g.from?.length)
+              .map((g) => ({ path: g.path, from: g.from ?? [] })),
+          }),
     );
     if (graphDiff.length) decision.details.graphDiff = graphDiff;
-    decision.warnings.push(...discoveryWarnings);
+    if (scope) decision.warnings.unshift(...scopeWarnings(scope, input.changeSet.completeness));
+    decision.warnings.push(...discoveryWarnings, ...(this.provided?.warnings ?? []));
     const profileNow = this.profileCache;
     if (profileNow) {
       const drift = detectDrift(this.config, this.loaded.raw, profileNow).filter(
@@ -844,11 +1026,11 @@ export class SmartTest {
       decision.warnings.push(
         `${unassigned.length} file(s) look like tests but no runner collects them, so they never run (e.g. ${unassigned.slice(0, 2).join(", ")})`,
       );
-    await writeJson(join(this.storeDir, "runs", "last-decision.json"), {
-      createdAt: new Date().toISOString(),
-      description: input.description,
-      decision,
-    });
+    // Compact: with thousands of selected tests and their dependency paths this file is large.
+    await writeFileAtomic(
+      join(this.storeDir, "runs", "last-decision.json"),
+      `${JSON.stringify({ createdAt: new Date().toISOString(), description: input.description, decision })}\n`,
+    );
     this.logger.info("impact decision", {
       source: input.description,
       changed: input.changeSet.changes.length,
@@ -872,6 +1054,7 @@ export class SmartTest {
       assignment,
       decision,
       timings,
+      ...(scope ? { scope } : {}),
     };
   }
 
@@ -1038,6 +1221,7 @@ export class SmartTest {
       // asked for `--no-cache` (an explicit `false` is respected).
       bail: options.bail ?? true,
       cache: options.cache ?? true,
+      hookScope: true,
       command: `hook ${stage}`,
       holdCheckout: () => checksPromise,
       onIsolatedConfig: (config) => {
@@ -1088,16 +1272,36 @@ export class SmartTest {
     const passed =
       outcome.exitCode === ExitCode.Success && checks.every((c) => c.status === "passed");
     const tree = await treeOf(this.root, stage);
+    const left = outcome.report.leftToCi ?? [];
+    const scope = describeScope(active.hook);
     records.runs.push({
       at: new Date().toISOString(),
       stage,
       durationMs,
       selected: outcome.report.decision.selectedTests.length,
       passed,
+      ...(left.length ? { leftToCi: left.length } : {}),
+      ...(scope.length ? { scope } : {}),
       ...(tree ? { tree } : {}),
     });
     await saveHookRecords(this.storeDir, records);
-    return { stage, skipped: false, outcome, checks, warnings, durationMs };
+    return {
+      stage,
+      skipped: false,
+      outcome,
+      checks,
+      warnings,
+      ...(left.length
+        ? {
+            leftToCi: {
+              count: left.length,
+              rules: [...new Set(left.map((l) => l.rule))],
+              files: left,
+            },
+          }
+        : {}),
+      durationMs,
+    };
   }
 
   /** `smarttest hook status` details: recent hook durations, bypasses, commits made without it. */
@@ -1109,10 +1313,16 @@ export class SmartTest {
     bypasses: HookRecords["bypasses"];
     withoutHook: { checked: number; without: { sha: string; subject: string }[] };
     installedLocally: boolean;
+    /** The hook scope in force (`hook.runners`, `hook.exclude`); empty: the hook runs everything. */
+    scope: string[];
+    /** Selected test files left to CI by the scope across the recent runs. */
+    leftToCi: number;
   }> {
     const records = await loadHookRecords(this.storeDir);
     const recent = records.runs.slice(-30);
     return {
+      scope: describeScope(this.config.hook),
+      leftToCi: recent.reduce((n, r) => n + (r.leftToCi ?? 0), 0),
       runs: records.runs.length,
       medianMs: median(recent.map((r) => r.durationMs)),
       slowestMs: Math.max(0, ...recent.map((r) => r.durationMs)),
@@ -1413,8 +1623,10 @@ export class SmartTest {
     const typicalAnalysis = recorded.analysisMs?.length
       ? [...recorded.analysisMs].sort((a, b) => a - b)[Math.floor(recorded.analysisMs.length / 2)]
       : undefined;
+    // A scoped run (`only`) is meant to be small: running everything would defeat it.
     const adaptive =
       !options.all &&
+      !options.only &&
       this.config.adaptive !== false &&
       recorded.fullRunMs !== undefined &&
       typicalAnalysis !== undefined &&
@@ -1469,6 +1681,23 @@ export class SmartTest {
         `Shard ${options.shard.index}/${options.shard.total}: ${mine.size} of ${all.length} selected test files run here; the others run in the other shards`,
       );
     }
+    // Hook scope: selected tests the hook does not run stay selected and are reported as left to
+    // CI with the rule that removed them; they are never passed and never dropped (§32.2).
+    const leftToCi = options.hookScope
+      ? outsideHookScope(
+          analysis.decision.selectedTests.map((t) => ({
+            file: t.filePath,
+            adapter: analysis.assignment.get(t.filePath)?.adapter,
+          })),
+          this.config.hook,
+        )
+      : [];
+    const leftFiles = new Set(leftToCi.map((l) => l.file));
+    const toRun = analysis.decision.selectedTests.filter((t) => !leftFiles.has(t.filePath));
+    if (leftToCi.length)
+      warnings.push(
+        `${leftToCi.length} selected test file(s) not run in the hook (left to CI) by ${[...new Set(leftToCi.map((l) => l.rule))].join(", ")} — \`smarttest run\` and \`smarttest ci\` run them`,
+      );
     // Validated result cache: a passing result is reused only while every input is unchanged.
     const history = await loadHistory(this.storeDir);
     const useCache = (options.cache ?? this.config.cache) && !options.all && !options.coverage;
@@ -1476,7 +1705,7 @@ export class SmartTest {
     const keys = useCache
       ? await this.resultKeys(
           analysis,
-          analysis.decision.selectedTests.map((t) => t.filePath),
+          toRun.map((t) => t.filePath),
           history,
         )
       : new Map<string, string>();
@@ -1503,13 +1732,10 @@ export class SmartTest {
     const cachedFiles = new Set(cachedExecutions.map((e) => e.file));
     // Fail-fast order: recent failures, then the tests closest to the change.
     const depthOf = new Map(
-      analysis.decision.selectedTests.map((t) => [
-        t.filePath,
-        Math.min(...t.reasons.map((r) => r.path?.length ?? 99), 99),
-      ]),
+      toRun.map((t) => [t.filePath, Math.min(...t.reasons.map((r) => r.path?.length ?? 99), 99)]),
     );
     const order = failFastOrder(
-      analysis.decision.selectedTests.map((t) => t.filePath).filter((f) => !cachedFiles.has(f)),
+      toRun.map((t) => t.filePath).filter((f) => !cachedFiles.has(f)),
       recentlyFailingFiles(history),
       (f) => depthOf.get(f) ?? 99,
     );
@@ -1521,6 +1747,33 @@ export class SmartTest {
       analysis.assignment,
     );
     for (const g of plan.groups) g.files.sort((a, b) => (rank.get(a) ?? 0) - (rank.get(b) ?? 0));
+    // A selected test that no runner collects cannot run. It is never dropped: it gets an
+    // infrastructure-error record, so the run fails (exit 4) and names the file and the cause.
+    const discoveryFailures = analysis.decision.warnings.filter((w) =>
+      w.includes("discovery failed"),
+    );
+    const uncollected: FileExecution[] = plan.unassigned.map((file) => ({
+      file,
+      adapter: "none",
+      status: "infrastructure-error",
+      durationMs: 0,
+      tests: [],
+      error: `Selected, but no runner collects this file, so it was not run.${
+        discoveryFailures.length
+          ? ` Cause: ${discoveryFailures.join("; ")}`
+          : " Add it to a runner's include patterns (or declare `runners`); if it is not meant to run, add it to `exclude` in the SmartTest config."
+      }`,
+    }));
+    if (uncollected.length) {
+      warnings.push(
+        `${uncollected.length} selected test file(s) were not run because no runner collects them: ${uncollected
+          .slice(0, 5)
+          .map((u) => u.file)
+          .join(", ")}${uncollected.length > 5 ? "…" : ""} — the run cannot pass`,
+      );
+    }
+    // A runner whose listing failed is shown with every run, hook runs included, until fixed.
+    warnings.push(...discoveryFailures);
     plan.groups.sort(
       (a, b) => (rank.get(a.files[0] ?? "") ?? 0) - (rank.get(b.files[0] ?? "") ?? 0),
     );
@@ -1537,6 +1790,7 @@ export class SmartTest {
         ? Math.max(1, Math.floor((cpus - 1) / Math.min(concurrency, plan.groups.length)))
         : undefined);
     const coverageDirs: string[] = [];
+    const browserCoverageDirs: string[] = [];
     const summary = await timed(timings, "test execution", () =>
       executeGroups(plan.groups, {
         concurrency,
@@ -1545,6 +1799,8 @@ export class SmartTest {
         createAdapter: (g) => {
           const dir = options.coverage ? this.coverageDirFor(g) : undefined;
           if (dir) coverageDirs.push(join(dir, "coverage-final.json"));
+          // The Playwright coverage fixture writes Chromium's V8 coverage here.
+          if (dir && g.adapter === "playwright") browserCoverageDirs.push(join(dir, "v8"));
           return this.createAdapter(g, dir);
         },
         timeoutMs: options.timeoutMs ?? this.config.timeoutMs,
@@ -1573,18 +1829,36 @@ export class SmartTest {
     }
     let coverage: CoverageReport | undefined;
     if (options.coverage) {
-      coverage = await timed(timings, "coverage", () =>
-        ingestIstanbul(coverageDirs, this.root, options.all ? "full" : "selected", runId),
+      const scope = options.all ? "full" : "selected";
+      const [summaryReport, lines, browser] = await timed(timings, "coverage", () =>
+        Promise.all([
+          ingestIstanbul(coverageDirs, this.root, scope, runId),
+          ingestIstanbulLines(coverageDirs, this.root, scope, runId),
+          browserCoverageDirs.length
+            ? ingestBrowserV8(browserCoverageDirs, this.root, scope, runId)
+            : Promise.resolve(undefined),
+        ]),
       );
+      coverage = summaryReport;
+      // Line detail of each origin is replaced only by a run that measured that origin; each file
+      // names its run, scope and time, and readers check file hashes before showing lines.
       if (coverage) await writeJson(join(this.storeDir, "runs", "coverage.json"), coverage);
-      else
+      if (lines) await writeJson(join(this.storeDir, "runs", "coverage-lines.json"), lines);
+      if (browser)
+        await writeJson(join(this.storeDir, "runs", "browser-coverage-lines.json"), browser);
+      if (!coverage && !browser)
         warnings.push(
           "Coverage was requested but no coverage report was produced — is a coverage provider installed?",
+        );
+      else if (browser && !coverage)
+        warnings.push(
+          "Only browser coverage was recorded (Playwright, Chromium): it is kept apart from runner coverage and has no summary percentage",
         );
     }
     const executions: FileExecution[] = [
       ...summary.files.map((f) => ({ ...f })),
       ...cachedExecutions,
+      ...uncollected,
     ].sort((a, b) => a.file.localeCompare(b.file));
     // Record fresh passing results in the cache and every fresh result in the history.
     if (resultCache) {
@@ -1631,6 +1905,7 @@ export class SmartTest {
       analysis.decision.skippedTests.length === 0 &&
       analysis.testFiles.length > 0 &&
       !cachedExecutions.length &&
+      !leftToCi.length &&
       !options.shard;
     await writeJson(statsPath, {
       analysisMs: adaptive
@@ -1652,10 +1927,15 @@ export class SmartTest {
       finishedAt: new Date().toISOString(),
       project: (await this.profile()).name,
       mode: analysis.decision.safetyMode,
-      change: { description: analysis.input.description, changeSet: analysis.input.changeSet },
+      change: {
+        description: analysis.input.description,
+        changeSet: analysis.input.changeSet,
+        ...(analysis.scope ? { only: analysis.scope } : {}),
+      },
       decision: stripDetails(analysis.decision),
       executions,
-      summary: summarize(analysis.decision, executions, durationMs),
+      summary: summarize(analysis.decision, executions, durationMs, leftToCi.length),
+      ...(leftToCi.length ? { leftToCi } : {}),
       ...(coverage
         ? {
             coverage: {
@@ -1689,8 +1969,12 @@ export class SmartTest {
     await this.recordFlaky(report);
     const status = overallStatus(report);
     // Advance the native baseline only after a fully passing run, so failures are never hidden.
+    // A scoped run (`only`) did not test the whole change set, and a run that left selected tests
+    // to CI did not verify the change, so neither advances it.
     if (
       status === "passed" &&
+      !analysis.scope &&
+      !leftToCi.length &&
       (analysis.input.changeSet.provider === "native" ||
         (this.config.vcs.snapshots && !options.source))
     ) {
@@ -1744,6 +2028,23 @@ export class SmartTest {
 
   async coverage(): Promise<CoverageReport | undefined> {
     return readJson<CoverageReport>(join(this.storeDir, "runs", "coverage.json"));
+  }
+
+  /**
+   * Line and branch detail of the last coverage run of each origin: runner istanbul output and
+   * browser V8 coverage (Playwright fixture). The two are separate measurements, never merged.
+   */
+  async lineCoverage(): Promise<{
+    istanbul: LineCoverageReport | undefined;
+    browser: LineCoverageReport | undefined;
+  }> {
+    const [istanbul, browser] = await Promise.all([
+      readJson<LineCoverageReport>(join(this.storeDir, "runs", "coverage-lines.json")),
+      readJson<LineCoverageReport>(join(this.storeDir, "runs", "browser-coverage-lines.json")),
+    ]);
+    const valid = (r: LineCoverageReport | undefined) =>
+      r && r.schemaVersion === 1 && r.files && typeof r.files === "object" ? r : undefined;
+    return { istanbul: valid(istanbul), browser: valid(browser) };
   }
 
   // ── Explain & graph ─────────────────────────────────────────────────────────────────────
@@ -2047,6 +2348,16 @@ export class SmartTest {
     return planHookInstall(this.root, { ...options, testCommands: profile.testCommands });
   }
 
+  /**
+   * The hook scope to propose (`hook.runners`) when browser runners (Playwright, Cypress) sit next
+   * to a unit runner and no scope is configured; undefined otherwise.
+   */
+  async hookScopeSuggestion(): Promise<string[] | undefined> {
+    if (describeScope(this.config.hook).length) return undefined;
+    const roots = await this.runnerRoots();
+    return suggestHookRunners(roots.map((r) => r.adapter));
+  }
+
   async hookUninstallPlan(
     manager?: HookManager,
     stages?: readonly HookStage[],
@@ -2077,7 +2388,6 @@ export class SmartTest {
       .map((f) => f.path);
     const validation = await this.validateSetup();
     const reportPath = join(this.storeDir, "reports", "setup.md");
-    const { writeFileAtomic } = await import("@smarttest/shared");
     await writeFileAtomic(reportPath, renderSetupReport(plan, applied, validation));
     return { applied, validation, reportPath };
   }
@@ -2363,6 +2673,7 @@ export class SmartTest {
           .split(/\r?\n/)
           .some((l) => l.trim().replace(/^\//, "").replace(/\/$/, "") === storeRel)
       ) {
+        assertNoSymlinkBelow(this.root, gi); // a committed `.gitignore` link must not be followed
         await wf(gi, `${text}${text && !text.endsWith("\n") ? "\n" : ""}${storeRel}/\n`);
         fixed.push(`.gitignore: ignore ${storeRel}/`);
       }
@@ -2426,6 +2737,26 @@ export class SmartTest {
     );
     for (const w of this.loaded.warnings)
       out.push({ severity: "warn", check: "config", message: `${w.path}: ${w.message}` });
+    if (this.config.plugins.length) {
+      try {
+        for (const { spec, plugin } of await this.plugins()) {
+          const providers = (plugin.edgeProviders ?? []).map((p) => p.id);
+          out.push({
+            severity: "ok",
+            check: "plugins",
+            message: `${plugin.name} (${spec})${providers.length ? ` · edge providers: ${providers.join(", ")}` : ""}`,
+          });
+        }
+      } catch (error) {
+        const e = error as SmartTestError;
+        out.push({
+          severity: "error",
+          check: "plugins",
+          message: e.message,
+          ...(e.hint ? { hint: e.hint } : {}),
+        });
+      }
+    }
     const rulesIssues = this.rules().validate();
     for (const r of rulesIssues)
       out.push({
@@ -2617,6 +2948,24 @@ export class SmartTest {
               }
             : {}),
         });
+      if (history.scope.length)
+        out.push({
+          severity: "info",
+          check: "hook",
+          message: `hook scope: ${history.scope.join(", ")}; selected tests outside it are not run in the hook (left to CI)${history.leftToCi ? ` — ${history.leftToCi} in recent hook runs` : ""}`,
+          hint: "`smarttest run` and `smarttest ci` still run them; make sure CI does.",
+        });
+      else if (plans.some((p) => p?.installed)) {
+        const suggested = await this.hookScopeSuggestion();
+        if (suggested)
+          out.push({
+            severity: "info",
+            check: "hook",
+            message:
+              "the hook also runs browser end-to-end specs (Playwright/Cypress) when they are selected",
+            hint: `To leave them to CI, set \`hook: { runners: [${suggested.map((a) => `"${a}"`).join(", ")}] }\`; the hook then reports them as left to CI.`,
+          });
+      }
       if (history.bypasses.length)
         out.push({
           severity: "warn",
@@ -2714,8 +3063,10 @@ export class SmartTest {
       selectedMs: Math.round(v.selectedDurationMs + v.analysisOverheadMs),
     };
     const { appendFile, mkdir } = await import("node:fs/promises");
+    const shadowLog = join(this.storeDir, "shadow", "history.jsonl");
+    assertConfinedWrite(shadowLog); // appendFile follows a link at the file itself
     await mkdir(join(this.storeDir, "shadow"), { recursive: true });
-    await appendFile(join(this.storeDir, "shadow", "history.jsonl"), `${JSON.stringify(record)}\n`);
+    await appendFile(shadowLog, `${JSON.stringify(record)}\n`);
     return { record, validation: v };
   }
 

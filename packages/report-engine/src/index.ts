@@ -4,6 +4,7 @@
  */
 import { join } from "node:path";
 import type {
+  ChangeScope,
   ChangeSet,
   ImpactDecision,
   SafetyMode,
@@ -46,6 +47,11 @@ export interface RunSummary {
   skippedByTests: number;
   /** Results reused from the validated cache (not run in this run). */
   cached: number;
+  /**
+   * Selected test files a commit hook did not run because of its scope (`hook.runners`,
+   * `hook.exclude`): left to CI, never passed. Absent outside hook runs.
+   */
+  leftToCi?: number;
   durationMs: number;
 }
 
@@ -58,11 +64,21 @@ export interface RunReport {
   finishedAt: string;
   project: string;
   mode: SafetyMode;
-  change: { description: string; changeSet: ChangeSet };
+  change: {
+    description: string;
+    changeSet: ChangeSet;
+    /** Present when the change set was restricted with `--only`. */
+    only?: ChangeScope;
+  };
   decision: ImpactDecision;
   executions: FileExecution[];
   summary: RunSummary;
   coverage?: CoverageSummary;
+  /**
+   * Selected test files a commit hook did not run (its scope left them to CI), with the rule that
+   * removed each one. They stay in `decision.selectedTests`: they were selected, not ruled out.
+   */
+  leftToCi?: { file: string; adapter: string; rule: string }[];
   /**
    * Estimated test time of the files that were NOT run, from their last recorded durations.
    * Always an estimate: runner start-up and transforms are not included.
@@ -83,6 +99,7 @@ export function summarize(
   decision: ImpactDecision,
   executions: readonly FileExecution[],
   durationMs: number,
+  leftToCi = 0,
 ): RunSummary {
   const tests = executions.flatMap((e) => e.tests);
   // A file whose runner never started (missing runner, cancelled before its group) has no test
@@ -103,6 +120,7 @@ export function summarize(
     infrastructureErrors: count("infrastructure-error"),
     skippedByTests: count("skipped") + count("pending"),
     cached: count("cached-pass"),
+    ...(leftToCi ? { leftToCi } : {}),
     durationMs,
   };
 }
@@ -143,6 +161,14 @@ export function validateReportIntegrity(report: RunReport): string[] {
   if (s.passed > tests.length) issues.push("more passes than executed tests");
   if ((s.cached ?? 0) !== tests.filter((t) => t.status === "cached-pass").length)
     issues.push("summary.cached does not match executions");
+  const left = report.leftToCi ?? [];
+  if ((s.leftToCi ?? 0) !== left.length)
+    issues.push("summary.leftToCi does not match the files left to CI");
+  const executed = new Set(report.executions.map((e) => e.file));
+  for (const l of left) {
+    if (!selected.has(l.file)) issues.push(`${l.file} is left to CI but was not selected`);
+    if (executed.has(l.file)) issues.push(`${l.file} is left to CI but has an execution record`);
+  }
   if (s.skippedBySelection !== report.decision.skippedTests.length)
     issues.push("summary.skippedBySelection does not match the decision");
   if (report.decision.fallbackApplied && report.decision.analysisStatus !== "fallback")
@@ -161,6 +187,27 @@ const esc = (s: unknown) =>
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
+
+/**
+ * Repository text in the markdown summary (posted to a CI step summary or a pull request): no
+ * markdown syntax (links, images, emphasis, table pipes) and no HTML from file or symbol names.
+ */
+const mdText = (s: unknown) =>
+  esc(
+    String(s)
+      .replace(/[\r\n]+/g, " ")
+      .replace(/[\\`*_[\]()!#|~]/g, "\\$&"),
+  );
+
+/** A code span that a backtick, pipe or newline in the text cannot end or break. */
+const mdCode = (s: unknown) => {
+  const text = String(s)
+    .replace(/[\r\n]+/g, " ")
+    .replace(/\|/g, "\\|");
+  const longest = Math.max(0, ...(text.match(/`+/g) ?? []).map((m) => m.length));
+  const fence = "`".repeat(longest + 1);
+  return longest ? `${fence} ${text} ${fence}` : `${fence}${text}${fence}`;
+};
 
 const xmlEsc = (s: unknown) =>
   esc(s)
@@ -227,27 +274,33 @@ export function toMarkdown(report: RunReport, htmlLink?: string): string {
   const icon = status === "passed" ? "✅" : status === "failed" ? "❌" : "⚠️";
   const out: string[] = [];
   out.push(
-    `### ${icon} SmartTest — ${s.passed} passed · ${s.failed} failed${s.flaky ? ` · ${s.flaky} flaky` : ""}${s.cached ? ` · ${s.cached} cached (not run)` : ""} · ${s.skippedBySelection} skipped (not run) · ${formatDuration(s.durationMs)}`,
+    `### ${icon} SmartTest — ${s.passed} passed · ${s.failed} failed${s.flaky ? ` · ${s.flaky} flaky` : ""}${s.cached ? ` · ${s.cached} cached (not run)` : ""}${s.leftToCi ? ` · ${s.leftToCi} left to CI (not run)` : ""} · ${s.skippedBySelection} skipped (not run) · ${formatDuration(s.durationMs)}`,
   );
   out.push("");
   out.push(
-    `**${s.selected} of ${s.totalTests} test files selected** · mode \`${report.decision.safetyMode}\` · analysis \`${report.decision.analysisStatus}\` · ${esc(report.change.description)}`,
+    `**${s.selected} of ${s.totalTests} test files selected** · mode \`${report.decision.safetyMode}\` · analysis \`${report.decision.analysisStatus}\` · ${mdText(report.change.description)}`,
   );
   if (report.decision.fallbackApplied)
     out.push(
       "",
-      `> ⚠️ Fallback applied: ${esc(report.decision.reasons.find((r) => r.kind === "fallback" || r.kind === "mandatory-trigger")?.message ?? "full suite")}`,
+      `> ⚠️ Fallback applied: ${mdText(report.decision.reasons.find((r) => r.kind === "fallback" || r.kind === "mandatory-trigger")?.message ?? "full suite")}`,
     );
   const failing = report.executions.filter((e) =>
     ["failed", "timed-out", "infrastructure-error"].includes(e.status),
   );
   if (failing.length) {
     out.push("", "| Failing file | Status |", "|---|---|");
-    for (const e of failing) out.push(`| \`${e.file}\` | ${e.status} |`);
+    for (const e of failing) out.push(`| ${mdCode(e.file)} | ${e.status} |`);
+  }
+  if (report.leftToCi?.length) {
+    out.push("", `**Selected, not run in the hook (left to CI): ${report.leftToCi.length}**`, "");
+    for (const l of report.leftToCi.slice(0, 50))
+      out.push(`- \`${l.file}\` — ${l.adapter} · ${esc(l.rule)}`);
+    if (report.leftToCi.length > 50) out.push(`- … ${report.leftToCi.length - 50} more`);
   }
   out.push("", "<details><summary>Why these tests?</summary>", "");
   for (const t of report.decision.selectedTests.slice(0, 50))
-    out.push(`- \`${t.filePath}\` — ${esc(t.reasons.map((r) => r.message).join("; "))}`);
+    out.push(`- ${mdCode(t.filePath)} — ${mdText(t.reasons.map((r) => r.message).join("; "))}`);
   if (report.decision.selectedTests.length > 50)
     out.push(`- … ${report.decision.selectedTests.length - 50} more`);
   out.push("", "</details>");
@@ -374,7 +427,7 @@ table{border-collapse:collapse;width:100%}td{padding:6px 8px;border-bottom:1px s
 <header><div class="logo" aria-hidden="true">✓</div><div><h1>SmartTest report</h1><div class="meta">${esc(report.project)} · ${esc(report.command)} · ${esc(report.startedAt)}</div></div><span class="status ${status}" style="margin-left:auto">${esc(statusLabel)}</span></header>
 <section aria-label="Summary" class="grid">
 <div class="card"><b>${s.selected}<span> / ${s.totalTests}</span></b><span>test files selected</span></div>
-<div class="card pass"><b>${s.passed}</b><span>passed</span></div>${s.cached ? `<div class="card"><b>${s.cached}</b><span>cached results — not run</span></div>` : ""}
+<div class="card pass"><b>${s.passed}</b><span>passed</span></div>${s.cached ? `<div class="card"><b>${s.cached}</b><span>cached results — not run</span></div>` : ""}${s.leftToCi ? `<div class="card warn"><b>${s.leftToCi}</b><span>selected, not run in the hook (left to CI)</span></div>` : ""}
 <div class="card fail"><b>${s.failed + s.timedOut}</b><span>failed / timed out</span></div>
 <div class="card warn"><b>${s.flaky}</b><span>flaky (passed on retry)</span></div>
 <div class="card skip"><b>${s.skippedBySelection}</b><span>skipped by selection — not run</span></div>
@@ -393,6 +446,7 @@ ${
 }
 ${warn ? `<h2>Warnings</h2><ul>${warn}</ul>` : ""}
 <h2>Executions</h2>${execRows || '<p class="muted">No tests were executed.</p>'}
+${report.leftToCi?.length ? `<h2>Selected, not run in the hook (left to CI)</h2><ul>${report.leftToCi.map((l) => `<li><code>${esc(l.file)}</code> <span class="muted">${esc(l.adapter)} · ${esc(l.rule)}</span></li>`).join("")}</ul>` : ""}
 <h2>Why these tests</h2>${selRows || '<p class="muted">No tests selected.</p>'}
 <h2>Skipped by selection (not run)</h2>${skipRows || '<p class="muted">Nothing skipped.</p>'}
 <h2>Change analysis</h2><ul>${changes || "<li class=muted>No changes</li>"}</ul>

@@ -3,7 +3,7 @@
  * Discovery uses `playwright test --list`; execution passes the selected spec files as filters
  * and reads the JSON reporter. Traces, screenshots and videos are attached to the results.
  */
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { isAbsolute, join, relative } from "node:path";
 import { resolvePackageBin } from "@smarttest/plugin-sdk";
@@ -20,11 +20,29 @@ import {
   type TestSelection,
   type TestStatus,
 } from "@smarttest/shared";
+import { BROWSER_COVERAGE_ENV } from "./coverage.js";
+
+export {
+  BROWSER_COVERAGE_ENV,
+  coveragePageFixture,
+  type ExtendableTest,
+  withBrowserCoverage,
+} from "./coverage.js";
 
 export interface PlaywrightAdapterOptions {
   projectRoot: string;
   cwd: string;
   configFile?: string;
+  /**
+   * Where browser coverage goes on a coverage run. Chromium V8 dumps are written to `<dir>/v8` by
+   * the `withBrowserCoverage` page fixture, which the project's tests must use.
+   */
+  coverageDir?: string;
+}
+
+/** The directory the coverage fixture writes to on a coverage run. */
+export function browserCoverageDir(coverageDir: string): string {
+  return join(coverageDir, "v8");
 }
 
 interface PwResult {
@@ -112,9 +130,15 @@ export function parsePlaywrightReport(
   return out;
 }
 
-const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+/**
+ * A file filter as a regular expression. A leading `-` becomes `[-]` (same match), so a spec
+ * file named like an option (`--config=x.spec.ts`) is never read as one.
+ */
+export const escapeRe = (s: string) =>
+  s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/^-/, "[-]");
 
 export class PlaywrightAdapter implements TestAdapter {
+  readonly apiVersion = 1;
   readonly id = "playwright";
   constructor(private readonly options: PlaywrightAdapterOptions) {}
 
@@ -123,7 +147,8 @@ export class PlaywrightAdapter implements TestAdapter {
       discovery: true,
       fileSelection: true,
       testCaseSelection: false,
-      coverage: false,
+      // Chromium only, and only when the tests use the withBrowserCoverage page fixture.
+      coverage: "partial",
       tracing: true,
       parallel: true,
       cancellation: true,
@@ -202,6 +227,22 @@ export class PlaywrightAdapter implements TestAdapter {
           category: "infrastructure",
         },
       );
+    // A spec that fails to load (a missing import, a syntax error) makes Playwright list nothing,
+    // or only part of the suite: the listing cannot be trusted, so discovery fails loudly.
+    const loadErrors = (report.errors ?? []).map((e) => (e.message ?? "").trim()).filter(Boolean);
+    if (loadErrors.length)
+      throw new SmartTestError(
+        `playwright discovery failed: \`playwright test --list\` reported ${loadErrors.length} error(s): ${loadErrors
+          .join("\n")
+          .split("\n")
+          .slice(0, 6)
+          .join("\n")}`,
+        {
+          code: "ST_DISCOVERY_FAILED",
+          category: "infrastructure",
+          hint: "Run `npx playwright test --list` and fix the spec that fails to load.",
+        },
+      );
     const files = [
       ...new Set(
         parsePlaywrightReport(report, this.options.projectRoot, this.options.cwd).map(
@@ -212,11 +253,24 @@ export class PlaywrightAdapter implements TestAdapter {
     return files.map((f) => ({ id: f, filePath: f, suitePath: [], name: f, tags: ["e2e"] }));
   }
 
+  /**
+   * On a coverage run, an emptied dump directory and the variable that turns the page fixture on.
+   * Dumps from an earlier run must never be read as this run's coverage.
+   */
+  async coverageEnv(options: ExecutionOptions): Promise<Record<string, string>> {
+    if (!options.coverage || !this.options.coverageDir) return {};
+    const dir = browserCoverageDir(this.options.coverageDir);
+    await rm(dir, { recursive: true, force: true });
+    await mkdir(dir, { recursive: true });
+    return { [BROWSER_COVERAGE_ENV]: dir };
+  }
+
   async execute(selection: TestSelection, options: ExecutionOptions): Promise<TestRunResult> {
     const startedAt = new Date().toISOString();
     const filters = selection.files.map((f) =>
       escapeRe(relative(this.options.cwd, join(this.options.projectRoot, f)).split("\\").join("/")),
     );
+    const env = { ...(options.env ?? {}), ...(await this.coverageEnv(options)) };
     const { res, report } = await this.report(
       [
         ...filters,
@@ -226,7 +280,7 @@ export class PlaywrightAdapter implements TestAdapter {
       {
         ...(options.timeoutMs ? { timeoutMs: options.timeoutMs } : {}),
         ...(options.signal ? { signal: options.signal } : {}),
-        ...(options.env ? { env: options.env } : {}),
+        ...(Object.keys(env).length ? { env } : {}),
       },
     );
     const executions = report

@@ -4,13 +4,16 @@
  *   - one ESM bundle for the CLI and the config API (all @smarttest/* packages inlined)
  *   - only runtime dependency: typescript (used to parse projects and load smarttest.config.ts)
  *   - hand-written public types (defineConfig + config schema)
+ *   - the Plugin SDK (`smarttest/plugin-sdk`, `smarttest/plugin-sdk/conformance`) with its
+ *     declarations, and the JSON schemas (`smarttest/schemas/*`)
  *
  *   node scripts/release/bundle-cli.mjs [--version x.y.z]
  */
-import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { build } from "esbuild";
+import ts from "typescript";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "../..");
 const cli = join(root, "packages/cli");
@@ -30,6 +33,10 @@ await build({
     bin: join(cli, "src/bin.ts"),
     index: join(cli, "src/index.ts"),
     "parse-worker": join(root, "packages/core/src/parse-worker.ts"),
+    "plugin-sdk": join(root, "packages/plugin-sdk/src/index.ts"),
+    "plugin-sdk-conformance": join(root, "packages/plugin-sdk/src/conformance.ts"),
+    // `smarttest/playwright`: the page fixture that records browser coverage for `--coverage`.
+    playwright: join(root, "packages/adapter-playwright/src/coverage.ts"),
   },
   outdir: join(out, "dist"),
   bundle: true,
@@ -83,6 +90,74 @@ export declare function defineConfig(config: SmartTestConfig): SmartTestConfig;
 export declare function main(argv: readonly string[]): Promise<number>;
 `;
 await writeFile(join(out, "dist/index.d.ts"), types);
+await writeFile(
+  join(out, "dist/playwright.d.ts"),
+  `/** Set by \`smarttest run --coverage\` for Playwright groups: where the page fixture writes V8 coverage. */
+export declare const BROWSER_COVERAGE_ENV = "SMARTTEST_BROWSER_COVERAGE_DIR";
+/**
+ * Wraps Playwright's \`test\` so its \`page\` fixture records Chromium JS coverage on a SmartTest
+ * coverage run: \`export const test = withBrowserCoverage(base)\`. Chromium only; does nothing otherwise.
+ */
+export declare function withBrowserCoverage<T>(base: { extend(fixtures: { page: unknown }): T }): T;
+`,
+);
+
+// Plugin SDK declarations: emitted from the sources, with `@smarttest/shared` replaced by the
+// public contracts only (primitives and contracts/*, which hold types and nothing else).
+const sdkEntries = ["index", "conformance"].map((f) =>
+  join(root, `packages/plugin-sdk/src/${f}.ts`),
+);
+const emitted = new Map();
+const program = ts.createProgram(sdkEntries, {
+  declaration: true,
+  emitDeclarationOnly: true,
+  strict: true,
+  skipLibCheck: true,
+  target: ts.ScriptTarget.ES2023,
+  lib: ["lib.es2023.d.ts"],
+  types: ["node"],
+  typeRoots: [join(root, "node_modules/@types")],
+  module: ts.ModuleKind.NodeNext,
+  moduleResolution: ts.ModuleResolutionKind.NodeNext,
+  // A path mapping (not node_modules resolution) so shared's declarations are emitted too.
+  paths: { "@smarttest/shared": [join(root, "packages/shared/src/index.ts")] },
+  rootDir: join(root, "packages"),
+  outDir: "/sdk-types",
+});
+const emit = program.emit(undefined, (file, text) => emitted.set(file, text));
+const errors = ts.getPreEmitDiagnostics(program).concat(emit.diagnostics);
+if (errors.length)
+  throw new Error(
+    ts.formatDiagnostics(errors, {
+      getCanonicalFileName: (f) => f,
+      getCurrentDirectory: () => root,
+      getNewLine: () => "\n",
+    }),
+  );
+const typesDir = join(out, "dist/types");
+const publicShared = [
+  "primitives.d.ts",
+  ...(await readdir(join(root, "packages/shared/src/contracts")))
+    .filter((f) => f.endsWith(".ts") && !f.endsWith(".test.ts"))
+    .map((f) => `contracts/${f.replace(/\.ts$/, ".d.ts")}`),
+];
+for (const [file, text] of emitted) {
+  const rel = file.replace(/^\/sdk-types\//, "");
+  let dest;
+  if (rel.startsWith("plugin-sdk/src/")) dest = rel.replace("plugin-sdk/src/", "plugin-sdk/");
+  else if (publicShared.some((p) => rel === `shared/src/${p}`))
+    dest = rel.replace("shared/src/", "shared/");
+  else continue;
+  await mkdir(dirname(join(typesDir, dest)), { recursive: true });
+  await writeFile(
+    join(typesDir, dest),
+    text.replaceAll('"@smarttest/shared"', '"../shared/index.js"'),
+  );
+}
+await writeFile(
+  join(typesDir, "shared/index.d.ts"),
+  `${publicShared.map((p) => `export type * from "./${p.replace(/\.d\.ts$/, ".js")}";`).join("\n")}\n`,
+);
 
 const manifest = {
   name: "smarttest",
@@ -104,6 +179,15 @@ const manifest = {
   bin: { smarttest: "./dist/bin.js" },
   exports: {
     ".": { types: "./dist/index.d.ts", default: "./dist/index.js" },
+    "./plugin-sdk": {
+      types: "./dist/types/plugin-sdk/index.d.ts",
+      default: "./dist/plugin-sdk.js",
+    },
+    "./plugin-sdk/conformance": {
+      types: "./dist/types/plugin-sdk/conformance.d.ts",
+      default: "./dist/plugin-sdk-conformance.js",
+    },
+    "./playwright": { types: "./dist/playwright.d.ts", default: "./dist/playwright.js" },
     "./schemas/*": "./schemas/*",
     "./package.json": "./package.json",
   },

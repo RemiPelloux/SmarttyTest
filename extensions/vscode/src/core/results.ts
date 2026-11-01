@@ -4,12 +4,12 @@
  * never counted as passed, and `analysisStatus: partial` stays visible.
  */
 import type {
-  ExplainResult,
+  ChangeScope,
   FileExecution,
+  ImpactResult,
   RunReport,
   TestExecution,
   TestStatus,
-  Uncertainty,
 } from "./contracts.js";
 import { projectPathKey } from "./symbols.js";
 
@@ -290,60 +290,53 @@ export function statusBarRunText(report: RunReport, context: RunContext = {}): s
   }
 }
 
-/**
- * Which tests reach one file, from `explain <file>`. `known: false` means
- * SmartTest could not answer; it is never read as "no test reaches the file".
- */
-export type FileReach =
-  | {
-      readonly known: true;
-      readonly tests: readonly string[];
-      readonly uncertainty: readonly Uncertainty[];
-    }
-  | { readonly known: false; readonly reason: string };
+/** The change description without the ` · only <paths>` suffix `--only` adds. */
+export function changeDescription(description: string): string {
+  return description.replace(/ · only .*$/, "");
+}
 
-export function fileReach(result: ExplainResult): FileReach {
-  if (result.kind !== "source")
-    return { known: false, reason: "smarttest explain answered for a test, not for this file" };
+/** An older CLI without `--only`: the file command never widens to the whole change set. */
+export const ONLY_UNSUPPORTED =
+  "SmartTest: this smarttest CLI cannot scope the change set to one file (`--only` needs SmartTest 1.0.0 or later). Nothing was run. Upgrade it, or use Run Affected Tests for the whole change set.";
+
+/**
+ * What `impact --only <file>` means for "run the tests for this file": run them, or say why
+ * nothing runs. A file with no change is reported as such, never as a pass.
+ */
+export type FileScope =
+  | { readonly kind: "run"; readonly scope: ChangeScope }
+  | { readonly kind: "unchanged" | "nothing-selected" | "unsupported"; readonly message: string };
+
+export function fileScope(
+  impact: ImpactResult,
+  projectPath: string,
+  platform: NodeJS.Platform = process.platform,
+): FileScope {
+  const scope = impact.only;
+  if (!scope) return { kind: "unsupported", message: ONLY_UNSUPPORTED };
+  if (impact.decision.selectedTests.length > 0) return { kind: "run", scope };
+  const key = projectPathKey(projectPath, platform);
+  const description = changeDescription(impact.description);
+  if (scope.unchanged.some((path) => projectPathKey(path, platform) === key))
+    return {
+      kind: "unchanged",
+      message: `SmartTest: ${projectPath} has no change in ${description}, so no test was selected. Nothing was run; this is not a pass.`,
+    };
   return {
-    known: true,
-    tests: [...new Set(result.tests.map((hit) => hit.test))].sort(),
-    uncertainty: result.uncertainty,
+    kind: "nothing-selected",
+    message: `SmartTest selected no tests for the changes in ${projectPath} (${description}). Nothing was run; this is not a pass.`,
   };
 }
 
-/** The "for this file" sentence: the intersection of the tests reaching the file with the run's selection. */
-export function fileRunDetail(
-  reach: FileReach,
-  report: RunReport,
-  platform: NodeJS.Platform = process.platform,
-): string {
-  const selected = report.decision.selectedTests;
-  const ran = `${selected.length} test(s) were selected by the change set and run`;
-  if (!reach.known)
-    return `SmartTest could not determine which tests reach this file (${reach.reason}); ${ran}.`;
-  const reaching = new Set(reach.tests.map((test) => projectPathKey(test, platform)));
-  const both = selected.filter(
-    (test) =>
-      reaching.has(projectPathKey(test.testId, platform)) ||
-      reaching.has(projectPathKey(test.filePath, platform)),
-  );
-  const unresolved = [...new Set(reach.uncertainty.map((item) => item.file))].sort();
-  const caveat =
-    unresolved.length > 0
-      ? ` Code SmartTest could not resolve (${unresolved.slice(0, 3).join(", ")}${
-          unresolved.length > 3 ? ", …" : ""
-        }) may connect other tests to this file.`
-      : "";
-  if (both.length > 0) {
-    const names = both.slice(0, 5).map((test) => test.testId);
-    return `${both.length} of the ${selected.length} selected test(s) reach this file: ${names.join(", ")}${
-      both.length > names.length ? ", …" : ""
-    }.${caveat}`;
-  }
-  if (unresolved.length > 0)
-    return `SmartTest could not determine whether any selected test reaches this file; ${ran}.${caveat}`;
-  if (reach.tests.length > 0)
-    return `${reach.tests.length} test file(s) reach this file, but none was selected by this change set; ${ran}.`;
-  return `No selected test has a static path to this file; ${ran}.`;
+/** The "for this file" sentence of a scoped run's notification. */
+export function fileRunDetail(report: RunReport, projectPath: string): string {
+  const selected = report.decision.selectedTests.length;
+  const scope = report.change.only;
+  if (!scope) return `${selected} test(s) selected.`;
+  const others = scope.excluded.length;
+  return `${selected} test(s) selected for the changes in ${projectPath}.${
+    others > 0
+      ? ` ${others} other changed file(s) were not considered; Run Affected Tests covers the whole change set.`
+      : ""
+  }`;
 }

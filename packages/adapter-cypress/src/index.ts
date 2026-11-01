@@ -88,6 +88,7 @@ export function parseCypressJUnit(xml: string, specFile: string): TestExecution[
 }
 
 export class CypressAdapter implements TestAdapter {
+  readonly apiVersion = 1;
   readonly id = "cypress";
   constructor(private readonly options: CypressAdapterOptions) {}
 

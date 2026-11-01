@@ -21,12 +21,31 @@ function changeFlags(options: ChangeOptions): string[] {
   return ["--uncommitted"];
 }
 
-export function impactArgs(options: ChangeOptions): string[] {
-  return ["impact", ...changeFlags(options), "--mode", options.mode, "--json"];
+/**
+ * `--only=<path>` (SmartTest 1.0.0+): restrict the change set to these project-relative files.
+ * The `=` form keeps a path that starts with `-` from being read as another option.
+ */
+function onlyFlags(only: readonly string[] | undefined): string[] {
+  for (const path of only ?? [])
+    if (!path || path.includes("\0"))
+      throw new Error("Refusing to pass an empty or NUL-containing path to --only.");
+  return (only ?? []).map((path) => `--only=${path}`);
 }
 
-export function runAffectedArgs(options: ChangeOptions): string[] {
-  return ["run", "--affected", ...changeFlags(options), "--mode", options.mode, "--json"];
+export function impactArgs(options: ChangeOptions, only?: readonly string[]): string[] {
+  return ["impact", ...changeFlags(options), ...onlyFlags(only), "--mode", options.mode, "--json"];
+}
+
+export function runAffectedArgs(options: ChangeOptions, only?: readonly string[]): string[] {
+  return [
+    "run",
+    "--affected",
+    ...changeFlags(options),
+    ...onlyFlags(only),
+    "--mode",
+    options.mode,
+    "--json",
+  ];
 }
 
 export function explainArgs(target: string): string[] {

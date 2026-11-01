@@ -158,6 +158,8 @@ Commit and push profiles share the core API. When the working tree differs from 
 .smarttest/                    (git-ignored, path configurable via storeDir)
 ├── state/
 │   ├── index.json             per-file analyses (content-hash cached), file stats, resolution context
+│   ├── index-delta.json       analyses changed since index.json was written (small edits)
+│   ├── graph.json             persisted dependency graph, keyed by contents, config and version
 │   ├── discovery.json         files each runner collects (cached per config and file list)
 │   ├── durations.json         last measured duration per test file
 │   ├── traces.json            observed execution per test file (smarttest trace)

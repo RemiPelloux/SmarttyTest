@@ -1,5 +1,5 @@
 import * as vscode from "vscode";
-import { registerCommands } from "./commands.js";
+import { recentNotices, registerCommands } from "./commands.js";
 import { isCancelledError } from "./core/errors.js";
 import { KeyedScheduler, LatestTask } from "./core/scheduler.js";
 import { SmartTestCodeLensProvider } from "./providers/code-lens.js";
@@ -43,6 +43,8 @@ const SELECTOR: vscode.DocumentSelector = [
 export interface SmartTestTestApi {
   status(): ReturnType<SmartTestStatusBar["snapshot"]>;
   results(): ResultsSnapshotNode[];
+  /** The last notifications the run commands showed, oldest first. */
+  notices(): readonly string[];
   readonly trusted: boolean;
 }
 
@@ -182,6 +184,7 @@ export function activate(context: vscode.ExtensionContext): SmartTestTestApi | u
   return {
     status: () => testStatus.snapshot(),
     results: () => testResults.snapshot(),
+    notices: () => recentNotices(),
     get trusted() {
       return testState.trusted;
     },

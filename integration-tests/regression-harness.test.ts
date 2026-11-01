@@ -26,6 +26,7 @@ const fixtures = [
   "react-vitest",
   "yarn-workspaces-node",
   "next-playwright",
+  "plugin-edges-vitest",
 ];
 
 for (const fixture of fixtures) {
