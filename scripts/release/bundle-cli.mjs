@@ -234,7 +234,7 @@ const manifest = {
   bugs: { url: "https://github.com/RemiPelloux/SmarttyTest/issues" },
   license: "Apache-2.0",
   type: "module",
-  bin: { smarttest: "./dist/bin.js" },
+  bin: { smarttest: "dist/bin.js" },
   exports: {
     ".": { types: "./dist/index.d.ts", default: "./dist/index.js" },
     "./plugin-sdk": {
