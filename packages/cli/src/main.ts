@@ -451,7 +451,7 @@ function printRun(ctx: Ctx, report: RunReport, written: Record<string, string>):
           ? `${counts("passed") + counts("flaky")} passed${counts("flaky") ? t.yellow(` (${counts("flaky")} flaky)`) : ""}`
           : e.status === "skipped"
             ? "skipped by the test itself"
-            : `${counts("failed")} failed${counts("timed-out") ? ` · ${counts("timed-out")} timed out` : ""}${e.status === "infrastructure-error" ? " · infrastructure error" : ""}`;
+            : `${counts("failed")} failed${counts("timed-out") ? ` · ${counts("timed-out")} timed out` : ""}${counts("cancelled") ? ` · ${counts("cancelled")} not run` : ""}${e.status === "infrastructure-error" ? " · infrastructure error" : ""}`;
     ctx.out(
       `  ${icon} ${pad(e.file, width)}${t.dim(detail)}  ${t.dim(formatDuration(e.durationMs))}`,
     );

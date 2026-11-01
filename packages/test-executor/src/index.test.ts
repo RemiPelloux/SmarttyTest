@@ -150,6 +150,166 @@ describe("executeGroups", () => {
     expect(res2.infrastructureErrors).toHaveLength(1);
   });
 
+  /** An adapter that returns scripted runs, one per attempt, like a real adapter with `meta`. */
+  const scripted = (
+    runs: { executions: TestExecution[]; meta?: Record<string, unknown> }[],
+  ): TestAdapter & { calls: string[][] } => {
+    const calls: string[][] = [];
+    return {
+      ...fakeAdapter({}),
+      calls,
+      execute: async (selection) => {
+        calls.push([...selection.files]);
+        const run = runs[calls.length - 1] ?? runs.at(-1);
+        return {
+          adapter: "fake",
+          executions: run?.executions ?? [],
+          startedAt: "",
+          finishedAt: "",
+          ...(run?.meta ? { meta: run.meta } : {}),
+        } as Awaited<ReturnType<TestAdapter["execute"]>>;
+      },
+    };
+  };
+  const ok = (testId: string): TestExecution => ({
+    testId,
+    status: "passed",
+    durationMs: 1,
+    attempts: 1,
+  });
+
+  it("fails every file of a run the runner failed outside any test (non-zero exit, nothing failed)", async () => {
+    // Vitest: an unhandled error thrown from a setTimeout. Every test passed, the report says
+    // `success: true`, and Vitest exits 1.
+    const adapter = scripted([
+      {
+        executions: [ok("a.test.ts::adds"), ok("b.test.ts::subs")],
+        meta: { exitCode: 1, output: "Error: unhandled boom" },
+      },
+    ]);
+    const res = await executeGroups(
+      [{ adapter: "vitest", dir: "", files: ["a.test.ts", "b.test.ts"] }],
+      { createAdapter: () => adapter },
+    );
+    expect(res.files.map((f) => f.status)).toEqual(["failed", "failed"]);
+    const run = res.files[0]?.tests.find((t) => t.testId === "a.test.ts::(run)");
+    expect(run?.status).toBe("failed");
+    expect(run?.error?.message).toContain("vitest exited with code 1 although no test failed");
+    expect(run?.error?.message).toContain("Error: unhandled boom");
+  });
+
+  it("fails the run on errors the runner reports outside tests (Playwright globalTeardown)", async () => {
+    const adapter = scripted([
+      {
+        executions: [ok("e2e/home.spec.js::home")],
+        meta: { exitCode: 1, runErrors: ["Error: teardown boom: leaked state"] },
+      },
+    ]);
+    const res = await executeGroups(
+      [{ adapter: "playwright", dir: "", files: ["e2e/home.spec.js"] }],
+      { createAdapter: () => adapter },
+    );
+    expect(res.files[0]?.status).toBe("failed");
+    expect(res.files[0]?.error).toContain("teardown boom");
+  });
+
+  it("adds no run-level failure when a test explains the exit code, or the run exits 0", async () => {
+    const failing = scripted([
+      {
+        executions: [
+          ok("a.test.ts::adds"),
+          { testId: "b.test.ts::subs", status: "failed", durationMs: 1, attempts: 1 },
+        ],
+        meta: { exitCode: 1 },
+      },
+    ]);
+    const res = await executeGroups(
+      [{ adapter: "x", dir: "", files: ["a.test.ts", "b.test.ts"] }],
+      {
+        createAdapter: () => failing,
+      },
+    );
+    expect(res.files.map((f) => f.status)).toEqual(["passed", "failed"]);
+    const clean = scripted([{ executions: [ok("a.test.ts::adds")], meta: { exitCode: 0 } }]);
+    const res2 = await executeGroups([{ adapter: "x", dir: "", files: ["a.test.ts"] }], {
+      createAdapter: () => clean,
+    });
+    expect(res2.files[0]?.status).toBe("passed");
+    expect(res2.files[0]?.tests.map((t) => t.testId)).toEqual(["a.test.ts::adds"]);
+  });
+
+  it("reports failures of files the runner ran beyond the selection (a failing setup project)", async () => {
+    // Playwright: `setup` fails, the selected spec depending on it is never run.
+    const adapter = scripted([
+      {
+        executions: [
+          {
+            testId: "e2e/auth.setup.js::authenticate [setup]",
+            status: "failed",
+            durationMs: 1,
+            attempts: 1,
+            error: { message: "Error: setup failed" },
+          },
+          {
+            testId: "e2e/home.spec.js::home [main]",
+            status: "cancelled",
+            durationMs: 0,
+            attempts: 1,
+          },
+          ok("e2e/other.spec.js::passes beyond the selection [main]"),
+        ],
+        meta: { exitCode: 1 },
+      },
+    ]);
+    const res = await executeGroups(
+      [{ adapter: "playwright", dir: "", files: ["e2e/home.spec.js"] }],
+      { createAdapter: () => adapter },
+    );
+    expect(res.files.map((f) => f.file)).toEqual(["e2e/home.spec.js"]);
+    expect(res.files[0]?.status).toBe("failed");
+    const run = res.files[0]?.tests.find((t) => t.testId === "e2e/home.spec.js::(run)");
+    expect(run?.error?.message).toContain("e2e/auth.setup.js › authenticate [setup] failed");
+    expect(run?.error?.message).toContain("Error: setup failed");
+  });
+
+  it("never lets a skip on a retry overwrite a failure", async () => {
+    const adapter = scripted([
+      {
+        executions: [
+          {
+            testId: "a.test.ts::t",
+            status: "failed",
+            durationMs: 1,
+            attempts: 1,
+            error: { message: "boom" },
+          },
+        ],
+        meta: { exitCode: 1 },
+      },
+      { executions: [{ testId: "a.test.ts::t", status: "skipped", durationMs: 0, attempts: 1 }] },
+    ]);
+    const res = await executeGroups([{ adapter: "x", dir: "", files: ["a.test.ts"] }], {
+      createAdapter: () => adapter,
+      retries: 1,
+    });
+    expect(adapter.calls).toHaveLength(2);
+    expect(res.files[0]?.status).toBe("failed");
+    expect(res.files[0]?.tests[0]).toMatchObject({ status: "failed", error: { message: "boom" } });
+  });
+
+  it("marks a run-level failure that does not come back on the retry as flaky", async () => {
+    const adapter = scripted([
+      { executions: [ok("a.test.ts::t")], meta: { exitCode: 1 } },
+      { executions: [ok("a.test.ts::t")], meta: { exitCode: 0 } },
+    ]);
+    const res = await executeGroups([{ adapter: "x", dir: "", files: ["a.test.ts"] }], {
+      createAdapter: () => adapter,
+      retries: 1,
+    });
+    expect(adapter.calls).toHaveLength(2);
+    expect(res.files[0]?.status).toBe("flaky");
+  });
+
   it("aggregates statuses honestly", () => {
     const t = (status: TestExecution["status"]): TestExecution => ({
       testId: "x",

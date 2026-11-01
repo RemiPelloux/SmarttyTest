@@ -115,7 +115,10 @@ export class VitestAdapter implements TestAdapter {
       this.bin(),
       "run",
       "--reporter=json",
-      `--outputFile=${out}`,
+      // The JSON report has no text for errors outside tests (an unhandled error, a failing
+      // hook in a describe block); a console reporter prints them on stderr.
+      "--reporter=dot",
+      `--outputFile.json=${out}`,
       "--passWithNoTests",
       ...this.configArgs(),
       ...(options.workers ? [`--maxWorkers=${options.workers}`] : []),
@@ -146,6 +149,11 @@ export class VitestAdapter implements TestAdapter {
         report = undefined;
       }
       const executions = report ? parseJestLikeReport(report, this.options.projectRoot) : [];
+      for (const e of executions)
+        if (e.testId.endsWith("::(suite)") && e.error?.message.includes("gave no message")) {
+          const printed = vitestFailedSuiteText(res.stderr, e.testId.slice(0, -"::(suite)".length));
+          if (printed) e.error = { message: printed };
+        }
       const finishedAt = new Date().toISOString();
       const result: TestRunResult & { meta?: Record<string, unknown> } = {
         adapter: this.id,
@@ -158,10 +166,28 @@ export class VitestAdapter implements TestAdapter {
         timedOut: res.timedOut,
         cancelled: res.cancelled,
         stderr: report ? "" : (res.stderr || res.stdout).slice(-4000),
+        // Vitest exits 1 for an unhandled error while its report says `success: true` and every
+        // test passed: the exit code and this text are all that is left of it.
+        output: (res.stderr || res.stdout).slice(0, 3000),
       };
       return result;
     } finally {
       await rm(tmp, { recursive: true, force: true });
     }
   }
+}
+
+/**
+ * The error a console reporter printed for a file that failed outside its tests (` FAIL  <file> >
+ * <suite>` blocks on stderr). The JSON report leaves the message empty for a hook that throws
+ * inside a describe block. Exported for tests.
+ */
+export function vitestFailedSuiteText(stderr: string, file: string): string | undefined {
+  const blocks: string[] = [];
+  for (const block of stderr.split(/^ *FAIL +/m).slice(1)) {
+    const shown = /^(\S+)/.exec(block)?.[1];
+    if (!shown || !(shown === file || file.endsWith(`/${shown}`))) continue;
+    blocks.push(`FAIL ${block.split(/^⎯/m)[0]?.trimEnd()}`);
+  }
+  return blocks.length ? blocks.join("\n\n").slice(0, 4000) : undefined;
 }

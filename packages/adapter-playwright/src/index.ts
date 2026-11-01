@@ -91,8 +91,13 @@ export function parsePlaywrightReport(
       for (const t of spec.tests ?? []) {
         const results = t.results ?? [];
         const last = results.at(-1);
-        const status: TestStatus =
-          t.status === "skipped"
+        // A test that skips itself (`test.skip`, `test.fixme`) has a skipped result. A "skipped"
+        // test with no result never ran: a project it depends on failed, or the run stopped
+        // early. That is not run, never a skip the test asked for.
+        const notRun = t.status === "skipped" && results.length === 0;
+        const status: TestStatus = notRun
+          ? "cancelled"
+          : t.status === "skipped"
             ? "skipped"
             : t.status === "flaky"
               ? "flaky"
@@ -104,8 +109,9 @@ export function parsePlaywrightReport(
                     ? "cancelled"
                     : "failed";
         const failure = results.find((r) => r.status !== "passed" && r.status !== "skipped");
-        const message =
-          failure?.error?.message ?? failure?.errors?.map((e) => e.message).join("\n");
+        const message = notRun
+          ? "Not run: Playwright skipped it without running it (a project it depends on failed, or the run stopped early)"
+          : (failure?.error?.message ?? failure?.errors?.map((e) => e.message).join("\n"));
         const artifacts = results.flatMap((r) =>
           (r.attachments ?? [])
             .filter((a) => a.path)
@@ -299,7 +305,15 @@ export class PlaywrightAdapter implements TestAdapter {
       ...(res.code !== 0 && !executions.length
         ? { stderr: (res.stderr || res.stdout).slice(0, 2000) }
         : {}),
+      // Errors outside every test: a failing globalSetup/globalTeardown, a worker that crashed.
+      runErrors: playwrightRunErrors(report),
+      output: (res.stderr || res.stdout).slice(0, 3000),
     };
     return result;
   }
+}
+
+/** Errors a Playwright JSON report records outside any test (`errors`, Playwright exits 1). */
+export function playwrightRunErrors(report: PlaywrightReport | undefined): string[] {
+  return (report?.errors ?? []).map((e) => (e.message ?? "").trim()).filter(Boolean);
 }

@@ -123,6 +123,8 @@ interface TestAdapter {
 - `TestCase.filePath` and test ids use project-relative POSIX paths. A test id is `<file>::<full test name>`.
 - Report what the runner did: `passed`, `failed`, `skipped`, `pending`, `cancelled`, `timed-out`, `flaky` or `infrastructure-error`. A skipped test is never `passed`, and an adapter never reports `cached-pass` or `cached-failure`: those belong to SmartTest's validated cache (ADR-0009).
 - A file that cannot run at all (syntax error, crash) is a failed execution, not an empty result.
+- A test the runner did not run because something else failed (a hook, a dependency project) is `cancelled`, never `skipped`: `skipped` means the test skipped itself.
+- Return the runner's exit code as `meta.exitCode`, and errors it reports outside any test as `meta.runErrors`. When the runner exits non-zero or reports such errors and no test failed, SmartTest fails every file of that run (exit 1). Failing results of files beyond the selection (a setup project) fail the run the same way.
 
 ## Version-control adapters
 

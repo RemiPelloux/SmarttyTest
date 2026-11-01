@@ -99,6 +99,23 @@ export function parseNodeJUnit(xml: string, projectRoot: string): TestExecution[
   return out;
 }
 
+/**
+ * A file path as a `node --test` argument. From Node 21 every argument is a glob, so
+ * `test/[id].test.js` would run `test/i.test.js`. Each glob character becomes a one-character
+ * class (`[` → `[[]`), the only escape Node's glob honours (it reads `\` as a path separator).
+ * Brace expansion runs before classes are parsed, so in a path with a brace the `,` and `..` that
+ * would expand it become `?`. The runner adapters always run the Node that runs SmartTest, so
+ * `nodeMajor` is that version; before 21 arguments are plain paths.
+ */
+export function nodeTestFileArg(
+  path: string,
+  nodeMajor = Number(process.versions.node.split(".")[0]),
+): string {
+  if (nodeMajor < 21) return path;
+  const escaped = path.replace(/[[\]*?(){}]/g, (c) => `[${c}]`);
+  return /[{}]/.test(path) ? escaped.replace(/,/g, "?").replace(/\.\./g, ".?") : escaped;
+}
+
 export class NodeTestAdapter implements TestAdapter {
   readonly apiVersion = 1;
   readonly id = "node";
@@ -137,7 +154,9 @@ export class NodeTestAdapter implements TestAdapter {
         "--test-reporter=junit",
         `--test-reporter-destination=${out}`,
         ...(options.workers ? [`--test-concurrency=${options.workers}`] : []),
-        ...selection.files.map((f) => join(canonicalPath(this.options.projectRoot), f)),
+        ...selection.files.map((f) =>
+          nodeTestFileArg(join(canonicalPath(this.options.projectRoot), f)),
+        ),
       ];
       const res = await runProcess(process.execPath, args, {
         // Canonical like the file filters: Windows keeps a short-name cwd (RUNNER~1) as given.
@@ -159,6 +178,7 @@ export class NodeTestAdapter implements TestAdapter {
         timedOut: res.timedOut,
         cancelled: res.cancelled,
         stderr: executions.length ? "" : (res.stderr || res.stdout).slice(-4000),
+        output: (res.stderr || res.stdout).slice(0, 3000),
       };
       return result;
     } finally {

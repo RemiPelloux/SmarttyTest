@@ -191,6 +191,27 @@ export class CypressAdapter implements TestAdapter {
     ];
   }
 
+  /**
+   * The selected spec a JUnit file belongs to (exported for tests). Results are credited to a
+   * spec only on evidence: the `file` attribute naming exactly one selected spec, or a run of a
+   * single spec. Otherwise they stay unattributed, so a spec that crashed before writing its own
+   * file can never inherit another spec's passes.
+   */
+  specOfJUnit(xml: string, selected: readonly string[]): string {
+    const raw = /<testsuite\b[^>]*\bfile="([^"]+)"/.exec(xml)?.[1];
+    if (!raw) return selected.length === 1 ? (selected[0] as string) : "(unattributed)";
+    const attr = raw.split("\\").join("/");
+    const fromCwd = (s: string) =>
+      relative(this.options.cwd, join(this.options.projectRoot, s)).split("\\").join("/");
+    const exact = selected.filter((s) => attr === s || attr === fromCwd(s));
+    if (exact.length === 1) return exact[0] as string;
+    // An absolute path, or one relative to another directory: match on a path boundary.
+    const suffix = selected.filter(
+      (s) => attr.endsWith(`/${fromCwd(s)}`) || attr.endsWith(`/${s}`),
+    );
+    return suffix.length === 1 ? (suffix[0] as string) : attr;
+  }
+
   async execute(selection: TestSelection, options: ExecutionOptions): Promise<TestRunResult> {
     const startedAt = new Date().toISOString();
     const tmp = await mkdtemp(join(tmpdir(), "smarttest-cypress-"));
@@ -208,11 +229,7 @@ export class CypressAdapter implements TestAdapter {
       const executions: TestExecution[] = [];
       for (const f of await readdir(tmp).catch(() => [] as string[])) {
         const xml = await readFile(join(tmp, f), "utf8");
-        const specAttr = /<testsuite\b[^>]*\bfile="([^"]+)"/.exec(xml)?.[1];
-        const spec = specAttr
-          ? (selection.files.find((s) => specAttr.endsWith(s) || s.endsWith(specAttr)) ?? specAttr)
-          : (selection.files[0] ?? "(unknown)");
-        executions.push(...parseCypressJUnit(xml, spec));
+        executions.push(...parseCypressJUnit(xml, this.specOfJUnit(xml, selection.files)));
       }
       if (res.code !== 0) {
         const reported = new Set(executions.map((e) => e.testId.split("::")[0]));
@@ -240,6 +257,8 @@ export class CypressAdapter implements TestAdapter {
         ...(res.code !== 0 && !executions.length
           ? { stderr: (res.stderr || res.stdout).slice(0, 2000) }
           : {}),
+        // Cypress exits with the number of failed tests; quoted if it fails with none failed.
+        output: (res.stderr || res.stdout).slice(-3000),
       };
       return result;
     } finally {
