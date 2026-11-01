@@ -87,6 +87,36 @@ describe("runner adapters conform to the plugin SDK", () => {
     expect(await checkTestAdapterConformance(adapter)).toEqual([]);
   }, 120_000);
 
+  // OpenPro's front end: vitest.stryker.config.ts next to vitest.config.ts collects 29 files, but
+  // its discovery listed the 2,298 of the default config.
+  it("discovery lists the files of the root's own config, not the folder's default one", async () => {
+    const vitestRoot = await materialize("nest-auth-vitest");
+    await writeFile(
+      join(vitestRoot, "vitest.narrow.config.ts"),
+      'import { defineConfig } from "vitest/config";\nexport default defineConfig({ test: { include: ["test/routes/**/*.test.ts"] } });\n',
+    );
+    const vitest = new VitestAdapter({
+      projectRoot: vitestRoot,
+      cwd: vitestRoot,
+      configFile: "vitest.narrow.config.ts",
+    });
+    expect((await vitest.discover()).map((t) => t.filePath)).toEqual([
+      "test/routes/ProtectedRoutes.test.ts",
+    ]);
+
+    const jestRoot = await materialize("express-cjs-jest");
+    await writeFile(
+      join(jestRoot, "jest.narrow.config.js"),
+      'module.exports = { testMatch: ["**/__tests__/format.test.js"] };\n',
+    );
+    const jest = new JestAdapter({
+      projectRoot: jestRoot,
+      cwd: jestRoot,
+      configFile: "jest.narrow.config.js",
+    });
+    expect((await jest.discover()).map((t) => t.filePath)).toEqual(["__tests__/format.test.js"]);
+  }, 120_000);
+
   it("node --test: discovery and execution, including a failing test", async () => {
     const root = await materialize("node-test-esm");
     await writeFile(

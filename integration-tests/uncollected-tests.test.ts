@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process";
-import { readFile, writeFile } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { dirname, join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { edit, git, materialize } from "./helpers.js";
 
@@ -30,7 +30,10 @@ describe("selected tests that no runner executes", () => {
         "",
       ].join("\n"),
     );
-    for (const [file, text] of Object.entries(extra)) await writeFile(join(dir, file), text);
+    for (const [file, text] of Object.entries(extra)) {
+      await mkdir(dirname(join(dir, file)), { recursive: true });
+      await writeFile(join(dir, file), text);
+    }
     git(dir, "add", "-A");
     git(dir, "commit", "-q", "-m", "cart");
     // The change: only cart's tests (and anything uncertain) are affected.
@@ -106,5 +109,60 @@ describe("selected tests that no runner executes", () => {
     expect(orphan.error).toContain("no runner collects this file");
     expect(json.report.summary.passed).toBeGreaterThan(0);
     expect(json.report.warnings.join("\n")).toContain("no runner collects them");
+  }, 180_000);
+
+  // OpenPro's front end: src/ads/__tests__/renderManager.tsx (a render helper no runner collects)
+  // stood for the 12 specs that import it, and those specs were never selected.
+  const helper = {
+    "lib/__tests__/cart-fixture.js": [
+      'import { total } from "../cart.js";',
+      "",
+      "export const fixtureTotal = () => total([{ price: 1 }]);",
+      "",
+    ].join("\n"),
+    "test/cart-fixture.test.js": [
+      'import assert from "node:assert/strict";',
+      'import { test } from "node:test";',
+      'import { fixtureTotal } from "../lib/__tests__/cart-fixture.js";',
+      "",
+      'test("fixture", () => assert.equal(fixtureTotal(), 1));',
+      "",
+    ].join("\n"),
+  };
+  const selectedFiles = (stdout: string): string[] =>
+    JSON.parse(stdout).report.decision.selectedTests.map((t: { filePath: string }) => t.filePath);
+
+  it("selects the tests behind a helper named like a test, not the helper", async () => {
+    const dir = await setup(helper);
+    const r = run(dir, "--json");
+    expect(r.status, r.stderr).toBe(0);
+    const selected = selectedFiles(r.stdout);
+    expect(selected).toContain("test/cart-fixture.test.js");
+    expect(selected).not.toContain("lib/__tests__/cart-fixture.js");
+
+    // A change to the helper itself selects the tests importing it.
+    git(dir, "checkout", "-q", "--", "lib/cart.js");
+    await edit(dir, "lib/__tests__/cart-fixture.js", "export const", "// changed\nexport const");
+    const again = run(dir, "--json");
+    expect(again.status, again.stderr).toBe(0);
+    expect(selectedFiles(again.stdout)).toEqual(["test/cart-fixture.test.js"]);
+  }, 180_000);
+
+  it("keeps helpers out of a failed runner's filename fallback", async () => {
+    const dir = await setup({
+      ...helper,
+      "e2e/broken.spec.js": [
+        'import { test } from "@playwright/test";',
+        'import { missing } from "../support/missing.js";',
+        "",
+        'test("broken", () => missing());',
+        "",
+      ].join("\n"),
+    });
+    const r = run(dir, "--json");
+    expect(r.status, r.stderr).toBe(4);
+    const selected = selectedFiles(r.stdout);
+    expect(selected).toContain("test/cart-fixture.test.js");
+    expect(selected).not.toContain("lib/__tests__/cart-fixture.js");
   }, 180_000);
 });

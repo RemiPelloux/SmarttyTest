@@ -157,6 +157,8 @@ export class DependencyGraph {
   /** Files a test replaces with a factory mock (`vi.mock("./m", () => …)`): never loaded there. */
   private factoryMocks = new Map<string, Set<string>>();
   private waspOps = new Map<string, Map<string, { file: string; unit: string }>>();
+  /** Test-named files no runner collects that other files import: helpers, walked through. */
+  private helpers = new Set<string>();
 
   constructor(
     private readonly files: ReadonlyMap<string, FileAnalysis>,
@@ -1127,7 +1129,7 @@ export class DependencyGraph {
       const [file, unit] = splitKey(k);
       affectedFiles.add(file);
       if (!firstKeyOfFile.has(file)) firstKeyOfFile.set(file, k);
-      if (this.isTest(file)) {
+      if (this.isTestFile(file)) {
         if (!tests.has(file)) {
           const path = pathOfKey(k);
           const files: string[] = [];
@@ -1174,7 +1176,7 @@ export class DependencyGraph {
         if (
           !referencesOnly.has(file) ||
           d.confidence === "high" ||
-          this.isTest(splitKey(d.from)[0])
+          this.isTestFile(splitKey(d.from)[0])
         )
           push(d.from, k, d.confidence);
       for (const g of this.reexporters.get(file) ?? []) push(key(g, ANY), k);
@@ -1191,6 +1193,19 @@ export class DependencyGraph {
   }
 
   // ── queries ─────────────────────────────────────────────────────────────────────────────
+
+  /**
+   * Files named like tests that no runner collects but other files import (`__tests__/render.tsx`).
+   * They never run, so a traversal goes through them to the tests that import them.
+   */
+  setHelpers(files: Iterable<string>): void {
+    this.helpers = new Set(files);
+  }
+
+  /** A test file, as traversals see it: named like a test and not a helper. */
+  isTestFile(path: string): boolean {
+    return this.isTest(path) && !this.helpers.has(path);
+  }
 
   /** Shortest dependency path from a changed unit (`file` or `file#Unit`) to another file. */
   why(from: string, to: string): string[] | undefined {
@@ -1238,7 +1253,7 @@ export class DependencyGraph {
   orphans(testFiles: readonly string[]): string[] {
     const reached = new Set<string>();
     for (const t of testFiles) for (const f of this.dependenciesOf(t)) reached.add(f);
-    return [...this.files.keys()].filter((f) => !this.isTest(f) && !reached.has(f)).sort();
+    return [...this.files.keys()].filter((f) => !this.isTestFile(f) && !reached.has(f)).sort();
   }
 
   /** Nodes and edges for export (JSON/DOT) and visualisation (spec §10.8). */

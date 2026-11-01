@@ -891,6 +891,8 @@ export class SmartTest {
   ): Promise<{
     tests: string[];
     unassigned: string[];
+    /** Named like tests, collected by no runner, imported by other files: helpers, not tests. */
+    helpers: string[];
     roots: RunnerRoot[];
     assignment: Map<string, RunnerRoot>;
     warnings: string[];
@@ -906,11 +908,28 @@ export class SmartTest {
       return matchGlob(rel, expandNodePatterns(root.patterns));
     };
     const staticCandidates = discoverTestFiles(analysed, this.config.tests.match);
+    // A test-named file that another file imports and no runner collects is a helper
+    // (`__tests__/renderManager.tsx`): the tests importing it are what protects its dependencies.
+    const imported = new Set<string>();
+    for (const [file, a] of index.entries())
+      for (const i of a.imports) if (i.resolved && i.resolved !== file) imported.add(i.resolved);
+    const split = (uncollected: string[]) => ({
+      unassigned: uncollected.filter((f) => !imported.has(f)),
+      helpers: uncollected.filter((f) => imported.has(f)),
+    });
     const assignment = new Map<string, RunnerRoot>();
     const warnings: string[] = [];
     const perRoot = new Map<string, number>();
     if (!roots.length)
-      return { tests: staticCandidates, unassigned: [], roots, assignment, warnings, perRoot };
+      return {
+        tests: staticCandidates,
+        unassigned: [],
+        helpers: [],
+        roots,
+        assignment,
+        warnings,
+        perRoot,
+      };
     const inRoot = (f: string, root: RunnerRoot) => root.dir === "" || f.startsWith(`${root.dir}/`);
     if (this.config.tests.discovery === "static") {
       const unassigned: string[] = [];
@@ -927,7 +946,14 @@ export class SmartTest {
       }
       for (const r of roots)
         perRoot.set(rootKey(r), [...assignment.values()].filter((x) => x === r).length);
-      return { tests: [...assignment.keys()], unassigned, roots, assignment, warnings, perRoot };
+      return {
+        tests: [...assignment.keys()],
+        ...split(unassigned),
+        roots,
+        assignment,
+        warnings,
+        perRoot,
+      };
     }
     const cachePath = join(this.storeDir, "state", "discovery.json");
     const cache = options.fresh
@@ -991,6 +1017,8 @@ export class SmartTest {
       let count = 0;
       for (const f of files) {
         if (!analysedSet.has(f)) continue; // excluded by smarttest config
+        // A pattern fallback does not take files other files import: helpers, not specs.
+        if (failed && imported.has(f)) continue;
         const prev = assignment.get(f);
         if (failed && prev && listedBy.get(f)) continue;
         // Several runners may collect the same file: the deepest project owns it.
@@ -1004,8 +1032,8 @@ export class SmartTest {
     }
     await writeStateJson(cachePath, nextCache);
     const tests = [...assignment.keys()].sort();
-    const unassigned = staticCandidates.filter((f) => !assignment.has(f));
-    return { tests, unassigned, roots, assignment, warnings, perRoot };
+    const { unassigned, helpers } = split(staticCandidates.filter((f) => !assignment.has(f)));
+    return { tests, unassigned, helpers, roots, assignment, warnings, perRoot };
   }
 
   // ── Analysis & impact ───────────────────────────────────────────────────────────────────
@@ -1067,6 +1095,7 @@ export class SmartTest {
     const {
       tests,
       unassigned,
+      helpers,
       roots,
       assignment,
       warnings: discoveryWarnings,
@@ -1077,6 +1106,7 @@ export class SmartTest {
         .map(([t]) => t),
     );
     const graph = await timed(timings, "graph build", () => this.analysisGraph(index, e2eTests));
+    graph.setHelpers(helpers);
     const graphDiff: { file: string; added: string[]; removed: string[] }[] = [];
     const resources = new Map<string, ResourceChange>();
     const diffs = await timed(timings, "semantic diff", () =>
@@ -1093,7 +1123,8 @@ export class SmartTest {
             graph,
             files: index.entries(),
             testFiles: tests,
-            isTest: this.isTest,
+            // A changed helper seeds the tests importing it; it is not a test of its own.
+            isTest: (path) => graph.isTestFile(path),
             mode: options.mode ?? this.config.mode,
             triggers: [...BUILTIN_TRIGGERS, ...this.config.triggers],
             // A plugin module inside the project decides edges: changing it widens to everything.
@@ -2203,8 +2234,11 @@ export class SmartTest {
       : moved
         ? `fresh analysis (the change or mode moved since the run at ${moved})`
         : "fresh analysis";
+    const { index } = await this.loadIndex();
+    const graph = this.buildGraph(index);
+    graph.setHelpers((await this.discoverTests(index)).helpers);
     if (
-      this.isTest(target) ||
+      graph.isTestFile(target) ||
       decision.selectedTests.some((t) => t.filePath === target) ||
       decision.skippedTests.some((t) => t.filePath === target)
     ) {
@@ -2218,8 +2252,6 @@ export class SmartTest {
       };
     }
     // A source file or symbol: which tests protect it?
-    const { index } = await this.loadIndex();
-    const graph = this.buildGraph(index);
     const [file, unit] = target.includes("#")
       ? (target.split("#") as [string, string])
       : [target, "*"];
@@ -2283,7 +2315,8 @@ export class SmartTest {
   async graphInsights(): Promise<{ graph: DependencyGraph; tests: string[] }> {
     const { index } = await this.loadIndex();
     const graph = this.buildGraph(index);
-    const { tests } = await this.discoverTests(index);
+    const { tests, helpers } = await this.discoverTests(index);
+    graph.setHelpers(helpers);
     return { graph, tests };
   }
 
@@ -2295,6 +2328,7 @@ export class SmartTest {
     const { index } = await this.loadIndex();
     const graph = this.buildGraph(index);
     if (!options.from) return { graph, stats: graph.stats };
+    graph.setHelpers((await this.discoverTests(index)).helpers);
     const [file, unit] = options.from.includes("#")
       ? (options.from.split("#") as [string, string])
       : [options.from, "*"];

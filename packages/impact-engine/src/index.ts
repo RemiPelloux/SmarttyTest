@@ -409,7 +409,7 @@ export function decideImpact(input: ImpactInput): ImpactResult {
     const u = graph.uncertainty.get(f);
     if (u) relevantUncertainty.set(f, u);
   }
-  const uncertainTests: { test: string; files: string[] }[] = [];
+  const uncertainTests: { test: string; files: { file: string; reasons: string[] }[] }[] = [];
   for (const t of allTests) {
     if (selected.has(t)) continue;
     if (details.observedSkips?.some((s) => s.test === t)) continue;
@@ -417,7 +417,7 @@ export function decideImpact(input: ImpactInput): ImpactResult {
     if (traces && mode !== "safe" && traces.isFresh(t) && !ranChange(t) && !nonCodeTests.has(t))
       continue;
     const u = graph.uncertaintyReachableFrom(t);
-    if (u.length) uncertainTests.push({ test: t, files: u.map((x) => x.file) });
+    if (u.length) uncertainTests.push({ test: t, files: u });
   }
   details.uncertainty = [...relevantUncertainty].map(([file, rs]) => ({ file, reasons: rs }));
   // Uncertain tests can't be ruled out: BALANCED and SAFE select them (individually, not the whole suite).
@@ -425,7 +425,11 @@ export function decideImpact(input: ImpactInput): ImpactResult {
     for (const { test, files } of uncertainTests) {
       select(test, {
         kind: "uncertainty",
-        message: `Cannot be ruled out: unresolved/dynamic imports in ${files.slice(0, 3).join(", ")}${files.length > 3 ? "…" : ""}`,
+        // The graph's own reason (a dynamic import, an e2e visit no route serves), not a guess.
+        message: `Cannot be ruled out: ${files
+          .slice(0, 3)
+          .map((u) => `${u.file}: ${u.reasons[0] ?? "unresolved or dynamic import"}`)
+          .join("; ")}${files.length > 3 ? "…" : ""}`,
       });
     }
     if (uncertainTests.length) partial = true;

@@ -7,6 +7,10 @@ All notable changes are documented here. Releases are managed with [Changesets](
 ### Fixed
 
 - `ST_NO_RUNNER` names all five runners and how to set one up; it said "No Jest or Vitest setup found".
+- A file named like a test that no runner collects but other files import (a render helper in `__tests__/`) is a helper, not a test. Selection now goes through it to the tests that import it, and a change to it selects them. Before, the helper was selected on its own and those tests were missed: the run failed with exit 4, and the hint (add it to `exclude`) would have hidden them. Found in OpenPro, where one helper stood for 12 specs.
+- A runner whose listing fails no longer takes helpers in its filename fallback (they were treated as end-to-end specs and widened every selection).
+- Vitest and Jest discovery read the runner's own config file: a second config in one folder (a Stryker config next to `vitest.config.ts`) listed the default config's files (2,298 instead of 29).
+- "Cannot be ruled out" names the actual reason (`visits /, which no known route serves`, `unresolved import "./x"`, a dynamic import) instead of always saying "unresolved/dynamic imports".
 
 ## [1.0.0] — stable
 

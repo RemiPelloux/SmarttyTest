@@ -59,12 +59,26 @@ export class JestAdapter implements TestAdapter {
     return bin;
   }
 
+  /**
+   * Discovery and execution read the same config: a second config in one folder (a Stryker
+   * config next to the main one) collects other files than the default config does.
+   */
+  private configArgs(): string[] {
+    return this.options.configFile
+      ? ["--config", join(this.options.projectRoot, this.options.configFile)]
+      : [];
+  }
+
   async discover(): Promise<TestCase[]> {
-    const res = await runProcess(process.execPath, [this.bin(), "--listTests", "--json"], {
-      cwd: canonicalPath(this.options.cwd),
-      env: { ...process.env, FORCE_COLOR: "0", NO_COLOR: "1" },
-      timeoutMs: 120_000,
-    });
+    const res = await runProcess(
+      process.execPath,
+      [this.bin(), "--listTests", "--json", ...this.configArgs()],
+      {
+        cwd: canonicalPath(this.options.cwd),
+        env: { ...process.env, FORCE_COLOR: "0", NO_COLOR: "1" },
+        timeoutMs: 120_000,
+      },
+    );
     const start = res.stdout.indexOf("[");
     if (res.code !== 0 || start === -1) {
       throw new SmartTestError(
@@ -104,9 +118,7 @@ export class JestAdapter implements TestAdapter {
       "--passWithNoTests",
       "--ci",
       "--colors=false",
-      ...(this.options.configFile
-        ? ["--config", join(this.options.projectRoot, this.options.configFile)]
-        : []),
+      ...this.configArgs(),
       ...(options.workers ? [`--maxWorkers=${options.workers}`] : []),
       ...(options.coverage && this.options.coverageDir
         ? [
