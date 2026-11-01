@@ -232,3 +232,89 @@ describe("decideImpact", () => {
     expect(d.selectedTests[0]?.reasons[0]?.kind).toBe("test-file-changed");
   });
 });
+
+describe("decideImpact: tests that are imported, type tests", () => {
+  const local = (src: Record<string, string>, res: Record<string, string>) => {
+    const files = new Map<string, FileAnalysis>();
+    for (const [p, c] of Object.entries(src)) {
+      const an = analyzeSource(p, c);
+      for (const imp of an.imports) {
+        const r = res[`${p}:${imp.specifier}`];
+        if (r) imp.resolved = r;
+        else imp.external = true;
+      }
+      files.set(p, an);
+    }
+    const isTest = (p: string) => /\.test(-d)?\./.test(p);
+    return { files, graph: new DependencyGraph(files, isTest), isTest };
+  };
+  const run = (
+    ctx: ReturnType<typeof local>,
+    cs: ChangeSet,
+    diffs: [string, FileSemanticDiff][],
+    traces?: TraceEvidence,
+  ) =>
+    decideImpact({
+      ...(traces ? { traces } : {}),
+      changeSet: cs,
+      diffs: new Map(diffs),
+      graph: ctx.graph,
+      files: ctx.files,
+      testFiles: [...ctx.files.keys()].filter(ctx.isTest),
+      isTest: ctx.isTest,
+      mode: "balanced",
+      triggers: [],
+      rules: new RulesEngine([]),
+    });
+
+  it("a changed test that other tests import also selects them", () => {
+    const ctx = local(
+      {
+        "test/shared.test.ts":
+          'export const check = (v: number) => v > 0;\nit("self", () => check(1));\n',
+        "test/uses.test.ts": 'import { check } from "./shared.test";\nit("x", () => check(2));\n',
+        "test/alone.test.ts": 'it("y", () => 1);\n',
+      },
+      { "test/uses.test.ts:./shared.test": "test/shared.test.ts" },
+    );
+    const d = run(ctx, changed(["test/shared.test.ts"]), [unit("test/shared.test.ts", ["check"])]);
+    expect(d.selectedTests.map((t) => t.filePath).sort()).toEqual([
+      "test/shared.test.ts",
+      "test/uses.test.ts",
+    ]);
+    // A test nobody imports selects itself only.
+    const alone = run(ctx, changed(["test/alone.test.ts"]), []);
+    expect(alone.selectedTests.map((t) => t.filePath)).toEqual(["test/alone.test.ts"]);
+  });
+
+  it("a type change is not ruled out by traces: types never run", () => {
+    const ctx = local(
+      {
+        "src/types.ts":
+          "export type Id = string;\nexport interface User { name: string }\nexport const mk = () => 1;\n",
+        "test/types.test-d.ts":
+          'import { mk, type Id } from "../src/types";\ntest("t", () => expectTypeOf<Id>().toEqualTypeOf<string>());\ntest("m", () => mk());\n',
+      },
+      { "test/types.test-d.ts:../src/types": "src/types.ts" },
+    );
+    // Fresh, and it never ran anything in src/types.ts.
+    const traces = fakeTraces({ "test/types.test-d.ts": { "src/other.ts": ["x"] } });
+    const typeDiff: [string, FileSemanticDiff] = [
+      "src/types.ts",
+      {
+        path: "src/types.ts",
+        units: ["Id"],
+        trivialOnly: false,
+        confidence: "high",
+        changes: [{ filePath: "src/types.ts", kind: "interface", confidence: "high" }],
+      },
+    ];
+    const d = run(ctx, changed(["src/types.ts"]), [typeDiff], traces);
+    expect(d.selectedTests.map((t) => t.filePath)).toEqual(["test/types.test-d.ts"]);
+    expect(d.details.observedSkips).toBeUndefined();
+    // A runtime unit the fresh trace never ran is still ruled out.
+    const code = run(ctx, changed(["src/types.ts"]), [unit("src/types.ts", ["mk"])], traces);
+    expect(code.selectedTests).toEqual([]);
+    expect(code.details.observedSkips?.map((s) => s.test)).toEqual(["test/types.test-d.ts"]);
+  });
+});

@@ -38,20 +38,25 @@ export interface RunnerRoot {
 
 /**
  * Expands `node --test` arguments the way Node does: a glob stays a glob, a directory means
- * "the default patterns inside it", a file path is that file.
+ * "the default patterns inside it", a file path is that file. `stripTypes`: whether that Node
+ * runs TypeScript (see `nodeStripsTypes`).
  */
-export function expandNodePatterns(patterns: readonly string[] | undefined): string[] {
-  if (!patterns?.length) return NODE_TEST_DEFAULTS;
+export function expandNodePatterns(
+  patterns: readonly string[] | undefined,
+  stripTypes: boolean = nodeStripsTypes(),
+): string[] {
+  const defaults = nodeTestDefaults(stripTypes);
+  if (!patterns?.length) return defaults;
   return patterns.flatMap((p) => {
     if (/\.[cm]?[jt]s$/.test(p) || /\*\.\{?[cm]?[jt]s/.test(p)) return [p];
     // A directory, or a glob that matches directories ("packages/*/test/"): Node searches them.
     const dir = p.replace(/\/$/, "");
-    const inDir = NODE_TEST_DEFAULTS.map((d) => `${dir}/${d}`);
+    const inDir = defaults.map((d) => `${dir}/${d}`);
     return /[*?{[]/.test(p) && !p.endsWith("/") ? [p, ...inDir] : inDir;
   });
 }
 
-/** Node's built-in runner default patterns (node --test without arguments). */
+/** Node's built-in runner default patterns for JavaScript (node --test without arguments). */
 export const NODE_TEST_DEFAULTS = [
   "**/*.test.{js,cjs,mjs}",
   "**/*-test.{js,cjs,mjs}",
@@ -60,6 +65,27 @@ export const NODE_TEST_DEFAULTS = [
   "**/test.{js,cjs,mjs}",
   "**/test/**/*.{js,cjs,mjs}",
 ];
+
+/**
+ * Node's default patterns. A Node that strips types (22.18+, 23.6+, or an older one run with
+ * `--experimental-strip-types`) also runs the same names in `.ts`, `.mts` and `.cts`.
+ */
+export function nodeTestDefaults(stripTypes: boolean): string[] {
+  if (!stripTypes) return NODE_TEST_DEFAULTS;
+  return NODE_TEST_DEFAULTS.map((p) => p.replace("{js,cjs,mjs}", "{js,cjs,mjs,ts,cts,mts}"));
+}
+
+/**
+ * Whether the Node that runs `node --test` strips TypeScript types. The adapter launches this
+ * process's own executable (`process.execPath`) with its environment (`NODE_OPTIONS` included),
+ * so this process's `process.features.typescript` answers it ("strip"/"transform", or false when
+ * disabled with `--no-experimental-strip-types`). Before 22.10 the feature flag did not exist and
+ * types were never stripped by default.
+ */
+export function nodeStripsTypes(): boolean {
+  const ts = (process.features as { typescript?: unknown }).typescript;
+  return typeof ts === "string" && ts !== "";
+}
 
 /** Assigns a test file to the deepest runner root that contains it. */
 export function assignRunner(

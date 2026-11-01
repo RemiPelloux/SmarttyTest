@@ -1,5 +1,12 @@
+import { matchGlob } from "@smarttest/shared";
 import { describe, expect, it } from "vitest";
-import { assignRunner, isTestFile, testCategory } from "./index.js";
+import {
+  assignRunner,
+  expandNodePatterns,
+  isTestFile,
+  nodeStripsTypes,
+  testCategory,
+} from "./index.js";
 
 describe("test discovery", () => {
   it.each([
@@ -33,5 +40,28 @@ describe("test discovery", () => {
     ];
     expect(assignRunner("packages/web/src/a.test.ts", roots)?.adapter).toBe("vitest");
     expect(assignRunner("packages/api/src/a.test.ts", roots)?.adapter).toBe("jest");
+  });
+});
+
+describe("node --test default patterns", () => {
+  const collects = (path: string, patterns: string[] | undefined, stripTypes: boolean) =>
+    matchGlob(path, expandNodePatterns(patterns, stripTypes));
+
+  it("a Node that strips types also runs .ts, .mts and .cts files", () => {
+    for (const f of ["test/math.ts", "src/math.test.ts", "a-test.mts", "test-a.cts", "x_test.ts"]) {
+      expect(collects(f, undefined, true), f).toBe(true);
+      expect(collects(f, undefined, false), f).toBe(false);
+    }
+    expect(collects("test/math.js", undefined, false)).toBe(true);
+    // `node --test test/`: the defaults inside the directory.
+    expect(collects("test/x.test.ts", ["test/"], true)).toBe(true);
+    expect(collects("test/x.test.ts", ["test/"], false)).toBe(false);
+    expect(collects("src/math.ts", undefined, true)).toBe(false);
+  });
+
+  it("follows the Node that runs the tests (this process: adapters launch process.execPath)", () => {
+    const strips = typeof (process.features as { typescript?: unknown }).typescript === "string";
+    expect(nodeStripsTypes()).toBe(strips);
+    expect(collects("test/math.ts", undefined, nodeStripsTypes())).toBe(strips);
   });
 });
