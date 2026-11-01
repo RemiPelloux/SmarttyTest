@@ -145,10 +145,29 @@ export async function executeGroups(
       }
       const meta = run.meta ?? {};
       const seenFiles = new Set<string>();
+      // Duplicate test names are legal (Vitest, Jest, Cypress): two results with
+      // the same id inside ONE attempt are two tests, never a retry. Merge them
+      // worst-first so a failing instance can't be hidden by a passing namesake.
+      const thisAttempt = new Map<string, TestExecution>();
       for (const exec of run.executions) {
         const file = fileOfTestId(exec.testId);
         if (!pending.includes(file)) continue; // ignore files the runner matched beyond the selection
         seenFiles.add(file);
+        const same = thisAttempt.get(exec.testId);
+        if (!same) {
+          thisAttempt.set(exec.testId, exec);
+          continue;
+        }
+        const worse = RANK.indexOf(exec.status) > RANK.indexOf(same.status) ? exec : same;
+        const error = worse.error ?? same.error ?? exec.error;
+        thisAttempt.set(exec.testId, {
+          ...worse,
+          durationMs: same.durationMs + exec.durationMs,
+          ...(error ? { error } : {}),
+        });
+      }
+      for (const exec of thisAttempt.values()) {
+        // Only a pass in a LATER attempt of the same test turns a failure into flaky.
         const previous = byId.get(exec.testId);
         if (
           previous &&

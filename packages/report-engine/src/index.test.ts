@@ -96,7 +96,38 @@ describe("report engine", () => {
     expect(r.summary.passed).toBe(1);
     expect(validateReportIntegrity(r)).toEqual([]);
     expect(toMarkdown(r)).toContain("1 left to CI (not run)");
-    expect(toMarkdown(r)).toContain("`e2e/a.spec.ts` — playwright · hook.runners [vitest]");
+    expect(toMarkdown(r)).toContain("`e2e/a.spec.ts` — playwright · hook.runners \\[vitest\\]");
+    // A file name with a backtick stays inside one code span in the left-to-CI list too.
+    const evil = r.leftToCi[0] as NonNullable<RunReport["leftToCi"]>[number];
+    evil.file = "e2e/a`](https://evil.example)|b.spec.ts";
+    expect(toMarkdown(r)).toContain("- `` e2e/a`](https://evil.example)\\|b.spec.ts `` —");
+    evil.file = "e2e/a.spec.ts";
+    // Coverage labelled full while a selected file did not run is an integrity violation.
+    r.coverage = { scope: "full", lines: 1, statements: 1, functions: 1, branches: 1, files: 1 };
+    r.decision.skippedTests = [];
+    r.summary = summarize(r.decision, r.executions, 5, 1);
+    expect(validateReportIntegrity(r)).toContain(
+      "coverage labelled 'full' but 1 selected test file(s) did not run",
+    );
+    r.leftToCi = [];
+    r.summary = summarize(r.decision, r.executions, 5, 0);
+    expect(validateReportIntegrity(r)).toEqual([]);
+    r.executions.push({
+      file: "e2e/a.spec.ts",
+      adapter: "x",
+      status: "cancelled",
+      durationMs: 0,
+      tests: [],
+    });
+    r.summary = summarize(r.decision, r.executions, 5, 0);
+    expect(validateReportIntegrity(r)).toContain(
+      "coverage labelled 'full' but 1 selected test file(s) did not run",
+    );
+    r.executions.pop();
+    r.decision.skippedTests = report().decision.skippedTests;
+    delete r.coverage;
+    r.leftToCi = [{ file: "e2e/a.spec.ts", adapter: "playwright", rule: "hook.runners [vitest]" }];
+    r.summary = summarize(r.decision, r.executions, 5, 1);
     expect(toHtml(r)).toContain("Selected, not run in the hook (left to CI)");
     // A left-to-CI file with a result, or a count that disagrees, is an integrity violation.
     r.executions.push({

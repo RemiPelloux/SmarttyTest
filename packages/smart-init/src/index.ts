@@ -13,6 +13,7 @@ import {
   readJson,
   readText,
   relPosix,
+  runProcess,
   sha256,
   writeFileAtomic,
   writeJson,
@@ -39,6 +40,63 @@ export interface FilePlan {
   risk: "low" | "medium";
   /** File mode to set after writing (executable hooks). */
   mode?: number;
+  /**
+   * The project's own formatter, run on `after` just before the (atomic) write so the new file
+   * passes the project's format check. A formatter failure is a warning: the file is written as
+   * generated.
+   */
+  format?: LocalFormatter;
+}
+
+export interface LocalFormatter {
+  name: "Prettier" | "Biome";
+  /** The formatter's Node entry point, run with this Node (no shell, no `.cmd` shim). */
+  script: string;
+}
+
+/**
+ * Prettier or Biome installed in the project (`node_modules/.bin`), resolved to the package's
+ * Node entry point. Prettier wins when both are installed.
+ */
+export async function localFormatter(root: string): Promise<LocalFormatter | undefined> {
+  for (const [name, bin, pkg] of [
+    ["Prettier", "prettier", "prettier"],
+    ["Biome", "biome", "@biomejs/biome"],
+  ] as const) {
+    const shim = join(root, "node_modules", ".bin", bin);
+    if (!(await exists(shim)) && !(await exists(`${shim}.cmd`))) continue;
+    const manifest = await readJson<{ bin?: string | Record<string, string> }>(
+      join(root, "node_modules", pkg, "package.json"),
+    );
+    const entry = typeof manifest?.bin === "string" ? manifest.bin : manifest?.bin?.[bin];
+    if (!entry) continue;
+    const script = resolve(root, "node_modules", pkg, entry);
+    if (await exists(script)) return { name, script };
+  }
+  return undefined;
+}
+
+/** Formats `text` as the file `path` with the project's formatter (stdin to stdout). */
+async function formatWith(
+  root: string,
+  formatter: LocalFormatter,
+  path: string,
+  text: string,
+): Promise<string> {
+  const args =
+    formatter.name === "Prettier"
+      ? ["--stdin-filepath", path]
+      : ["format", `--stdin-file-path=${path}`];
+  const r = await runProcess(process.execPath, [formatter.script, ...args], {
+    cwd: root,
+    input: text,
+    timeoutMs: 30_000,
+  });
+  if (r.code !== 0 || !r.stdout.trim())
+    throw new Error(
+      (r.stderr || r.stdout).trim().split("\n")[0] || (r.timedOut ? "timed out" : `exit ${r.code}`),
+    );
+  return r.stdout;
 }
 
 export interface SetupPlan {
@@ -343,12 +401,14 @@ export async function buildPlan(
     });
   } else {
     const name = profile.layout.typescript ? "smarttest.config.ts" : "smarttest.config.mjs";
+    const formatter = await localFormatter(root);
     files.push({
       path: name,
       action: "create",
-      reason: "SmartTest configuration",
+      reason: `SmartTest configuration${formatter ? ` (formatted with the project's ${formatter.name} when written)` : ""}`,
       after: renderConfigFile(config, profile.layout.typescript),
       risk: "low",
+      ...(formatter ? { format: formatter } : {}),
     });
   }
   const pkgText = await readText(join(root, "package.json"));
@@ -495,7 +555,7 @@ export async function applyPlan(
   root: string,
   storeDir: string,
   plan: SetupPlan,
-  options: { onlyLowRisk?: boolean } = {},
+  options: { onlyLowRisk?: boolean; onWarning?: (message: string) => void } = {},
 ): Promise<Journal> {
   const previous = await readJson<Journal>(journalPath(storeDir));
   const entries: JournalEntry[] = [...(previous?.entries ?? [])];
@@ -509,16 +569,25 @@ export async function applyPlan(
     const current = await readText(abs);
     if (fp.action === "create" && current !== undefined) continue; // appeared meanwhile — never overwrite
     if (fp.action === "modify" && current !== fp.before) continue; // changed since planning — skip safely
-    await writeFileAtomic(abs, fp.after);
+    let after = fp.after;
+    if (fp.format)
+      try {
+        after = await formatWith(root, fp.format, fp.path, fp.after);
+      } catch (error) {
+        options.onWarning?.(
+          `${fp.path} was written unformatted: ${fp.format.name} failed (${(error as Error).message}) — run your formatter on it`,
+        );
+      }
+    await writeFileAtomic(abs, after);
     if (fp.mode !== undefined) await chmod(abs, fp.mode);
     const prior = entries.find((e) => e.path === fp.path);
-    if (prior) prior.afterHash = sha256(fp.after);
+    if (prior) prior.afterHash = sha256(after);
     else
       entries.push({
         path: fp.path,
         action: fp.action,
         ...(fp.action === "modify" ? { before: fp.before as string } : {}),
-        afterHash: sha256(fp.after),
+        afterHash: sha256(after),
       });
   }
   const journal: Journal = {

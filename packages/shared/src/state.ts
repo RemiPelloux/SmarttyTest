@@ -12,7 +12,7 @@
  * per user outside every project (`<user cache dir>/smarttest/state.key`, mode 0600).
  */
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { readFile, rm } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, dirname, join } from "node:path";
@@ -31,33 +31,103 @@ export function stateKeyFile(env: NodeJS.ProcessEnv = process.env): string {
 
 let userKey: Buffer | undefined;
 
-function readKey(file: string): Buffer | undefined {
+/**
+ * What happened to the per-user key in this process, for `doctor`:
+ * - `stored`: read from the key file, or created there;
+ * - `repaired`: the key file was truncated or damaged; it was replaced (state signed with the
+ *   lost key is rebuilt once);
+ * - `ephemeral`: no key could be stored (read-only directory, damaged file that cannot be
+ *   replaced): signed caches last for this process only, so every run rebuilds them.
+ */
+export type StateKeySource = "env" | "stored" | "repaired" | "ephemeral";
+let keySource: StateKeySource | undefined;
+
+/** A stored key is exactly what `loadStateKey` writes: 32 bytes or more. */
+function readKey(file: string): { key?: Buffer; exists: boolean } {
   try {
     const k = readFileSync(file);
-    return k.length >= 32 ? k : undefined;
-  } catch {
-    return undefined;
+    return k.length >= 32 ? { key: k, exists: true } : { exists: true };
+  } catch (error) {
+    return { exists: (error as NodeJS.ErrnoException).code !== "ENOENT" };
   }
+}
+
+const pause = (ms: number) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+
+/**
+ * Reads the key file, or creates or repairs it. Writers take `<file>.lock` (exclusive create) and
+ * replace the file atomically (temporary file + rename), so a reader never sees a half-written
+ * key and two processes cannot end up with different keys: whoever does not hold the lock waits
+ * and reads the key the holder wrote. A lock left by a crashed process is broken after 10 s.
+ */
+export function loadStateKey(file: string): { key: Buffer; source: StateKeySource } {
+  const first = readKey(file);
+  if (first.key) return { key: first.key, source: "stored" };
+  const lock = `${file}.lock`;
+  const deadline = Date.now() + 5_000;
+  try {
+    mkdirSync(dirname(file), { recursive: true, mode: 0o700 });
+  } catch {
+    return { key: randomBytes(32), source: "ephemeral" };
+  }
+  for (;;) {
+    let held = false;
+    try {
+      writeFileSync(lock, `${process.pid}\n`, { flag: "wx", mode: 0o600 });
+      held = true;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "EEXIST")
+        return { key: randomBytes(32), source: "ephemeral" };
+    }
+    if (held) {
+      try {
+        // Another process may have written it between our read and the lock.
+        const now = readKey(file);
+        if (now.key) return { key: now.key, source: "stored" };
+        const fresh = randomBytes(32);
+        const tmp = `${file}.${process.pid}.${randomBytes(4).toString("hex")}.tmp`;
+        writeFileSync(tmp, fresh, { flag: "wx", mode: 0o600 });
+        try {
+          renameSync(tmp, file);
+        } catch {
+          rmSync(tmp, { force: true });
+          return { key: fresh, source: "ephemeral" };
+        }
+        return { key: fresh, source: now.exists ? "repaired" : "stored" };
+      } catch {
+        return { key: randomBytes(32), source: "ephemeral" };
+      } finally {
+        rmSync(lock, { force: true });
+      }
+    }
+    const now = readKey(file);
+    if (now.key) return { key: now.key, source: "stored" };
+    try {
+      if (Date.now() - statSync(lock).mtimeMs > 10_000) rmSync(lock, { force: true });
+    } catch {
+      // The lock is gone: try again.
+    }
+    if (Date.now() > deadline) return { key: randomBytes(32), source: "ephemeral" };
+    pause(20);
+  }
+}
+
+/** How this process got its state key (undefined before the first use). */
+export function stateKeySource(): StateKeySource | undefined {
+  return keySource;
 }
 
 /** The key state files are authenticated with. */
 export function stateKey(): Buffer {
   const fromEnv = process.env.SMARTTEST_STATE_KEY;
-  if (fromEnv && fromEnv.length >= 32) return Buffer.from(fromEnv, "utf8");
-  if (userKey) return userKey;
-  const file = stateKeyFile();
-  userKey = readKey(file);
-  if (userKey) return userKey;
-  const fresh = randomBytes(32);
-  try {
-    mkdirSync(dirname(file), { recursive: true, mode: 0o700 });
-    writeFileSync(file, fresh, { flag: "wx", mode: 0o600 });
-    userKey = fresh;
-  } catch {
-    // Another process created it first, or the directory is read-only. Without a stored key,
-    // state written now is trusted by this process only (later runs rebuild it: always safe).
-    userKey = readKey(file) ?? fresh;
+  if (fromEnv && fromEnv.length >= 32) {
+    keySource ??= "env";
+    return Buffer.from(fromEnv, "utf8");
   }
+  if (userKey) return userKey;
+  const loaded = loadStateKey(stateKeyFile());
+  userKey = loaded.key;
+  keySource = loaded.source;
   return userKey;
 }
 

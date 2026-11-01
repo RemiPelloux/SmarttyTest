@@ -73,6 +73,9 @@ import {
   SmartTestError,
   sha256,
   silentLogger,
+  stateKey,
+  stateKeyFile,
+  stateKeySource,
   walkFiles,
   writeFileAtomic,
   writeJson,
@@ -147,8 +150,14 @@ import {
   unknownCheckProjects,
 } from "./hook.js";
 import { ParsePool, parallelParsingAvailable } from "./parse-pool.js";
-import { type LoadedPlugin, loadPlugins, runEdgeProviders } from "./plugins.js";
-import { nothingInScope, restrictChanges, scopeWarnings, unchangedScopeDecision } from "./scope.js";
+import { type LoadedPlugin, loadPlugins, pluginsChanged, runEdgeProviders } from "./plugins.js";
+import {
+  nothingInScope,
+  resolveScopePaths,
+  restrictChanges,
+  scopeWarnings,
+  unchangedScopeDecision,
+} from "./scope.js";
 import {
   cacheGet,
   cachePut,
@@ -707,9 +716,19 @@ export class SmartTest {
   /** Output of the plugin edge providers for the current index (recomputed on each load). */
   private provided: (ProvidedGraphInput & { warnings: string[] }) | undefined;
 
-  /** Plugins from the `plugins` option, loaded once per instance. */
-  plugins(): Promise<LoadedPlugin[]> {
-    this.pluginsLoaded ??= loadPlugins(this.root, this.config.plugins);
+  /**
+   * Plugins from the `plugins` option. A long-lived instance (watch mode, Studio) loads a plugin
+   * again when its file changed, so later cycles never use the old version's edges.
+   */
+  async plugins(): Promise<LoadedPlugin[]> {
+    const loaded = this.pluginsLoaded;
+    if (loaded) {
+      const current = await loaded.catch(() => undefined);
+      if (current && !(await pluginsChanged(current))) return current;
+      // Retry a failed load too: the plugin may have been fixed since.
+      if (this.pluginsLoaded !== loaded) return this.plugins();
+    }
+    this.pluginsLoaded = loadPlugins(this.root, this.config.plugins);
     return this.pluginsLoaded;
   }
 
@@ -953,7 +972,10 @@ export class SmartTest {
     if (changed.status === "rejected") throw changed.reason;
     if (updated.status === "rejected") throw updated.reason;
     const detected = changed.value;
-    const scoped = options.only ? restrictChanges(detected, options.only) : undefined;
+    const only = options.only
+      ? await resolveScopePaths(this.root, options.only, detected.changeSet.changes)
+      : undefined;
+    const scoped = only ? restrictChanges(detected, only.paths) : undefined;
     const input = scoped?.input ?? detected;
     const scope = scoped?.scope;
     const { index, stats } = updated.value;
@@ -969,7 +991,9 @@ export class SmartTest {
         safetyMode: options.mode ?? this.config.mode,
         requestedMode: options.mode ?? this.config.mode,
         reasons: [reason],
-        warnings: scope ? scopeWarnings(scope, input.changeSet.completeness) : [],
+        warnings: scope
+          ? [...(only?.notes ?? []), ...scopeWarnings(scope, input.changeSet.completeness)]
+          : [],
         fallbackApplied: true,
         details: { triggers: [], seeds: [], trivialSkipped: [], ignored: [], uncertainty: [] },
       } satisfies ImpactResult;
@@ -1034,7 +1058,11 @@ export class SmartTest {
           }),
     );
     if (graphDiff.length) decision.details.graphDiff = graphDiff;
-    if (scope) decision.warnings.unshift(...scopeWarnings(scope, input.changeSet.completeness));
+    if (scope)
+      decision.warnings.unshift(
+        ...(only?.notes ?? []),
+        ...scopeWarnings(scope, input.changeSet.completeness),
+      );
     decision.warnings.push(...discoveryWarnings, ...(this.provided?.warnings ?? []));
     const profileNow = this.profileCache;
     if (profileNow) {
@@ -1854,7 +1882,16 @@ export class SmartTest {
     }
     let coverage: CoverageReport | undefined;
     if (options.coverage) {
-      const scope = options.all ? "full" : "selected";
+      // "full" only when every test of the suite ran here: not a shard, nothing left to CI,
+      // nothing cancelled (bail, abort) or uncollected. Anything less is partial coverage (§32.2).
+      const scope =
+        options.all &&
+        !options.shard &&
+        !leftToCi.length &&
+        !uncollected.length &&
+        summary.files.every((f) => f.status !== "cancelled" && f.status !== "infrastructure-error")
+          ? "full"
+          : "selected";
       const [summaryReport, lines, browser] = await timed(timings, "coverage", () =>
         Promise.all([
           ingestIstanbul(coverageDirs, this.root, scope, runId),
@@ -1994,11 +2031,12 @@ export class SmartTest {
     await this.recordFlaky(report);
     const status = overallStatus(report);
     // Advance the native baseline only after a fully passing run, so failures are never hidden.
-    // A scoped run (`only`) did not test the whole change set, and a run that left selected tests
-    // to CI did not verify the change, so neither advances it.
+    // A scoped run (`only`), a shard, and a run that left selected tests to CI did not test the
+    // whole change set, so none of them advances it (the other shards' tests would never run).
     if (
       status === "passed" &&
       !analysis.scope &&
+      !options.shard &&
       !leftToCi.length &&
       (analysis.input.changeSet.provider === "native" ||
         (this.config.vcs.snapshots && !options.source))
@@ -2407,11 +2445,17 @@ export class SmartTest {
     validation: { ok: boolean; messages: string[] };
     reportPath: string;
   }> {
-    const journal = await applyPlan(this.root, this.storeDir, plan, options);
+    const formatWarnings: string[] = [];
+    const journal = await applyPlan(this.root, this.storeDir, plan, {
+      ...options,
+      onWarning: (m) => formatWarnings.push(m),
+    });
     const applied = plan.files
       .filter((f) => f.action !== "skip" && journal.entries.some((e) => e.path === f.path))
       .map((f) => f.path);
     const validation = await this.validateSetup();
+    // A formatter failure never fails init: the file is valid, only its style differs.
+    validation.messages.push(...formatWarnings);
     const reportPath = join(this.storeDir, "reports", "setup.md");
     await writeFileAtomic(reportPath, renderSetupReport(plan, applied, validation));
     return { applied, validation, reportPath };
@@ -2732,6 +2776,25 @@ export class SmartTest {
           hint: "Run `smarttest sync` to update it, or `smarttest doctor --fix`.",
         });
     }
+    {
+      // The key every signed cache (index, graph, discovery, cached passes) is checked with.
+      stateKey();
+      const source = stateKeySource();
+      if (source === "repaired")
+        out.push({
+          severity: "warn",
+          check: "state-key",
+          message: `The state key (${stateKeyFile()}) was truncated or damaged and has been replaced; caches signed with the old key are rebuilt once`,
+          hint: "Nothing to do. If it happens again, check the disk and what else writes to that directory.",
+        });
+      else if (source === "ephemeral")
+        out.push({
+          severity: "warn",
+          check: "state-key",
+          message: `No state key could be stored (${stateKeyFile()}): signed caches last for one process, so every run rebuilds the index and graph`,
+          hint: "Make the directory writable, or set SMARTTEST_STATE_KEY (32+ characters).",
+        });
+    }
     out.push(
       profile.runtime.nodeSupported
         ? {
@@ -3029,7 +3092,13 @@ export class SmartTest {
       ...(options.signal ? { signal: options.signal } : {}),
     });
     const selected = new Set(analysis.decision.selectedTests.map((t) => t.filePath));
-    const failing = full.files.filter((f) => f.status === "failed" || f.status === "timed-out");
+    // A reference file that could not run (runner crash, not collected, cancelled) has an unknown
+    // outcome: it may hide a failure, so it counts as one, never as a pass (§32.2).
+    const notRun = new Set<string>(["infrastructure-error", "cancelled"]);
+    const failing = [
+      ...full.files,
+      ...plan.unassigned.map((file) => ({ file, status: "infrastructure-error" as const })),
+    ].filter((f) => f.status === "failed" || f.status === "timed-out" || notRun.has(f.status));
     const fullDurationMs = full.files.reduce((a, f) => a + f.durationMs, 0);
     const selectedDurationMs = full.files
       .filter((f) => selected.has(f.file))
@@ -3042,7 +3111,9 @@ export class SmartTest {
         .filter((f) => !selected.has(f.file))
         .map((f) => ({
           test: f.file,
-          note: "failed in the full run but was not selected (may be a pre-existing failure — compare with a clean checkout)",
+          note: notRun.has(f.status)
+            ? `could not run in the full reference run (${f.status}) and was not selected: a failure there cannot be ruled out — fix the runner and validate again`
+            : "failed in the full run but was not selected (may be a pre-existing failure — compare with a clean checkout)",
         })),
       flakyInterference: full.files.filter((f) => f.status === "flaky").map((f) => f.file),
       fullDurationMs,

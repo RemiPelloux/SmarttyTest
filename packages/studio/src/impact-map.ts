@@ -169,11 +169,18 @@ function buildImpactMap(snapshot: Snapshot): StudioImpactMap {
   };
 
   let total = 0;
+  // Origins of EVERY path, kept or not: the "reached by no test" list must not depend on the cap.
+  const reached = new Set<string>();
   for (const test of impact.selected) {
     for (const reason of test.reasons) {
       total++;
-      if (paths.length >= MAX_MAP_PATHS) continue;
       const route = reason.path?.filter(Boolean) ?? [];
+      if (paths.length >= MAX_MAP_PATHS) {
+        const ran = /^Ran (.+?) when traced/.exec(reason.message)?.[1];
+        const origin = route[0] ?? (ran && changedFiles.has(ran) ? ran : undefined);
+        if (origin) reached.add(origin);
+        continue;
+      }
       let ids: string[];
       let edgeIds: string[];
       let kinds: StudioMapEdgeKind[];
@@ -235,7 +242,7 @@ function buildImpactMap(snapshot: Snapshot): StudioImpactMap {
     }
   }
 
-  const reached = new Set(paths.map((p) => p.origin));
+  for (const p of paths) reached.add(p.origin);
   const reachedFiles = new Set([...reached].map(fileOf));
   const edgeKinds = [...new Set([...edges.values()].map((e) => e.kind))].sort();
   const confidences = [...new Set(paths.map((p) => p.confidence ?? "not graded"))].sort(

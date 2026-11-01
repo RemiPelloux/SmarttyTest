@@ -1,3 +1,5 @@
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 import { SmartTest } from "@smarttest/core";
 import { describe, expect, it } from "vitest";
 import { edit, materialize } from "./helpers.js";
@@ -37,5 +39,23 @@ describe("coverage", () => {
     });
     expect(selected.report.coverage?.scope).toBe("selected");
     expect(selected.integrityIssues).toEqual([]);
+  }, 180_000);
+
+  it("never labels one shard of the full suite as full coverage", async () => {
+    const dir = await materialize("nest-auth-vitest", { git: true });
+    const st = await SmartTest.open({ root: dir });
+    const half = await st.run({
+      all: true,
+      shard: { index: 1, total: 2 },
+      coverage: true,
+      formats: ["json"],
+    });
+    expect(half.report.executions.length).toBeLessThan(half.analysis.testFiles.length);
+    expect(half.report.coverage?.scope).toBe("selected");
+    const lines = JSON.parse(
+      await readFile(join(dir, ".smarttest/runs/coverage-lines.json"), "utf8"),
+    ) as { scope: string };
+    expect(lines.scope).toBe("selected");
+    expect(half.integrityIssues).toEqual([]);
   }, 180_000);
 });
