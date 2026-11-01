@@ -221,6 +221,34 @@ class Session {
         await sleep(200);
         obscured = await this.focusInfo();
       }
+      // Safari under WebDriver has been seen to keep a focused element's unfocused style:
+      // :focus matches, yet getComputedStyle still shows the unfocused rule. An inline-style
+      // change forces WebKit to restyle that one element; if the page's own :focus rule then
+      // shows it, the page is right and the stale style is the automation's, which is recorded.
+      if (obscured.obscured === "entirely") {
+        const stale = await this.page(() => {
+          const el = document.activeElement;
+          if (!el?.matches(":focus")) return null;
+          const before = getComputedStyle(el).left;
+          el.style.setProperty("--st-restyle", "1");
+          void el.offsetWidth;
+          el.style.removeProperty("--st-restyle");
+          void el.offsetWidth;
+          const after = getComputedStyle(el).left;
+          return before !== after ? `${before} → ${after}` : null;
+        });
+        if (stale) {
+          const again = await this.focusInfo();
+          if (again.obscured !== "entirely") {
+            advise(
+              state,
+              "webkit-stale-focus-style",
+              `${info.desc} kept its unfocused style until restyled (left ${stale}); the page's :focus rule is correct`,
+            );
+            obscured = again;
+          }
+        }
+      }
       if (obscured.obscured === "entirely" && obscured.obscuredBy !== "run drawer") {
         const where = await this.page(() => {
           const el = document.activeElement;

@@ -21,6 +21,7 @@
 import { execFile, spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { createServer } from "node:http";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -50,6 +51,21 @@ const fail = (check, detail) => {
   failures.push({ check, detail });
   console.log(`FAIL ${check}: ${detail}`);
 };
+const advisories = [];
+const advise = (check, detail) => {
+  advisories.push({ check, detail });
+  console.log(`advisory ${check}: ${detail}`);
+};
+/** Live-region messages heard on the calibration page (see calibrateLiveRegion). */
+let calibration = [];
+/** A live-region check fails only when the calibration page proved live regions are audible. */
+const failLive = (check, detail) =>
+  calibration.length
+    ? fail(check, detail)
+    : advise(
+        check,
+        `${detail} (not gated: the calibration page's live region was not heard either, so this reader's log cannot observe live regions here)`,
+      );
 const hear = (phrase, source) => {
   const text = String(phrase ?? "").trim();
   if (!text) return;
@@ -90,9 +106,36 @@ async function poll(ms, until) {
   while (Date.now() < end) {
     if (MAC) hear(await sr.lastSpokenPhrase().catch(() => ""), "poll");
     if (until?.()) return true;
-    await sleep(MAC ? 150 : 250);
+    // Each AppleScript round trip already takes ~100 ms: poll VoiceOver back to back.
+    if (!MAC) await sleep(250);
   }
   return false;
+}
+
+/**
+ * Calibrates the instrument before judging Studio: a bare page whose persistent, initially empty
+ * role="status" region gets a new message every 2.5 s (cleared first, then set 60 ms later, as
+ * Studio's announce() does), with nothing else happening. Returns the messages heard. If none
+ * is heard here either, this reader/runner/log combination cannot observe live regions at all,
+ * and a silent Studio run says nothing about Studio.
+ */
+async function calibrateLiveRegion() {
+  const page = `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Live region calibration</title></head>
+<body><main><h1>Live region calibration</h1><p>Messages follow.</p></main>
+<div id="s" role="status" aria-live="polite" aria-atomic="true" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)"></div>
+<script>let n=0;function tick(){n++;const s=document.getElementById("s");s.textContent="";setTimeout(()=>{s.textContent="Calibration message "+n},60);if(n<5)setTimeout(tick,2500)}setTimeout(tick,3000)</script></body></html>`;
+  const server = createServer((_req, res) => {
+    res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+    res.end(page);
+  });
+  await new Promise((done) => server.listen(0, "127.0.0.1", done));
+  const browser = await openBrowser(`http://127.0.0.1:${server.address().port}/`);
+  const mark = spoken.length;
+  await poll(17_000);
+  await browser.close().catch(() => {});
+  server.close();
+  await sleep(1500);
+  return heardSince(mark).filter((t) => /Calibration message \d/.test(t));
 }
 
 /** Runs a screen-reader command and records what it made the reader say. */
@@ -210,6 +253,11 @@ async function main() {
       throw error;
     }
     listener = await listen();
+    step = "calibration";
+    calibration = await calibrateLiveRegion();
+    console.log(`Calibration: ${calibration.length} of 5 live-region messages heard`);
+    if (!calibration.length)
+      advise("calibration", "no message of the calibration page's live region was heard");
     step = "load";
     browser = await openBrowser(studio.url("/overview", { theme: "dark" }));
     await poll(8000);
@@ -247,9 +295,9 @@ async function main() {
       await poll(2000);
       const said = heardSince(mark);
       if (!said.some((t) => /Selecting tests|Running tests/.test(t)))
-        fail("run-progress", `run progress is not spoken: ${said.join(" | ")}`);
+        failLive("run-progress", `run progress is not spoken: ${said.join(" | ")}`);
       if (!said.some((t) => verdict.test(t)))
-        fail("run-verdict", `the verdict is not spoken: ${said.join(" | ")}`);
+        failLive("run-verdict", `the verdict is not spoken: ${said.join(" | ")}`);
       else if (!said.some((t) => /\d+ passed, \d+ failed/.test(t)))
         fail("run-verdict", "the verdict is spoken without its counts");
 
@@ -295,12 +343,13 @@ async function main() {
   );
   await writeFile(
     join(OUT, `spoken-${READER}.json`),
-    `${JSON.stringify({ reader: READER, failures, spoken }, null, 2)}\n`,
+    `${JSON.stringify({ reader: READER, calibration, failures, advisories, spoken }, null, 2)}\n`,
   );
   console.log(
     `\n${READER}: ${failures.length} failures, ${spoken.length} phrases → ${join(OUT, `spoken-${READER}.txt`)}`,
   );
   for (const f of failures) console.log(`- FAIL ${f.check}: ${f.detail}`);
+  for (const a of advisories) console.log(`- advisory ${a.check}: ${a.detail}`);
   process.exitCode = failures.length ? 1 : 0;
 }
 
