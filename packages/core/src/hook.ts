@@ -509,9 +509,12 @@ export async function isolate(options: {
 
     const parts: string[] = [];
     const { unstaged, untracked, staged } = options.aside;
-    if (unstaged.length) parts.push(`${unstaged.length} file(s) with unstaged edits`);
-    if (untracked.length) parts.push(`${untracked.length} untracked file(s)`);
-    if (staged.length) parts.push(`${staged.length} staged, uncommitted file(s)`);
+    // Name the files (the first few): a set-aside config means the checkout used another one.
+    const named = (files: readonly string[], what: string) =>
+      `${files.length} ${what} (${files.slice(0, 3).join(", ")}${files.length > 3 ? `, +${files.length - 3} more` : ""})`;
+    if (unstaged.length) parts.push(named(unstaged, "file(s) with unstaged edits"));
+    if (untracked.length) parts.push(named(untracked, "untracked file(s)"));
+    if (staged.length) parts.push(named(staged, "staged, uncommitted file(s)"));
     const what = options.kind === "staged" ? "the staged content" : "the commits being pushed";
     return {
       root,

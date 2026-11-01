@@ -3136,7 +3136,7 @@ export class SmartTest {
         out.push({
           severity: history.medianMs > this.config.hook.budgetMs ? "warn" : "ok",
           check: "hook",
-          message: `hook: ${history.runs} run(s), median ${Math.round(history.medianMs)} ms, slowest ${Math.round(history.slowestMs)} ms`,
+          message: `${history.runs} run(s), median ${Math.round(history.medianMs)} ms, slowest ${Math.round(history.slowestMs)} ms`,
           ...(history.medianMs > this.config.hook.budgetMs
             ? {
                 hint: `Above the ${this.config.hook.budgetMs} ms budget: move slow checks to pre-push, or run \`smarttest trace --stale\`.`,

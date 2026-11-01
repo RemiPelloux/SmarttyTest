@@ -640,6 +640,10 @@ it("does not inherit the pre-commit Git environment", () => {
     });
     expect(commit.status, commit.stderr).toBe(0);
     expect(git(dir, "log", "-1", "--format=%s").trim()).toBe("hook env");
+    // The set-aside files are named, not only counted.
+    expect(await readFile(join(dir, ".smarttest/reports/report.json"), "utf8")).toContain(
+      "untracked file(s) (notes.md)",
+    );
     expect((await (await SmartTest.open({ root: dir })).hookHistory()).runs).toBe(1);
     const records = JSON.parse(
       await readFile(join(dir, ".smarttest/state/hooks.json"), "utf8"),
