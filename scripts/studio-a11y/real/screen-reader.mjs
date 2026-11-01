@@ -323,8 +323,8 @@ async function main() {
       const verdict = /Run (passed|finished|hit)|No test|Nothing to run/;
       // Wait for the run itself (Studio's API), not for speech: with a screen reader on, a hosted
       // runner can take minutes, and the drawer must not be read while it still says "Running".
-      const finished = await runFinished(studio, 360_000);
-      if (!finished) fail("run", "the run did not finish within 6 minutes");
+      const finished = await runFinished(studio, 900_000);
+      if (!finished) fail("run", "the run did not finish within 15 minutes");
       await poll(4000);
       const said = heardSince(mark);
       if (!said.some((t) => /Selecting tests|Running tests/.test(t)))

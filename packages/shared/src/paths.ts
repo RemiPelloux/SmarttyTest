@@ -1,3 +1,4 @@
+import { realpathSync } from "node:fs";
 import { isAbsolute, relative, resolve, sep } from "node:path";
 import { SmartTestError } from "./errors.js";
 
@@ -11,6 +12,34 @@ export function relPosix(root: string, absolute: string): string | undefined {
   if (rel === "") return "";
   if (rel.startsWith("..") || isAbsolute(rel)) return undefined;
   return toPosix(rel);
+}
+
+const canonicalCache = new Map<string, string>();
+/** `path` with symlinks and Windows 8.3 short names resolved (cached; `path` itself if missing). */
+export function canonicalPath(path: string): string {
+  let real = canonicalCache.get(path);
+  if (real === undefined) {
+    try {
+      real = realpathSync.native(path);
+    } catch {
+      real = path;
+    }
+    canonicalCache.set(path, real);
+  }
+  return real;
+}
+
+/**
+ * Project-relative POSIX path of a path a test runner or coverage tool reported. Runners report
+ * canonical paths (macOS: /private/var/..., Windows: no 8.3 short names such as RUNNER~1), which
+ * do not relate lexically to a root spelled through a symlink or a short name; the canonical
+ * root is tried next. For reporting only: path confinement checks stay lexical (`safeResolve`).
+ */
+export function relPosixReported(root: string, absolute: string): string | undefined {
+  const rel = relPosix(root, absolute);
+  if (rel !== undefined) return rel;
+  const real = canonicalPath(root);
+  return real === root ? undefined : relPosix(real, absolute);
 }
 
 /** Resolve a project-relative POSIX path, rejecting traversal outside the root (spec §30.2). */

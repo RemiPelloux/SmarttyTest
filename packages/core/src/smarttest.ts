@@ -417,12 +417,19 @@ export class SmartTest {
 
   static async open(options: OpenOptions): Promise<SmartTest> {
     const root = canonicalRoot(options.root);
-    const loaded = await loadConfig(root, options.configPath);
+    // Paths given inside the root are re-spelled under the canonical root, so the store and the
+    // config stay "inside the project" for every later relative() check.
+    const rebase = (p: string | undefined) => {
+      if (p === undefined || !isAbsolute(p)) return p;
+      const rel = relative(options.root, p);
+      return rel.startsWith("..") || isAbsolute(rel) ? p : join(root, rel);
+    };
+    const loaded = await loadConfig(root, rebase(options.configPath));
     const st = new SmartTest(
       root,
       loaded,
       options.logger ?? silentLogger,
-      options.storeDir,
+      rebase(options.storeDir),
       options.mirror,
     );
     await st.assertStoreUntracked();

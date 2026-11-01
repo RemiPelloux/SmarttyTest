@@ -2,7 +2,7 @@
  * @smarttest/coverage-engine — ingests istanbul coverage with an explicit scope.
  * Full-suite and selected-subset coverage are never merged (spec §16.2).
  */
-import { readJson, relPosix } from "@smarttest/shared";
+import { readJson, relPosixReported } from "@smarttest/shared";
 
 export type CoverageScope = "full" | "selected";
 
@@ -86,7 +86,7 @@ export async function ingestIstanbul(
     if (!data) continue;
     found = true;
     for (const [abs, entry] of Object.entries(data)) {
-      const rel = relPosix(projectRoot, entry.path ?? abs) ?? abs;
+      const rel = relPosixReported(projectRoot, entry.path ?? abs) ?? abs;
       files[rel] = fileCoverage(entry);
     }
   }

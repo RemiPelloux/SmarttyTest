@@ -6,8 +6,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type JestLikeReport, parseJestLikeReport, resolvePackageBin } from "@smarttest/plugin-sdk";
 import {
+  canonicalPath,
   type ExecutionOptions,
-  relPosix,
+  relPosixReported,
   runProcess,
   SmartTestError,
   type TestAdapter,
@@ -84,7 +85,7 @@ export class JestAdapter implements TestAdapter {
       ),
     ];
     return files.map((abs) => {
-      const rel = relPosix(this.options.projectRoot, abs) ?? abs;
+      const rel = relPosixReported(this.options.projectRoot, abs) ?? abs;
       return { id: rel, filePath: rel, suitePath: [], name: rel, tags: [] };
     });
   }
@@ -93,7 +94,9 @@ export class JestAdapter implements TestAdapter {
     const startedAt = new Date().toISOString();
     const tmp = await mkdtemp(join(tmpdir(), "smarttest-jest-"));
     const out = join(tmp, "report.json");
-    const files = selection.files.map((f) => join(this.options.projectRoot, f));
+    // Canonical: the runner matches these against the canonical paths it found (macOS
+    // /private/var, Windows long names); a root spelled through a symlink would match nothing.
+    const files = selection.files.map((f) => join(canonicalPath(this.options.projectRoot), f));
     const args = [
       this.bin(),
       "--json",

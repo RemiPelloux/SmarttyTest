@@ -9,7 +9,7 @@ import { isAbsolute, join, relative } from "node:path";
 import { resolvePackageBin } from "@smarttest/plugin-sdk";
 import {
   type ExecutionOptions,
-  relPosix,
+  relPosixReported,
   runProcess,
   SmartTestError,
   type TestAdapter,
@@ -87,7 +87,7 @@ export function parsePlaywrightReport(
     const here = suite.title && suite.title !== suite.file ? [...path, suite.title] : path;
     for (const spec of suite.specs ?? []) {
       const abs = isAbsolute(spec.file) ? spec.file : join(rootDir, spec.file);
-      const file = relPosix(projectRoot, abs) ?? relative(projectRoot, abs);
+      const file = relPosixReported(projectRoot, abs) ?? relative(projectRoot, abs);
       for (const t of spec.tests ?? []) {
         const results = t.results ?? [];
         const last = results.at(-1);
@@ -111,7 +111,7 @@ export function parsePlaywrightReport(
             .filter((a) => a.path)
             .map((a) => ({
               name: a.name ?? "attachment",
-              path: relPosix(projectRoot, a.path as string) ?? (a.path as string),
+              path: relPosixReported(projectRoot, a.path as string) ?? (a.path as string),
             })),
         );
         out.push({
