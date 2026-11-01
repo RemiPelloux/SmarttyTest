@@ -799,8 +799,8 @@ async function cmdMigrate(ctx: Ctx): Promise<number> {
     ...(flags.dir !== undefined ? { dir: flags.dir } : {}),
   });
   const { previewDiff } = await import("@smarttest/smart-init");
-  if (flags.json && (flags["dry-run"] || !flags.yes)) ctx.json("migrate", { plan });
-  else {
+  if (flags.json && (flags["dry-run"] || !plan.files.length)) ctx.json("migrate", { plan });
+  else if (!flags.json) {
     ctx.out(`${t.bold("Migrate Jest → Vitest")} · ${plan.files.length} file(s)`);
     for (const f of plan.files) {
       ctx.out(
@@ -814,7 +814,7 @@ async function cmdMigrate(ctx: Ctx): Promise<number> {
   }
   if (!plan.files.length || flags["dry-run"]) return ExitCode.Success;
   if (!flags.yes) {
-    if (!ctx.interactive)
+    if (!ctx.interactive || flags.json)
       throw new SmartTestError("migrate needs confirmation", {
         code: "ST_INIT_CONFIRMATION_REQUIRED",
         category: "configuration",
@@ -944,9 +944,10 @@ async function cmdInit(ctx: Ctx): Promise<number> {
     ]);
   }
   const plan = await st.initPlan(overrides);
-  if (flags.json && (flags["dry-run"] || !flags.yes)) {
+  // --json prints exactly one document: the plan (dry run), the result, or an error.
+  if (flags.json && flags["dry-run"]) {
     ctx.json("init", { plan });
-    if (flags["dry-run"]) return ExitCode.Success;
+    return ExitCode.Success;
   }
   if (!flags.json) {
     ctx.out(`${t.cyan("Detected:")} ${plan.summary}`);
@@ -977,11 +978,11 @@ async function cmdInit(ctx: Ctx): Promise<number> {
   const pending = plan.files.filter((f) => f.action !== "skip");
   if (!pending.length) {
     if (!flags.json) ctx.out(t.green("\n✓ Already initialised — nothing to change."));
-    else if (flags.yes) ctx.json("init", { plan, applied: [] });
+    else ctx.json("init", { plan, applied: [] });
     return ExitCode.Success;
   }
   if (!flags.yes && !flags.auto) {
-    if (!ctx.interactive) {
+    if (!ctx.interactive || flags.json) {
       throw new SmartTestError("init needs confirmation", {
         code: "ST_INIT_CONFIRMATION_REQUIRED",
         category: "configuration",

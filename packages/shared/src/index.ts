@@ -5,8 +5,10 @@
  */
 
 export type * from "./contracts/adapters.js";
+export type * from "./contracts/analysis.js";
 export type * from "./contracts/graph.js";
 export type * from "./contracts/impact.js";
+export type * from "./contracts/plugins.js";
 export type * from "./contracts/symbols.js";
 export type * from "./contracts/test-results.js";
 export type * from "./contracts/tracing.js";
@@ -15,6 +17,7 @@ export * from "./errors.js";
 export * from "./fs.js";
 export * from "./glob.js";
 export * from "./hash.js";
+export * from "./json-schema.js";
 export * from "./logger.js";
 export * from "./paths.js";
 export * from "./primitives.js";

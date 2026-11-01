@@ -115,6 +115,7 @@ export function parsePlaywrightReport(
 const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 export class PlaywrightAdapter implements TestAdapter {
+  readonly apiVersion = 1;
   readonly id = "playwright";
   constructor(private readonly options: PlaywrightAdapterOptions) {}
 

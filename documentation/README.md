@@ -6,6 +6,7 @@ Guides
 - [Studio](guides/studio.md)
 - [VS Code extension](../extensions/vscode/README.md)
 - [Running in CI](guides/ci.md)
+- [Plugins](guides/plugins.md)
 
 Concepts
 - [How selection works](concepts/how-selection-works.md)
@@ -18,6 +19,7 @@ Concepts
 Reference
 - [CLI](reference/cli.md)
 - [Configuration](reference/configuration.md)
+- [Public contracts and semver policy](reference/contracts.md)
 - [Benchmarks](../benchmarks/RESULTS.md)
 
 Architecture and design

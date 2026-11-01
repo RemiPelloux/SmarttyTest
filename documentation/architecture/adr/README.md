@@ -13,6 +13,7 @@ We record significant decisions as lightweight ADRs (context → decision → co
 | [0007](0007-name-license-distribution.md)      | Name, license and distribution                                       | Proposed (decision pending) |
 | [0008](0008-observed-execution.md)             | Observed execution may rule out tests, except in SAFE mode           | Accepted (0.5.0)            |
 | [0009](0009-validated-result-cache.md)         | Validated result cache, reported as cached                           | Accepted (0.8.0)            |
+| [0010](0010-plugin-sdk-v1.md)                  | Plugin SDK v1 and edge providers                                     | Proposed (1.0.0)            |
 
 Boundaries from ADR-0004 are enforced by `pnpm check:boundaries` (`scripts/check-boundaries.mjs`).
 

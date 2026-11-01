@@ -5,6 +5,7 @@ import { aggregateStatus, executeGroups } from "./index.js";
 function fakeAdapter(script: Record<string, ("passed" | "failed")[]>): TestAdapter {
   const attempts = new Map<string, number>();
   return {
+    apiVersion: 1,
     id: "fake",
     getCapabilities: () => ({
       discovery: false,

@@ -1,23 +1,40 @@
 /**
- * @smarttest/plugin-sdk — public plugin contracts and capability helpers (spec §27, ADR-0005).
+ * @smarttest/plugin-sdk — public plugin contracts (Plugin SDK v1, frozen at 1.0.0; spec §27,
+ * ADR-0005, ADR-0006). Published as `smarttest/plugin-sdk`; the conformance kit is
+ * `smarttest/plugin-sdk/conformance`. Guide: documentation/guides/plugins.md.
+ *
+ * Contracts (the types are defined in `@smarttest/shared` and re-exported here):
+ *   - runner adapters:          `TestAdapter`
+ *   - version-control adapters: `VersionControlAdapter`
+ *   - language analyzers:       `LanguageAnalyzer`
+ *   - edge providers:           `EdgeProvider`, loaded through a `SmartTestPlugin`
  */
-import type {
-  Capability,
-  TestAdapter,
-  TestAdapterCapabilities,
-  VersionControlCapabilities,
-} from "@smarttest/shared";
+import type { Analyzer, Capability, EdgeProvider, SmartTestPlugin } from "@smarttest/shared";
 
 export type {
   Capability,
   ChangeSet,
+  Completeness,
+  Confidence,
   CoverageArtifact,
+  EdgeProvider,
+  EdgeProviderCapabilities,
+  EdgeProviderContext,
+  EdgeProviderResult,
   ExecutionOptions,
+  FileAnalysis,
   FileChange,
-  LanguageAdapter,
+  GraphEdgeKind,
+  ImportBinding,
+  ImportKind,
+  ImportRecord,
+  ProvidedEdge,
   RevisionRef,
-  SourceSymbol,
-  SymbolGraph,
+  SmartTestPlugin,
+  SourcePosition,
+  SourceRange,
+  SymbolKind,
+  SymbolRecord,
   TestAdapter,
   TestAdapterCapabilities,
   TestCase,
@@ -25,11 +42,34 @@ export type {
   TestRunResult,
   TestSelection,
   TestStatus,
-  TestTarget,
+  UnresolvedRelationship,
   VersionControlAdapter,
   VersionControlCapabilities,
   WorkingState,
 } from "@smarttest/shared";
+
+/** A language analyzer: turns one source file into a `FileAnalysis`. */
+export type LanguageAnalyzer = Analyzer;
+
+export {
+  type ConformanceCheck,
+  type ConformanceIssue,
+  type ConformanceReport,
+  type ConformanceStatus,
+  checkTestAdapterConformance,
+} from "./conformance.js";
+export {
+  fileOfTestId,
+  type JestLikeReport,
+  parseJestLikeReport,
+  resolvePackageBin,
+} from "./runner.js";
+export {
+  EDGE_PROVIDER_CAPABILITY_KEYS,
+  PLUGIN_API_VERSION,
+  TEST_ADAPTER_CAPABILITY_KEYS,
+  VCS_CAPABILITY_KEYS,
+} from "./version.js";
 
 /** A capability counts as supported only when explicitly declared `true` (undeclared = unsupported). */
 export function supports(capability: Capability | undefined): boolean {
@@ -40,67 +80,12 @@ export function supportsPartially(capability: Capability | undefined): boolean {
   return capability === true || capability === "partial";
 }
 
-export {
-  fileOfTestId,
-  type JestLikeReport,
-  parseJestLikeReport,
-  resolvePackageBin,
-} from "./runner.js";
-
-export const TEST_ADAPTER_CAPABILITY_KEYS: (keyof TestAdapterCapabilities)[] = [
-  "discovery",
-  "fileSelection",
-  "testCaseSelection",
-  "coverage",
-  "tracing",
-  "parallel",
-  "cancellation",
-  "retry",
-  "sourceMaps",
-];
-
-export const VCS_CAPABILITY_KEYS: (keyof VersionControlCapabilities)[] = [
-  "branches",
-  "stagedChanges",
-  "untrackedFiles",
-  "renameDetection",
-  "mergeBase",
-  "fileContentAtRevision",
-];
-
-export interface ConformanceIssue {
-  capability: string;
-  message: string;
+/** Identity helper that type-checks a plugin's default export. */
+export function definePlugin(plugin: SmartTestPlugin): SmartTestPlugin {
+  return plugin;
 }
 
-/**
- * Minimal conformance kit: verifies that an adapter declares every capability explicitly
- * and that declared discovery actually works.
- */
-export async function checkTestAdapterConformance(
-  adapter: TestAdapter,
-): Promise<ConformanceIssue[]> {
-  const issues: ConformanceIssue[] = [];
-  const caps = adapter.getCapabilities() as unknown as Record<string, unknown>;
-  for (const key of TEST_ADAPTER_CAPABILITY_KEYS) {
-    const v = caps[key];
-    if (v !== true && v !== false && v !== "partial")
-      issues.push({
-        capability: key,
-        message: 'capability must be declared as true, false or "partial"',
-      });
-  }
-  if (caps.discovery === true) {
-    try {
-      const cases = await adapter.discover();
-      if (!Array.isArray(cases))
-        issues.push({ capability: "discovery", message: "discover() must return an array" });
-    } catch (error) {
-      issues.push({
-        capability: "discovery",
-        message: `discover() threw: ${(error as Error).message}`,
-      });
-    }
-  }
-  return issues;
+/** Identity helper that type-checks an edge provider. */
+export function defineEdgeProvider(provider: EdgeProvider): EdgeProvider {
+  return provider;
 }

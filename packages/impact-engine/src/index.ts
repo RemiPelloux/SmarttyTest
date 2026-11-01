@@ -29,6 +29,8 @@ export interface ImpactInput {
   isTest: (path: string) => boolean;
   mode: SafetyMode;
   triggers: readonly string[];
+  /** Triggers whose change widens to the whole project, not only their directory (plugin modules). */
+  globalTriggers?: readonly string[];
   rules: RulesEngine;
   packageOf?: (path: string) => string | undefined;
   /** Key-level changes of resource files (env, Prisma schema, translation catalogs). */
@@ -136,7 +138,8 @@ export function decideImpact(input: ImpactInput): ImpactResult {
   // are all read by analysed code selects those readers instead.
   for (const change of changeSet.changes) {
     for (const path of [change.path, change.previousPath].filter((p): p is string => !!p)) {
-      const pattern = input.triggers.find((t) => matchGlob(path, t));
+      const globalPattern = input.globalTriggers?.find((t) => matchGlob(path, t));
+      const pattern = globalPattern ?? input.triggers.find((t) => matchGlob(path, t));
       if (!pattern) continue;
       const rc = input.resources?.get(path);
       if (rc?.kind === "env" && change.type === "modified") {
@@ -149,7 +152,7 @@ export function decideImpact(input: ImpactInput): ImpactResult {
           continue;
         }
       }
-      const scope = dirOf(path);
+      const scope = globalPattern ? "" : dirOf(path);
       details.triggers.push({ file: path, pattern, scope });
       const reason: SelectionReason = {
         kind: "mandatory-trigger",

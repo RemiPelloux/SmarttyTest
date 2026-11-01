@@ -48,6 +48,21 @@ export interface GraphOptions {
   routes?: readonly RouteDef[];
   /** Test files run by end-to-end runners (Playwright, Cypress). */
   e2eTests?: ReadonlySet<string>;
+  /** Edges and unresolved relationships from plugin edge providers (Plugin SDK v1). */
+  provided?: ProvidedGraphInput;
+}
+
+/** Plugin edge-provider output, already validated and made project-relative by the caller. */
+export interface ProvidedGraphInput {
+  edges: readonly {
+    from: string;
+    to: string;
+    kind: GraphEdge["kind"];
+    confidence: Confidence;
+    provider: string;
+  }[];
+  /** Files holding relationships a provider could not resolve: they become uncertainty. */
+  unresolved: readonly { file: string; reason: string }[];
 }
 
 export interface Seed {
@@ -123,6 +138,39 @@ export class DependencyGraph {
   ) {
     this.build();
     this.linkRoutes();
+    this.linkProvided();
+  }
+
+  /**
+   * Plugin edges: `from` depends on the whole of `to`. They only add dependents (a provider can
+   * never remove an edge), and what a provider could not resolve is uncertainty.
+   */
+  private linkProvided(): void {
+    const p = this.options.provided;
+    if (!p) return;
+    for (const e of p.edges) {
+      if (e.from === e.to) continue;
+      let fwd = this.forward.get(e.from);
+      if (!fwd) {
+        fwd = new Set();
+        this.forward.set(e.from, fwd);
+      }
+      fwd.add(e.to);
+      this.addFileDep(e.to, {
+        from: key(e.from, WHOLE),
+        kind: e.kind,
+        provenance: "plugin",
+        confidence: e.confidence,
+      });
+    }
+    for (const u of p.unresolved)
+      this.uncertainty.set(u.file, [...(this.uncertainty.get(u.file) ?? []), u.reason]);
+  }
+
+  /** Whether plugin edge providers contributed edges or uncertainty. */
+  private get hasProvided(): boolean {
+    const p = this.options.provided;
+    return !!p && (p.edges.length > 0 || p.unresolved.length > 0);
   }
 
   /**
@@ -451,6 +499,8 @@ export class DependencyGraph {
   patch(changed: readonly string[]): boolean {
     const set = new Set(changed);
     if (!set.size) return true;
+    // Provider output is recomputed for each analysis: the graph is rebuilt with it.
+    if (this.hasProvided) return false;
     for (const f of set) {
       const a = this.files.get(f);
       if (!a) return false;

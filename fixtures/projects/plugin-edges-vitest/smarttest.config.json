@@ -1,0 +1,4 @@
+{
+  "$schema": "../../../packages/cli/schemas/config.v1.schema.json",
+  "plugins": ["./tools/sql-edges.mjs"]
+}

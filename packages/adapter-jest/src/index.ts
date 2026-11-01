@@ -28,6 +28,7 @@ export interface JestAdapterOptions {
 }
 
 export class JestAdapter implements TestAdapter {
+  readonly apiVersion = 1;
   readonly id = "jest";
   constructor(private readonly options: JestAdapterOptions) {}
 

@@ -1,9 +1,13 @@
 import { analyzeSource } from "@smarttest/language-typescript";
 import type { FileAnalysis } from "@smarttest/source-parser";
 import { describe, expect, it } from "vitest";
-import { DependencyGraph } from "./index.js";
+import { DependencyGraph, type GraphOptions } from "./index.js";
 
-function graph(files: Record<string, string>, resolve: Record<string, string>) {
+function graph(
+  files: Record<string, string>,
+  resolve: Record<string, string>,
+  options: GraphOptions = {},
+) {
   const map = new Map<string, FileAnalysis>();
   for (const [p, c] of Object.entries(files)) {
     const a = analyzeSource(p, c);
@@ -14,7 +18,7 @@ function graph(files: Record<string, string>, resolve: Record<string, string>) {
     }
     map.set(p, a);
   }
-  return new DependencyGraph(map, (p) => p.includes(".test."));
+  return new DependencyGraph(map, (p) => p.includes(".test."), options);
 }
 
 const files = {
@@ -129,5 +133,60 @@ describe("DependencyGraph", () => {
     );
     expect(cyc.cycles()).toEqual([["a.ts", "b.ts"]]);
     expect(g.orphans(["test/auth.test.ts"])).toContain("src/catalog.ts");
+  });
+});
+
+describe("plugin edges", () => {
+  const withProvided = () =>
+    graph(
+      {
+        "src/users.ts": "export const findUser = () => 1;\n",
+        "src/orders.ts": "export const listOrders = () => 2;\n",
+        "test/users.test.ts":
+          'import { findUser } from "../src/users";\nit("x", () => findUser());\n',
+        "test/orders.test.ts":
+          'import { listOrders } from "../src/orders";\nit("x", () => listOrders());\n',
+      },
+      {
+        "test/users.test.ts:../src/users": "src/users.ts",
+        "test/orders.test.ts:../src/orders": "src/orders.ts",
+      },
+      {
+        provided: {
+          edges: [
+            {
+              from: "src/users.ts",
+              to: "sql/find-user.sql",
+              kind: "REFERENCES",
+              confidence: "high",
+              provider: "sql",
+            },
+          ],
+          unresolved: [{ file: "src/orders.ts", reason: "sql: query(name) is not a literal" }],
+        },
+      },
+    );
+
+  it("a provided edge reaches the tests of its dependent, and only those", () => {
+    const g = withProvided();
+    const hit = g.dependentsOf([{ file: "sql/find-user.sql", units: ["*"] }]);
+    expect([...hit.tests.keys()]).toEqual(["test/users.test.ts"]);
+    expect(g.dependenciesOf("test/users.test.ts")).toContain("sql/find-user.sql");
+    expect(g.toGraph().edges).toContainEqual(
+      expect.objectContaining({
+        from: "src/users.ts",
+        to: "sql/find-user.sql",
+        provenance: "plugin",
+      }),
+    );
+  });
+
+  it("unresolved relationships are uncertainty, and the graph is rebuilt instead of patched", () => {
+    const g = withProvided();
+    expect(g.uncertaintyReachableFrom("test/orders.test.ts")).toEqual([
+      { file: "src/orders.ts", reasons: ["sql: query(name) is not a literal"] },
+    ]);
+    expect(g.uncertaintyReachableFrom("test/users.test.ts")).toEqual([]);
+    expect(g.patch(["src/users.ts"])).toBe(false);
   });
 });

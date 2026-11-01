@@ -167,11 +167,11 @@ Watches the project and, after each batch of saves, runs the tests those saves c
 
 ## JSON output
 
-Every `--json` document has `schemaVersion` and `command`. Schemas ship with the package in [`packages/cli/schemas/`](../../packages/cli/schemas): `run`, `impact`, `scan`, `explain` and `error`. `trace`, `shadow`, `benchmark` and `graph` also accept `--json`; their documents are not versioned by a schema yet. Breaking a schema requires a major version.
+Every `--json` call prints one document with `schemaVersion` and `command` (or the error document). Schemas ship with the package in [`packages/cli/schemas/`](../../packages/cli/schemas): `run`, `impact`, `scan`, `explain`, `ci`, `doctor`, `shard`, `flaky`, `validate-selection`, `hook`, `sync` and `error`, plus `config` for the configuration file. Other commands that accept `--json` are experimental. [Public contracts](contracts.md) lists what is frozen and the semver policy; breaking a schema requires a major version.
 
 ## Exit codes
 
-These are versioned and part of the public contract (locked by a test in `@smarttest/shared`).
+These are versioned and part of the public contract (locked by tests in `@smarttest/shared` and `integration-tests/contracts.test.ts`; see [Public contracts](contracts.md)).
 
 | Code | Category                | Examples                                                                                |
 | ---- | ----------------------- | --------------------------------------------------------------------------------------- |
@@ -179,6 +179,6 @@ These are versioned and part of the public contract (locked by a test in `@smart
 | 1    | Test failure            | A test failed, timed out or was cancelled                                               |
 | 2    | Invalid usage           | Unknown command or flag, bad argument                                                   |
 | 3    | Configuration failure   | Invalid config, rule conflict, confirmation required in non-interactive mode            |
-| 4    | Infrastructure failure  | Runner crashed or missing, Git base missing in a shallow clone                          |
+| 4    | Infrastructure failure  | Runner crashed or missing, Git base missing in a shallow clone, edge provider failed    |
 | 5    | Safety / policy failure | `validate-selection`, `shadow` or `benchmark` found a missed failure, rollback conflict |
 | 70   | Internal error          | A SmartTest bug (e.g. a report integrity violation)                                     |

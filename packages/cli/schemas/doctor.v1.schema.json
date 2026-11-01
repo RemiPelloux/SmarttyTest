@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://smarttest.dev/schemas/doctor.v1.json",
+  "title": "smarttest doctor --json (v1)",
+  "type": "object",
+  "required": ["schemaVersion", "command", "findings"],
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "command": {
+      "const": "doctor"
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["severity", "check", "message"],
+        "properties": {
+          "severity": {
+            "enum": ["ok", "info", "warn", "error"]
+          },
+          "check": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "hint": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}

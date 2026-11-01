@@ -61,7 +61,23 @@ export default defineConfig({
 
 `hook.checks` is an array of `{ name, run, projects?, files?, stage? }`. Commands run in affected project directories; `{files}` becomes quoted changed paths. `stage` is `pre-commit` (default), `pre-push` or `both`. `hook.budgetMs` defaults to `60000`; exceeding the estimate warns and still runs the full selection. See [commit and push hooks](../guides/commit-hooks.md).
 
+`plugins` is an array of plugin modules: paths relative to the root (`./tools/sql-edges.mjs`) or package names. A plugin adds dependency edges that static analysis cannot see; see [Plugins](../guides/plugins.md). A change to a plugin file inside the project selects the full suite.
+
 Unknown keys produce warnings instead of being silently accepted.
+
+## JSON Schema
+
+The configuration has a published JSON Schema, frozen at 1.0.0: [`config.v1.schema.json`](../../packages/cli/schemas/config.v1.schema.json), shipped in the package as `smarttest/schemas/config.v1.schema.json`. Point `$schema` at it in `smarttest.config.json` to get completion and validation in editors; SmartTest ignores the key:
+
+```json
+{
+  "$schema": "./node_modules/smarttest/schemas/config.v1.schema.json",
+  "mode": "balanced",
+  "plugins": ["./tools/sql-edges.mjs"]
+}
+```
+
+A test checks the schema, the `SmartTestConfig` type and the validator SmartTest runs on load against each other, so they cannot drift. The schema rejects unknown keys so editors catch typos; SmartTest itself only warns about them. [Public contracts](contracts.md) lists what is frozen and how it may change.
 
 ## Per-project conventions
 
