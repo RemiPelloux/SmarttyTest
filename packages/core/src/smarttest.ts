@@ -954,7 +954,8 @@ export class SmartTest {
         const outputDir = isAbsolute(this.config.reports.outputDir)
           ? this.config.reports.outputDir
           : join(this.root, this.config.reports.outputDir);
-        engine.loaded.config.reports.outputDir = relative(iso.root, outputDir) || ".";
+        // Relative to the engine's (canonical) root, which may differ from iso.root in spelling.
+        engine.loaded.config.reports.outputDir = relative(engine.root, outputDir) || ".";
         options.onIsolatedConfig?.(engine.loaded.config);
         try {
           return await engine.run({
