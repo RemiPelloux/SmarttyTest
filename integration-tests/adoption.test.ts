@@ -193,11 +193,23 @@ describe("adaptive policy", () => {
     await mkdir(join(st.storeDir, "state"), { recursive: true });
     await writeFile(
       join(st.storeDir, "state/timings.json"),
-      JSON.stringify({ analysisMs: [5000, 5000, 5000], fullRunMs: 10 }),
+      JSON.stringify({
+        analysisMs: [5000, 5000, 5000],
+        fullRunMs: 10,
+        fullRunAt: new Date().toISOString(),
+      }),
     );
     const out = await st.run({});
     expect(out.report.decision.reasons[0]?.message).toMatch(/^Adaptive:/);
     expect(out.report.decision.skippedTests).toEqual([]);
+    // The adaptive run is counted (a real analysis comes back after a few), and its analysis time
+    // (no analysis ran) is not recorded.
+    const timings = JSON.parse(await readFile(join(st.storeDir, "state/timings.json"), "utf8")) as {
+      analysisMs: number[];
+      adaptiveRuns?: number;
+    };
+    expect(timings.analysisMs).toEqual([5000, 5000, 5000]);
+    expect(timings.adaptiveRuns).toBe(1);
     const off = await SmartTest.open({ root: dir });
     off.config.adaptive = false;
     const again = await off.run({});

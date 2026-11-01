@@ -27,6 +27,7 @@ import {
   type RawChange,
   scopeChangeSet,
 } from "@smarttest/vcs-core";
+import { BlobReader } from "./cat-file.js";
 
 const GIT_CONFIG = ["-c", "core.quotePath=false", "-c", "color.ui=false"];
 /**
@@ -285,21 +286,20 @@ export class GitAdapter implements VersionControlAdapter, ChangeProvider {
     return out;
   }
 
-  /** Content of a repository path at a revision, looking inside an expanded submodule. */
-  private async showAt(rev: string, repoPath: string): Promise<string | undefined> {
+  /**
+   * Content of a repository path at a revision, looking inside an expanded submodule. Read
+   * through one `git cat-file --batch` per repository (see cat-file.ts).
+   */
+  private async showAt(
+    blobs: BlobReader,
+    rev: string,
+    repoPath: string,
+  ): Promise<string | undefined> {
     for (const [sub, id] of this.submoduleBase) {
       if (!repoPath.startsWith(`${sub}/`)) continue;
-      const res = await runProcess(
-        "git",
-        [...GIT_CONFIG, "show", `${id}:${repoPath.slice(sub.length + 1)}`],
-        { cwd: join(await this.root(), sub) },
-      );
-      return res.code === 0 ? res.stdout : undefined;
+      return blobs.read(join(await this.root(), sub), id, repoPath.slice(sub.length + 1));
     }
-    const res = await runProcess("git", [...GIT_CONFIG, "show", `${rev}:${repoPath}`], {
-      cwd: this.projectRoot,
-    });
-    return res.code === 0 ? res.stdout : undefined;
+    return blobs.read(this.projectRoot, rev, repoPath);
   }
 
   async getChangeInput(source: ChangeSource): Promise<ChangeAnalysisInput> {
@@ -354,11 +354,12 @@ export class GitAdapter implements VersionControlAdapter, ChangeProvider {
       changeSet.targetRevision = "working-tree";
     }
     const scoped = scopeChangeSet(changeSet, prefix);
+    const blobs = new BlobReader(GIT_CONFIG);
     const readBefore = async (path: string): Promise<string | undefined> => {
       if (!beforeRev) return undefined;
       const repoPath = posix.normalize(prefix ? `${prefix}/${path}` : path);
       if (repoPath.startsWith("../")) return undefined;
-      return this.showAt(beforeRev, repoPath);
+      return this.showAt(blobs, beforeRev, repoPath);
     };
     return { changeSet: scoped, readBefore, description: `git · ${describeSource(source)}` };
   }

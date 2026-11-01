@@ -7,7 +7,15 @@ import { constants } from "node:fs";
 import { access, readdir, stat } from "node:fs/promises";
 import { arch, cpus, freemem, platform, totalmem } from "node:os";
 import { dirname, join } from "node:path";
-import { exists, matchGlob, readJson, readText, toPosix, walkFiles } from "@smarttest/shared";
+import {
+  exists,
+  gitProjectFiles,
+  matchGlob,
+  readJson,
+  readText,
+  toPosix,
+  walkFiles,
+} from "@smarttest/shared";
 import { detectTestCommands, type ExistingTestCommand } from "./commands.js";
 
 export { detectTestCommands, type ExistingTestCommand } from "./commands.js";
@@ -231,11 +239,15 @@ async function workspaceGlobs(
 async function detectWorkspaces(
   root: string,
   manifest: PackageManifest | undefined,
+  gitFiles?: readonly string[],
 ): Promise<WorkspacePackage[]> {
   const all = await workspaceGlobs(root, manifest);
   const globs = all.filter((g) => !g.startsWith("!"));
   const negated = all.filter((g) => g.startsWith("!")).map((g) => g.slice(1));
-  const manifests = await walkFiles(root, { include: ["**/package.json"] });
+  const manifests = await walkFiles(root, {
+    include: ["**/package.json"],
+    ...(gitFiles ? { gitFiles } : {}),
+  });
   const out: WorkspacePackage[] = [];
   for (const m of manifests) {
     const dir = m === "package.json" ? "" : m.slice(0, -"/package.json".length);
@@ -643,7 +655,7 @@ async function findUp(start: string, marker: string): Promise<string | undefined
   }
 }
 
-async function detectVcs(root: string): Promise<VcsInfo> {
+async function detectVcs(root: string, gitFiles?: readonly string[]): Promise<VcsInfo> {
   const gitRoot = await findUp(root, ".git");
   const unsupported: string[] = [];
   const svn = await findUp(root, ".svn");
@@ -657,6 +669,7 @@ async function detectVcs(root: string): Promise<VcsInfo> {
     const dirs = await walkFiles(root, {
       include: ["**/.git/HEAD", "**/.git"],
       ignoredDirs: new Set(["node_modules", ".smarttest"]),
+      ...(gitFiles ? { gitFiles } : {}),
     }).catch(() => []);
     for (const d of dirs) {
       const dir = d.replace(/\/?\.git(?:\/HEAD)?$/, "");
@@ -726,6 +739,11 @@ export interface DetectOptions {
   isTestFile?: (path: string) => boolean;
   /** The project files as `walkFiles(root)` lists them, when the caller already has them. */
   files?: string[];
+  /**
+   * A `gitProjectFiles(root)` listing the caller already has: every listing detection needs is
+   * derived from it instead of asking Git again.
+   */
+  gitFiles?: readonly string[];
 }
 
 /** Full project detection. Read-only: never writes anything. */
@@ -735,8 +753,10 @@ export async function detectProject(
 ): Promise<ProjectProfile> {
   const warnings: string[] = [];
   const manifest = await readJson<PackageManifest>(join(root, "package.json"));
-  const files = options.files ?? (await walkFiles(root));
-  const workspaces = await detectWorkspaces(root, manifest);
+  // One Git listing serves every walk below (it was taken up to three times).
+  const gitFiles = options.gitFiles ?? (await gitProjectFiles(root));
+  const files = options.files ?? (await walkFiles(root, gitFiles ? { gitFiles } : {}));
+  const workspaces = await detectWorkspaces(root, manifest, gitFiles);
   if (!manifest && !workspaces.length) warnings.push("No package.json found in this project");
   const manifests = [
     ...(manifest ? [{ dir: "", manifest }] : []),
@@ -751,7 +771,7 @@ export async function detectProject(
   const runners = await detectRunners(root, manifests);
   if (!runners.length)
     warnings.push("No Jest or Vitest setup detected — install one to run tests through SmartTest");
-  const vcs = await detectVcs(root);
+  const vcs = await detectVcs(root, gitFiles);
   warnings.push(...vcs.unsupported);
   return {
     root,

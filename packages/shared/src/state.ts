@@ -168,9 +168,13 @@ function verified(path: string, data: Buffer, mac: string | undefined): string |
   if (!mac) return undefined;
   const expected = macOf(path, data);
   const given = Buffer.from(mac.trim(), "hex");
-  return given.length === expected.length && timingSafeEqual(given, expected)
-    ? data.toString("utf8")
-    : undefined;
+  if (given.length !== expected.length || !timingSafeEqual(given, expected)) return undefined;
+  try {
+    return data.toString("utf8");
+  } catch {
+    // Larger than the longest string this runtime can hold: unreadable, so rebuilt.
+    return undefined;
+  }
 }
 
 /** Writes a state file and its MAC (atomically each; a torn pair reads as absent). */
@@ -180,6 +184,24 @@ export async function writeStateFile(path: string, data: string): Promise<void> 
     macPath(path),
     `${macOf(path, Buffer.from(data, "utf8")).toString("hex")}\n`,
   );
+}
+
+/**
+ * Writes a state file given in pieces, and its MAC: for content too large to hold as one string
+ * (atomically each; a torn pair reads as absent).
+ */
+export async function writeStateChunks(path: string, chunks: Iterable<string>): Promise<void> {
+  const mac = createHmac("sha256", stateKey()).update(
+    `smarttest-state-v1\u0000${basename(path)}\u0000`,
+  );
+  function* signed(): Generator<string> {
+    for (const chunk of chunks) {
+      mac.update(chunk, "utf8");
+      yield chunk;
+    }
+  }
+  await writeFileAtomic(path, signed());
+  await writeFileAtomic(macPath(path), `${mac.digest().toString("hex")}\n`);
 }
 
 /** The content of a state file this key wrote, or undefined (missing, damaged or forged). */

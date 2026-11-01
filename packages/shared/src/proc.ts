@@ -51,6 +51,14 @@ function childEnv(explicit: NodeJS.ProcessEnv | undefined): NodeJS.ProcessEnv {
   return env;
 }
 
+/**
+ * The environment a process spawned now would receive (`process.env` plus the current
+ * `runWithEnvScope` overrides), for long-lived children not started through `runProcess`.
+ */
+export function scopedEnv(explicit?: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  return childEnv(explicit);
+}
+
 /** Kills the whole process tree, not only the immediate child (e.g. `sh -c` grandchildren). */
 function killTree(child: ReturnType<typeof spawn>, signal: NodeJS.Signals): void {
   const pid = child.pid;

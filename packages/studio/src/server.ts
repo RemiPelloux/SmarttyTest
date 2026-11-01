@@ -221,7 +221,11 @@ class Studio {
     const run = (async () => {
       const started = Date.now();
       const analysis: Analysis = await this.st.analyze(wanted ? { source: wanted } : {});
-      const view = await this.st.traceView(analysis.input, analysis.index);
+      // The analysis read the traces already: one read per refresh, not two.
+      const view =
+        analysis.traces !== undefined
+          ? (analysis.traces ?? undefined)
+          : await this.st.traceView(analysis.input, analysis.index);
       // Runs started outside Studio (terminal, commit hook) change the last run and coverage.
       await this.loadRunState();
       const snapshot = await buildSnapshot(
@@ -857,6 +861,9 @@ export async function startStudio(options: StartStudioOptions): Promise<StudioSe
     ...(options.configPath ? { configPath: options.configPath } : {}),
     ...(options.storeDir ? { storeDir: options.storeDir } : {}),
   });
+  // A long-lived session, like `watch`: the index and graph stay in memory between refreshes
+  // (each save re-read the whole index and reloaded the graph).
+  st.keepWarm = true;
   const token = createSessionToken();
   const studio = new Studio(st);
   const server = createServer();

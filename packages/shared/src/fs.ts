@@ -124,7 +124,11 @@ export function assertConfinedWrite(path: string): void {
  * Atomic write: write to a sibling temp file, then rename over the target.
  * Readers never observe a partially written file (spec §30.2).
  */
-export async function writeFileAtomic(path: string, data: string | Uint8Array): Promise<void> {
+/** `data` may be given in pieces (an iterable of strings) when it is too large for one string. */
+export async function writeFileAtomic(
+  path: string,
+  data: string | Uint8Array | Iterable<string>,
+): Promise<void> {
   assertConfinedWrite(path);
   await mkdir(dirname(path), { recursive: true });
   const tmp = `${path}.${randomBytes(6).toString("hex")}.tmp`;
