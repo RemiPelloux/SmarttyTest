@@ -1,0 +1,141 @@
+{
+  "schemaVersion": 1,
+  "measured": "2026-11-01",
+  "machine": "Linux, 16 cores, 30 GB RAM, shared laptop; every run under a machine-wide lock; Node.js v26.12.1",
+  "cli": "SmartTest 1.0.0 candidate packed with pnpm bundle:cli (packages/cli/.publish/dist/bin.js), with the persisted graph, hook scope and 1.0.0 security fixes",
+  "page": "documentation/case-studies/benchmarks-1.0.md",
+  "repositories": [
+    {
+      "name": "tj/commander.js",
+      "runner": "node --test",
+      "testFiles": 109,
+      "commits": 12,
+      "fullMs": 12600,
+      "smarttestMs": 6992,
+      "savedPct": 45,
+      "testFilesRun": "644/1312",
+      "fallbacks": 5,
+      "missed": 0,
+      "alreadyFailing": 6,
+      "raw": "commander-js-benchmark.json"
+    },
+    {
+      "name": "pillarjs/path-to-regexp",
+      "runner": "vitest",
+      "testFiles": 3,
+      "commits": 12,
+      "fullMs": 32200,
+      "smarttestMs": 25208,
+      "savedPct": 22,
+      "testFilesRun": "30/36",
+      "fallbacks": 4,
+      "missed": 0,
+      "alreadyFailing": 0,
+      "raw": "path-to-regexp-benchmark.json"
+    },
+    {
+      "name": "unjs/ufo",
+      "runner": "vitest",
+      "testFiles": 13,
+      "commits": 12,
+      "fullMs": 4800,
+      "smarttestMs": 4658,
+      "savedPct": 4,
+      "testFilesRun": "99/156",
+      "fallbacks": 7,
+      "missed": 0,
+      "alreadyFailing": 0,
+      "raw": "ufo-benchmark.json"
+    },
+    {
+      "name": "unjs/defu",
+      "runner": "vitest",
+      "testFiles": 2,
+      "commits": 12,
+      "fullMs": 4100,
+      "smarttestMs": 3351,
+      "savedPct": 19,
+      "testFilesRun": "14/24",
+      "fallbacks": 6,
+      "missed": 0,
+      "alreadyFailing": 0,
+      "raw": "defu-benchmark.json"
+    },
+    {
+      "name": "LeadsIt",
+      "runner": "jest, vitest, node --test",
+      "testFiles": 103,
+      "commits": 12,
+      "fullMs": 47500,
+      "projectGatedMs": 12800,
+      "smarttestMs": 6928,
+      "savedPct": 85,
+      "testFilesRun": "5/1225",
+      "fallbacks": 0,
+      "missed": 0,
+      "alreadyFailing": 0,
+      "raw": "leadsit-benchmark.json"
+    },
+    {
+      "name": "OpenPro front end",
+      "runner": "vitest (e2e/** excluded, NODE_OPTIONS=--max-old-space-size=8192)",
+      "testFiles": 2085,
+      "commits": 6,
+      "fullMs": 678600,
+      "smarttestMs": 134355,
+      "savedPct": 80,
+      "testFilesRun": "2121/12496",
+      "fallbacks": 1,
+      "missed": 0,
+      "alreadyFailing": 100,
+      "raw": "openpro-front-benchmark.json"
+    }
+  ],
+  "targets": {
+    "observedExecution050": {
+      "definition": "Observed edges (traces) reduce the selection by 20% or more on the benchmark repositories, 0 missed failures",
+      "method": "benchmark --commits 12 --traces vs benchmark --commits 12, BALANCED, commits without full-suite fallback",
+      "LeadsIt": { "static": 5, "withTraces": 8, "ruledOut": 0, "added": 3, "missed": 0 },
+      "commander.js": { "static": 97, "withTraces": 110, "ruledOut": 0, "added": 13, "missed": 0 },
+      "met": false
+    },
+    "speed080": {
+      "definition": "30% less test time than 0.7 on the benchmark repositories, 0 cache-integrity violations",
+      "method": "SmartTest total time in benchmark --commits 12, SmartTest 0.7.0 vs the 1.0.0 candidate, same clones and windows",
+      "LeadsIt": {
+        "v070Ms": 6303,
+        "candidatePreMergeMs": 6600,
+        "candidateMs": 6928,
+        "changePct": 10
+      },
+      "commander.js": {
+        "v070Ms": 7658,
+        "candidatePreMergeMs": 8200,
+        "candidateMs": 6992,
+        "changePct": -9
+      },
+      "path-to-regexp": {
+        "v070Ms": 23809,
+        "candidatePreMergeMs": 24400,
+        "candidateMs": 25208,
+        "changePct": 6
+      },
+      "cacheViolations": 0,
+      "met": false
+    }
+  },
+  "leadsitAnalysis": {
+    "files": 1608,
+    "coldScanMs": 1726,
+    "warmScanMs": 281,
+    "coldImpactWallMs": 1807,
+    "coldImpactAnalysisMs": 1466,
+    "warmImpactWallMs": 478,
+    "warmImpactAnalysisMs": 471,
+    "warmGraphMs": 14,
+    "warmChangeDetectionMs": 316,
+    "persistedGraph": ".smarttest/state/graph.json",
+    "previousColdScanMs060": 3600,
+    "fullSuiteThroughSmartTest": { "tests": 724, "files": 103, "ms": 4300 }
+  }
+}

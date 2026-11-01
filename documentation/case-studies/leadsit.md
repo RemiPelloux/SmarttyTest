@@ -107,9 +107,19 @@ The packaged CLI passes 714 assertions across 101 files in 4.78 s. The final ado
 
 The 12-commit replay records 53.59 s full, 7.18 s project-gated and 34.38 s SmartTest, with zero missed failures and zero cache violations. SmartTest saves 36% against full runs but is 379% slower than project-gated execution on this window. It selects 526 of 1,204 test-file runs. History, cache and machine load differ from older measurements; this is not a controlled version comparison. The [raw benchmark](../../benchmarks/releases/0.9.0/leadsit-090-benchmark.json) retains the per-commit results.
 
+## Update: 1.0.0
+
+Measured on a fresh clone with the 1.0.0 candidate ([all repositories](benchmarks-1.0.md), [raw results](../../benchmarks/releases/1.0.0/leadsit-benchmark.json)):
+
+- **12-commit replay:** full runs 47.5 s, project-gated 12.8 s, SmartTest 6.9 s. That saves 85% against full runs and 46% against the project-gated baseline. SmartTest runs 5 of 1,225 test-file runs, with 0 missed failures, 0 already failing and 0 cache violations. The window (`47835e1d` to `cac765a1`) is newer than the 0.9.0 one and contains no SmartTest or lockfile commits, which explains most of the difference from 0.9.0's 34.4 s.
+- **Observed execution (0.5.0 target):** with traces, the same 12 commits select 8 test files instead of 5. Traces ruled out none and added 3 on `c4ad92a4`. That change adds a function and a type alias to `growth/gift/operations.ts`, units with no V8 name at the parent, so every test that loads the file counts as running them. Target not met.
+- **Speed (0.8.0 target):** SmartTest 0.7.0 takes 6.3 s on the same window and the 1.0.0 candidate 6.6–6.9 s. Target not met. Each replayed commit is a new state, so the result cache cannot help, and the time goes to analysis and runner start-up.
+- **Analysis time:** cold `scan` 1.73 s (3.6 s in 0.6.0), warm `scan` 0.28 s. Cold `impact` 1.81 s. Warm `impact` 0.48 s: 471 ms of analysis, of which Git change detection takes 316 ms, and the graph loads from `.smarttest/state/graph.json` in 14 ms.
+- **Full suite through SmartTest:** 724 tests in 103 files pass in 4.3 s.
+
 ## Caveats
 
 - LeadsIt's suites are already fast (about 5–8 s for everything), so the absolute saving per commit is seconds, not minutes. The percentage is what carries over to larger suites.
-- The first run in a fresh checkout pays a cold start: about 3.6 s with 0.6.0 (it was 5.5 s), for parsing about 1,600 files and asking each runner for its file list. Both are cached afterwards.
+- The first run in a fresh checkout pays a cold start: 1.7–1.8 s with the 1.0.0 candidate (3.6 s with 0.6.0, 5.5 s before that), for parsing about 1,600 files and asking each runner for its file list. Both are cached afterwards, and the graph is persisted.
 - Commits outside tested projects run nothing. That's correct, but it also means "gated" can be 0 ms on those commits, and the old hook didn't run anything for them either.
 - Root `package.json`, lockfile and `tsconfig` changes run the full suite or the project's suite. That's deliberate: they're mandatory triggers.

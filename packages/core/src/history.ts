@@ -9,7 +9,7 @@ import { dirname, join } from "node:path";
 import { exists, runProcess, type SafetyMode, SmartTestError } from "@smarttest/shared";
 import type { RunnerRoot } from "@smarttest/test-discovery";
 import { type ExecutionSummary, executeGroups } from "@smarttest/test-executor";
-import { planExecution } from "@smarttest/test-selector";
+import { planExecution, rootKey } from "@smarttest/test-selector";
 import type { SmartTest } from "./smarttest.js";
 
 export interface CommitBenchmark {
@@ -209,7 +209,7 @@ export async function benchmarkHistory(
           onEvent: (e) => {
             if (e.type === "group-start") groupStart = performance.now();
             if (e.type === "group-end")
-              groupMs.set(`${e.group.adapter}:${e.group.dir}`, performance.now() - groupStart);
+              groupMs.set(rootKey(e.group as RunnerRoot), performance.now() - groupStart);
           },
         }),
       );
@@ -235,10 +235,9 @@ export async function benchmarkHistory(
       const touched = analysis.runnerRoots.filter((r: RunnerRoot) =>
         changed.some((p) => r.dir === "" || p.startsWith(`${r.dir}/`)),
       );
-      const projectGatedMs = touched.reduce(
-        (a, r) => a + (groupMs.get(`${r.adapter}:${r.dir}`) ?? 0),
-        0,
-      );
+      // Keyed by adapter, directory and config: two configs of one runner in the same directory
+      // (vitest.config.ts next to vitest.stryker.config.ts) are two roots, timed once each.
+      const projectGatedMs = touched.reduce((a, r) => a + (groupMs.get(rootKey(r)) ?? 0), 0);
       const projectGatedTests = analysis.testFiles.filter((t) =>
         touched.some((r) => analysis.assignment.get(t) === r),
       ).length;

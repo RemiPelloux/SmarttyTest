@@ -1,5 +1,7 @@
 # External repositories
 
+> These are the 0.6.0 results. The 1.0.0 benchmarks are in [Benchmarks for 1.0.0](benchmarks-1.0.md): the same four repositories, LeadsIt and OpenPro's front end, re-measured with the 1.0.0 candidate, plus the 0.5.0 and 0.8.0 targets.
+
 The 0.6.0 adoption check: take repositories SmartTest has never seen, run `smarttest init --yes`, change nothing in the generated configuration, and replay their recent history with `smarttest benchmark --commits 12`. A failure that the selection did not include counts as a miss unless it also fails on the parent commit.
 
 The CLI was run from the packed build (`packages/cli/.publish/dist/bin.js`), since the package is not on npm yet. Dependencies were installed with each project's own lockfile.

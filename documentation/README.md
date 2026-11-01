@@ -34,7 +34,8 @@ Product and planning
 - [Delivery log (0.3.0 to 0.9.0)](planning/delivery.md)
 - [Foundation backlog](planning/foundation/README.md)
 - [Case study: LeadsIt](case-studies/leadsit.md)
-- [External repositories](case-studies/external-repositories.md)
+- [External repositories](case-studies/external-repositories.md) (0.6.0)
+- [Benchmarks for 1.0.0](case-studies/benchmarks-1.0.md)
 
 These pages are also published as a site: https://remipelloux.github.io/SmarttyTest/
 
