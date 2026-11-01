@@ -1,0 +1,3 @@
+# Keep line endings LF in every checkout (Windows included): fixtures are byte-compared and
+# the formatter expects LF. Product code handles CRLF input on its own (tested explicitly).
+* text=auto eol=lf

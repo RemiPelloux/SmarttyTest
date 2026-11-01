@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, relative, sep } from "node:path";
-import type { TestExecution, TestStatus } from "@smarttest/shared";
+import { relPosixReported, type TestExecution, type TestStatus } from "@smarttest/shared";
 
 /** Finds an installed package's bin script by walking up node_modules from `cwd` (no shell shims). */
 export function resolvePackageBin(cwd: string, pkg: string, bin: string): string | undefined {
@@ -72,7 +72,8 @@ function mapStatus(s: string | undefined): TestStatus {
 export function parseJestLikeReport(report: JestLikeReport, projectRoot: string): TestExecution[] {
   const out: TestExecution[] = [];
   for (const file of report.testResults ?? []) {
-    const rel = toPosix(relative(projectRoot, file.name));
+    const rel =
+      relPosixReported(projectRoot, file.name) ?? toPosix(relative(projectRoot, file.name));
     const assertions = file.assertionResults ?? [];
     if (
       !assertions.length ||

@@ -49,6 +49,25 @@ const decode = (s: string) =>
     .replace(/&#39;/g, "'")
     .replace(/&amp;/g, "&");
 
+/** Element text: CDATA sections verbatim, everything else entity-decoded. */
+const text = (s: string) =>
+  s
+    .split(/(<!\[CDATA\[[\s\S]*?\]\]>)/)
+    .map((part) => (part.startsWith("<![CDATA[") ? part.slice(9, -3) : decode(part)))
+    .join("");
+
+/**
+ * The full title of a mocha JUnit test case. Cypress's reporter writes the full title
+ * ("cart adds") as `name` and the test's own title ("adds") as `classname`; with
+ * `testCaseSwitchClassnameAndName` it is the other way round. Either way, the full title is the
+ * attribute that ends with the other one.
+ */
+function fullTitle(name = "", classname = ""): string {
+  if (!classname || name.endsWith(classname)) return name || classname;
+  if (!name || classname.endsWith(name)) return classname;
+  return `${classname} ${name}`;
+}
+
 /** Parses one mocha JUnit file written for a Cypress spec. */
 export function parseCypressJUnit(xml: string, specFile: string): TestExecution[] {
   const out: TestExecution[] = [];
@@ -62,26 +81,48 @@ export function parseCypressJUnit(xml: string, specFile: string): TestExecution[
       body,
     );
     const skipped = /<skipped\b/.test(body);
-    const name =
-      a.classname && !a.classname.endsWith(a.name ?? "")
-        ? `${a.classname} ${a.name}`
-        : (a.classname ?? a.name ?? "");
+    const message = decode(/message="([^"]*)"/.exec(failure?.[2] ?? failure?.[5] ?? "")?.[1] ?? "");
+    const detail = text(failure?.[3] ?? "").trim();
     out.push({
-      testId: `${specFile}::${name}`,
+      testId: `${specFile}::${fullTitle(a.name, a.classname)}`,
       status: failure ? "failed" : skipped ? "skipped" : "passed",
       durationMs: Math.round(Number(a.time ?? 0) * 1000),
       attempts: 1,
       ...(failure
         ? {
             error: {
-              message: decode(
-                `${/message="([^"]*)"/.exec(failure[2] ?? failure[5] ?? "")?.[1] ?? ""}\n${failure[3] ?? ""}`,
-              )
+              message: (detail.includes(message) ? detail : `${message}\n${detail}`)
                 .trim()
                 .slice(0, 4000),
             },
           }
         : {}),
+    });
+  }
+  return out;
+}
+
+/**
+ * Specs that Cypress ran and counted as failing but for which it wrote no JUnit file: a spec
+ * that fails to load (syntax error, missing import) never reaches the reporter. Reads the
+ * per-spec "Running: <spec>" sections of `cypress run`'s console output.
+ */
+export function cypressUnreportedFailures(
+  output: string,
+  specs: readonly string[],
+): { spec: string; message: string }[] {
+  const out: { spec: string; message: string }[] = [];
+  const sections = output.split(/^\s*Running:\s+/m).slice(1);
+  for (const section of sections) {
+    const shown = /^(\S+)/.exec(section)?.[1];
+    if (!shown) continue;
+    const matches = specs.filter((s) => s === shown || s.endsWith(`/${shown}`));
+    const failing = Number(/Failing:\s+(\d+)/.exec(section)?.[1] ?? 0);
+    if (matches.length !== 1 || !failing) continue;
+    const body = section.split(/\(Results\)/)[0] ?? "";
+    out.push({
+      spec: matches[0] as string,
+      message: body.split("\n").slice(1).join("\n").trim().slice(0, 4000),
     });
   }
   return out;
@@ -142,7 +183,8 @@ export class CypressAdapter implements TestAdapter {
       "--reporter",
       "junit",
       "--reporter-options",
-      `mochaFile=${join(junitDir, "[hash].xml")},toConsole=false`,
+      // includePending: without it, skipped (`it.skip`) tests are left out of the file entirely.
+      `mochaFile=${join(junitDir, "[hash].xml")},toConsole=false,includePending=true`,
       ...(this.options.configFile
         ? ["--config-file", join(this.options.projectRoot, this.options.configFile)]
         : []),
@@ -171,6 +213,19 @@ export class CypressAdapter implements TestAdapter {
           ? (selection.files.find((s) => specAttr.endsWith(s) || s.endsWith(specAttr)) ?? specAttr)
           : (selection.files[0] ?? "(unknown)");
         executions.push(...parseCypressJUnit(xml, spec));
+      }
+      if (res.code !== 0) {
+        const reported = new Set(executions.map((e) => e.testId.split("::")[0]));
+        for (const { spec, message } of cypressUnreportedFailures(res.stdout, selection.files)) {
+          if (reported.has(spec)) continue;
+          executions.push({
+            testId: `${spec}::(suite)`,
+            status: "failed",
+            durationMs: 0,
+            attempts: 1,
+            error: { message: message || "Cypress counted this spec as failing" },
+          });
+        }
       }
       const result: TestRunResult & { meta?: Record<string, unknown> } = {
         adapter: this.id,

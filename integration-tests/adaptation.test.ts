@@ -6,7 +6,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { patchConfig, SmartTest } from "@smarttest/core";
 import { describe, expect, it } from "vitest";
-import { cypressSpecPatterns, parseCypressJUnit } from "../packages/adapter-cypress/src/index.js";
+import {
+  cypressSpecPatterns,
+  cypressUnreportedFailures,
+  parseCypressJUnit,
+} from "../packages/adapter-cypress/src/index.js";
 import { parsePlaywrightReport } from "../packages/adapter-playwright/src/index.js";
 import { nextRoutes, routeMatches } from "../packages/dependency-graph/src/index.js";
 import { migrateTestSource } from "../packages/smart-init/src/index.js";
@@ -259,5 +263,75 @@ describe("end-to-end adapters", () => {
       ["cypress/e2e/a.cy.ts::cart adds", "passed", 500],
       ["cypress/e2e/a.cy.ts::cart pays", "failed", 1000],
     ]);
+  });
+
+  it("reads the JUnit files and console output of a real Cypress 16 run", () => {
+    // Written by `cypress run --reporter junit --reporter-options includePending=true` (16.1.1):
+    // `name` is the full title, `classname` the test's own title, failures in CDATA.
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<testsuites name="Mocha Tests" time="0.156" tests="4" failures="1" skipped="1">
+  <testsuite name="Root Suite" timestamp="2026-11-01T09:05:59" tests="0" file="cypress/e2e/zfail.cy.js" time="0.000" failures="0">
+  </testsuite>
+  <testsuite name="bad &lt;one&gt; &amp; &quot;q&quot;" timestamp="2026-11-01T09:05:59" tests="4" time="0.154" failures="1">
+    <testcase name="bad &lt;one&gt; &amp; &quot;q&quot; throws" time="0.012" classname="throws">
+      <failure message="boom &lt;x&gt;" type="Error"><![CDATA[Error: boom <x>
+    at Context.eval (webpack://fixture/./cypress/e2e/zfail.cy.js:6:10)]]></failure>
+    </testcase>
+    <testcase name="bad &lt;one&gt; &amp; &quot;q&quot; ok" time="0.009" classname="ok">
+    </testcase>
+    <testcase name="bad &lt;one&gt; &amp; &quot;q&quot; divides" time="0.000" classname="divides">
+      <skipped/>
+    </testcase>
+  </testsuite>
+</testsuites>`;
+    expect(parseCypressJUnit(xml, "cypress/e2e/zfail.cy.js")).toEqual([
+      {
+        testId: 'cypress/e2e/zfail.cy.js::bad <one> & "q" throws',
+        status: "failed",
+        durationMs: 12,
+        attempts: 1,
+        error: {
+          message:
+            "Error: boom <x>\n    at Context.eval (webpack://fixture/./cypress/e2e/zfail.cy.js:6:10)",
+        },
+      },
+      {
+        testId: 'cypress/e2e/zfail.cy.js::bad <one> & "q" ok',
+        status: "passed",
+        durationMs: 9,
+        attempts: 1,
+      },
+      {
+        testId: 'cypress/e2e/zfail.cy.js::bad <one> & "q" divides',
+        status: "skipped",
+        durationMs: 0,
+        attempts: 1,
+      },
+    ]);
+    // A spec that fails to load writes no JUnit file; the console still names it as failing.
+    const output = `
+  Running:  broken.cy.js                                                                    (1 of 2)
+
+Error: Webpack Compilation Error
+Module not found: Error: Can't resolve '../../src/missing.js'
+
+  (Results)
+
+  │ Tests:        0                                                                                │
+  │ Failing:      1                                                                                │
+
+  Running:  math.cy.js                                                                      (2 of 2)
+
+  (Results)
+
+  │ Tests:        2                                                                                │
+  │ Failing:      0                                                                                │
+`;
+    const unreported = cypressUnreportedFailures(output, [
+      "cypress/e2e/broken.cy.js",
+      "cypress/e2e/math.cy.js",
+    ]);
+    expect(unreported.map((u) => u.spec)).toEqual(["cypress/e2e/broken.cy.js"]);
+    expect(unreported[0]?.message).toContain("Can't resolve '../../src/missing.js'");
   });
 });

@@ -6,6 +6,7 @@ import { execFileSync } from "node:child_process";
 import { mkdir, mkdtemp, readFile, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { detectCi, prepareCi, SmartTest } from "@smarttest/core";
 import { describe, expect, it } from "vitest";
 import { planHookInstall, planHookUninstall } from "../packages/smart-init/src/index.js";
@@ -104,7 +105,10 @@ describe("hook install / uninstall", () => {
     expect(plan.plan.action).toBe("create");
     await st.applyFiles([plan.plan]);
     const s = await stat(join(dir, ".git/hooks/pre-commit"));
-    expect(s.mode & 0o111).not.toBe(0);
+    // Windows has no execute bit (stat never reports one); Git for Windows runs the hook through
+    // its own sh from the shebang, which is checked on every platform.
+    if (process.platform !== "win32") expect(s.mode & 0o111).not.toBe(0);
+    expect(await readFile(join(dir, ".git/hooks/pre-commit"), "utf8")).toMatch(/^#!\/bin\/sh\n/);
   });
 });
 
@@ -154,7 +158,7 @@ describe("smarttest ci", () => {
       "--depth=1",
       "--branch",
       "feature",
-      `file://${origin}`,
+      pathToFileURL(origin).href,
       clone,
     ]);
     const plan = await prepareCi(clone, {
@@ -166,7 +170,7 @@ describe("smarttest ci", () => {
     expect(plan.all).toBe(false);
     expect(plan.base).toBe("origin/main");
     expect(plan.steps.join(" ")).toMatch(/shallow/);
-  });
+  }, 60_000);
 
   it("uses the parent commit on a branch build", async () => {
     const dir = await materialize("no-vcs-vitest", { git: true });
@@ -244,7 +248,9 @@ describe("per-project conventions", () => {
       await writeFile(join(hooks, "pre-commit"), "#!/bin/sh\nnpx lint-staged\n");
       git(dir, "config", "core.hooksPath", hooks);
       git(dir, "add", "-A");
-      git(dir, "commit", "-qm", "init");
+      // The stand-in hook is not executable, so POSIX Git skips it; Git for Windows has no execute
+      // bit and would run it (npx lint-staged). Committing never needs it here.
+      git(dir, "commit", "--no-verify", "-qm", "init");
       const plan = await (await SmartTest.open({ root: dir })).initPlan();
       expect(plan.files.map((f) => f.path)).toContain("smarttest.config.ts");
       expect(plan.files.some((f) => f.path.endsWith("pre-commit"))).toBe(false);

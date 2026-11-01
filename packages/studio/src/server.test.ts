@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { realpathSync } from "node:fs";
 import { mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { request as httpRequest } from "node:http";
 import { join } from "node:path";
@@ -163,7 +164,8 @@ describe("API authentication", () => {
       schemaVersion: 1,
       project: "fixture-ts-lib-vitest",
       port: handle.port,
-      root,
+      // SmartTest works on the canonical root (macOS: /private/var, Windows: no 8.3 names).
+      root: realpathSync.native(root),
     });
   });
 

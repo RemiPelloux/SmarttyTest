@@ -3,10 +3,16 @@
  * compares, per commit, a full run, a project-gated run (suites of the projects a commit touched)
  * and SmartTest's selection — with every missed failure checked against the parent commit.
  */
-import { lstat, mkdtemp, rm, symlink } from "node:fs/promises";
+import { lstat, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { exists, runProcess, type SafetyMode, SmartTestError } from "@smarttest/shared";
+import {
+  exists,
+  linkNodeModules,
+  runProcess,
+  type SafetyMode,
+  SmartTestError,
+} from "@smarttest/shared";
 import type { RunnerRoot } from "@smarttest/test-discovery";
 import { type ExecutionSummary, executeGroups } from "@smarttest/test-executor";
 import { planExecution, rootKey } from "@smarttest/test-selector";
@@ -150,7 +156,7 @@ export async function benchmarkHistory(
         !(await lstat(dest).catch(() => undefined)) &&
         (await exists(dirname(dest)))
       ) {
-        await symlink(src, dest, process.platform === "win32" ? "junction" : "dir");
+        await linkNodeModules(src, dest);
       }
     }
     const projectRoot = join(wt, prefix);

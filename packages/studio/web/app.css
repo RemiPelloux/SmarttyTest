@@ -132,8 +132,11 @@ button {
   color: var(--st-text);
 }
 
+/* Fixed, not absolute: reached by Tab after wrapping from the end of a long screen, an absolute
+   link sits at the top of the document while the page stays scrolled (Safari does not scroll it
+   into view), so it would be focused but off screen. */
 .skip-link {
-  position: absolute;
+  position: fixed;
   left: -9999px;
   top: 8px;
   z-index: 100;

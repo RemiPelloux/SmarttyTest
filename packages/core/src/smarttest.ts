@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { existsSync } from "node:fs";
+import { existsSync, realpathSync } from "node:fs";
 import { availableParallelism } from "node:os";
 import { isAbsolute, join, relative } from "node:path";
 import { CypressAdapter } from "@smarttest/adapter-cypress";
@@ -385,6 +385,19 @@ const timed = async <T>(
   }
 };
 
+/**
+ * The project root with symlinks and Windows 8.3 short names resolved. Test runners report the
+ * canonical paths they load (macOS's /var is /private/var; Windows' temp dir is often
+ * C:\Users\RUNNER~1\...), so relating them to a non-canonical root would lose every result.
+ */
+function canonicalRoot(root: string): string {
+  try {
+    return realpathSync.native(root);
+  } catch {
+    return root;
+  }
+}
+
 export class SmartTest {
   private profileCache: ProjectProfile | undefined;
   private resolver: TypeScriptResolver | undefined;
@@ -405,12 +418,20 @@ export class SmartTest {
   }
 
   static async open(options: OpenOptions): Promise<SmartTest> {
-    const loaded = await loadConfig(options.root, options.configPath);
+    const root = canonicalRoot(options.root);
+    // Paths given inside the root are re-spelled under the canonical root, so the store and the
+    // config stay "inside the project" for every later relative() check.
+    const rebase = (p: string | undefined) => {
+      if (p === undefined || !isAbsolute(p)) return p;
+      const rel = relative(options.root, p);
+      return rel.startsWith("..") || isAbsolute(rel) ? p : join(root, rel);
+    };
+    const loaded = await loadConfig(root, rebase(options.configPath));
     const st = new SmartTest(
-      options.root,
+      root,
       loaded,
       options.logger ?? silentLogger,
-      options.storeDir,
+      rebase(options.storeDir),
       options.mirror,
     );
     await st.assertStoreUntracked();
@@ -1126,7 +1147,8 @@ export class SmartTest {
         const outputDir = isAbsolute(this.config.reports.outputDir)
           ? this.config.reports.outputDir
           : join(this.root, this.config.reports.outputDir);
-        engine.loaded.config.reports.outputDir = relative(iso.root, outputDir) || ".";
+        // Relative to the engine's (canonical) root, which may differ from iso.root in spelling.
+        engine.loaded.config.reports.outputDir = relative(engine.root, outputDir) || ".";
         options.onIsolatedConfig?.(engine.loaded.config);
         try {
           return await engine.run({

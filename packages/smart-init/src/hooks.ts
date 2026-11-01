@@ -95,7 +95,7 @@ function realish(path: string): string {
     rest.unshift(basename(dir));
     dir = dirname(dir);
   }
-  return join(realpathSync(dir), ...rest);
+  return join(realpathSync.native(dir), ...rest);
 }
 
 const inside = (parent: string, child: string) => {
@@ -129,14 +129,14 @@ function gitHookTarget(root: string, stage: HookStage): HookTarget {
   }
   if (!abs) return fallback;
   abs = realish(abs);
-  const file = relative(realpathSync(root), abs).replace(/\\/g, "/");
-  const shown = relative(realpathSync(top), dirname(abs)).replace(/\\/g, "/");
+  const file = relative(realpathSync.native(root), abs).replace(/\\/g, "/");
+  const shown = relative(realpathSync.native(top), dirname(abs)).replace(/\\/g, "/");
   return {
     manager: "git",
     file,
     evidence: custom ? `core.hooksPath ${hooksPath}` : `Git hooks directory ${shown}`,
     stage,
-    ...(custom && !inside(realpathSync(top), abs) ? { outside: abs } : {}),
+    ...(custom && !inside(realpathSync.native(top), abs) ? { outside: abs } : {}),
     ...(custom && /(?:^|\/)node_modules\//.test(file) ? { dependency: abs } : {}),
   };
 }

@@ -10,7 +10,7 @@
 import { createHash } from "node:crypto";
 import { readdir, readFile, realpath } from "node:fs/promises";
 import { isAbsolute, join, resolve, sep } from "node:path";
-import { readJson, relPosix } from "@smarttest/shared";
+import { readJson, relPosix, relPosixReported } from "@smarttest/shared";
 import type { CoverageScope } from "./index.js";
 
 export const LINE_COVERAGE_SCHEMA = 1;
@@ -134,7 +134,7 @@ export async function ingestIstanbulLines(
     if (!data) continue;
     found = true;
     for (const [abs, entry] of Object.entries(data)) {
-      const rel = relPosix(projectRoot, entry.path ?? abs);
+      const rel = relPosixReported(projectRoot, entry.path ?? abs);
       if (!rel || rel.startsWith("../")) continue;
       const detail = istanbulLines(entry);
       const prev = merged.get(rel);

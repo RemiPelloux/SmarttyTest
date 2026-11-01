@@ -1,5 +1,5 @@
 import { spawn, spawnSync } from "node:child_process";
-import { existsSync, statSync } from "node:fs";
+import { existsSync, realpathSync, statSync } from "node:fs";
 import {
   chmod,
   copyFile,
@@ -12,7 +12,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { join, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 import { SmartTest } from "@smarttest/core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -657,7 +657,8 @@ it("does not inherit the pre-commit Git environment", () => {
 async function linkedWorkspace(): Promise<string> {
   const dir = await materialize("pnpm-monorepo");
   const installed = join(FIXTURES, "pnpm-monorepo", "node_modules");
-  await rm(join(dir, "node_modules"));
+  // A link on POSIX, a directory of junctions on Windows (see linkNodeModules).
+  await rm(join(dir, "node_modules"), { recursive: true, force: true });
   await mkdir(join(dir, "node_modules/@demo"), { recursive: true });
   for (const entry of ["vitest", ".bin"])
     await symlink(join(installed, entry), join(dir, "node_modules", entry));
@@ -716,7 +717,7 @@ describe("the temporary checkout is the content under test", () => {
   it("lets Vite load an installed package's file by URL in the checkout", async () => {
     // A real node_modules (not a link to the fixture's): the package is inside the project.
     const dir = await materialize("ts-lib-vitest");
-    await rm(join(dir, "node_modules"));
+    await rm(join(dir, "node_modules"), { recursive: true, force: true });
     await mkdir(join(dir, "node_modules/asset-pkg"), { recursive: true });
     for (const entry of ["vitest", ".bin"])
       await symlink(
@@ -794,8 +795,9 @@ describe("the temporary checkout is the content under test", () => {
 
   it("removes checkouts abandoned by a killed run, and keeps a live run's", async () => {
     const dir = await materialize("ts-lib-vitest", { git: true });
+    // `git worktree list` prints canonical paths (macOS: /private/var/..., not /var/...).
     const fake = async (pid: number) => {
-      const tmp = await mkdtemp(join(tmpdir(), "smarttest-hook-"));
+      const tmp = realpathSync.native(await mkdtemp(join(tmpdir(), "smarttest-hook-")));
       git(dir, "worktree", "add", "-q", "--detach", join(tmp, "repo"), "HEAD");
       await writeFile(join(tmp, "owner"), `${pid}\n`);
       return tmp;
@@ -807,7 +809,10 @@ describe("the temporary checkout is the content under test", () => {
     const gone = await fake(dead);
     await rm(gone, { recursive: true, force: true });
     // The user's own worktree on a drive that is not mounted right now: never forgotten.
-    const unmounted = join(await mkdtemp(join(tmpdir(), "st-user-wt-")), "feature");
+    const unmounted = join(
+      realpathSync.native(await mkdtemp(join(tmpdir(), "st-user-wt-"))),
+      "feature",
+    );
     git(dir, "worktree", "add", "-q", "--detach", unmounted, "HEAD");
     await rm(unmounted, { recursive: true, force: true });
 
@@ -816,7 +821,8 @@ describe("the temporary checkout is the content under test", () => {
     await writeFile(join(dir, "notes.md"), "unstaged\n");
     await (await SmartTest.open({ root: dir })).runHook("pre-commit", { cache: false });
 
-    const list = git(dir, "worktree", "list", "--porcelain");
+    // Git lists canonical paths with forward slashes, Windows included.
+    const list = git(dir, "worktree", "list", "--porcelain").replaceAll("/", sep);
     expect(list).not.toContain(stale);
     expect(list).not.toContain(gone);
     expect(list).toContain(live);
@@ -898,7 +904,10 @@ describe("a push that only deletes refs", () => {
   }, 120_000);
 });
 
-describe("a hook run that is terminated", () => {
+// Windows has no POSIX signals: `kill(SIGTERM|SIGHUP)` there is TerminateProcess, which runs no
+// handler, so no process can clean up after it. There, the next hook run removes the checkout
+// ("removes checkouts abandoned by a killed run", which runs on every platform).
+describe.skipIf(process.platform === "win32")("a hook run that is terminated", () => {
   const bin = resolve(import.meta.dirname, "../packages/cli/dist/bin.js");
 
   it.each(["SIGTERM", "SIGHUP"] as const)(

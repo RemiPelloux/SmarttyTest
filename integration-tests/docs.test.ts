@@ -4,7 +4,7 @@
  * example must pass the configuration validator.
  */
 import { readdirSync, readFileSync, statSync } from "node:fs";
-import { join, relative, resolve } from "node:path";
+import { join, relative, resolve, sep } from "node:path";
 import { describe, expect, it } from "vitest";
 import { parse } from "../packages/cli/src/args.js";
 import { COMMANDS } from "../packages/cli/src/help.js";
@@ -17,7 +17,9 @@ const walk = (d: string) => {
   for (const e of readdirSync(d)) {
     const p = join(d, e);
     if (statSync(p).isDirectory()) {
-      if (!p.includes("planning/foundation") && !p.includes("/product")) walk(p);
+      // POSIX form so the exclusions also apply to Windows paths.
+      const posix = p.split(sep).join("/");
+      if (!posix.includes("planning/foundation") && !posix.includes("/product")) walk(p);
     } else if (p.endsWith(".md")) files.push(p);
   }
 };

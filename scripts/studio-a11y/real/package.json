@@ -1,0 +1,12 @@
+{
+  "name": "smarttest-studio-a11y-real",
+  "private": true,
+  "description": "Real Safari (safaridriver) and real screen readers (Guidepup) for Studio. Installed only by .github/workflows/studio-a11y.yml with `npm ci`; outside the pnpm workspace on purpose.",
+  "type": "module",
+  "dependencies": {
+    "@guidepup/guidepup": "0.36.4",
+    "@guidepup/setup": "0.29.3",
+    "axe-core": "4.14.0",
+    "selenium-webdriver": "4.51.0"
+  }
+}

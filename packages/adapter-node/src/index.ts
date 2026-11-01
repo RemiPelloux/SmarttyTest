@@ -6,8 +6,9 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 import {
+  canonicalPath,
   type ExecutionOptions,
-  relPosix,
+  relPosixReported,
   runProcess,
   type TestAdapter,
   type TestAdapterCapabilities,
@@ -65,7 +66,9 @@ export function parseNodeJUnit(xml: string, projectRoot: string): TestExecution[
         continue;
       }
       const a = attrs(rawAttrs ?? "");
-      const file = a.file ? toPosix(relative(projectRoot, a.file)) : "(unknown)";
+      const file = a.file
+        ? (relPosixReported(projectRoot, a.file) ?? toPosix(relative(projectRoot, a.file)))
+        : "(unknown)";
       const name = [...suites, a.name ?? ""].filter(Boolean).join(" ");
       const exec: TestExecution = {
         testId: `${file}::${name}`,
@@ -119,7 +122,7 @@ export class NodeTestAdapter implements TestAdapter {
     const patterns = expandNodePatterns(this.options.patterns);
     const files = await walkFiles(this.options.cwd, { include: patterns });
     return files.map((f) => {
-      const rel = relPosix(this.options.projectRoot, join(this.options.cwd, f)) ?? f;
+      const rel = relPosixReported(this.options.projectRoot, join(this.options.cwd, f)) ?? f;
       return { id: rel, filePath: rel, suitePath: [], name: rel, tags: [] };
     });
   }
@@ -134,10 +137,11 @@ export class NodeTestAdapter implements TestAdapter {
         "--test-reporter=junit",
         `--test-reporter-destination=${out}`,
         ...(options.workers ? [`--test-concurrency=${options.workers}`] : []),
-        ...selection.files.map((f) => join(this.options.projectRoot, f)),
+        ...selection.files.map((f) => join(canonicalPath(this.options.projectRoot), f)),
       ];
       const res = await runProcess(process.execPath, args, {
-        cwd: this.options.cwd,
+        // Canonical like the file filters: Windows keeps a short-name cwd (RUNNER~1) as given.
+        cwd: canonicalPath(this.options.cwd),
         env: { ...process.env, FORCE_COLOR: "0", NO_COLOR: "1", ...options.env },
         ...(options.timeoutMs ? { timeoutMs: options.timeoutMs } : {}),
         ...(options.signal ? { signal: options.signal } : {}),

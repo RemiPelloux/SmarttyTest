@@ -21,5 +21,8 @@ autoInstallPeers: true
 
 allowBuilds:
   "@parcel/watcher": false
+  # fixtures/projects/cypress-e2e: the ~600 MB binary is installed only by the CI job that needs it
+  # (`pnpm --dir fixtures/projects/cypress-e2e exec cypress install`).
+  cypress: false
   esbuild: false
   unrs-resolver: false

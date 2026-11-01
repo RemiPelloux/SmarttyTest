@@ -6,8 +6,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type JestLikeReport, parseJestLikeReport, resolvePackageBin } from "@smarttest/plugin-sdk";
 import {
+  canonicalPath,
   type ExecutionOptions,
-  relPosix,
+  relPosixReported,
   runProcess,
   SmartTestError,
   type TestAdapter,
@@ -60,7 +61,7 @@ export class VitestAdapter implements TestAdapter {
 
   async discover(): Promise<TestCase[]> {
     const res = await runProcess(process.execPath, [this.bin(), "list", "--json", "--filesOnly"], {
-      cwd: this.options.cwd,
+      cwd: canonicalPath(this.options.cwd),
       env: { ...process.env, FORCE_COLOR: "0", NO_COLOR: "1" },
       timeoutMs: 120_000,
     });
@@ -84,7 +85,7 @@ export class VitestAdapter implements TestAdapter {
       ),
     ];
     return files.map((abs) => {
-      const rel = relPosix(this.options.projectRoot, abs) ?? abs;
+      const rel = relPosixReported(this.options.projectRoot, abs) ?? abs;
       return { id: rel, filePath: rel, suitePath: [], name: rel, tags: [] };
     });
   }
@@ -93,7 +94,9 @@ export class VitestAdapter implements TestAdapter {
     const startedAt = new Date().toISOString();
     const tmp = await mkdtemp(join(tmpdir(), "smarttest-vitest-"));
     const out = join(tmp, "report.json");
-    const files = selection.files.map((f) => join(this.options.projectRoot, f));
+    // Canonical: the runner matches these against the canonical paths it found (macOS
+    // /private/var, Windows long names); a root spelled through a symlink would match nothing.
+    const files = selection.files.map((f) => join(canonicalPath(this.options.projectRoot), f));
     const args = [
       this.bin(),
       "run",
@@ -118,7 +121,8 @@ export class VitestAdapter implements TestAdapter {
     ];
     try {
       const res = await runProcess(process.execPath, args, {
-        cwd: this.options.cwd,
+        // Canonical like the file filters: Windows keeps a short-name cwd (RUNNER~1) as given.
+        cwd: canonicalPath(this.options.cwd),
         env: { ...process.env, FORCE_COLOR: "0", NO_COLOR: "1", ...options.env },
         ...(options.timeoutMs ? { timeoutMs: options.timeoutMs } : {}),
         ...(options.signal ? { signal: options.signal } : {}),
