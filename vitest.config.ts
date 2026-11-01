@@ -1,3 +1,6 @@
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { defineConfig } from "vitest/config";
 
 // The tests create throwaway repositories with git. Started from a git hook, an inherited GIT_DIR
@@ -14,6 +17,14 @@ for (const name of [
   delete process.env[name];
 }
 
+// One temporary directory per run, removed at the end (scripts/test-tmp.mjs). Workers and the
+// processes the tests start inherit it.
+if (!process.env.SMARTTEST_TEST_TMP) {
+  const runTmp = mkdtempSync(join(tmpdir(), "st-run-"));
+  process.env.SMARTTEST_TEST_TMP = runTmp;
+  for (const name of ["TMPDIR", "TEMP", "TMP"]) process.env[name] = runTmp;
+}
+
 export default defineConfig({
   // Resolve workspace packages to their TypeScript sources (no build needed for tests). Tests run
   // in the SSR environment, and linked workspace packages are inlined so the condition applies to
@@ -28,6 +39,7 @@ export default defineConfig({
       "integration-tests/**/*.test.ts",
     ],
     passWithNoTests: true,
+    globalSetup: ["scripts/test-tmp.mjs"],
     // Process start-up, git and Git for Windows' sh are several times slower on Windows runners:
     // tests that take 3-5 s on Linux brush past the 5 s default there.
     testTimeout: process.platform === "win32" ? 30_000 : 5_000,
