@@ -50,7 +50,7 @@ jobs:
   voiceover:
     name: VoiceOver + Safari
     runs-on: macos-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v5
       - uses: pnpm/action-setup@v4
@@ -86,7 +86,7 @@ jobs:
   nvda:
     name: NVDA + Chrome
     runs-on: windows-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
       # Keep fixtures byte-identical to the repository (no CRLF conversion on Windows).
       - run: git config --global core.autocrlf false

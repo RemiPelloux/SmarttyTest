@@ -113,6 +113,36 @@ async function poll(ms, until) {
 }
 
 /**
+ * Polls the reader (as poll does) until Studio's API reports a recorded run and none active.
+ * GET /api/runs with the session token answers `{ active, runs }`.
+ */
+async function runFinished(studio, ms) {
+  let done = false;
+  let checking = false;
+  const check = async () => {
+    if (checking || done) return;
+    checking = true;
+    try {
+      const res = await fetch(`${studio.origin}/api/runs`, {
+        headers: { authorization: `Bearer ${studio.handle.token}` },
+      });
+      const body = await res.json();
+      done = res.ok && body.active === null && body.runs.length > 0;
+    } catch {
+      // The next tick asks again.
+    } finally {
+      checking = false;
+    }
+  };
+  const timer = setInterval(check, 2000);
+  try {
+    return await poll(ms, () => done);
+  } finally {
+    clearInterval(timer);
+  }
+}
+
+/**
  * Calibrates the instrument before judging Studio: a bare page whose persistent, initially empty
  * role="status" region gets a new message every 2.5 s (cleared first, then set 60 ms later, as
  * Studio's announce() does), with nothing else happening. Returns the messages heard. If none
@@ -291,8 +321,11 @@ async function main() {
       mark = spoken.length;
       await command(() => key("Enter"));
       const verdict = /Run (passed|finished|hit)|No test|Nothing to run/;
-      await poll(180_000, () => heardSince(mark).some((t) => verdict.test(t)));
-      await poll(2000);
+      // Wait for the run itself (Studio's API), not for speech: with a screen reader on, a hosted
+      // runner can take minutes, and the drawer must not be read while it still says "Running".
+      const finished = await runFinished(studio, 360_000);
+      if (!finished) fail("run", "the run did not finish within 6 minutes");
+      await poll(4000);
       const said = heardSince(mark);
       if (!said.some((t) => /Selecting tests|Running tests/.test(t)))
         failLive("run-progress", `run progress is not spoken: ${said.join(" | ")}`);
