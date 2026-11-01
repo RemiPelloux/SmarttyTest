@@ -10,12 +10,12 @@ SmartTest follows [semantic versioning](https://semver.org) from 1.0.0. This pag
 | Exit codes and categories | [Exit codes](#exit-codes) below, `packages/shared/src/errors.ts`                                                         | `packages/shared/src/errors.test.ts`, `integration-tests/contracts.test.ts` |
 | `--json` documents        | One `<command>.v1.schema.json` per frozen command in [`packages/cli/schemas/`](../../packages/cli/schemas)               | `integration-tests/contracts.test.ts` validates real CLI output             |
 | Error document            | [`error.v1.schema.json`](../../packages/cli/schemas/error.v1.schema.json)                                                | `integration-tests/contracts.test.ts`                                       |
-| Plugin SDK v1             | `smarttest/plugin-sdk`, `smarttest/plugin-sdk/conformance` ([Plugins guide](../guides/plugins.md))                       | the conformance kit, run against every built-in adapter                     |
+| Plugin SDK v1             | `@tkmremi/smarttest/plugin-sdk`, `@tkmremi/smarttest/plugin-sdk/conformance` ([Plugins guide](../guides/plugins.md))     | the conformance kit, run against every built-in adapter                     |
 | Commands and flags        | [CLI reference](cli.md)                                                                                                  | `integration-tests/docs.test.ts` parses every documented command line       |
 
-The schemas ship in the package: `node_modules/smarttest/schemas/<name>.v1.schema.json`, also importable as `smarttest/schemas/<name>.v1.schema.json`.
+The schemas ship in the package: `node_modules/@tkmremi/smarttest/schemas/<name>.v1.schema.json`, also importable as `@tkmremi/smarttest/schemas/<name>.v1.schema.json`.
 
-`smarttest/studio` exports `startStudio(options)` ([Studio guide](../guides/studio.md#embedding-and-assets)): its options and handle follow the semver policy below, while what Studio shows is not a contract.
+`@tkmremi/smarttest/studio` exports `startStudio(options)` ([Studio guide](../guides/studio.md#embedding-and-assets)): its options and handle follow the semver policy below, while what Studio shows is not a contract.
 
 Not public, and free to change in any release: everything under `.smarttest/` (index, graph, traces, history, caches, logs; SmartTest rebuilds what it cannot read), the HTML report's layout, human-readable terminal output, log messages, and the `@smarttest/*` workspace packages, which are bundled into `smarttest` and not published.
 

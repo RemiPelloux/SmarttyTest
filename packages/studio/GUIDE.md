@@ -47,7 +47,7 @@ Playwright Test does not collect coverage by itself, so SmartTest provides a pag
 ```ts
 // e2e/fixtures.ts
 import { test as base } from "@playwright/test";
-import { withBrowserCoverage } from "smarttest/playwright";
+import { withBrowserCoverage } from "@tkmremi/smarttest/playwright";
 export const test = withBrowserCoverage(base);
 export { expect } from "@playwright/test";
 ```

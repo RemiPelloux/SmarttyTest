@@ -1,7 +1,7 @@
 /**
  * @smarttest/plugin-sdk — public plugin contracts (Plugin SDK v1, frozen at 1.0.0; spec §27,
- * ADR-0005, ADR-0006). Published as `smarttest/plugin-sdk`; the conformance kit is
- * `smarttest/plugin-sdk/conformance`. Guide: documentation/guides/plugins.md.
+ * ADR-0005, ADR-0006). Published as `@tkmremi/smarttest/plugin-sdk`; the conformance kit is
+ * `@tkmremi/smarttest/plugin-sdk/conformance`. Guide: documentation/guides/plugins.md.
  *
  * Contracts (the types are defined in `@smarttest/shared` and re-exported here):
  *   - runner adapters:          `TestAdapter`

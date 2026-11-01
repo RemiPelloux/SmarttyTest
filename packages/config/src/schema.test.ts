@@ -142,7 +142,7 @@ const rule: Rule = {
 };
 
 const KITCHEN_SINK = {
-  $schema: "./node_modules/smarttest/schemas/config.v1.schema.json",
+  $schema: "./node_modules/@tkmremi/smarttest/schemas/config.v1.schema.json",
   include: ["src/**/*.ts"],
   exclude: ["src/legacy/**"],
   mode: "balanced",

@@ -95,7 +95,7 @@ describe("smarttest CLI", () => {
     expect(await readdir(dir)).not.toContain("smarttest.config.ts");
     expect((await cli(dir, "init", "--yes")).code).toBe(0);
     const config = await readFile(join(dir, "smarttest.config.ts"), "utf8");
-    expect(config).toContain('import { defineConfig } from "smarttest"');
+    expect(config).toContain('import { defineConfig } from "@tkmremi/smarttest"');
     expect((await cli(dir, "init", "--yes")).out).toContain("nothing to change");
     expect(await readFile(join(dir, "smarttest.config.ts"), "utf8")).toBe(config);
     expect((await cli(dir, "doctor")).code).toBe(0);

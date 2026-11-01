@@ -9,7 +9,7 @@
  *
  *     // e2e/fixtures.ts
  *     import { test as base } from "@playwright/test";
- *     import { withBrowserCoverage } from "smarttest/playwright";
+ *     import { withBrowserCoverage } from "@tkmremi/smarttest/playwright";
  *     export const test = withBrowserCoverage(base);
  *
  * Limits, stated rather than emulated: Chromium only (`page.coverage` does not exist in Firefox

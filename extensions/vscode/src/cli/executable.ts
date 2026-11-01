@@ -10,9 +10,9 @@
  *
  * A JavaScript entry (`.js`, `.mjs`, `.cjs`), configured or found, is started
  * through Node on every platform: its executable bit and shebang are not needed,
- * so `smarttest.executablePath` can point at `node_modules/smarttest/dist/bin.js`.
+ * so `smarttest.executablePath` can point at `node_modules/@tkmremi/smarttest/dist/bin.js`.
  */
-import { accessSync, constants, readFileSync, statSync } from "node:fs";
+import { accessSync, constants, existsSync, readFileSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, delimiter, dirname, isAbsolute, join, resolve } from "node:path";
 
@@ -112,10 +112,12 @@ function pathCandidates(pathEnv: string, platform: NodeJS.Platform): string[] {
 /** The `smarttest` bin entry of the package next to a batch shim, if it exists. */
 function packageEntry(shim: string): string | undefined {
   const dir = dirname(shim);
-  const packageDir =
-    basename(dir) === ".bin"
-      ? join(dir, "..", "smarttest")
-      : join(dir, "node_modules", "smarttest");
+  const modules = basename(dir) === ".bin" ? join(dir, "..") : join(dir, "node_modules");
+  // The published package (`@tkmremi/smarttest`), or a local build installed as `smarttest`.
+  const packageDir = [join(modules, "@tkmremi", "smarttest"), join(modules, "smarttest")].find(
+    (d) => existsSync(join(d, "package.json")),
+  );
+  if (!packageDir) return undefined;
   try {
     const manifest = JSON.parse(readFileSync(join(packageDir, "package.json"), "utf8")) as {
       bin?: unknown;

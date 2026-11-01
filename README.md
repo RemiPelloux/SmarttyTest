@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <a href="https://www.npmjs.com/package/smarttest"><img alt="npm: smarttest 1.0.0" src="https://img.shields.io/badge/npm-smarttest%201.0.0-34D399?style=flat-square&amp;labelColor=0E1530"></a>
+  <a href="https://www.npmjs.com/package/@tkmremi/smarttest"><img alt="npm: @tkmremi/smarttest 1.0.0" src="https://img.shields.io/badge/npm-%40tkmremi%2Fsmarttest%201.0.0-34D399?style=flat-square&amp;labelColor=0E1530"></a>
   <a href="LICENSE"><img alt="License: Apache-2.0" src="https://img.shields.io/badge/license-Apache--2.0-8B5CF6?style=flat-square&amp;labelColor=0E1530"></a>
   <img alt="Node 22.12 or newer" src="https://img.shields.io/badge/node-22.12%2B-34D399?style=flat-square&amp;labelColor=0E1530">
   <img alt="Runners: Jest, Vitest, node:test, Playwright, Cypress" src="https://img.shields.io/badge/runners-Jest%20%7C%20Vitest%20%7C%20node%3Atest%20%7C%20Playwright%20%7C%20Cypress-22D3EE?style=flat-square&amp;labelColor=0E1530">
@@ -38,7 +38,7 @@ npx smarttest trace               # record which code each test runs; later sele
 npx smarttest benchmark           # replay recent commits: full run vs SmartTest, with misses checked
 ```
 
-Install it in a project with `npm install -D smarttest` (or `pnpm add -D smarttest`). To try an unreleased build, run `pnpm release:pack` in this repository and install the tarball it writes.
+Install it in a project with `npm install -D @tkmremi/smarttest` (or `pnpm add -D @tkmremi/smarttest`). To try an unreleased build, run `pnpm release:pack` in this repository and install the tarball it writes.
 
 ## How it works
 

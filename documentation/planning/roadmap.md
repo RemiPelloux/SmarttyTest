@@ -9,7 +9,7 @@ Planning is in story points. One sprint is about 40 points. Each version has an 
 ## Where 1.0.0 stands
 
 - Released: 0.3.0 to 1.0.0 on top of the [foundation backlog](foundation/README.md). Sprint-by-sprint results, partial items and what moved: [delivery log](delivery.md).
-- 1.0.0 freezes the config schema, exit codes and `--json` contracts ([contracts](../reference/contracts.md)) and the Plugin SDK v1. It is published on npm as `smarttest`.
+- 1.0.0 freezes the config schema, exit codes and `--json` contracts ([contracts](../reference/contracts.md)) and the Plugin SDK v1. It is published on npm as `@tkmremi/smarttest` (the command is `smarttest`).
 - Graph: files, top-level symbols and class members; imports, re-exports, barrels, workspace packages, CommonJS, inheritance; environment keys, Prisma models, translation keys, assets, snapshots, manual mocks, Wasp operations, Next.js routes and the URLs end-to-end specs visit; edges from plugins; runtime traces as observed evidence. Unresolved relationships are uncertainty and select the test. The graph is persisted between runs.
 - Runners: Jest, Vitest, `node --test`, Playwright, Cypress (checked against a real install). Version control: Git, Subversion, Mercurial, native snapshots. CI on Linux, Windows and macOS.
 - Real-world checks: [six repositories](../case-studies/benchmarks-1.0.md), LeadsIt and OpenPro's front end included, 0 missed failures.
@@ -20,7 +20,7 @@ Planning is in story points. One sprint is about 40 points. Each version has an 
 | Who                                                                                                               | Usable from       | What is missing before that                                        |
 | ----------------------------------------------------------------------------------------------------------------- | ----------------- | ------------------------------------------------------------------ |
 | A team that installs the tarball (like LeadsIt)                                                                   | 0.9.0             | Nothing for Linux; install is `npm install -D <tarball>`           |
-| Anyone, with `npm install -D smarttest`                                                                           | 1.0.0             | Done: ADR-0007 accepted, published as `smarttest`                  |
+| Anyone, with `npm install -D @tkmremi/smarttest`                                                                  | 1.0.0             | Done: ADR-0007 accepted, published as `@tkmremi/smarttest`         |
 | Teams whose daily contact is the commit hook                                                                      | 0.9.0, sprint S24 | Staged-content runs, pre-push mode, project checks, time budget    |
 | People who prefer a UI to the CLI                                                                                 | 0.9.0, S25–S26    | SmartTest Studio and the VS Code extension                         |
 | Teams that need guarantees: frozen config and `--json` contracts, macOS and Windows checked, published benchmarks | 1.0.0             | Done: contracts frozen, Linux/Windows/macOS in CI, security review |

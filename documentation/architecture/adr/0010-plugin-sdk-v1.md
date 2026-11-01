@@ -9,11 +9,11 @@
 
 ## Decision
 
-- The Plugin SDK v1 exports four contracts from `smarttest/plugin-sdk`: `TestAdapter`, `VersionControlAdapter`, `LanguageAnalyzer` (the per-file analyzer SmartTest uses, replacing the §27.4 sketch) and `EdgeProvider`. Each implementation declares `apiVersion: 1`. The types stay in `shared` (ADR-0006) and `plugin-sdk` re-exports them.
+- The Plugin SDK v1 exports four contracts from `@tkmremi/smarttest/plugin-sdk`: `TestAdapter`, `VersionControlAdapter`, `LanguageAnalyzer` (the per-file analyzer SmartTest uses, replacing the §27.4 sketch) and `EdgeProvider`. Each implementation declares `apiVersion: 1`. The types stay in `shared` (ADR-0006) and `plugin-sdk` re-exports them.
 - A plugin is a module listed in the `plugins` option; its default export is a `SmartTestPlugin`. In 1.0 it contributes edge providers. Registering runners, version control and analyzers from a plugin is a later, additive change.
 - An edge provider returns file-to-file edges `{ from, to, kind, confidence }` and what it could not resolve. Edges enter the graph with provenance `plugin` and only add dependents. Unresolved relationships become uncertainty. A provider that throws or returns malformed output fails the run (`ST_PLUGIN_FAILED`, exit 4), never "no edges". A change to a plugin file inside the project is a trigger for the whole suite.
 - Capabilities are declared (ADR-0005): a provider without `fileEdges` is not called; one without `unresolved` is used with a warning.
-- A test-framework-agnostic conformance kit (`smarttest/plugin-sdk/conformance`) checks each contract against a fixture. Every built-in adapter runs it in SmartTest's own suite.
+- A test-framework-agnostic conformance kit (`@tkmremi/smarttest/plugin-sdk/conformance`) checks each contract against a fixture. Every built-in adapter runs it in SmartTest's own suite.
 
 ## Consequences
 

@@ -4,7 +4,7 @@ Rules turn your architecture into testing policy. They are deterministic, inspec
 
 ```ts
 // smarttest.config.ts
-import { defineConfig } from "smarttest";
+import { defineConfig } from "@tkmremi/smarttest";
 
 export default defineConfig({
   rules: [

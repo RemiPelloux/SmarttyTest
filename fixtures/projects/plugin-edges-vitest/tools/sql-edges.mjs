@@ -7,7 +7,7 @@
  */
 const CALL = /(?<![\w.$]|function\s*)query\(\s*(?:(["'`])([\w-]+)\1|([^,)]*))/g;
 
-/** @type {import("smarttest/plugin-sdk").EdgeProvider} */
+/** @type {import("@tkmremi/smarttest/plugin-sdk").EdgeProvider} */
 const sqlEdges = {
   apiVersion: 1,
   id: "sql-queries",
@@ -34,5 +34,5 @@ const sqlEdges = {
   },
 };
 
-/** @type {import("smarttest/plugin-sdk").SmartTestPlugin} */
+/** @type {import("@tkmremi/smarttest/plugin-sdk").SmartTestPlugin} */
 export default { apiVersion: 1, name: "sql-edges", edgeProviders: [sqlEdges] };

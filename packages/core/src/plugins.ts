@@ -86,7 +86,7 @@ function invalid(spec: string, message: string): SmartTestError {
   return new SmartTestError(`Plugin ${spec}: ${message}`, {
     code: "ST_PLUGIN_INVALID",
     category: "configuration",
-    hint: "Check the plugin against the Plugin SDK conformance kit (smarttest/plugin-sdk/conformance).",
+    hint: "Check the plugin against the Plugin SDK conformance kit (@tkmremi/smarttest/plugin-sdk/conformance).",
   });
 }
 

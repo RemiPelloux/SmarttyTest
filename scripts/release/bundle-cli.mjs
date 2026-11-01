@@ -4,9 +4,9 @@
  *   - one ESM bundle for the CLI and the config API (all @smarttest/* packages inlined)
  *   - only runtime dependency: typescript (used to parse projects and load smarttest.config.ts)
  *   - hand-written public types (defineConfig + config schema)
- *   - `smarttest/studio`: `startStudio`, to embed Studio in another Node process
- *   - the Plugin SDK (`smarttest/plugin-sdk`, `smarttest/plugin-sdk/conformance`) with its
- *     declarations, and the JSON schemas (`smarttest/schemas/*`)
+ *   - `@tkmremi/smarttest/studio`: `startStudio`, to embed Studio in another Node process
+ *   - the Plugin SDK (`@tkmremi/smarttest/plugin-sdk`, `@tkmremi/smarttest/plugin-sdk/conformance`) with its
+ *     declarations, and the JSON schemas (`@tkmremi/smarttest/schemas/*`)
  *
  *   node scripts/release/bundle-cli.mjs [--version x.y.z]
  */
@@ -36,9 +36,9 @@ await build({
     "parse-worker": join(root, "packages/core/src/parse-worker.ts"),
     "plugin-sdk": join(root, "packages/plugin-sdk/src/index.ts"),
     "plugin-sdk-conformance": join(root, "packages/plugin-sdk/src/conformance.ts"),
-    // `smarttest/playwright`: the page fixture that records browser coverage for `--coverage`.
+    // `@tkmremi/smarttest/playwright`: the page fixture that records browser coverage for `--coverage`.
     playwright: join(root, "packages/adapter-playwright/src/coverage.ts"),
-    // `smarttest/studio`: only `startStudio`; the rest of @smarttest/studio stays internal.
+    // `@tkmremi/smarttest/studio`: only `startStudio`; the rest of @smarttest/studio stays internal.
     studio: "smarttest-studio-entry",
   },
   outdir: join(out, "dist"),
@@ -210,7 +210,7 @@ await writeFile(
 );
 
 const manifest = {
-  name: "smarttest",
+  name: "@tkmremi/smarttest",
   version,
   description:
     "Semantic test-impact analysis for TypeScript & JavaScript — run only the tests that matter, through Jest, Vitest, node:test, Playwright or Cypress.",
@@ -269,7 +269,10 @@ const userReadme = repoReadme
     /## Development\n[\s\S]*?(?=\n## )/,
     "## Development\n\nTo build SmartTest from source or contribute, see the [repository](https://github.com/RemiPelloux/SmarttyTest) and [CONTRIBUTING.md](CONTRIBUTING.md).\n",
   );
-if (userReadme.includes("release:pack") || !userReadme.includes("npm install -D smarttest"))
+if (
+  userReadme.includes("release:pack") ||
+  !userReadme.includes("npm install -D @tkmremi/smarttest")
+)
   throw new Error("README.md changed shape: update the npm README transform in bundle-cli.mjs");
 await writeFile(
   join(out, "README.md"),
@@ -288,4 +291,4 @@ await writeFile(
       "](https://github.com/RemiPelloux/SmarttyTest/blob/main/$1)",
     ),
 );
-console.log(`✔ smarttest@${version} bundled into ${out.slice(root.length + 1)}`);
+console.log(`✔ @tkmremi/smarttest@${version} bundled into ${out.slice(root.length + 1)}`);

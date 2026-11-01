@@ -9,7 +9,7 @@
 ## Install
 
 ```bash
-npm install -D smarttest     # or: pnpm add -D smarttest · yarn add -D smarttest
+npm install -D @tkmremi/smarttest     # or: pnpm add -D @tkmremi/smarttest · yarn add -D @tkmremi/smarttest
 ```
 
 To try an unreleased build, run `pnpm install && pnpm build && pnpm release:pack` in a clone of [the repository](https://github.com/RemiPelloux/SmarttyTest) and install the tarball it writes to `packages/cli/.publish/`.

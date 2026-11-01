@@ -4081,7 +4081,7 @@ The long-term ambition is to make SmartTest a universal testing intelligence pla
 The user experience should ultimately be as simple as:
 
 ```bash
-npm install -D smarttest
+npm install -D @tkmremi/smarttest
 
 npx smarttest init
 

@@ -191,7 +191,7 @@ Goal: freeze the public contracts, publish benchmarks, review security, and clos
 
 Carried gates closed in this version:
 
-- **npm.** [ADR-0007](../architecture/adr/0007-name-license-distribution.md) accepted: `smarttest`, Apache-2.0, published from a local `pnpm release:publish`.
+- **npm.** [ADR-0007](../architecture/adr/0007-name-license-distribution.md) accepted: Apache-2.0, published from a local `pnpm release:publish`. npm refused the bare name `smarttest` as too similar to `smart-test`, and the `@smarttest` scope belongs to another account, so the package is `@tkmremi/smarttest`; the command is still `smarttest`.
 - **macOS and Windows.** `pnpm verify` runs in CI on Linux, Windows and macOS. The first run had 86 failures on macOS and 142 on Windows. The real bugs were paths spelled differently from the runner's (`/var` vs `/private/var`, `RUNNER~1`) and pnpm's relative symlinks behind a junction. One test is skipped on Windows (signal cleanup; Windows has no POSIX signals).
 - **Cypress.** A CI job installs Cypress 16.1.1 in `fixtures/projects/cypress-e2e` and runs it through SmartTest. It found four adapter bugs (test ids, missing skipped tests, CDATA failure text, specs that fail to load), all fixed.
 - **Studio with real assistive technology.** CI runs Studio in real Safari (axe and keyboard), VoiceOver with Safari and NVDA with Chrome, through Guidepup, and keeps the spoken logs. NVDA announces landmarks, headings, run progress, the verdict and results. On hosted runners VoiceOver does not record live-region announcements at all (a plain calibration page is not heard either), so run progress and verdict are advisories there, not gated checks.

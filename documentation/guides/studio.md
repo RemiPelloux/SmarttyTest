@@ -1,6 +1,6 @@
 # Studio guide
 
-Studio is a local browser interface for the current project's real SmartTest analysis. Start it through `smarttest studio`, or import `startStudio` from `smarttest/studio` ([embedding](#embedding-and-assets)). Open the exact printed URL, including its session token fragment. Tokens are kept in session storage and removed from the address bar after pairing.
+Studio is a local browser interface for the current project's real SmartTest analysis. Start it through `smarttest studio`, or import `startStudio` from `@tkmremi/smarttest/studio` ([embedding](#embedding-and-assets)). Open the exact printed URL, including its session token fragment. Tokens are kept in session storage and removed from the address bar after pairing.
 
 The server defaults to `127.0.0.1:4173`. If that port is occupied it falls back to an OS-assigned ephemeral port. `port: 0` requests an ephemeral port immediately. Use the returned URL rather than assuming a port. Non-loopback bind addresses are refused.
 
@@ -47,7 +47,7 @@ Playwright Test does not collect coverage by itself, so SmartTest provides a pag
 ```ts
 // e2e/fixtures.ts
 import { test as base } from "@playwright/test";
-import { withBrowserCoverage } from "smarttest/playwright";
+import { withBrowserCoverage } from "@tkmremi/smarttest/playwright";
 export const test = withBrowserCoverage(base);
 export { expect } from "@playwright/test";
 ```
@@ -77,7 +77,7 @@ Studio targets WCAG 2.2 AA in Chromium, Firefox and WebKit, light and dark. Open
 With `smarttest` installed in the project, another Node process (a dev server, a custom tool) can start Studio itself:
 
 ```ts
-import { startStudio } from "smarttest/studio";
+import { startStudio } from "@tkmremi/smarttest/studio";
 
 const studio = await startStudio({ root: process.cwd(), port: 4173 });
 console.log(studio.url); // open this exact URL: the session token is in its fragment

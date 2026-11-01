@@ -37,14 +37,15 @@ export async function findConfigFile(root: string): Promise<string | undefined> 
 }
 
 /**
- * Loads smarttest.config.* without requiring the smarttest package to be resolvable:
+ * Loads smarttest.config.* without requiring the package to be resolvable (`@tkmremi/smarttest`,
+ * or `smarttest` in configs written before it was published):
  * the file is transpiled and `defineConfig` imports are replaced by an identity helper.
  */
 async function importConfigModule(root: string, file: string): Promise<unknown> {
   const source = await readFile(file, "utf8");
   if (file.endsWith(".json")) return JSON.parse(source);
   const stripped = source.replace(
-    /^\s*import\s+(?:type\s+)?\{[^}]*\}\s+from\s+["'](?:smarttest|@smarttest\/config)["'];?\s*$/gm,
+    /^\s*import\s+(?:type\s+)?\{[^}]*\}\s+from\s+["'](?:@tkmremi\/smarttest|smarttest|@smarttest\/config)["'];?\s*$/gm,
     "",
   );
   const js = ts.transpileModule(`const defineConfig = (c) => c;\n${stripped}`, {

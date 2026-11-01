@@ -16,10 +16,14 @@ The spec uses "SmartTest" as a working name and asks for npm availability to be 
 
 ## Decision
 
-- CLI package **`smarttest`** (bin `smarttest`). Internal packages under **`@smarttest/*`**.
+- CLI package **`smarttest`** (bin `smarttest`) was the plan; see the outcome below. Internal packages under **`@smarttest/*`**.
 - **Apache-2.0** for the open-source core. It includes an explicit patent grant, which suits enterprise adoption and an open-core model. Cloud and enterprise code live in separate, closed repositories.
 - Publish locally with `pnpm release:publish` after `pnpm verify`. CI (GitHub Actions) checks every push on Linux, Windows and macOS, but publishing stays a local, manual step, so there is no npm provenance attestation yet. Pre-releases go to the `next` tag.
-- 1.0.0 is the first npm release, published as `smarttest`.
+- 1.0.0 is the first npm release, published as **`@tkmremi/smarttest`**. The command stays `smarttest` (`bin`), and so do the config file names and the `.smarttest/` store.
+
+## Outcome at publication (1.0.0)
+
+npm refused the bare name: "Package name too similar to existing package smart-test". The planned fallback `@smarttest/cli` was not possible either, because the `@smarttest` npm scope belongs to another account. The package is published under the owner's scope, `@tkmremi/smarttest`. Internal workspace packages keep their `@smarttest/*` names; they are bundled into the published package and never published themselves. The config loader also accepts `import { defineConfig } from "smarttest"`, so configs written from a local build keep working.
 
 ## Fallbacks
 

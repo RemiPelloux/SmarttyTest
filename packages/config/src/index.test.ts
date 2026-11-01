@@ -43,7 +43,7 @@ describe("loadConfig", () => {
     const root = await mkdtemp(join(tmpdir(), "st-config-"));
     await writeFile(
       join(root, "smarttest.config.ts"),
-      'import { defineConfig } from "smarttest";\nconst mode: "safe" = "safe";\nexport default defineConfig({ mode, retries: 1 });\n',
+      'import { defineConfig } from "@tkmremi/smarttest";\nconst mode: "safe" = "safe";\nexport default defineConfig({ mode, retries: 1 });\n',
     );
     const loaded = await loadConfig(root);
     expect(loaded.config.mode).toBe("safe");

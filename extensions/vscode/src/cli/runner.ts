@@ -93,7 +93,7 @@ export function windowsShellCommand(executable: string, args: readonly string[])
         {
           code: "ST_EXT_UNSAFE_ARGUMENT",
           category: "configuration",
-          hint: "Set `smarttest.executablePath` to the CLI's JavaScript entry (for example node_modules/smarttest/dist/bin.js) so no shell is needed.",
+          hint: "Set `smarttest.executablePath` to the CLI's JavaScript entry (for example node_modules/@tkmremi/smarttest/dist/bin.js) so no shell is needed.",
         },
       );
   return [executable, ...args].map((value) => `"${value}"`).join(" ");

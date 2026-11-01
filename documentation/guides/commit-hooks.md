@@ -75,7 +75,7 @@ A selected test that no runner executes is different: it was not left out on pur
 Checks run in the affected project's directory, alongside the tests, at most one per CPU core at a time:
 
 ```ts
-import { defineConfig } from "smarttest";
+import { defineConfig } from "@tkmremi/smarttest";
 
 export default defineConfig({
   hook: {

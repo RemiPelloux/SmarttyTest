@@ -4,7 +4,7 @@
  * `assertConformance(report)` to throw (with every failure listed) from any test runner, or read
  * `report.checks` yourself.
  *
- *   import { assertConformance, checkRunnerAdapter } from "smarttest/plugin-sdk/conformance";
+ *   import { assertConformance, checkRunnerAdapter } from "@tkmremi/smarttest/plugin-sdk/conformance";
  *   assertConformance(await checkRunnerAdapter(new MyAdapter(opts), { expectedFiles: ["a.test.ts"] }));
  *
  * Every built-in adapter of SmartTest passes this kit in SmartTest's own test suite.

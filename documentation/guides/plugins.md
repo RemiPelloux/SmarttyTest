@@ -14,8 +14,8 @@ SmartTest's built-in adapters implement the last three and pass the [conformance
 Everything is imported from the `smarttest` package:
 
 ```ts
-import { definePlugin, type EdgeProvider, PLUGIN_API_VERSION } from "smarttest/plugin-sdk";
-import { assertConformance, checkEdgeProvider } from "smarttest/plugin-sdk/conformance";
+import { definePlugin, type EdgeProvider, PLUGIN_API_VERSION } from "@tkmremi/smarttest/plugin-sdk";
+import { assertConformance, checkEdgeProvider } from "@tkmremi/smarttest/plugin-sdk/conformance";
 ```
 
 Every adapter, provider and plugin declares `apiVersion: 1`. SmartTest refuses a plugin built for another version (`ST_PLUGIN_API_VERSION`, exit 3).
@@ -31,7 +31,7 @@ TypeScript and JavaScript imports, references and many conventions (environment 
 // (`function query(`) and other objects' methods (`pool.query(`).
 const CALL = /(?<![\w.$]|function\s*)query\(\s*(?:(["'`])([\w-]+)\1|([^,)]*))/g;
 
-/** @type {import("smarttest/plugin-sdk").EdgeProvider} */
+/** @type {import("@tkmremi/smarttest/plugin-sdk").EdgeProvider} */
 const sqlEdges = {
   apiVersion: 1,
   id: "sql-queries",
@@ -57,14 +57,14 @@ const sqlEdges = {
   },
 };
 
-/** @type {import("smarttest/plugin-sdk").SmartTestPlugin} */
+/** @type {import("@tkmremi/smarttest/plugin-sdk").SmartTestPlugin} */
 export default { apiVersion: 1, name: "sql-edges", edgeProviders: [sqlEdges] };
 ```
 
 Register it in the configuration, as a path relative to the project root or as an installed package name:
 
 ```ts
-import { defineConfig } from "smarttest";
+import { defineConfig } from "@tkmremi/smarttest";
 
 export default defineConfig({
   plugins: ["./tools/sql-edges.mjs"],
@@ -160,7 +160,7 @@ interface LanguageAnalyzer {
 
 ## Conformance kit
 
-`smarttest/plugin-sdk/conformance` checks an implementation against the contract with a fixture you provide. It does not depend on a test framework: each function returns a report, and `assertConformance` throws with every failed check listed.
+`@tkmremi/smarttest/plugin-sdk/conformance` checks an implementation against the contract with a fixture you provide. It does not depend on a test framework: each function returns a report, and `assertConformance` throws with every failed check listed.
 
 | Function                                   | Fixture                                                                                            |
 | ------------------------------------------ | -------------------------------------------------------------------------------------------------- |
@@ -183,7 +183,7 @@ test/fixtures/sql-app/
 // test/sql-edges.test.ts
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
-import { assertConformance, checkPlugin } from "smarttest/plugin-sdk/conformance";
+import { assertConformance, checkPlugin } from "@tkmremi/smarttest/plugin-sdk/conformance";
 import plugin from "../tools/sql-edges.mjs";
 
 test("sql-edges conforms to the plugin API", async () => {

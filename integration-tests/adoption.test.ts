@@ -317,14 +317,14 @@ describe("init and the project's formatter", () => {
     expect(config?.reason).toContain("formatted with the project's Prettier");
     await st.initApply(plan);
     const written = await readFile(join(dir, "smarttest.config.ts"), "utf8");
-    expect(written).toContain("import { defineConfig } from 'smarttest';");
+    expect(written).toContain("import { defineConfig } from '@tkmremi/smarttest';");
     expect(written).not.toContain('"');
 
     const broken = await repo({ ...base, ...prettier("process.exit(1);\n") });
     const st2 = await SmartTest.open({ root: broken });
     const res = await st2.initApply(await st2.initPlan());
     expect(await readFile(join(broken, "smarttest.config.ts"), "utf8")).toContain(
-      'import { defineConfig } from "smarttest";',
+      'import { defineConfig } from "@tkmremi/smarttest";',
     );
     expect(res.validation.messages.join("\n")).toContain("written unformatted: Prettier failed");
   }, 120_000);

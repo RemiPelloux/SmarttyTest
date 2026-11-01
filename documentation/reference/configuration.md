@@ -1,9 +1,9 @@
 # Configuration reference
 
-SmartTest reads `smarttest.config.{ts,mts,js,mjs,json}` from the project root, or the file given with `--config`. `smarttest init` writes one for you. The file is transpiled on load, so `import { defineConfig } from "smarttest"` works even before the package is resolvable.
+SmartTest reads `smarttest.config.{ts,mts,js,mjs,json}` from the project root, or the file given with `--config`. `smarttest init` writes one for you. The file is transpiled on load, so `import { defineConfig } from "@tkmremi/smarttest"` works even before the package is resolvable.
 
 ```ts
-import { defineConfig } from "smarttest";
+import { defineConfig } from "@tkmremi/smarttest";
 
 export default defineConfig({
   mode: "balanced",
@@ -69,11 +69,11 @@ The configuration is repository content, so its paths must stay inside the proje
 
 ## JSON Schema
 
-The configuration has a published JSON Schema, frozen at 1.0.0: [`config.v1.schema.json`](../../packages/cli/schemas/config.v1.schema.json), shipped in the package as `smarttest/schemas/config.v1.schema.json`. Point `$schema` at it in `smarttest.config.json` to get completion and validation in editors; SmartTest ignores the key:
+The configuration has a published JSON Schema, frozen at 1.0.0: [`config.v1.schema.json`](../../packages/cli/schemas/config.v1.schema.json), shipped in the package as `@tkmremi/smarttest/schemas/config.v1.schema.json`. Point `$schema` at it in `smarttest.config.json` to get completion and validation in editors; SmartTest ignores the key:
 
 ```json
 {
-  "$schema": "./node_modules/smarttest/schemas/config.v1.schema.json",
+  "$schema": "./node_modules/@tkmremi/smarttest/schemas/config.v1.schema.json",
   "mode": "balanced",
   "plugins": ["./tools/sql-edges.mjs"]
 }
@@ -84,7 +84,7 @@ A test checks the schema, the `SmartTestConfig` type and the validator SmartTest
 ## Per-project conventions
 
 ```ts
-import { defineConfig } from "smarttest";
+import { defineConfig } from "@tkmremi/smarttest";
 
 export default defineConfig({
   tests: { layout: "mirror", directory: "tests" },

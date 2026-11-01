@@ -15,7 +15,7 @@ The 1.0.0 release gate "Security review: file writes, process execution, Studio"
   - line, branch and browser coverage (`coverage-lines.json`);
   - `--only` (`scope.ts`);
   - the hook scope (`hook.runners`, `hook.exclude`);
-  - the `smarttest/playwright` browser coverage fixture and its URL-to-file mapping.
+  - the `@tkmremi/smarttest/playwright` browser coverage fixture and its URL-to-file mapping.
 - **Dependencies**: `scripts/release/audit.mjs` (npm audit of the packed CLI), `scripts/release/sbom.mjs`, and `pnpm audit` of the workspace.
 
 ## Threat model
@@ -344,7 +344,7 @@ Any of these turns a CI run green without running the affected tests.
 
 ### SR-21: browser coverage URL mapping (low)
 
-**What was checked.** The `smarttest/playwright` fixture writes dumps under a hashed name into the directory SmartTest gives it. `ingestBrowserV8` maps `http(s)`, `/@fs/` and `file:` URLs to candidate files. It reads a file only when its real path is inside the project's real path, and uses it only when the browser's source is byte for byte that file. So encoded `../`, `/@fs/` outside the project and `file:` URLs outside it are never read, which was already tested.
+**What was checked.** The `@tkmremi/smarttest/playwright` fixture writes dumps under a hashed name into the directory SmartTest gives it. `ingestBrowserV8` maps `http(s)`, `/@fs/` and `file:` URLs to candidate files. It reads a file only when its real path is inside the project's real path, and uses it only when the browser's source is byte for byte that file. So encoded `../`, `/@fs/` outside the project and `file:` URLs outside it are never read, which was already tested.
 
 **SR-21.** When the project root was reached through a link, the real file path was made relative to the unresolved root. Coverage then fell back to the absolute path, which leaked it into the report and Studio. Paths are now relative to the root's real path, and dropped if that fails.
 
