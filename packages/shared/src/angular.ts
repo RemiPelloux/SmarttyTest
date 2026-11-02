@@ -4,9 +4,12 @@
  * workspace directory).
  */
 
+export type AngularTestRunner = "vitest" | "karma" | "jest";
+
 /** Builders that run unit tests through `ng test`. */
-export const ANGULAR_TEST_BUILDERS: Record<string, "vitest" | "karma"> = {
+export const ANGULAR_TEST_BUILDERS: Record<string, AngularTestRunner> = {
   "@angular/build:unit-test": "vitest",
+  "@angular-builders/jest:run": "jest",
   "@angular/build:karma": "karma",
   "@angular-devkit/build-angular:karma": "karma",
 };
@@ -19,7 +22,9 @@ export interface AngularTestTarget {
   sourceRoot: string;
   builder: string;
   /** The runner the builder starts (the unit-test builder's `runner` option; Karma builders: karma). */
-  runner: "vitest" | "karma";
+  runner: AngularTestRunner;
+  /** Whether the build type-checks every file a spec imports (the unit-test and Karma builders). */
+  typeChecks: boolean;
   /** Globs relative to the source root. */
   include: string[];
   exclude: string[];
@@ -90,7 +95,7 @@ export function angularTestTargets(text: string, projectName?: string): AngularT
         ? options.runner === "karma"
           ? "karma"
           : "vitest"
-        : (ANGULAR_TEST_BUILDERS[builder] as "vitest" | "karma");
+        : (ANGULAR_TEST_BUILDERS[builder] as AngularTestRunner);
     const loads: AngularTestTarget["loads"] = [];
     const computed: string[] = [];
     const add = (key: string, value: unknown) => {
@@ -119,23 +124,28 @@ export function angularTestTargets(text: string, projectName?: string): AngularT
           "tsConfig",
           "karmaConfig",
           "main",
+          "setupFilesAfterEnv",
         ].includes(key)
       )
         add(key, value);
+      else if (key === "config" && runner === "jest" && typeof value === "string") add(key, value);
       else if (key === "runnerConfig") {
         if (typeof value === "string") add(key, value);
         else if (value === true) computed.push("runnerConfig: true (default file search)");
       }
     }
-    // The unit-test builder's defaults: tsconfig.spec.json in the project root.
-    if (!("tsConfig" in options) && builder === "@angular/build:unit-test")
+    // The builders' defaults: tsconfig.spec.json in the project root; Jest's jest.config.js.
+    if (!("tsConfig" in options) && builder !== "@angular-devkit/build-angular:karma")
       loads.push({ file: join(root, "tsconfig.spec.json"), key: "tsConfig" });
+    if (runner === "jest" && !("config" in options))
+      loads.push({ file: join(root, "jest.config.js"), key: "config" });
     out.push({
       project: name,
       root,
       sourceRoot,
       builder,
       runner,
+      typeChecks: runner !== "jest",
       include: strings(options.include).length ? strings(options.include) : DEFAULT_INCLUDE,
       exclude: strings(options.exclude),
       // Polyfills given as package names (`zone.js`, `zone.js/testing`) are not project files.

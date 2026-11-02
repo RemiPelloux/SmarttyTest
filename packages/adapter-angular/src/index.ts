@@ -9,7 +9,7 @@
  */
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, posix, relative } from "node:path";
+import { isAbsolute, join, posix, relative, resolve } from "node:path";
 import { type JestLikeReport, parseJestLikeReport, resolvePackageBin } from "@smarttest/plugin-sdk";
 import {
   type AngularTestTarget,
@@ -100,12 +100,28 @@ export class AngularAdapter implements TestAdapter {
   }
 
   private projectArgs(target: AngularTestTarget): string[] {
-    return ["test", target.project, "--watch=false", "--progress=false"];
+    // `@angular-builders/jest` passes Jest's flags through and knows no `--progress`.
+    return target.runner === "jest"
+      ? ["test", target.project, "--watch=false"]
+      : ["test", target.project, "--watch=false", "--progress=false"];
   }
 
   private env(extra?: Record<string, string>): NodeJS.ProcessEnv {
     // NG_CLI_ANALYTICS: never prompt for analytics consent in a non-interactive run.
     return { ...process.env, FORCE_COLOR: "0", NO_COLOR: "1", NG_CLI_ANALYTICS: "false", ...extra };
+  }
+
+  /** `@angular-builders/jest`: Jest's own flags, through `ng test`. */
+  private jestArgs(target: AngularTestTarget, selection: TestSelection, out: string): string[] {
+    const root = canonicalPath(this.options.projectRoot);
+    return [
+      this.bin(),
+      "test",
+      target.project,
+      "--json",
+      `--output-file=${out}`,
+      ...selection.files.flatMap((f) => ["--test-path-patterns", jestPathPattern(join(root, f))]),
+    ];
   }
 
   async discover(): Promise<TestCase[]> {
@@ -116,22 +132,25 @@ export class AngularAdapter implements TestAdapter {
       { cwd: canonicalPath(this.options.cwd), env: this.env(), timeoutMs: 120_000 },
     );
     const text = res.stdout;
-    const at = text.indexOf("Discovered test files:");
+    // The unit-test builder prints a header then relative paths; Jest prints absolute paths.
+    const at = target.runner === "jest" ? 0 : text.indexOf("Discovered test files:");
     if (res.code !== 0 || at === -1) {
       throw new SmartTestError(
         `ng test --list-tests failed: ${(res.stderr || res.stdout).trim().slice(0, 500)}`,
         { code: "ST_DISCOVERY_FAILED", category: "infrastructure" },
       );
     }
-    const files = text
+    const lines = text
       .slice(at)
       .split("\n")
-      .slice(1)
-      .map((l) => l.trim())
-      .filter((l) => l && !/\s/.test(l));
+      .map((l) => l.trim());
+    const files =
+      target.runner === "jest"
+        ? lines.filter((l) => isAbsolute(l))
+        : lines.slice(1).filter((l) => l && !/\s/.test(l));
     return files.map((f) => {
       const rel = posix.normalize(
-        relative(this.options.projectRoot, join(this.options.cwd, f)).split("\\").join("/"),
+        relative(this.options.projectRoot, resolve(this.options.cwd, f)).split("\\").join("/"),
       );
       return { id: rel, filePath: rel, suitePath: [], name: rel, tags: [] };
     });
@@ -149,16 +168,19 @@ export class AngularAdapter implements TestAdapter {
         .split("\\")
         .join("/"),
     );
-    const args = [
-      this.bin(),
-      ...this.projectArgs(target),
-      "--reporters=json",
-      // The JSON report has no text for a build error or an error outside tests; a console
-      // reporter prints it.
-      "--reporters=dot",
-      `--output-file=${out}`,
-      ...includes.flatMap((f) => ["--include", f]),
-    ];
+    const args =
+      target.runner === "jest"
+        ? this.jestArgs(target, selection, out)
+        : [
+            this.bin(),
+            ...this.projectArgs(target),
+            "--reporters=json",
+            // The JSON report has no text for a build error or an error outside tests; a console
+            // reporter prints it.
+            "--reporters=dot",
+            `--output-file=${out}`,
+            ...includes.flatMap((f) => ["--include", f]),
+          ];
     try {
       const res = await runProcess(process.execPath, args, {
         cwd: canonicalPath(this.options.cwd),
@@ -192,4 +214,9 @@ export class AngularAdapter implements TestAdapter {
       await rm(tmp, { recursive: true, force: true });
     }
   }
+}
+
+/** A `--test-path-patterns` regex that matches exactly one file. Exported for tests. */
+export function jestPathPattern(abs: string): string {
+  return `^${abs.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`;
 }

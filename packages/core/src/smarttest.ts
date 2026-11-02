@@ -56,6 +56,7 @@ import {
 } from "@smarttest/semantic-diff";
 import type { ChangeScope, TestAdapter } from "@smarttest/shared";
 import {
+  angularTestTargets,
   assertConfinedWrite,
   assertNoSymlinkBelow,
   confineWrites,
@@ -66,6 +67,7 @@ import {
   mapLimit,
   matchGlob,
   readJson,
+  readPackageScripts,
   readStateFile,
   readText,
   runProcess,
@@ -110,6 +112,7 @@ import {
   expandNodePatterns,
   isTestFile,
   type RunnerRoot,
+  runnerPreference,
 } from "@smarttest/test-discovery";
 import { type ExecutionEvent, executeGroups, type Group } from "@smarttest/test-executor";
 import {
@@ -1104,6 +1107,15 @@ export class SmartTest {
     // Playwright listing must not take the unit tests away from their own runner.
     const ordered = [...listed.filter((l) => !l.failed), ...listed.filter((l) => l.failed)];
     const listedBy = new Map<string, boolean>();
+    // Two runners in one directory collecting the same file (Jest set up with a config while the
+    // Vitest the Angular CLI installed stays in the dependencies): the configured order wins,
+    // then the runner the `test` script starts, then a runner with a config file.
+    const testScripts = new Map<string, string>();
+    const owns = (root: RunnerRoot): number => {
+      if (!testScripts.has(root.dir))
+        testScripts.set(root.dir, readPackageScripts(join(this.root, root.dir)).test ?? "");
+      return runnerPreference(root, testScripts.get(root.dir) as string, this.config.adapters);
+    };
     for (const { root, key, files, failed } of ordered) {
       // A fallback is not cached: the failure must be reported again until it is fixed.
       if (!failed) nextCache[key] = files;
@@ -1115,7 +1127,13 @@ export class SmartTest {
         const prev = assignment.get(f);
         if (failed && prev && listedBy.get(f)) continue;
         // Several runners may collect the same file: the deepest project owns it.
-        if (!prev || root.dir.length > prev.dir.length) {
+        if (
+          !prev ||
+          root.dir.length > prev.dir.length ||
+          (root.dir.length === prev.dir.length &&
+            listedBy.get(f) === !failed &&
+            owns(root) < owns(prev))
+        ) {
           assignment.set(f, root);
           listedBy.set(f, !failed);
         }
@@ -1236,10 +1254,8 @@ export class SmartTest {
         .filter(([, r]) => r.adapter === "playwright" || r.adapter === "cypress")
         .map(([t]) => t),
     );
-    // Angular's test build compiles and type-checks everything a spec imports.
-    const typeCheckedTests = new Set(
-      [...assignment].filter(([, r]) => r.adapter === "angular").map(([t]) => t),
-    );
+    // Angular's unit-test and Karma builds compile and type-check everything a spec imports.
+    const typeCheckedTests = await this.typeCheckedTests(assignment);
     const graph = await timed(timings, "graph build", () => this.analysisGraph(index, e2eTests));
     graph.setDiscovery({ tests, helpers });
     const graphDiff: { file: string; added: string[]; removed: string[] }[] = [];
@@ -1874,6 +1890,28 @@ export class SmartTest {
       );
     }
     return diffs;
+  }
+
+  /** Tests whose runner type-checks every file they import (Angular's unit-test and Karma builds). */
+  private async typeCheckedTests(
+    assignment: ReadonlyMap<string, RunnerRoot>,
+  ): Promise<Set<string>> {
+    const out = new Set<string>();
+    const checks = new Map<RunnerRoot, boolean>();
+    for (const [test, root] of assignment) {
+      if (root.adapter !== "angular") continue;
+      if (!checks.has(root)) {
+        const file = root.configFile ?? (root.dir ? `${root.dir}/angular.json` : "angular.json");
+        const text = await readFileText(join(this.root, file), "utf8").catch(() => "");
+        const target = angularTestTargets(text).find(
+          (t) => !root.project || t.project === root.project,
+        );
+        // Unreadable: assume it does, which selects more, never less.
+        checks.set(root, target?.typeChecks ?? true);
+      }
+      if (checks.get(root)) out.add(test);
+    }
+    return out;
   }
 
   // ── Run ─────────────────────────────────────────────────────────────────────────────────

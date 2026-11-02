@@ -486,15 +486,26 @@ async function detectRunners(
       });
     }
   }
-  // Under an Angular workspace, Vitest runs inside `ng test`: a Vitest root with no config of its
-  // own (or with the builder's `vitest-base.config`) is the builder's runner, not a second one.
+  // Under an Angular workspace, the builder's runner runs inside `ng test`: a Vitest root with no
+  // config of its own (or with the builder's `vitest-base.config`) is not a second runner, and
+  // neither is Jest when `@angular-builders/jest` runs it (its jest.config.js is a partial config
+  // the builder completes; Jest started directly would fail on it).
   const angularDirs = new Set(out.filter((r) => r.adapter === "angular").map((r) => r.dir));
+  const jestBuilderDirs = new Set(
+    out
+      .filter(
+        (r) =>
+          r.adapter === "angular" && r.evidence.some((e) => e.includes("@angular-builders/jest")),
+      )
+      .map((r) => r.dir),
+  );
   return out.filter(
     (r) =>
       !(
-        r.adapter === "vitest" &&
-        angularDirs.has(r.dir) &&
-        (!r.configFile || /(?:^|\/)vitest-base\.config\.[cm]?[jt]s$/.test(r.configFile))
+        (r.adapter === "vitest" &&
+          angularDirs.has(r.dir) &&
+          (!r.configFile || /(?:^|\/)vitest-base\.config\.[cm]?[jt]s$/.test(r.configFile))) ||
+        (r.adapter === "jest" && jestBuilderDirs.has(r.dir))
       ),
   );
 }

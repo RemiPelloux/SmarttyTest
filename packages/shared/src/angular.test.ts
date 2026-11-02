@@ -84,6 +84,30 @@ describe("angularTestTargets", () => {
     expect(t).toMatchObject({ project: "web", runner: "karma", sourceRoot: "apps/web/src" });
   });
 
+  it("@angular-builders/jest: Jest, its config and no type-checking", () => {
+    const [t] = angularTestTargets(
+      JSON.stringify({
+        projects: {
+          a: {
+            root: "",
+            architect: {
+              test: {
+                builder: "@angular-builders/jest:run",
+                options: { config: "jest.app.config.js", setupFilesAfterEnv: "src/setup-jest.ts" },
+              },
+            },
+          },
+        },
+      }),
+    );
+    expect(t).toMatchObject({ runner: "jest", typeChecks: false });
+    expect(t?.loads).toEqual([
+      { file: "jest.app.config.js", key: "config" },
+      { file: "src/setup-jest.ts", key: "setupFilesAfterEnv" },
+      { file: "tsconfig.spec.json", key: "tsConfig" },
+    ]);
+  });
+
   it("returns nothing for text that is not a workspace", () => {
     expect(angularTestTargets("{ not json")).toEqual([]);
   });

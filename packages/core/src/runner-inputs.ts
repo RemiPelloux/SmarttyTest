@@ -113,7 +113,7 @@ export async function readRunnerInputs(
     for (const l of target.loads) {
       const file = root.dir ? `${root.dir}/${l.file}` : l.file;
       if (!(await isFile(join(projectRoot, file)))) continue;
-      if (["tsConfig", "runnerConfig", "karmaConfig"].includes(l.key))
+      if (["tsConfig", "runnerConfig", "karmaConfig", "config"].includes(l.key))
         out.configs.push({ file, importedBy: workspace });
       else out.loads.push({ file, key: l.key, source: workspace });
     }

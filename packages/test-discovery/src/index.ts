@@ -90,6 +90,28 @@ export function nodeStripsTypes(): boolean {
 }
 
 /** Assigns a test file to the deepest runner root that contains it. */
+/**
+ * Which of two runners in one directory owns a file both collect (lower wins): the order given in
+ * `adapters`, then the runner the `test` script starts, then a runner with a config file. A Jest
+ * set up with a config keeps its specs when the Vitest the Angular CLI installed stays in the
+ * dependencies.
+ */
+export function runnerPreference(
+  root: RunnerRoot,
+  testScript: string,
+  adapters: readonly AdapterId[] = [],
+): number {
+  const configured = adapters.indexOf(root.adapter);
+  if (configured !== -1) return configured;
+  const starts =
+    root.adapter === "angular"
+      ? /\bng\s+test\b/.test(testScript)
+      : root.adapter === "node"
+        ? /\bnode\b[^&|;]*\s--test\b/.test(testScript)
+        : new RegExp(`\\b${root.adapter}\\b`).test(testScript);
+  return 100 + (starts ? 0 : root.configFile ? 1 : 2);
+}
+
 export function assignRunner(
   testFile: string,
   roots: readonly RunnerRoot[],

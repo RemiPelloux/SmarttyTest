@@ -59,3 +59,26 @@ describe("Angular detection", () => {
     }
   });
 });
+
+describe("Angular detection · @angular-builders/jest", () => {
+  it("runs the specs through ng test, not through the partial jest.config.js", async () => {
+    const root = await mkdtemp(join(tmpdir(), "st-detect-angular-jest-"));
+    try {
+      await writeFile(
+        join(root, "package.json"),
+        JSON.stringify({ scripts: { test: "ng test" }, devDependencies: { jest: "^30.0.0" } }),
+      );
+      await writeFile(join(root, "jest.config.js"), "module.exports = {};");
+      await writeFile(
+        join(root, "angular.json"),
+        JSON.stringify({
+          projects: { demo: { architect: { test: { builder: "@angular-builders/jest:run" } } } },
+        }),
+      );
+      const profile = await detectProject(root, { files: [] });
+      expect(profile.runners.map((r) => r.adapter)).toEqual(["angular"]);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+});
