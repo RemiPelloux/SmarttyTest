@@ -23,6 +23,7 @@ import {
   type TestCase,
   type TestRunResult,
   type TestSelection,
+  walkFiles,
 } from "@smarttest/shared";
 
 export interface AngularAdapterOptions {
@@ -86,6 +87,12 @@ export class AngularAdapter implements TestAdapter {
         },
       );
     }
+    return target;
+  }
+
+  /** The target, refusing Karma: it has no per-test report to read results from. */
+  private async runnableTarget(): Promise<AngularTestTarget> {
+    const target = await this.target();
     if (target.runner === "karma") {
       throw new SmartTestError(
         `Project "${target.project}" runs its tests with Karma, which SmartTest cannot read results from`,
@@ -126,6 +133,23 @@ export class AngularAdapter implements TestAdapter {
 
   async discover(): Promise<TestCase[]> {
     const target = await this.target();
+    // Karma has no listing mode: its `include` globs, under the source root, without starting it.
+    // Running one of these specs is refused (see runnableTarget).
+    if (target.runner === "karma") {
+      const base = posix.join(target.sourceRoot);
+      const files = await walkFiles(join(this.options.cwd, base), {
+        include: target.include,
+        exclude: ["**/node_modules/**", ...target.exclude],
+      });
+      return files.map((f) => {
+        const rel = posix.normalize(
+          relative(this.options.projectRoot, resolve(this.options.cwd, base, f))
+            .split("\\")
+            .join("/"),
+        );
+        return { id: rel, filePath: rel, suitePath: [], name: rel, tags: [] };
+      });
+    }
     const res = await runProcess(
       process.execPath,
       [this.bin(), ...this.projectArgs(target), "--list-tests"],
@@ -158,7 +182,7 @@ export class AngularAdapter implements TestAdapter {
 
   async execute(selection: TestSelection, options: ExecutionOptions): Promise<TestRunResult> {
     const startedAt = new Date().toISOString();
-    const target = await this.target();
+    const target = await this.runnableTarget();
     const tmp = await mkdtemp(join(tmpdir(), "smarttest-angular-"));
     const out = join(tmp, "report.json");
     // `--include` is relative to the project's source root; a file path selects that spec.

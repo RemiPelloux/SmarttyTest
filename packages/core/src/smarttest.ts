@@ -1256,6 +1256,7 @@ export class SmartTest {
     );
     // Angular's unit-test and Karma builds compile and type-check everything a spec imports.
     const typeCheckedTests = await this.typeCheckedTests(assignment);
+    const replacements = await this.fileReplacements(roots);
     const graph = await timed(timings, "graph build", () => this.analysisGraph(index, e2eTests));
     graph.setDiscovery({ tests, helpers });
     const graphDiff: { file: string; added: string[]; removed: string[] }[] = [];
@@ -1297,6 +1298,7 @@ export class SmartTest {
             triggers: [...BUILTIN_TRIGGERS, ...this.config.triggers],
             runnerInputs: runners.hits,
             ...(typeCheckedTests.size ? { typeCheckedTests } : {}),
+            ...(replacements.size ? { replacements } : {}),
             ...(stylesheetImporterMap.size ? { stylesheetImporters: stylesheetImporterMap } : {}),
             // A plugin module inside the project decides edges: changing it widens to everything.
             globalTriggers: this.config.plugins
@@ -1890,6 +1892,27 @@ export class SmartTest {
       );
     }
     return diffs;
+  }
+
+  /** Angular `fileReplacements` of the detected workspaces: replacement → replaced files. */
+  private async fileReplacements(roots: readonly RunnerRoot[]): Promise<Map<string, string[]>> {
+    const out = new Map<string, string[]>();
+    const seen = new Set<string>();
+    for (const root of roots) {
+      if (root.adapter !== "angular") continue;
+      const file = root.configFile ?? (root.dir ? `${root.dir}/angular.json` : "angular.json");
+      if (seen.has(file)) continue;
+      seen.add(file);
+      const text = await readFileText(join(this.root, file), "utf8").catch(() => "");
+      const base = root.dir ? `${root.dir}/` : "";
+      for (const t of angularTestTargets(text))
+        for (const r of t.replacements) {
+          const list = out.get(base + r.with) ?? [];
+          if (!list.includes(base + r.replace)) list.push(base + r.replace);
+          out.set(base + r.with, list);
+        }
+    }
+    return out;
   }
 
   /** Tests whose runner type-checks every file they import (Angular's unit-test and Karma builds). */

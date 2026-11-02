@@ -108,6 +108,41 @@ describe("angularTestTargets", () => {
     ]);
   });
 
+  it("fileReplacements of every build configuration", () => {
+    const [t] = angularTestTargets(
+      JSON.stringify({
+        projects: {
+          a: {
+            root: "",
+            sourceRoot: "src",
+            architect: {
+              build: {
+                builder: "@angular/build:application",
+                configurations: {
+                  development: {
+                    fileReplacements: [
+                      {
+                        replace: "src/environments/environment.ts",
+                        with: "src/environments/environment.development.ts",
+                      },
+                    ],
+                  },
+                },
+              },
+              test: { builder: "@angular/build:unit-test" },
+            },
+          },
+        },
+      }),
+    );
+    expect(t?.replacements).toEqual([
+      {
+        replace: "src/environments/environment.ts",
+        with: "src/environments/environment.development.ts",
+      },
+    ]);
+  });
+
   it("returns nothing for text that is not a workspace", () => {
     expect(angularTestTargets("{ not json")).toEqual([]);
   });

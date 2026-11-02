@@ -34,6 +34,7 @@ export default defineConfig({
 | Any file a spec reaches, on a builder that type-checks (see the table above)             | That spec, whatever unit changed: a type error there fails `ng test`                         |
 | `angular.json`, the test target's `tsConfig` (`tsconfig.spec.json`), `runnerConfig`      | Every spec of that project                                                                   |
 | A `setupFiles` or `providersFile`, a polyfill file, a global `styles` or `scripts` entry | Every spec of that project                                                                   |
+| A file in `fileReplacements` (`environment.development.ts`)                              | The specs that reach the file it replaces (`environment.ts`)                                 |
 | A comment or formatting only                                                             | Nothing new                                                                                  |
 
 Lazy routes are imports: `loadComponent: () => import("./a")`, `loadChildren: () => import("./b.routes")`, and the legacy string form `loadChildren: "./c/c.module#CModule"`.

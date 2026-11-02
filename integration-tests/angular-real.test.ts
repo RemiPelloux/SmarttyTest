@@ -69,4 +69,14 @@ describe.runIf(process.env.SMARTTEST_REAL_ANGULAR === "1")("Angular CLI (real in
     expect(out.exitCode).not.toBe(0);
     expect(JSON.stringify(out.report)).toContain("TS2322");
   }, 300_000);
+
+  it("fileReplacements: the development environment the tests build with selects its readers", async () => {
+    const dir = await materialize("angular-cli", { git: true });
+    await edit(dir, "src/environments/environment.development.ts", "'EUR'", "'GBP'");
+    const out = await (await SmartTest.open({ root: dir })).run({ formats: ["json"] });
+    expect(out.report.decision.selectedTests.map((t) => t.filePath)).toEqual([
+      "src/app/price.spec.ts",
+    ]);
+    expect(statuses(out)).toEqual({ "src/app/price.spec.ts::Price formats an amount": "failed" });
+  }, 300_000);
 });

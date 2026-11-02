@@ -167,6 +167,23 @@ describe("decideImpact", () => {
     expect(run(true, ["test/guard.test.ts"])).toEqual([]);
   });
 
+  it("a file the build loads in place of another one selects that one's tests", () => {
+    const { files, graph, isTest, tests } = setup();
+    const d = decideImpact({
+      changeSet: changed(["src/auth/guard.development.ts"]),
+      diffs: new Map(),
+      graph,
+      files,
+      testFiles: tests,
+      isTest,
+      mode: "balanced",
+      triggers: [],
+      rules: new RulesEngine([]),
+      replacements: new Map([["src/auth/guard.development.ts", ["src/auth/guard.ts"]]]),
+    });
+    expect(d.selectedTests.map((t) => t.filePath)).toContain("test/guard.test.ts");
+  });
+
   it("selects direct and transitive tests; unresolvable tests can't be ruled out in BALANCED", () => {
     const d = decide(changed(["src/a.ts"]), [unit("src/a.ts", ["a"])], "balanced");
     expect(sel(d)).toEqual(["test/a.test.ts", "test/b.test.ts", "test/plugins.test.ts"]);

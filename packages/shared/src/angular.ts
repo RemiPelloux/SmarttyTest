@@ -35,6 +35,11 @@ export interface AngularTestTarget {
   loads: { file: string; key: string }[];
   /** Option values that are not plain paths (reported, never guessed). */
   computed: string[];
+  /**
+   * `fileReplacements` of the build target, in every configuration (the unit-test builder builds
+   * with one of them; any may be used): `with` is loaded where code imports `replace`.
+   */
+  replacements: { replace: string; with: string }[];
 }
 
 interface Target {
@@ -139,8 +144,21 @@ export function angularTestTargets(text: string, projectName?: string): AngularT
       loads.push({ file: join(root, "tsconfig.spec.json"), key: "tsConfig" });
     if (runner === "jest" && !("config" in options))
       loads.push({ file: join(root, "jest.config.js"), key: "config" });
+    const replacements: AngularTestTarget["replacements"] = [];
+    for (const opts of [
+      buildTarget?.options,
+      ...Object.values(buildTarget?.configurations ?? {}),
+      options,
+      ...Object.values(test?.configurations ?? {}),
+    ])
+      for (const r of (opts?.fileReplacements as unknown[] | undefined) ?? []) {
+        const { replace, with: by } = (r ?? {}) as { replace?: unknown; with?: unknown };
+        if (typeof replace === "string" && typeof by === "string")
+          replacements.push({ replace: join(replace), with: join(by) });
+      }
     out.push({
       project: name,
+      replacements,
       root,
       sourceRoot,
       builder,

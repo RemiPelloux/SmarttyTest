@@ -61,6 +61,11 @@ export interface ImpactInput {
    * (Angular's `ng test`): a type error anywhere in that set fails them, whichever unit changed.
    */
   typeCheckedTests?: ReadonlySet<string>;
+  /**
+   * Files a build substitutes for others (Angular's `fileReplacements`): replacement → the files
+   * it replaces. Code imports the replaced file, so a change to the replacement seeds that file.
+   */
+  replacements?: ReadonlyMap<string, readonly string[]>;
 }
 
 /** A changed file that a runner's configuration makes a dependency of some of its tests. */
@@ -361,6 +366,10 @@ export function decideImpact(input: ImpactInput): ImpactResult {
       }
       continue;
     }
+    // A file the build loads in place of another one: the code importing the other one.
+    for (const p of [path, change.previousPath])
+      for (const replaced of p ? (input.replacements?.get(p) ?? []) : [])
+        details.seeds.push({ file: replaced, units: ["*"] });
     // A submodule whose changed files could not be listed: everything that uses it.
     if (change.submodule) {
       const reason: SelectionReason = {
