@@ -14,7 +14,7 @@ import { ProcessScripts } from "./processes.js";
 import { catalogKeys, collectResources, MODEL_MODULES } from "./resources.js";
 import { StaticPathEvaluator } from "./static-path.js";
 
-export const ANALYZER_VERSION = "ts-13";
+export const ANALYZER_VERSION = "ts-14";
 
 function scriptKind(path: string): ts.ScriptKind {
   if (path.endsWith(".tsx")) return ts.ScriptKind.TSX;
@@ -177,6 +177,22 @@ class TokenHasher {
     walk(node);
     return acc;
   }
+}
+
+const COMPONENT_RESOURCE_KEYS = new Set(["templateUrl", "styleUrl", "styleUrls"]);
+
+/** The object literal passed to a `@Component(…)` decorator (also `@angular/core`'s namespace form). */
+function isComponentDecoratorArgument(node: ts.Node): boolean {
+  if (!ts.isObjectLiteralExpression(node) || !ts.isCallExpression(node.parent)) return false;
+  const call = node.parent;
+  if (!ts.isDecorator(call.parent)) return false;
+  const callee = call.expression;
+  const name = ts.isIdentifier(callee)
+    ? callee.text
+    : ts.isPropertyAccessExpression(callee)
+      ? callee.name.text
+      : "";
+  return name === "Component";
 }
 
 function hasModifier(node: ts.Node, kind: ts.SyntaxKind): boolean {
@@ -1100,6 +1116,24 @@ export function analyzeSource(path: string, content: string): FileAnalysis {
           if (pattern) dynamicHints.push({ pattern, line: lineOf(n), expr });
           else dynamicUnresolved.push(expr);
         }
+      }
+    }
+    // Angular component resources: `templateUrl`, `styleUrl` and `styleUrls` in `@Component({…})`
+    // are files the component loads by path, relative to its own file. They are asset reads of the
+    // class; a path that cannot be evaluated is uncertainty.
+    if (
+      ts.isPropertyAssignment(n) &&
+      ts.isIdentifier(n.name) &&
+      COMPONENT_RESOURCE_KEYS.has(n.name.text) &&
+      isComponentDecoratorArgument(n.parent)
+    ) {
+      const values = ts.isArrayLiteralExpression(n.initializer)
+        ? [...n.initializer.elements]
+        : [n.initializer];
+      for (const v of values) {
+        const pattern = pathEval.evaluate(v);
+        if (pattern) assetLines.push({ pattern, line: lineOf(v) });
+        else dynamicUnresolved.push(`line ${lineOf(v) + 1}: ${n.getText(sf).slice(0, 80)}`);
       }
     }
     ts.forEachChild(n, visit);

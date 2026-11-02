@@ -295,3 +295,46 @@ describe("import.meta.glob", () => {
     expect(a.dynamicUnresolved).toEqual(["line 4: import.meta.glob(pattern)"]);
   });
 });
+
+describe("Angular component resources", () => {
+  it("templateUrl, styleUrl and styleUrls are asset reads of the component class", () => {
+    const a = analyzeSource(
+      "src/app/foo.component.ts",
+      `import { Component } from "@angular/core";
+@Component({
+  selector: "app-foo",
+  templateUrl: "./foo.component.html",
+  styleUrls: ["./foo.component.scss", "../shared/table.css"],
+})
+export class FooComponent {}
+@Component({ selector: "app-bar", template: "<p></p>", styleUrl: "./bar.component.css" })
+export class BarComponent {}
+`,
+    );
+    expect(a.assetReads).toEqual([
+      { pattern: "foo.component.html", line: 3, unit: "FooComponent" },
+      { pattern: "foo.component.scss", line: 4, unit: "FooComponent" },
+      { pattern: "../shared/table.css", line: 4, unit: "FooComponent" },
+      { pattern: "bar.component.css", line: 7, unit: "BarComponent" },
+    ]);
+    expect(a.dynamicUnresolved).toEqual([]);
+  });
+
+  it("a resource path that cannot be evaluated is uncertainty", () => {
+    const a = analyzeSource(
+      "src/app/foo.component.ts",
+      `import { Component } from "@angular/core";
+declare const theme: string;
+@Component({ selector: "app-foo", templateUrl: pick(), styleUrl: \`./\${theme}.css\` })
+export class FooComponent {}
+`,
+    );
+    expect(a.dynamicUnresolved).toHaveLength(1);
+    expect(a.assetReads).toEqual([{ pattern: "*.css", line: 2, unit: "FooComponent" }]);
+  });
+
+  it("templateUrl outside a @Component decorator is not a resource", () => {
+    const a = analyzeSource("src/x.ts", `export const cfg = { templateUrl: "./x.html" };`);
+    expect(a.assetReads).toBeUndefined();
+  });
+});

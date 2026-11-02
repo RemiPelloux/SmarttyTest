@@ -51,6 +51,11 @@ export interface ImpactInput {
    * configuration's own imports, mapped modules), with the tests that depend on them.
    */
   runnerInputs?: readonly RunnerHit[];
+  /**
+   * Changed stylesheet → the project stylesheets that import it, directly or transitively (Sass
+   * `@use`/`@import`). A partial reaches code through the stylesheets that load it.
+   */
+  stylesheetImporters?: ReadonlyMap<string, readonly string[]>;
 }
 
 /** A changed file that a runner's configuration makes a dependency of some of its tests. */
@@ -177,6 +182,24 @@ export function decideImpact(input: ImpactInput): ImpactResult {
     reasons.push(reason);
     const users = graph.filesDependingOn((d) => inDir(d, scope));
     for (const t of allTests) if (inDir(t, scope) || users.has(t)) select(t, reason);
+  };
+  /**
+   * Seeds for the stylesheets that import a changed stylesheet: the code that reads them by path
+   * (`styleUrl`) and the modules that import them. True when there was at least one.
+   */
+  const stylesheetUsers = (path: string): boolean => {
+    let any = false;
+    for (const sheet of input.stylesheetImporters?.get(path) ?? []) {
+      const readers = graph.assetReaders(sheet);
+      details.seeds.push(...readers);
+      const reach = graph.dependentsOf([{ file: sheet, units: ["*"] }]);
+      if (reach.affectedFiles.size > 1 || reach.tests.size) {
+        details.seeds.push({ file: sheet, units: ["*"] });
+        any = true;
+      }
+      if (readers.length) any = true;
+    }
+    return any;
   };
   /**
    * Files whose imports name a path, read from the import specifiers rather than from resolution:
@@ -409,7 +432,8 @@ export function decideImpact(input: ImpactInput): ImpactResult {
         ...graph.assetReaders(old),
       ];
       details.seeds.push(...users);
-      if (!users.length && !input.diffs.has(old))
+      const viaStylesheets = stylesheetUsers(old);
+      if (!users.length && !viaStylesheets && !input.diffs.has(old))
         details.ignored.push(`${old} (${change.type}; not referenced by analysed code)`);
       if (change.type === "deleted") continue;
     }
@@ -455,9 +479,10 @@ export function decideImpact(input: ImpactInput): ImpactResult {
     const traversal = graph.dependentsOf([
       { file: path, units: ["*"], ...(rc ? { referencesOnly: true } : {}) },
     ]);
+    const viaStylesheets = stylesheetUsers(path);
     if (traversal.affectedFiles.size > 1 || traversal.tests.size)
       details.seeds.push({ file: path, units: ["*"], ...(rc ? { referencesOnly: true } : {}) });
-    else if (!readers.length && !rc && !runnerInputFiles.has(path))
+    else if (!readers.length && !viaStylesheets && !rc && !runnerInputFiles.has(path))
       details.ignored.push(`${path} (not part of the analysed sources)`);
   }
 

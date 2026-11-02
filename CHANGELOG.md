@@ -2,6 +2,14 @@
 
 All notable changes are documented here. Releases are managed with [Changesets](https://github.com/changesets/changesets). The project follows [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed: Angular templates and styles selected no test
+
+- A component's `templateUrl`, `styleUrl` and `styleUrls` link it to those files. Changing `foo.component.html` used to select no test at all; it now selects the tests of `FooComponent` and of the code that imports it. A path SmartTest cannot evaluate is uncertainty.
+- A stylesheet reaches code through the stylesheets that import it: changing a Sass partial (`_vars.scss`), a Less file or a CSS file pulled in by `@use`, `@forward` or `@import` selects the tests of every component or module whose stylesheet imports it, directly or transitively. Imports through load paths (Angular's `stylePreprocessorOptions.includePaths`) match by path suffix, so they select more, never less.
+- New fixture `angular-vitest`, in the regression harness.
+
 ## [1.0.2] — patch
 
 An audit of 1.0.1 (two soundness oracles on the six adopting projects, four reproduction-driven reviews) found ways a run could pass while the suite failed, and ways a change could skip a test it affects. Each is fixed with a test that fails without the fix. Under the [semver policy](documentation/reference/contracts.md#semver-policy) these are bug fixes: some selections grow, and some runs that passed now fail because the suite really failed. No contract changes; `explain --json` gains an optional `loadedBy` field.

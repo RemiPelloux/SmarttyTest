@@ -192,6 +192,7 @@ import {
   saveResultCache,
   shardFiles,
 } from "./speed.js";
+import { STYLESHEET, stylesheetImporters } from "./stylesheets.js";
 import { detectDrift, patchConfig, type SyncResult } from "./sync.js";
 import {
   cleanDir,
@@ -1246,6 +1247,13 @@ export class SmartTest {
         changeSet: input.changeSet,
       }),
     );
+    // A changed stylesheet reaches code through the stylesheets that import it (Sass partials).
+    const changedSheets = input.changeSet.changes
+      .flatMap((c) => [c.path, c.previousPath])
+      .filter((p): p is string => !!p && STYLESHEET.test(p));
+    const stylesheetImporterMap = changedSheets.length
+      ? await stylesheetImporters(this.root, await this.allFiles(), changedSheets)
+      : new Map<string, string[]>();
     const decision = await timed(timings, "impact analysis", async () =>
       scope && nothingInScope(scope, input.changeSet.completeness)
         ? unchangedScopeDecision(tests, scope, options.mode ?? this.config.mode)
@@ -1264,6 +1272,7 @@ export class SmartTest {
             mode: options.mode ?? this.config.mode,
             triggers: [...BUILTIN_TRIGGERS, ...this.config.triggers],
             runnerInputs: runners.hits,
+            ...(stylesheetImporterMap.size ? { stylesheetImporters: stylesheetImporterMap } : {}),
             // A plugin module inside the project decides edges: changing it widens to everything.
             globalTriggers: this.config.plugins
               .filter((p) => p.startsWith("./"))

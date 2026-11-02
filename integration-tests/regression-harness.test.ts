@@ -28,6 +28,7 @@ const fixtures = [
   "next-playwright",
   "plugin-edges-vitest",
   "runner-inputs-vitest",
+  "angular-vitest",
 ];
 
 for (const fixture of fixtures) {

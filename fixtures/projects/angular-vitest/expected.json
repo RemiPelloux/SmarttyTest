@@ -1,0 +1,11 @@
+{
+  "runners": ["vitest"],
+  "vcs": "git",
+  "testFiles": 3,
+  "mutations": [
+    { "file": "src/app/greeting.component.html", "find": "Hello", "replace": "Hi", "expectFailing": ["test/greeting.component.spec.ts"] },
+    { "file": "src/styles/tokens.css", "find": "#c00", "replace": "#0c0", "expectFailing": ["test/greeting.component.spec.ts"] },
+    { "file": "src/app/badge.component.html", "find": "{{ label }}", "replace": "{{ label }}!", "expectFailing": ["test/badge.component.spec.ts"] },
+    { "file": "src/app/format.service.ts", "find": "toFixed(2)", "replace": "toFixed(1)", "expectFailing": ["test/price.component.spec.ts"] }
+  ]
+}
