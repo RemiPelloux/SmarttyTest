@@ -141,6 +141,7 @@ import {
   type CheckResult,
   commitsWithoutHook,
   describeScope,
+  estimateRunMs,
   GIT_HOOK_ENV,
   type HookRecords,
   hookInvocations,
@@ -1567,11 +1568,19 @@ export class SmartTest {
         checksPromise = runChecks(a.root, planned, active.timeoutMs, options.signal);
         const selected = a.decision.selectedTests.map((t) => t.filePath);
         const known = selected.filter((f) => durations[f] !== undefined);
-        const summed = known.reduce((s, f) => s + (durations[f] ?? 0), 0);
-        const groups = new Set(selected.map((f) => a.assignment.get(f)?.dir ?? "")).size || 1;
         const estimateMs = Math.round(
-          summed / Math.max(1, Math.min(groups, 4)) +
-            Object.values(a.timings).reduce((x, y) => x + y, 0),
+          estimateRunMs(
+            known.map((f) => {
+              const root = a.assignment.get(f);
+              return {
+                ms: durations[f] ?? 0,
+                group: root ? rootKey(root) : "",
+                adapter: root?.adapter ?? "",
+              };
+            }),
+            availableParallelism(),
+            options.workers ?? this.config.workers,
+          ) + Object.values(a.timings).reduce((x, y) => x + y, 0),
         );
         options.onEstimate?.({
           estimateMs,

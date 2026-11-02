@@ -6,6 +6,7 @@ import {
   cleanGitEnv,
   describeScope,
   escapesCheckout,
+  estimateRunMs,
   normalizeProject,
   onlyDeletions,
   outsideHookScope,
@@ -132,5 +133,21 @@ describe("pre-push refs", () => {
     expect(onlyDeletions([ref("0".repeat(40))])).toBe(true);
     expect(onlyDeletions([ref("0".repeat(40)), ref("2".repeat(40))])).toBe(false);
     expect(onlyDeletions([])).toBe(false);
+  });
+});
+
+describe("estimateRunMs", () => {
+  it("divides a group's files over its workers, never below its slowest file", () => {
+    // 30 files of 5 s in Vitest on 16 cores: about 10 s, not 150 s.
+    const vitest = Array.from({ length: 30 }, () => ({ ms: 5000, group: "v", adapter: "vitest" }));
+    expect(estimateRunMs(vitest, 16)).toBe(10_000);
+    expect(estimateRunMs([...vitest, { ms: 40_000, group: "v", adapter: "vitest" }], 16)).toBe(
+      40_000,
+    );
+    // Cypress runs one spec at a time; --workers overrides the default.
+    const cy = [1, 2, 3].map(() => ({ ms: 10_000, group: "c", adapter: "cypress" }));
+    expect(estimateRunMs(cy, 16)).toBe(30_000);
+    expect(estimateRunMs(vitest, 16, 2)).toBe(75_000);
+    expect(estimateRunMs([], 16)).toBe(0);
   });
 });

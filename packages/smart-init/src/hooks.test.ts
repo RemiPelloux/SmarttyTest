@@ -322,3 +322,19 @@ describe("existing hook scripts", () => {
     expect(plan.plan.after).toContain("# >>> smarttest >>>");
   });
 });
+
+describe.each(SHELLS)("missing install under %s", (shell) => {
+  it.each(["pre-commit", "pre-push"] as const)(
+    "%s stops when SmartTest is not installed, instead of letting the change through",
+    async (stage) => {
+      const root = await repo({ "package.json": "{}" });
+      const plan = await install(root, stage);
+      const r = spawnSync(shell, [plan.file], { cwd: root, input: "" });
+      expect(r.status).toBe(1);
+      expect(r.stderr.toString()).toContain("smarttest is not installed");
+      expect(r.stderr.toString()).toContain(
+        stage === "pre-push" ? "the push stops" : "the commit stops",
+      );
+    },
+  );
+});

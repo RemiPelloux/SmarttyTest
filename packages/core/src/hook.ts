@@ -341,32 +341,38 @@ async function linkNodeModules(
     join(dest, ".modules.yaml"),
     `${JSON.stringify({ ...modules, virtualStoreDir }, null, 2)}\n`,
   );
-  // pnpm's store (node_modules/.pnpm) is linked as a whole. A link from there into the
-  // repository (a workspace package as a dependency of an installed package, or hoisted into
-  // .pnpm/node_modules) bypasses the checkout. Links are read, not resolved: cheap at thousands
-  // of installed packages.
+  // pnpm's store (node_modules/.pnpm) is linked as a whole, and Node resolves an installed
+  // package's imports from its real path in that store. An installed package that depends on a
+  // workspace package (a plugin with a workspace peer) has a link inside its store directory into
+  // the repository: that import bypasses the checkout. pnpm's hoisted directory
+  // (.pnpm/node_modules) links every workspace package too, but only an installed package
+  // importing one it does not declare reaches it, so it is not reported: project code resolves
+  // workspace packages through the mirrored links above. Links are read, not resolved: cheap at
+  // thousands of installed packages.
   const store = await realpath(join(src, ".pnpm")).catch(() => undefined);
   if (store) {
-    const dirs = [join(store, "node_modules")];
-    for (const e of await readdir(store, { withFileTypes: true }).catch(() => []))
-      if (e.isDirectory() && e.name !== "node_modules")
-        dirs.push(join(store, e.name, "node_modules"));
-    const leaks = new Set<string>();
-    const scan = async (dir: string, top: boolean): Promise<void> => {
+    const leaks = new Map<string, Set<string>>(); // workspace package → installed packages
+    const scan = async (dir: string, owner: string, top: boolean): Promise<void> => {
       const entries = await readdir(dir, { withFileTypes: true }).catch(() => []);
       await mapLimit(entries, 32, async (e) => {
         const entry = join(dir, e.name);
-        if (top && e.isDirectory() && e.name.startsWith("@")) return scan(entry, false);
+        if (top && e.isDirectory() && e.name.startsWith("@")) return scan(entry, owner, false);
         if (!e.isSymbolicLink()) return;
         const target = await readlink(entry).catch(() => undefined);
         const rel = target ? inRepo(resolve(dirname(entry), target)) : undefined;
-        if (rel) leaks.add(toSlash(rel));
+        if (!rel) return;
+        const set = leaks.get(toSlash(rel)) ?? new Set<string>();
+        set.add(owner);
+        leaks.set(toSlash(rel), set);
       });
     };
-    await mapLimit(dirs, 16, (dir) => scan(dir, true));
-    if (leaks.size)
+    const owners = (await readdir(store, { withFileTypes: true }).catch(() => [])).filter(
+      (e) => e.isDirectory() && e.name !== "node_modules",
+    );
+    await mapLimit(owners, 16, (e) => scan(join(store, e.name, "node_modules"), e.name, true));
+    for (const [pkg, by] of [...leaks].sort(([x], [y]) => x.localeCompare(y)))
       warnings.push(
-        `Isolation incomplete: installed packages in node_modules/.pnpm link to the working tree's ${[...leaks].sort().join(", ")}; unstaged edits there can affect this run`,
+        `Isolation incomplete: the installed ${[...by].sort().slice(0, 3).join(", ")}${by.size > 3 ? ` and ${by.size - 3} more` : ""} depend${by.size === 1 ? "s" : ""} on the working tree's ${pkg}, not the content under test; unstaged edits there can affect code ${by.size === 1 ? "that package runs" : "those packages run"}`,
       );
   }
   // A linked workspace package's untracked build output (dist/) is not in the checkout. Link it
@@ -817,4 +823,38 @@ export function hookInvocations(text: string, stage: "pre-commit" | "pre-push"):
       ? lines.filter((l) => /smarttest\s+run\b[^\n]*--staged/.test(l))
       : lines.filter((l) => /smarttest\s+run\b[^\n]*--push/.test(l));
   return inStage.length;
+}
+
+/**
+ * Wall-clock estimate of running selected test files, from their recorded durations. Files of one
+ * runner group run in parallel workers (`workers`, or the runner's default: cores − 1 for Vitest
+ * and Jest, half the cores for Playwright, one at a time for Cypress), so a group takes about its
+ * total over its workers, and never less than its slowest file. Groups run up to four at a time.
+ */
+export function estimateRunMs(
+  files: readonly { ms: number; group: string; adapter: string }[],
+  cores: number,
+  workers?: number,
+): number {
+  const groups = new Map<string, { adapter: string; total: number; slowest: number; n: number }>();
+  for (const f of files) {
+    const g = groups.get(f.group) ?? { adapter: f.adapter, total: 0, slowest: 0, n: 0 };
+    g.total += f.ms;
+    g.slowest = Math.max(g.slowest, f.ms);
+    g.n++;
+    groups.set(f.group, g);
+  }
+  const walls = [...groups.values()].map((g) => {
+    const lanes =
+      workers ??
+      (g.adapter === "cypress"
+        ? 1
+        : g.adapter === "playwright"
+          ? Math.max(1, Math.floor(cores / 2))
+          : Math.max(1, cores - 1));
+    return Math.max(g.slowest, g.total / Math.max(1, Math.min(lanes, g.n)));
+  });
+  if (!walls.length) return 0;
+  const sum = walls.reduce((a, b) => a + b, 0);
+  return Math.round(Math.max(Math.max(...walls), sum / Math.min(walls.length, 4)));
 }

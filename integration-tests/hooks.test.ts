@@ -714,8 +714,23 @@ describe("the temporary checkout is the content under test", () => {
       cache: false,
     });
     expect(result.outcome?.report.warnings.join("\n")).toContain(
-      "installed packages in node_modules/.pnpm link to the working tree's packages/core-lib",
+      "the installed consumer@1.0.0 depends on the working tree's packages/core-lib",
     );
+  }, 120_000);
+
+  it("does not report pnpm's hoisted links, which project code never resolves through", async () => {
+    const dir = await linkedWorkspace();
+    const hoisted = join(dir, "node_modules/.pnpm/node_modules/@demo");
+    await mkdir(hoisted, { recursive: true });
+    await symlink("../../../../packages/core-lib", join(hoisted, "core-lib"));
+    await edit(dir, "packages/core-lib/src/price.ts", "VAT = 0.2", "VAT = 0.25");
+    git(dir, "add", "packages/core-lib/src/price.ts");
+    await writeFile(join(dir, "notes.md"), "force isolation\n");
+
+    const result = await (await SmartTest.open({ root: dir })).runHook("pre-commit", {
+      cache: false,
+    });
+    expect(result.outcome?.report.warnings.join("\n")).not.toContain("Isolation incomplete");
   }, 120_000);
 
   it("lets Vite load an installed package's file by URL in the checkout", async () => {

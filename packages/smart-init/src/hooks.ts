@@ -218,7 +218,9 @@ const block = (stage: HookStage, prefix = "") => {
         ]
       : ["if [ -x node_modules/.bin/smarttest ]; then", `  ${command} || exit 1`]),
     "else",
-    '  echo "smarttest is not installed (npm install); affected tests were not run" >&2',
+    // Without SmartTest nothing checks the change: stop rather than let it through unchecked.
+    `  echo "smarttest is not installed: install the project's dependencies first. The affected tests were not run, so the ${push ? "push" : "commit"} stops here (--no-verify skips this check)." >&2`,
+    "  exit 1",
     "fi",
     // A here-document keeps this POSIX sh; it must start in the first column.
     ...(push

@@ -4,6 +4,12 @@ All notable changes are documented here. Releases are managed with [Changesets](
 
 ## [Unreleased]
 
+### Fixed: commit and push hooks
+
+- A hook installed by SmartTest stops the commit or push when SmartTest is not installed (`smarttest is not installed: install the project's dependencies first…`), instead of printing a warning and letting the change through unchecked. `--no-verify` still skips it. Run `smarttest hook install` again to update an installed hook.
+- The hook's time estimate counts the runner's parallel workers: per runner, the larger of its slowest file and its total over its workers (`--workers` / `workers`, or the runner's default). It used to add every file's duration as if they ran one after another, so a run of 19.5 s was announced as "Estimated 2m 27s exceeds the 1m 0s budget".
+- The staged checkout no longer reports "Isolation incomplete" for pnpm's hoisted links (`node_modules/.pnpm/node_modules/<workspace package>`): only an installed package importing a workspace package it does not declare goes through them, and project code resolves workspace packages to the content under test. Checked in a pnpm workspace with an unstaged edit that would fail the test. An installed package that does depend on a workspace package is still reported, now by name.
+
 ### Fixed: Angular templates and styles selected no test
 
 - A component's `templateUrl`, `styleUrl` and `styleUrls` link it to those files. Changing `foo.component.html` used to select no test at all; it now selects the tests of `FooComponent` and of the code that imports it. A path SmartTest cannot evaluate is uncertainty.

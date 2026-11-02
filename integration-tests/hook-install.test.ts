@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { chmod, mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { delimiter, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { SmartTest } from "../packages/core/src/index.js";
 import { detectTestCommands } from "../packages/project-detector/src/commands.js";
@@ -37,8 +37,18 @@ describe("0.9 hook installation", () => {
     expect(p.plan.after).toContain("smarttest run --push --hook");
     expect(p.plan.after).toContain("true & # smarttest-replaced:");
     await writeFile(join(root, p.file), p.plan.after as string);
-    // Missing local SmartTest is reported by the block; the replaced background job still has a PID.
-    execFileSync("sh", [p.file], { cwd: root, stdio: "pipe" });
+    // With SmartTest installed (a stand-in that succeeds), the script goes on after the block and
+    // the replaced background job still has a PID to wait for.
+    await mkdir(join(root, "node_modules/.bin"), { recursive: true });
+    await writeFile(join(root, "node_modules/.bin/smarttest"), "#!/bin/sh\n", { mode: 0o755 });
+    const bin = join(root, ".fake-bin");
+    await mkdir(bin, { recursive: true });
+    await writeFile(join(bin, "npx"), "#!/bin/sh\ncat >/dev/null\nexit 0\n", { mode: 0o755 });
+    execFileSync("sh", [p.file], {
+      cwd: root,
+      stdio: "pipe",
+      env: { ...process.env, PATH: `${bin}${delimiter}${process.env.PATH ?? ""}` },
+    });
     const repeat = await planHookInstall(root, {
       stage: "pre-push",
       replace: true,
