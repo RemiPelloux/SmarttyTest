@@ -7,6 +7,7 @@ Guides
 - [VS Code extension](../extensions/vscode/README.md)
 - [Running in CI](guides/ci.md)
 - [Plugins](guides/plugins.md)
+- [Angular](guides/angular.md)
 
 Concepts
 - [How selection works](concepts/how-selection-works.md)
