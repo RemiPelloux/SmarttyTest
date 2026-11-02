@@ -4,6 +4,7 @@
  * Contracts mirror the master specification (documentation/product/PRD.md).
  */
 
+export * from "./angular.js";
 export type * from "./contracts/adapters.js";
 export type * from "./contracts/analysis.js";
 export type * from "./contracts/graph.js";

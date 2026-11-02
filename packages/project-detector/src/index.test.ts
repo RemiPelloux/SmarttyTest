@@ -23,3 +23,39 @@ describe("node --test detection", () => {
     }
   });
 });
+
+describe("Angular detection", () => {
+  it("runs each Angular project through ng test, not the Vitest the builder starts", async () => {
+    const root = await mkdtemp(join(tmpdir(), "st-detect-angular-"));
+    try {
+      await writeFile(
+        join(root, "package.json"),
+        JSON.stringify({
+          scripts: { test: "ng test" },
+          dependencies: { "@angular/core": "^22.2.0" },
+          devDependencies: { "@angular/build": "^22.2.5", vitest: "^5.0.0" },
+        }),
+      );
+      await writeFile(
+        join(root, "angular.json"),
+        JSON.stringify({
+          projects: {
+            demo: { root: "", architect: { test: { builder: "@angular/build:unit-test" } } },
+            lib: {
+              root: "projects/lib",
+              architect: { test: { builder: "@angular/build:unit-test" } },
+            },
+          },
+        }),
+      );
+      const profile = await detectProject(root, { files: [] });
+      expect(profile.runners.map((r) => [r.adapter, r.configFile, r.project])).toEqual([
+        ["angular", "angular.json", "demo"],
+        ["angular", "angular.json", "lib"],
+      ]);
+      expect(profile.frameworks.map((f) => f.value)).toContain("Angular");
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+});

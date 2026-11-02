@@ -8,7 +8,7 @@ import { readFile, stat } from "node:fs/promises";
 import { dirname, isAbsolute, join, posix, relative } from "node:path";
 import type { RunnerHit } from "@smarttest/impact-engine";
 import type { ConfigPath, RunnerConfigFacts } from "@smarttest/language-typescript";
-import type { ChangeSet } from "@smarttest/shared";
+import { angularTestTargets, type ChangeSet } from "@smarttest/shared";
 import type { RunnerRoot } from "@smarttest/test-discovery";
 import { languages } from "./languages.js";
 
@@ -40,6 +40,11 @@ const ROLES: Record<string, string> = {
   supportFile: "support file",
   snapshotResolver: "snapshot resolver",
   testSequencer: "test sequencer",
+  providersFile: "providers file",
+  polyfills: "polyfills",
+  styles: "global stylesheet",
+  scripts: "global script",
+  main: "test entry point",
   resolver: "module resolver",
   snapshotSerializers: "snapshot serializer",
   transform: "transformer",
@@ -92,6 +97,28 @@ export async function readRunnerInputs(
       if (await isFile(abs + ext)) return abs + ext;
     return undefined;
   };
+
+  // Angular CLI: `angular.json` is the configuration. Its test target (and the build target the
+  // unit-test builder compiles with) names the TypeScript and runner configs, setup and providers
+  // files, polyfills and global styles: every spec of the project loads them.
+  if (root.adapter === "angular") {
+    const workspace = root.configFile ?? (root.dir ? `${root.dir}/angular.json` : "angular.json");
+    out.configs.push({ file: workspace });
+    const text = await read(join(projectRoot, workspace));
+    const target = (text ? angularTestTargets(text) : []).find(
+      (t) => !root.project || t.project === root.project,
+    );
+    if (!target) return out;
+    for (const key of target.computed) out.computed.push({ key, source: workspace });
+    for (const l of target.loads) {
+      const file = root.dir ? `${root.dir}/${l.file}` : l.file;
+      if (!(await isFile(join(projectRoot, file)))) continue;
+      if (["tsConfig", "runnerConfig", "karmaConfig"].includes(l.key))
+        out.configs.push({ file, importedBy: workspace });
+      else out.loads.push({ file, key: l.key, source: workspace });
+    }
+    return out;
+  }
 
   // The configuration files: the runner's own (or the vite config Vitest falls back to) and,
   // transitively, the local modules they import.

@@ -56,6 +56,11 @@ export interface ImpactInput {
    * `@use`/`@import`). A partial reaches code through the stylesheets that load it.
    */
   stylesheetImporters?: ReadonlyMap<string, readonly string[]>;
+  /**
+   * Tests whose runner compiles and type-checks every file they import before running them
+   * (Angular's `ng test`): a type error anywhere in that set fails them, whichever unit changed.
+   */
+  typeCheckedTests?: ReadonlySet<string>;
 }
 
 /** A changed file that a runner's configuration makes a dependency of some of its tests. */
@@ -664,6 +669,21 @@ export function decideImpact(input: ImpactInput): ImpactResult {
             false,
           );
         }
+    }
+  }
+
+  // 5a. Type-checked runs: a change that is not only formatting or comments, in any file a
+  // type-checked test reaches, can fail its compilation (a type error in an unused export fails
+  // `ng test`). File level, in every mode; not a static reason, so traces never rule it out.
+  if (input.typeCheckedTests?.size) {
+    for (const [path, diff] of input.diffs) {
+      if (diff.trivialOnly) continue;
+      for (const hit of graph.dependentsOf([{ file: path, units: ["*"] }]).tests.values())
+        if (input.typeCheckedTests.has(hit.test) && !selected.has(hit.test))
+          select(hit.test, {
+            kind: "mandatory-trigger",
+            message: `${path} changed — its runner type-checks every file the test imports`,
+          });
     }
   }
 

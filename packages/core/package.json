@@ -45,6 +45,7 @@
     "@smarttest/test-selector": "workspace:*",
     "@smarttest/test-executor": "workspace:*",
     "@smarttest/adapter-vitest": "workspace:*",
+    "@smarttest/adapter-angular": "workspace:*",
     "@smarttest/adapter-jest": "workspace:*",
     "@smarttest/adapter-node": "workspace:*",
     "@smarttest/adapter-cypress": "workspace:*",

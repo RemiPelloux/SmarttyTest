@@ -158,7 +158,13 @@ const KITCHEN_SINK = {
     discovery: "runner",
   },
   runners: [
-    { adapter: "node", dir: "packages/a", config: "vitest.config.ts", patterns: ["**/*.test.js"] },
+    {
+      adapter: "node",
+      dir: "packages/a",
+      config: "vitest.config.ts",
+      patterns: ["**/*.test.js"],
+      project: "shop",
+    },
   ],
   generated: [{ path: "src/generated/**", policy: "rebuild-required", from: ["schema.graphql"] }],
   triggers: ["config/**"],

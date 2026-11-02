@@ -68,6 +68,9 @@
       "path": "packages/adapter-vitest"
     },
     {
+      "path": "packages/adapter-angular"
+    },
+    {
       "path": "packages/adapter-jest"
     },
     {

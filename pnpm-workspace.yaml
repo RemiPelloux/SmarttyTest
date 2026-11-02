@@ -4,6 +4,9 @@ packages:
   - "apps/*"
   - "examples/*"
   - "fixtures/projects/*"
+  # Installed with npm by the `angular (real install)` CI job only: the Angular CLI and build
+  # toolchain stay out of every `pnpm install`.
+  - "!fixtures/projects/angular-cli"
 minimumReleaseAgeExclude:
   - "@biomejs/biome@2.6.4"
   - "@biomejs/cli-android-arm64@2.6.4"

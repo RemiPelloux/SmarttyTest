@@ -151,6 +151,12 @@
       "description": "Vitest test runner adapter."
     },
     {
+      "name": "adapter-angular",
+      "epic": "EXE",
+      "deps": ["shared", "plugin-sdk"],
+      "description": "Angular CLI test runner adapter (ng test: unit-test builder with Vitest or Karma)."
+    },
+    {
       "name": "adapter-jest",
       "epic": "EXE",
       "deps": ["shared", "plugin-sdk"],
@@ -226,6 +232,7 @@
         "test-selector",
         "test-executor",
         "adapter-vitest",
+        "adapter-angular",
         "adapter-jest",
         "adapter-node",
         "adapter-cypress",

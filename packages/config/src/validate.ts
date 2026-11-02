@@ -9,7 +9,7 @@ const MODES = ["fast", "balanced", "safe"];
 const RISKS = ["low", "medium", "high", "critical"];
 const CATEGORIES = ["unit", "integration", "e2e"];
 const LAYOUTS = ["mirror", "colocated", "domain", "custom"];
-const ADAPTERS = ["vitest", "jest", "node", "playwright", "cypress"];
+const ADAPTERS = ["vitest", "jest", "node", "playwright", "cypress", "angular"];
 const FORMATS = ["html", "json", "junit", "markdown"];
 const POLICIES = ["exclude", "test-source", "rebuild-required"];
 const VISIBILITIES = ["public", "protected", "private"];
@@ -331,6 +331,8 @@ export function validateConfig(raw: unknown): { errors: ConfigIssue[]; warnings:
         }
         if (!ADAPTERS.includes(r.adapter as string))
           err(`${p}.adapter`, `must be one of ${ADAPTERS.join(", ")}`);
+        if (r.project !== undefined && typeof r.project !== "string")
+          err(`${p}.project`, "must be a string");
         for (const k of ["dir", "config"]) {
           if (r[k] !== undefined && typeof r[k] !== "string") err(`${p}.${k}`, "must be a string");
           const why = typeof r[k] === "string" ? outsideProject(r[k] as string) : undefined;

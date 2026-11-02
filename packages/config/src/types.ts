@@ -3,7 +3,7 @@ import type { SafetyMode } from "@smarttest/shared";
 export type TestLayout = "mirror" | "colocated" | "domain" | "custom";
 export type TestCategory = "unit" | "integration" | "e2e";
 export type RiskLevel = "low" | "medium" | "high" | "critical";
-export type AdapterId = "vitest" | "jest" | "node" | "playwright" | "cypress";
+export type AdapterId = "vitest" | "jest" | "node" | "playwright" | "cypress" | "angular";
 
 /** Explicit runner declaration (overrides detection). */
 export interface RunnerDeclaration {
@@ -14,6 +14,8 @@ export interface RunnerDeclaration {
   config?: string;
   /** Test patterns (node --test). */
   patterns?: string[];
+  /** Angular CLI project whose `test` target runs the tests (`ng test <project>`). */
+  project?: string;
 }
 export type ReportFormat = "html" | "json" | "junit" | "markdown";
 

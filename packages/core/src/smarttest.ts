@@ -3,6 +3,7 @@ import { existsSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { readFile as readFileText } from "node:fs/promises";
 import { availableParallelism, tmpdir } from "node:os";
 import { isAbsolute, join, relative } from "node:path";
+import { AngularAdapter } from "@smarttest/adapter-angular";
 import { CypressAdapter } from "@smarttest/adapter-cypress";
 import { JestAdapter } from "@smarttest/adapter-jest";
 import { NodeTestAdapter } from "@smarttest/adapter-node";
@@ -611,12 +612,14 @@ export class SmartTest {
           dir: r.dir ?? "",
           ...(r.config ? { configFile: r.config } : {}),
           ...(r.patterns ? { patterns: r.patterns } : {}),
+          ...(r.project ? { project: r.project } : {}),
         }))
       : profile.runners.map((r) => ({
           adapter: r.adapter,
           dir: r.dir,
           ...(r.configFile ? { configFile: r.configFile } : {}),
           ...(r.patterns ? { patterns: r.patterns } : {}),
+          ...(r.project ? { project: r.project } : {}),
         }));
     if (this.config.adapters.length)
       roots = roots.filter((r) => this.config.adapters.includes(r.adapter));
@@ -1076,6 +1079,7 @@ export class SmartTest {
                 files: [],
                 ...(root.configFile ? { configFile: root.configFile } : {}),
                 ...(root.patterns ? { patterns: root.patterns } : {}),
+                ...(root.project ? { project: root.project } : {}),
               } as Group).discover()
             ).map((t) => t.filePath);
           } catch (error) {
@@ -1232,6 +1236,10 @@ export class SmartTest {
         .filter(([, r]) => r.adapter === "playwright" || r.adapter === "cypress")
         .map(([t]) => t),
     );
+    // Angular's test build compiles and type-checks everything a spec imports.
+    const typeCheckedTests = new Set(
+      [...assignment].filter(([, r]) => r.adapter === "angular").map(([t]) => t),
+    );
     const graph = await timed(timings, "graph build", () => this.analysisGraph(index, e2eTests));
     graph.setDiscovery({ tests, helpers });
     const graphDiff: { file: string; added: string[]; removed: string[] }[] = [];
@@ -1272,6 +1280,7 @@ export class SmartTest {
             mode: options.mode ?? this.config.mode,
             triggers: [...BUILTIN_TRIGGERS, ...this.config.triggers],
             runnerInputs: runners.hits,
+            ...(typeCheckedTests.size ? { typeCheckedTests } : {}),
             ...(stylesheetImporterMap.size ? { stylesheetImporters: stylesheetImporterMap } : {}),
             // A plugin module inside the project decides edges: changing it widens to everything.
             globalTriggers: this.config.plugins
@@ -1870,13 +1879,15 @@ export class SmartTest {
   // ── Run ─────────────────────────────────────────────────────────────────────────────────
 
   /** Adapter for a runner group (used by the history benchmark). */
-  createAdapterFor(group: Group & { configFile?: string; patterns?: string[] }): TestAdapter {
+  createAdapterFor(
+    group: Group & { configFile?: string; patterns?: string[]; project?: string },
+  ): TestAdapter {
     return this.createAdapter(group);
   }
 
   private createAdapter(group: Group, coverageDir?: string): TestAdapter {
     const cwd = join(this.root, group.dir);
-    const g = group as Group & { configFile?: string; patterns?: string[] };
+    const g = group as Group & { configFile?: string; patterns?: string[]; project?: string };
     const base = {
       projectRoot: this.root,
       cwd,
@@ -1885,6 +1896,13 @@ export class SmartTest {
     };
     if (group.adapter === "jest") return new JestAdapter(base);
     if (group.adapter === "vitest") return new VitestAdapter(base);
+    if (group.adapter === "angular")
+      return new AngularAdapter({
+        projectRoot: this.root,
+        cwd,
+        ...(g.configFile ? { configFile: g.configFile } : {}),
+        ...(g.project ? { project: g.project } : {}),
+      });
     if (group.adapter === "playwright") return new PlaywrightAdapter(base);
     if (group.adapter === "cypress")
       return new CypressAdapter({ ...base, files: () => this.sourceFilesForSnapshots() });
@@ -2834,6 +2852,7 @@ export class SmartTest {
           files: [],
           ...(r.configFile ? { configFile: r.configFile } : {}),
           ...(r.patterns ? { patterns: r.patterns } : {}),
+          ...(r.project ? { project: r.project } : {}),
         } as Group).discover();
         const where = r.configFile ?? (r.dir || ".");
         messages.push(`${r.adapter} (${where}) discovers ${cases.length} test file(s)`);

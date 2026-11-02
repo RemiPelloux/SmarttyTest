@@ -113,6 +113,10 @@
           "patterns": {
             "description": "Test patterns (node --test).",
             "$ref": "#/$defs/globs"
+          },
+          "project": {
+            "description": "Angular CLI project whose test target runs the tests (ng test <project>).",
+            "type": "string"
           }
         }
       }
@@ -289,7 +293,7 @@
       "enum": ["fast", "balanced", "safe"]
     },
     "adapter": {
-      "enum": ["vitest", "jest", "node", "playwright", "cypress"]
+      "enum": ["vitest", "jest", "node", "playwright", "cypress", "angular"]
     },
     "layout": {
       "enum": ["mirror", "colocated", "domain", "custom"]

@@ -175,6 +175,9 @@ importers:
       '@changesets/cli':
         specifier: ^3.0.3
         version: 3.0.3
+      '@smarttest/adapter-angular':
+        specifier: workspace:*
+        version: link:packages/adapter-angular
       '@smarttest/adapter-cypress':
         specifier: workspace:*
         version: link:packages/adapter-cypress
@@ -349,6 +352,15 @@ importers:
 
   fixtures/projects/yarn-workspaces-node: {}
 
+  packages/adapter-angular:
+    dependencies:
+      '@smarttest/plugin-sdk':
+        specifier: workspace:*
+        version: link:../plugin-sdk
+      '@smarttest/shared':
+        specifier: workspace:*
+        version: link:../shared
+
   packages/adapter-cypress:
     dependencies:
       '@smarttest/plugin-sdk':
@@ -426,6 +438,9 @@ importers:
 
   packages/core:
     dependencies:
+      '@smarttest/adapter-angular':
+        specifier: workspace:*
+        version: link:../adapter-angular
       '@smarttest/adapter-cypress':
         specifier: workspace:*
         version: link:../adapter-cypress

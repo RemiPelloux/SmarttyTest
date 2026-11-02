@@ -10,6 +10,7 @@ export interface ExecutionGroup {
   dir: string;
   configFile?: string;
   patterns?: string[];
+  project?: string;
   files: string[];
 }
 
@@ -19,7 +20,7 @@ export interface ExecutionPlan {
 }
 
 export const rootKey = (root: RunnerRoot): string =>
-  `${root.adapter}:${root.dir}:${root.configFile ?? ""}`;
+  `${root.adapter}:${root.dir}:${root.configFile ?? ""}${root.project ? `:${root.project}` : ""}`;
 
 /**
  * Groups tests per runner root. With runner-based discovery, `assignment` says which root
@@ -45,6 +46,7 @@ export function planExecution(
       dir: root.dir,
       ...(root.configFile ? { configFile: root.configFile } : {}),
       ...(root.patterns ? { patterns: root.patterns } : {}),
+      ...(root.project ? { project: root.project } : {}),
       files: [],
     };
     g.files.push(t);

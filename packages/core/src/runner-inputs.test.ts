@@ -137,6 +137,55 @@ describe("readRunnerInputs", () => {
   });
 });
 
+describe("readRunnerInputs · Angular", () => {
+  it("angular.json, the TypeScript config and what the test and build targets load", async () => {
+    const root = await project({
+      "angular.json": JSON.stringify({
+        projects: {
+          demo: {
+            root: "",
+            sourceRoot: "src",
+            architect: {
+              build: {
+                builder: "@angular/build:application",
+                options: { tsConfig: "tsconfig.app.json", styles: ["src/styles.scss"] },
+              },
+              test: {
+                builder: "@angular/build:unit-test",
+                options: {
+                  setupFiles: ["src/test-setup.ts"],
+                  runnerConfig: "vitest-base.config.ts",
+                },
+              },
+            },
+          },
+        },
+      }),
+      "tsconfig.app.json": "{}",
+      "tsconfig.spec.json": "{}",
+      "vitest-base.config.ts": "export default {};",
+      "src/styles.scss": "body {}",
+      "src/test-setup.ts": "",
+    });
+    const inputs = await readRunnerInputs(root, {
+      adapter: "angular",
+      dir: "",
+      configFile: "angular.json",
+      project: "demo",
+    } as RunnerRoot);
+    expect(inputs.configs.map((c) => c.file).sort()).toEqual([
+      "angular.json",
+      "tsconfig.app.json",
+      "tsconfig.spec.json",
+      "vitest-base.config.ts",
+    ]);
+    expect(inputs.loads.map((l) => [l.file, l.key])).toEqual([
+      ["src/styles.scss", "styles"],
+      ["src/test-setup.ts", "setupFiles"],
+    ]);
+  });
+});
+
 describe("runnerHits", () => {
   const vitest: RunnerRoot = { adapter: "vitest", dir: "", configFile: "vitest.config.ts" };
   const node: RunnerRoot = { adapter: "node", dir: "tools" };

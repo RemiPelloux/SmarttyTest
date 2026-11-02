@@ -3,7 +3,7 @@
  */
 import { matchGlob } from "@smarttest/shared";
 
-export type AdapterId = "vitest" | "jest" | "node" | "playwright" | "cypress";
+export type AdapterId = "vitest" | "jest" | "node" | "playwright" | "cypress" | "angular";
 
 /** Union of Vitest and Jest default test patterns. */
 const DEFAULT_TEST_FILE = /(?:^|\/)(?:__tests__\/.+|[^/]+\.(?:test|spec|cy))\.[cm]?[jt]sx?$/;
@@ -34,6 +34,8 @@ export interface RunnerRoot {
   configFile?: string;
   /** Explicit test patterns (node --test <patterns>). */
   patterns?: string[];
+  /** Angular CLI project (`ng test <project>`). */
+  project?: string;
 }
 
 /**

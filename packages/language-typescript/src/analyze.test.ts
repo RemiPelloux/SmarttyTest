@@ -338,3 +338,21 @@ export class FooComponent {}
     expect(a.assetReads).toBeUndefined();
   });
 });
+
+describe("Angular lazy routes", () => {
+  it("loadComponent/loadChildren with import() and the legacy string form are dynamic imports", () => {
+    const a = analyzeSource(
+      "src/app/app.routes.ts",
+      `export const routes = [
+  { path: "a", loadComponent: () => import("./a/a.component").then((m) => m.A) },
+  { path: "b", loadChildren: () => import("./b/b.routes") },
+  { path: "c", loadChildren: "./c/c.module#CModule" },
+];`,
+    );
+    expect(a.imports.filter((i) => i.kind === "dynamic").map((i) => i.specifier)).toEqual([
+      "./a/a.component",
+      "./b/b.routes",
+      "./c/c.module",
+    ]);
+  });
+});

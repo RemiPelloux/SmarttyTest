@@ -113,7 +113,7 @@ export interface PlanInputs {
   globalConfigFiles: string[];
   overrides?: Partial<Pick<SmartTestConfig, "mode">> & {
     layout?: "mirror" | "colocated" | "domain" | "custom";
-    adapters?: ("vitest" | "jest" | "node" | "playwright" | "cypress")[];
+    adapters?: ("vitest" | "jest" | "node" | "playwright" | "cypress" | "angular")[];
   };
 }
 
@@ -473,7 +473,7 @@ export async function buildPlan(
   const lang = profile.layout.typescript ? "TypeScript" : "JavaScript";
   const pm =
     profile.packageManager.name === "unknown" ? "no lockfile" : profile.packageManager.name;
-  const summary = `${fw} + ${lang}${adapters.length ? ` + ${adapters.map((a) => ({ vitest: "Vitest", jest: "Jest", node: "node:test", playwright: "Playwright", cypress: "Cypress" })[a]).join(" + ")}` : ""} · ${pm}${profile.workspaces.length ? (profile.workspaces.every((w) => w.kind === "nested") ? ` · ${profile.workspaces.length} independent projects` : ` workspace (${profile.workspaces.length} packages)`) : ""} · ${profile.vcs.provider === "git" ? "Git" : "no VCS"}`;
+  const summary = `${fw} + ${lang}${adapters.length ? ` + ${adapters.map((a) => ({ vitest: "Vitest", jest: "Jest", node: "node:test", playwright: "Playwright", cypress: "Cypress", angular: "ng test" })[a]).join(" + ")}` : ""} · ${pm}${profile.workspaces.length ? (profile.workspaces.every((w) => w.kind === "nested") ? ` · ${profile.workspaces.length} independent projects` : ` workspace (${profile.workspaces.length} packages)`) : ""} · ${profile.vcs.provider === "git" ? "Git" : "no VCS"}`;
   return { summary, recommendations: recs, warnings, files, config };
 }
 

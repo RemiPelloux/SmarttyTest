@@ -1118,6 +1118,28 @@ export function analyzeSource(path: string, content: string): FileAnalysis {
         }
       }
     }
+    // Angular's legacy lazy route, `loadChildren: "./admin/admin.module#AdminModule"`: a dynamic
+    // import of the path before `#` (Angular < 8 resolved it from the app's source root, which
+    // the resolver's fallback to uncertainty covers).
+    if (
+      ts.isPropertyAssignment(n) &&
+      ts.isIdentifier(n.name) &&
+      n.name.text === "loadChildren" &&
+      ts.isStringLiteralLike(n.initializer) &&
+      n.initializer.text.includes("#")
+    ) {
+      const specifier = n.initializer.text.split("#")[0] as string;
+      if (specifier && !seen.has(`dynamic:${specifier}:${lineOf(n)}`)) {
+        seen.add(`dynamic:${specifier}:${lineOf(n)}`);
+        imports.push({
+          specifier,
+          kind: "dynamic",
+          bindings: [],
+          typeOnly: false,
+          line: lineOf(n),
+        } as ImportRecord);
+      }
+    }
     // Angular component resources: `templateUrl`, `styleUrl` and `styleUrls` in `@Component({…})`
     // are files the component loads by path, relative to its own file. They are asset reads of the
     // class; a path that cannot be evaluated is uncertainty.

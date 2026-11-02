@@ -143,6 +143,30 @@ describe("decideImpact", () => {
     expect(d.details.unprotected).toEqual(["src/auth/guard.ts#unused"]);
   });
 
+  it("type-checked tests: any change to a file they reach selects them, not formatting", () => {
+    const { files, graph, isTest, tests } = setup();
+    const run = (trivialOnly: boolean, typeChecked: string[]) =>
+      decideImpact({
+        changeSet: changed(["src/auth/guard.ts"]),
+        diffs: new Map([unit("src/auth/guard.ts", ["unused"], trivialOnly)]),
+        graph,
+        files,
+        testFiles: tests,
+        isTest,
+        mode: "balanced",
+        triggers: [],
+        rules: new RulesEngine([]),
+        typeCheckedTests: new Set(typeChecked),
+      })
+        .selectedTests.map((t) => t.filePath)
+        // Selected for its dynamic import (uncertainty), whatever changed.
+        .filter((t) => t !== "test/plugins.test.ts");
+    // A new, unused export: no test runs it, but `ng test` compiles (and type-checks) it.
+    expect(run(false, [])).toEqual([]);
+    expect(run(false, ["test/guard.test.ts"])).toEqual(["test/guard.test.ts"]);
+    expect(run(true, ["test/guard.test.ts"])).toEqual([]);
+  });
+
   it("selects direct and transitive tests; unresolvable tests can't be ruled out in BALANCED", () => {
     const d = decide(changed(["src/a.ts"]), [unit("src/a.ts", ["a"])], "balanced");
     expect(sel(d)).toEqual(["test/a.test.ts", "test/b.test.ts", "test/plugins.test.ts"]);

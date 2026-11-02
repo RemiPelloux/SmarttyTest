@@ -8,6 +8,7 @@ import { access, readdir, stat } from "node:fs/promises";
 import { arch, cpus, freemem, platform, totalmem } from "node:os";
 import { dirname, join } from "node:path";
 import {
+  angularTestTargets,
   exists,
   gitProjectFiles,
   matchGlob,
@@ -66,11 +67,13 @@ export interface PackageManifest {
 }
 
 export interface RunnerInfo {
-  adapter: "vitest" | "jest" | "node" | "playwright" | "cypress";
+  adapter: "vitest" | "jest" | "node" | "playwright" | "cypress" | "angular";
   dir: string;
   configFile?: string;
   /** Test file patterns given on the command line (node --test). */
   patterns?: string[];
+  /** Angular CLI project whose `test` target runs these tests. */
+  project?: string;
   evidence: string[];
 }
 
@@ -284,6 +287,7 @@ const FRAMEWORKS: { name: string; deps: string[]; files?: string[] }[] = [
   },
   { name: "Wasp", deps: ["wasp"], files: ["main.wasp", "main.wasp.ts"] },
   { name: "NestJS", deps: ["@nestjs/core"], files: ["nest-cli.json"] },
+  { name: "Angular", deps: ["@angular/core"], files: ["angular.json"] },
   { name: "Remix", deps: ["@remix-run/react", "@react-router/dev"] },
   { name: "Astro", deps: ["astro"], files: ["astro.config.mjs", "astro.config.ts"] },
   { name: "React", deps: ["react"] },
@@ -362,7 +366,11 @@ async function detectRunners(
   const prefix = (dir: string) => (dir ? `${dir}/` : "");
   const add = (info: RunnerInfo) => {
     const existing = out.find(
-      (r) => r.adapter === info.adapter && r.dir === info.dir && r.configFile === info.configFile,
+      (r) =>
+        r.adapter === info.adapter &&
+        r.dir === info.dir &&
+        r.configFile === info.configFile &&
+        r.project === info.project,
     );
     if (existing)
       existing.evidence.push(...info.evidence.filter((e) => !existing.evidence.includes(e)));
@@ -449,6 +457,22 @@ async function detectRunners(
             : `${prefix(dir)}package.json depends on cypress`,
         ],
       });
+    // Angular CLI: each project whose `test` target uses a test builder runs through `ng test`.
+    // Its Vitest is the builder's runner, not one to start directly (that fails: nothing compiles
+    // the specs), so a Vitest found here without its own config is dropped below.
+    if (entries.includes("angular.json")) {
+      const text = await readText(join(root, dir, "angular.json"));
+      for (const t of text ? angularTestTargets(text) : [])
+        add({
+          adapter: "angular",
+          dir,
+          configFile: `${prefix(dir)}angular.json`,
+          project: t.project,
+          evidence: [
+            `${prefix(dir)}angular.json: project "${t.project}" tests with ${t.builder}${t.runner === "karma" ? " (Karma)" : ""}`,
+          ],
+        });
+    }
     // Node's built-in runner: `node --test [patterns]`
     const nodeScript = scripts.find(([, cmd]) => /\bnode\b[^&|;]*\s--test\b/.test(cmd));
     if (nodeScript) {
@@ -462,7 +486,17 @@ async function detectRunners(
       });
     }
   }
-  return out;
+  // Under an Angular workspace, Vitest runs inside `ng test`: a Vitest root with no config of its
+  // own (or with the builder's `vitest-base.config`) is the builder's runner, not a second one.
+  const angularDirs = new Set(out.filter((r) => r.adapter === "angular").map((r) => r.dir));
+  return out.filter(
+    (r) =>
+      !(
+        r.adapter === "vitest" &&
+        angularDirs.has(r.dir) &&
+        (!r.configFile || /(?:^|\/)vitest-base\.config\.[cm]?[jt]s$/.test(r.configFile))
+      ),
+  );
 }
 
 const SOURCE_EXTS = [".ts", ".tsx", ".js", ".jsx", ".mts", ".mjs", ".cjs", ".cts"];

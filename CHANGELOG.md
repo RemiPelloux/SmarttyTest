@@ -10,6 +10,16 @@ All notable changes are documented here. Releases are managed with [Changesets](
 - A stylesheet reaches code through the stylesheets that import it: changing a Sass partial (`_vars.scss`), a Less file or a CSS file pulled in by `@use`, `@forward` or `@import` selects the tests of every component or module whose stylesheet imports it, directly or transitively. Imports through load paths (Angular's `stylePreprocessorOptions.includePaths`) match by path suffix, so they select more, never less.
 - New fixture `angular-vitest`, in the regression harness.
 
+### Added: Angular CLI projects run through `ng test`
+
+- A new `angular` runner. Each project of an `angular.json` whose `test` target uses the unit-test builder (`@angular/build:unit-test`, Vitest) is detected as its own runner and run with `ng test <project> --include …`, so the specs are compiled the way the project compiles them. Before, SmartTest ran the builder's Vitest directly, and every spec of a new Angular 22 app failed with `describe is not defined`. A build error (a compile error in a spec or in what it imports) fails the run with the compiler's message, never a pass.
+- `angular.json` is the runner's configuration: changing it, the test or build target's `tsConfig` (`tsconfig.spec.json` by default), `runnerConfig`, `setupFiles`, `providersFile`, polyfill files or global `styles`/`scripts` selects that project's specs. `explain` names them ("global stylesheet of angular (styles in angular.json)").
+- `ng test` type-checks everything a spec imports, so a change to any file a spec reaches selects it, even an export no test runs (a type error there fails the build). Comment and formatting changes do not.
+- Lazy routes in the legacy string form (`loadChildren: "./admin/admin.module#AdminModule"`) are import edges; `loadComponent`/`loadChildren` with `import()` already were.
+- Karma: a test target on Karma gives no per-test report, so it is refused with `ST_ANGULAR_KARMA_UNSUPPORTED` and a hint to move to the unit-test builder with Vitest, instead of being reported from the exit code.
+- Config: `runners[].project` and the `angular` adapter value (both additive to the 1.0 schema). `detect` reports Angular as a framework.
+- Checked against a real Angular 22 workspace (`fixtures/projects/angular-cli`, run by the new `angular (real install)` CI job): the full suite through SmartTest reports what `ng test` reports; a template change, a Sass partial and a type error each select and fail the right spec.
+
 ## [1.0.2] — patch
 
 An audit of 1.0.1 (two soundness oracles on the six adopting projects, four reproduction-driven reviews) found ways a run could pass while the suite failed, and ways a change could skip a test it affects. Each is fixed with a test that fails without the fix. Under the [semver policy](documentation/reference/contracts.md#semver-policy) these are bug fixes: some selections grow, and some runs that passed now fail because the suite really failed. No contract changes; `explain --json` gains an optional `loadedBy` field.
