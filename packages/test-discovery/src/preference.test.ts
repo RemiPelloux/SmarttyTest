@@ -12,6 +12,10 @@ describe("runnerPreference", () => {
       runnerPreference(jest, "vitest run"),
     );
     expect(runnerPreference(angular, "ng test")).toBeLessThan(runnerPreference(vitest, "ng test"));
+    // The Angular CLI's own flags name its runner; the script still starts ng.
+    expect(runnerPreference(angular, "ng test --runner=vitest --watch=false")).toBeLessThan(
+      runnerPreference({ ...vitest, configFile: "vitest.config.ts" }, "ng test --runner=vitest"),
+    );
     expect(runnerPreference(jest, "")).toBeLessThan(runnerPreference(vitest, ""));
   });
 

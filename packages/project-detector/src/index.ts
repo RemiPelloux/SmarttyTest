@@ -363,6 +363,8 @@ async function detectRunners(
   manifests: { dir: string; manifest: PackageManifest }[],
 ): Promise<RunnerInfo[]> {
   const out: RunnerInfo[] = [];
+  /** Vitest configs an Angular test target loads (`runnerConfig`): part of `ng test`, not runners. */
+  const angularRunnerConfigs = new Set<string>();
   const prefix = (dir: string) => (dir ? `${dir}/` : "");
   const add = (info: RunnerInfo) => {
     const existing = out.find(
@@ -462,7 +464,9 @@ async function detectRunners(
     // the specs), so a Vitest found here without its own config is dropped below.
     if (entries.includes("angular.json")) {
       const text = await readText(join(root, dir, "angular.json"));
-      for (const t of text ? angularTestTargets(text) : [])
+      for (const t of text ? angularTestTargets(text) : []) {
+        for (const l of t.loads)
+          if (l.key === "runnerConfig") angularRunnerConfigs.add(`${prefix(dir)}${l.file}`);
         add({
           adapter: "angular",
           dir,
@@ -472,6 +476,7 @@ async function detectRunners(
             `${prefix(dir)}angular.json: project "${t.project}" tests with ${t.builder}${t.runner === "karma" ? " (Karma)" : ""}`,
           ],
         });
+      }
     }
     // Node's built-in runner: `node --test [patterns]`
     const nodeScript = scripts.find(([, cmd]) => /\bnode\b[^&|;]*\s--test\b/.test(cmd));
@@ -504,7 +509,9 @@ async function detectRunners(
       !(
         (r.adapter === "vitest" &&
           angularDirs.has(r.dir) &&
-          (!r.configFile || /(?:^|\/)vitest-base\.config\.[cm]?[jt]s$/.test(r.configFile))) ||
+          (!r.configFile ||
+            /(?:^|\/)vitest-base\.config\.[cm]?[jt]s$/.test(r.configFile) ||
+            angularRunnerConfigs.has(r.configFile))) ||
         (r.adapter === "jest" && jestBuilderDirs.has(r.dir))
       ),
   );

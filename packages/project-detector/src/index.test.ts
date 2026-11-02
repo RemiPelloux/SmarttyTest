@@ -40,7 +40,15 @@ describe("Angular detection", () => {
         join(root, "angular.json"),
         JSON.stringify({
           projects: {
-            demo: { root: "", architect: { test: { builder: "@angular/build:unit-test" } } },
+            demo: {
+              root: "",
+              architect: {
+                test: {
+                  builder: "@angular/build:unit-test",
+                  options: { runnerConfig: "vitest.config.ts" },
+                },
+              },
+            },
             lib: {
               root: "projects/lib",
               architect: { test: { builder: "@angular/build:unit-test" } },
@@ -48,6 +56,8 @@ describe("Angular detection", () => {
           },
         }),
       );
+      // The runner config ng test loads: not a Vitest of its own.
+      await writeFile(join(root, "vitest.config.ts"), "export default {};");
       const profile = await detectProject(root, { files: [] });
       expect(profile.runners.map((r) => [r.adapter, r.configFile, r.project])).toEqual([
         ["angular", "angular.json", "demo"],

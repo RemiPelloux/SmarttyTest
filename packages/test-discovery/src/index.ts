@@ -103,9 +103,11 @@ export function runnerPreference(
 ): number {
   const configured = adapters.indexOf(root.adapter);
   if (configured !== -1) return configured;
+  // `ng test --runner=vitest` starts the Angular CLI, not Vitest.
+  const ng = /\bng\s+test\b/.test(testScript);
   const starts =
-    root.adapter === "angular"
-      ? /\bng\s+test\b/.test(testScript)
+    root.adapter === "angular" || ng
+      ? ng && root.adapter === "angular"
       : root.adapter === "node"
         ? /\bnode\b[^&|;]*\s--test\b/.test(testScript)
         : new RegExp(`\\b${root.adapter}\\b`).test(testScript);
