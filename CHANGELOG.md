@@ -2,7 +2,9 @@
 
 All notable changes are documented here. Releases are managed with [Changesets](https://github.com/changesets/changesets). The project follows [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [1.1.0] — minor
+
+Angular support, and fixes to the commit and push hooks reported by an adopting project. Additive under the [semver policy](documentation/reference/contracts.md#semver-policy): a new `angular` adapter and `runners[].project` in the config schema; nothing frozen changes. Some selections grow (Angular templates and stylesheets, files a type-checking runner compiles), and a hook now stops the commit when SmartTest is not installed. Run `smarttest hook install` again to update an installed hook.
 
 ### Fixed: commit and push hooks
 

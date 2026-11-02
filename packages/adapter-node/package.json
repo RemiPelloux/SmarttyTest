@@ -1,6 +1,6 @@
 {
   "name": "@smarttest/adapter-node",
-  "version": "1.0.2",
+  "version": "1.1.0",
   "description": "Node.js built-in test runner (node --test) adapter.",
   "license": "Apache-2.0",
   "type": "module",

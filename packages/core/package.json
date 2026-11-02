@@ -1,6 +1,6 @@
 {
   "name": "@smarttest/core",
-  "version": "1.0.2",
+  "version": "1.1.0",
   "description": "Application core: orchestrates engines behind a stable API used by the CLI and (later) Studio.",
   "license": "Apache-2.0",
   "type": "module",

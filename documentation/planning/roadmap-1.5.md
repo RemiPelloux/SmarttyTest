@@ -1,28 +1,29 @@
-# Roadmap to 1.5.0
+# Roadmap to 1.6.0
 
-1.0.0 froze SmartTest's contracts. The 1.x line keeps them: every version from 1.1.0 to 1.5.0 is additive (new flags, new config keys with defaults, new adapters), so a config, a script or a `--json` consumer written for 1.0.0 keeps working. Anything that would break a frozen contract waits for 2.0.0 ([contracts](../reference/contracts.md)).
+1.0.0 froze SmartTest's contracts. The 1.x line keeps them: every version from 1.1.0 to 1.6.0 is additive (new flags, new config keys with defaults, new adapters), so a config, a script or a `--json` consumer written for 1.0.0 keeps working. Anything that would break a frozen contract waits for 2.0.0 ([contracts](../reference/contracts.md)).
 
-The first real rollout after 1.0.0 set the order. On 1 November 2026 SmartTest went into four of OpenPro's repositories (front, admin, desktop monitor, MCP service): 0 missed failures and 42–96% less test time, but each repository needed hand work that `init` should have done, and a bug hid one test file. 1.1.0 adds Angular, proves selection is reliable with checks that inject real faults, brings Python forward as a preview, and makes that hand work unnecessary. Then precision (1.2.0), the browser (1.3.0), the ecosystem (1.4.0) and PHP (1.5.0).
+The first real rollout after 1.0.0 set the order. On 1 November 2026 SmartTest went into four of OpenPro's repositories (front, admin, desktop monitor, MCP service): 0 missed failures and 42–96% less test time, but each repository needed hand work that `init` should have done, and a bug hid one test file. 1.1.0 added Angular (released 2 November 2026). 1.2.0 proves selection is reliable with checks that inject real faults, brings Python forward as a preview, and makes that hand work unnecessary. Then precision (1.3.0), the browser (1.4.0), the ecosystem (1.5.0) and PHP (1.6.0).
 
 Planning is in story points; one sprint is about 40 points. A version ships when its gate is met, not on a date. Sprints continue from S27 (1.0.0).
 
 ## Overview
 
-| Version | Theme                                         | Sprints | Points | Gate in one line                                                                                                                  |
-| ------- | --------------------------------------------- | ------- | ------ | --------------------------------------------------------------------------------------------------------------------------------- |
-| 1.1.0   | Angular, reliability, Python preview, rollout | S28–S31 | 152    | Angular and Python selected at 0 misses; a fault-injection audit finds no missed test; `init` alone reproduces the OpenPro setups |
-| 1.2.0   | Precision                                     | S32–S33 | 76     | Type-checker resolution; the 20% observed-execution target met on two benchmarks                                                  |
-| 1.3.0   | Browser and end-to-end                        | S34–S35 | 72     | Source-mapped browser coverage; live-environment specs never run by accident                                                      |
-| 1.4.0   | Ecosystem                                     | S36–S37 | 74     | Third-party adapters installable from npm; CI annotations; a shared result cache                                                  |
-| 1.5.0   | PHP and backend frameworks (preview)          | S38–S39 | 68     | PHP selection on OpenPro's backend at 0 misses; Django, FastAPI and Laravel edges                                                 |
+| Version | Theme                                | Sprints | Points | Gate in one line                                                                                                      |
+| ------- | ------------------------------------ | ------- | ------ | --------------------------------------------------------------------------------------------------------------------- |
+| 1.1.0   | Angular (released)                   | S28     | 40     | Angular selected at 0 misses; `ng test` results reproduced                                                            |
+| 1.2.0   | Reliability, Python preview, rollout | S29–S31 | 112    | Python selected at 0 misses; a fault-injection audit finds no missed test; `init` alone reproduces the OpenPro setups |
+| 1.3.0   | Precision                            | S32–S33 | 76     | Type-checker resolution; the 20% observed-execution target met on two benchmarks                                      |
+| 1.4.0   | Browser and end-to-end               | S34–S35 | 72     | Source-mapped browser coverage; live-environment specs never run by accident                                          |
+| 1.5.0   | Ecosystem                            | S36–S37 | 74     | Third-party adapters installable from npm; CI annotations; a shared result cache                                      |
+| 1.6.0   | PHP and backend frameworks (preview) | S38–S39 | 68     | PHP selection on OpenPro's backend at 0 misses; Django, FastAPI and Laravel edges                                     |
 
 Total: 442 points, twelve sprints (S28–S39).
 
 ---
 
-## 1.1.0: Angular, reliability, Python preview, rollout (152 pts)
+## 1.1.0: Angular (40 pts, released 2 November 2026)
 
-Four sprints. S28 adds Angular. S29 turns the 1.0.2 audit into checks that run on every release, so "0 missed failures" is measured, not hoped. S30 brings Python forward from 1.5.0, built on S29's checks. S31 removes the hand work the OpenPro rollout needed.
+Planned as the first of four sprints of a larger 1.1.0. It shipped on its own, since Angular support and fixes to the commit hooks were ready; the other three sprints are 1.2.0.
 
 ### S28: Angular (40 pts)
 
@@ -45,8 +46,12 @@ Angular is the main TypeScript framework SmartTest does not understand. Most of 
 - Delivered: component resources and stylesheet imports as edges; `angular.json` read per project (test and build targets, `fileReplacements`, global styles); the `angular` runner through `ng test` for the unit-test builder and `@angular-builders/jest`; `jest-preset-angular` and Analog through the Jest and Vitest runners; lazy routes in both forms; the `angular-vitest` fixture in the regression harness; the real-install `angular-cli` fixture (Angular 22) with its own CI job; the [Angular guide](../guides/angular.md).
 - Found while testing and fixed: a type error in an export no spec runs fails `ng test`, so any non-cosmetic change to a file a spec imports selects it on builders that type-check; a Vitest `runnerConfig` is part of `ng test`, not a runner of its own.
 - Changed: Karma has no per-test report, so a Karma target is listed but never run (`ST_ANGULAR_KARMA_UNSUPPORTED`), instead of results read from its exit code.
-- Moved: Nx workspaces (`project.json`, `nx test`) to the monorepo orchestration story of 1.4.0. The NgModule-on-Karma fixture is dropped with Karma.
-- Real-world check: HMCTS's [opal-frontend](https://github.com/hmcts/opal-frontend) (354 spec files, 4,054 tests). The full suite through SmartTest gives the same results as `ng test` (4,039 test ids: 15 `it.each` rows share a title, the S29 identity story). Ten commits replayed: **0 missed failures**, 4% less time overall. Four of the five commits that ran everything changed `yarn.lock` (S31's lockfile story); on the other five, 19% less time. The largest selections come from one service injected into 145 specs, which 1.2.0's type-checker resolution addresses. swimlane's ngx-datatable (a Karma app beside a library on the unit-test builder in Chromium): both projects are detected and the library's 21 specs are listed through `ng test` and selected; their run in Chromium was not checked (the browser download did not complete on this machine).
+- Moved: Nx workspaces (`project.json`, `nx test`) to the monorepo orchestration story of 1.5.0. The NgModule-on-Karma fixture is dropped with Karma.
+- Real-world check: HMCTS's [opal-frontend](https://github.com/hmcts/opal-frontend) (354 spec files, 4,054 tests). The full suite through SmartTest gives the same results as `ng test` (4,039 test ids: 15 `it.each` rows share a title, the S29 identity story). Ten commits replayed: **0 missed failures**, 4% less time overall. Four of the five commits that ran everything changed `yarn.lock` (S31's lockfile story); on the other five, 19% less time. The largest selections come from one service injected into 145 specs, which 1.3.0's type-checker resolution addresses. swimlane's ngx-datatable (a Karma app beside a library on the unit-test builder in Chromium): both projects are detected and the library's 21 specs are listed through `ng test` and selected; their run in Chromium was not checked (the browser download did not complete on this machine).
+
+## 1.2.0: Reliability, Python preview, rollout (112 pts)
+
+Three sprints, first planned as part of 1.1.0. S29 turns the 1.0.2 audit into checks that run on every release, so "0 missed failures" is measured, not hoped. S30 brings Python forward from 1.6.0, built on S29's checks. S31 removes the hand work the OpenPro rollout needed.
 
 ### S29: Reliability (40 pts)
 
@@ -67,7 +72,7 @@ The 1.0.2 audit found about 30 ways a change could skip a test it affects. It wa
 
 ### S30: Python preview (40 pts)
 
-Brought forward from 1.5.0. The Plugin SDK's language contract was designed for this; Python is the first language built on it, as an official plugin marked **preview**: it selects tests and never hides a failure, but its precision is not yet that of the TypeScript analyzer. Driven by OpenProAuto (Python, `unittest`).
+Brought forward from 1.6.0. The Plugin SDK's language contract was designed for this; Python is the first language built on it, as an official plugin marked **preview**: it selects tests and never hides a failure, but its precision is not yet that of the TypeScript analyzer. Driven by OpenProAuto (Python, `unittest`).
 
 | Story                                                                                                                                                                                                                                                                                                                                                                                                                | Pts |
 | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --- |
@@ -94,7 +99,7 @@ Every item comes from a problem met on OpenPro. Each was fixed by hand there; he
 
 **S31 gate:** on a fresh clone of each of OpenPro's four JavaScript repositories, `smarttest init --yes` alone produces a setup equivalent to the hand-tuned one (hook, scope, script placement), the full suite through SmartTest reports the same tests and failures as the runner, and `benchmark` shows 0 missed failures. No test file a runner collects is missing from the graph in any benchmark repository.
 
-## 1.2.0: Precision (76 pts)
+## 1.3.0: Precision (76 pts)
 
 Run fewer tests for the same safety. Two items have been carried since 0.3.0 and 0.8.0.
 
@@ -110,7 +115,7 @@ Run fewer tests for the same safety. Two items have been carried since 0.3.0 and
 
 **Gate:** type-checker resolution on at least two benchmark repositories with 0 misses; the 20% observed-execution reduction met on at least two of them; analysis at 10,000 modules under 500 ms in process.
 
-## 1.3.0: Browser and end-to-end (72 pts)
+## 1.4.0: Browser and end-to-end (72 pts)
 
 End-to-end specs are where test time goes, and where running the wrong one is costly: on OpenPro, the Playwright suite targets a live environment.
 
@@ -127,7 +132,7 @@ End-to-end specs are where test time goes, and where running the wrong one is co
 
 **Gate:** on OpenPro's front, a component change selects the Playwright specs that render it, from source-mapped coverage; no live-environment spec runs in `run`, `benchmark` or a hook without `--live`; 0 missed failures across the end-to-end benchmarks.
 
-## 1.4.0: Ecosystem (74 pts)
+## 1.5.0: Ecosystem (74 pts)
 
 | Story                                                                                                                                                                                                                                                          | Pts |
 | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --- |
@@ -141,9 +146,9 @@ End-to-end specs are where test time goes, and where running the wrong one is co
 
 **Gate:** a third-party adapter published to npm passes the conformance kit and runs in a benchmark repository; CI annotations on GitHub and GitLab; a shared cache hit verified across two CI runs, with a forged entry rejected.
 
-## 1.5.0: PHP and backend frameworks, preview (68 pts)
+## 1.6.0: PHP and backend frameworks, preview (68 pts)
 
-Python moved to 1.1.0 (S30). 1.5.0 adds PHP on the same language plugin path, and the backend framework edges for both languages. Driven by OpenPro's Laravel backend (PHP, Pest).
+Python moved to 1.2.0 (S30). 1.6.0 adds PHP on the same language plugin path, and the backend framework edges for both languages. Driven by OpenPro's Laravel backend (PHP, Pest).
 
 | Story                                                                                                                                                                                                          | Pts |
 | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --- |

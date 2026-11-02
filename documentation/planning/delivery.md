@@ -226,6 +226,15 @@ An audit of 1.0.1 before more projects adopt it, so the fixes ship in one releas
 - Checked after the fixes: the trace oracle finds no file a test loaded that selection cannot reach (Galdia's ops scripts and LeadsIt's MCP server are now linked); resolution agrees with the compiler on 19,233 imports. Replaying 10 commits with full suites on each of the five projects gives 0 selection misses; the two failures the replay flagged (`MiaDock.test.tsx` in openpro-admin, `tournament-pool.test.ts` in Galdia) are tests that fail only under full-suite load, with no dependency on the change.
 - Faster: 400 changed files 1.18 s to 0.51 s (one `git cat-file --batch`), path rules no longer quadratic, `explain` from the last decision 86 ms, `traces.json` about 18 times smaller.
 
+## 1.1.0 · minor (2 November 2026)
+
+Sprint S28 of the [1.x roadmap](roadmap-1.5.md), released on its own; S29–S31 became 1.2.0.
+
+- Angular: component templates and styles (`templateUrl`, `styleUrl(s)`) and Sass/Less/CSS imports are edges; `angular.json` is read per project (test and build targets, `fileReplacements`, global styles and scripts, setup files); a new `angular` runner runs `ng test <project> --include …` for the unit-test builder and `@angular-builders/jest`; `jest-preset-angular` and Analog run through the Jest and Vitest runners; lazy routes in both forms. Builders that type-check select every spec reaching a changed file.
+- Checked on a real Angular 22 workspace (new CI job) and on HMCTS's opal-frontend (354 spec files): the same results as `ng test`, 10 commits replayed at 0 missed failures, 4% less test time overall and 19% on the commits that did not change `yarn.lock`.
+- Not delivered: Karma targets are listed, never run (`ST_ANGULAR_KARMA_UNSUPPORTED`); Nx workspaces moved to 1.5.0; ngx-datatable's Chromium run not checked.
+- Hooks: a missing SmartTest install stops the commit or push; the time estimate counts parallel workers; the pnpm "isolation incomplete" warning fires only for an installed package that depends on a workspace package (a hoisted link was a false alarm, checked in a pnpm workspace).
+
 ## After 1.0.0
 
 | Item                                                                                                     | From         | Status                                                                   |
