@@ -2,27 +2,27 @@
 
 1.0.0 froze SmartTest's contracts. The 1.x line keeps them: every version from 1.1.0 to 1.5.0 is additive (new flags, new config keys with defaults, new adapters), so a config, a script or a `--json` consumer written for 1.0.0 keeps working. Anything that would break a frozen contract waits for 2.0.0 ([contracts](../reference/contracts.md)).
 
-The first real rollout after 1.0.0 set the order. On 1 November 2026 SmartTest went into four of OpenPro's repositories (front, admin, desktop monitor, MCP service): 0 missed failures and 42–96% less test time, but each repository needed hand work that `init` should have done, and a bug hid one test file. 1.1.0 adds Angular, which SmartTest does not understand yet, and makes that hand work unnecessary. Then precision (1.2.0), the browser (1.3.0), the ecosystem (1.4.0) and the first languages beyond JavaScript (1.5.0).
+The first real rollout after 1.0.0 set the order. On 1 November 2026 SmartTest went into four of OpenPro's repositories (front, admin, desktop monitor, MCP service): 0 missed failures and 42–96% less test time, but each repository needed hand work that `init` should have done, and a bug hid one test file. 1.1.0 adds Angular, proves selection is reliable with checks that inject real faults, brings Python forward as a preview, and makes that hand work unnecessary. Then precision (1.2.0), the browser (1.3.0), the ecosystem (1.4.0) and PHP (1.5.0).
 
 Planning is in story points; one sprint is about 40 points. A version ships when its gate is met, not on a date. Sprints continue from S27 (1.0.0).
 
 ## Overview
 
-| Version | Theme                              | Sprints | Points | Gate in one line                                                                            |
-| ------- | ---------------------------------- | ------- | ------ | ------------------------------------------------------------------------------------------- |
-| 1.1.0   | Angular, rollout without hand work | S28–S29 | 80     | Angular workspaces selected and run at 0 misses; `init` alone reproduces the OpenPro setups |
-| 1.2.0   | Precision                          | S30–S31 | 76     | Type-checker resolution; the 20% observed-execution target met on two benchmarks            |
-| 1.3.0   | Browser and end-to-end             | S32–S33 | 72     | Source-mapped browser coverage; live-environment specs never run by accident                |
-| 1.4.0   | Ecosystem                          | S34–S35 | 74     | Third-party adapters installable from npm; CI annotations; a shared result cache            |
-| 1.5.0   | Beyond JavaScript (preview)        | S36–S38 | 110    | Python and PHP selection on OpenPro's backend and OpenProAuto at 0 misses                   |
+| Version | Theme                                         | Sprints | Points | Gate in one line                                                                                                                  |
+| ------- | --------------------------------------------- | ------- | ------ | --------------------------------------------------------------------------------------------------------------------------------- |
+| 1.1.0   | Angular, reliability, Python preview, rollout | S28–S31 | 152    | Angular and Python selected at 0 misses; a fault-injection audit finds no missed test; `init` alone reproduces the OpenPro setups |
+| 1.2.0   | Precision                                     | S32–S33 | 76     | Type-checker resolution; the 20% observed-execution target met on two benchmarks                                                  |
+| 1.3.0   | Browser and end-to-end                        | S34–S35 | 72     | Source-mapped browser coverage; live-environment specs never run by accident                                                      |
+| 1.4.0   | Ecosystem                                     | S36–S37 | 74     | Third-party adapters installable from npm; CI annotations; a shared result cache                                                  |
+| 1.5.0   | PHP and backend frameworks (preview)          | S38–S39 | 68     | PHP selection on OpenPro's backend at 0 misses; Django, FastAPI and Laravel edges                                                 |
 
-Total: 412 points, eleven sprints (S28–S38).
+Total: 442 points, twelve sprints (S28–S39).
 
 ---
 
-## 1.1.0: Angular, rollout without hand work (80 pts)
+## 1.1.0: Angular, reliability, Python preview, rollout (152 pts)
 
-Two sprints. S28 adds Angular; S29 removes the hand work the OpenPro rollout needed.
+Four sprints. S28 adds Angular. S29 turns the 1.0.2 audit into checks that run on every release, so "0 missed failures" is measured, not hoped. S30 brings Python forward from 1.5.0, built on S29's checks. S31 removes the hand work the OpenPro rollout needed.
 
 ### S28: Angular (40 pts)
 
@@ -35,19 +35,48 @@ Angular is the main TypeScript framework SmartTest does not understand. Most of 
 | **`ng test` as a runner.** An adapter for the Angular CLI's test builders: `@angular/build:unit-test` (Vitest, the default since Angular 21) and the Karma builders. It reads `include`, `exclude`, `setupFiles`, `providersFile`, `polyfills` and `tsConfig` (all of them runner inputs, so a change selects that project's tests), and runs a selection with `ng test --include` per project. Karma reports per file only; the adapter declares it and does not emulate per-test results (ADR-0005). A run where `ng test` fails before reporting is a failure, never a pass. | 13  |
 | **Jest and Vitest community setups.** `jest-preset-angular` (`setup-jest.ts`, zone setup), `@angular-builders/jest` (Jest config inside `angular.json`) and `@analogjs/vitest-angular` discovered and run through the existing Jest and Vitest adapters.                                                                                                                                                                                                                                                                                                                        | 5   |
 | **Angular code edges.** Lazy routes (`loadComponent`, `loadChildren` with `import()`) link the route file to the loaded code; the legacy string form (`'./x.module#XModule'`) is resolved, or treated as uncertainty when it cannot be. `inject(X)`, constructor injection and `providers` need nothing new, since they import their tokens; a fixture proves it.                                                                                                                                                                                                               | 5   |
-| **Fixtures and a real-world check.** Three fixtures: a standalone Angular 21 app on the unit-test builder, an NgModule app on Karma, and an Nx workspace on Jest. An open-source Angular application replayed with `benchmark` and added to the published benchmarks. The trace and resolution oracles from the 1.0.2 audit are run on it.                                                                                                                                                                                                                                      | 5   |
+| **Fixtures and a real-world check.** Three fixtures: a standalone Angular 21 app on the unit-test builder, an NgModule app on Karma, and an Nx workspace on Jest. An open-source Angular application replayed with `benchmark` and added to the published benchmarks. The trace and resolution oracles from the 1.0.2 audit are run on it, with a trace that also records the non-code files a spec reads (templates, styles, JSON), which the 1.0.2 trace could not see.                                                                                                       | 5   |
 | **Angular guide.** `documentation/guides/angular.md`: what is understood, what is uncertainty, the supported builders, and how to read `explain` on a template change.                                                                                                                                                                                                                                                                                                                                                                                                          | 2   |
 
 **S28 gate:** on the three fixtures, a template, style, component, service or `angular.json` change selects the affected specs and no others. The full suite through SmartTest reports the same tests and failures as `ng test`. `benchmark` on the open-source application shows 0 missed failures, and the trace oracle finds no file a spec loads that selection cannot reach.
 
-### S29: Rollout without hand work (40 pts)
+### S29: Reliability (40 pts)
 
-Every item comes from a problem met on OpenPro. Each was fixed by hand there; here it becomes the default.
+The 1.0.2 audit found about 30 ways a change could skip a test it affects. It was run by hand, once. This sprint makes those checks part of SmartTest and of every release, adds the one check that measures misses directly (inject a fault, see which tests fail), and closes the two correctness items the OpenPro rollout found.
+
+| Story                                                                                                                                                                                                                                                                                                                                                                                                                                      | Pts |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --- |
+| **Fault injection.** `smarttest audit --mutate` changes one function at a time in a real way (makes it throw, or return a wrong value), runs the full suite, and reports every test that failed without being selected. That is a missed test by definition, with no guessing from the graph. It samples functions across the repository within a time budget and never leaves a change behind (it works on a copy).                       | 8   |
+| **Reachability audit as a command.** The trace oracle from the 1.0.2 audit becomes `smarttest audit --traces`: every file a test loaded or read at run time (code and non-code: templates, styles, JSON, fixtures) must be reachable from that test in the graph, or reached by a runner input or uncertainty. The resolution oracle (each import resolved as the TypeScript compiler resolves it) becomes `smarttest audit --resolution`. | 8   |
+| **Audits in CI.** A nightly job runs the three audits on every fixture and on the benchmark repositories; any missed test or unreachable file fails it. Each release runs them on the adopting projects and records the result in the delivery log.                                                                                                                                                                                        | 5   |
+| **Fail-safe under faults.** Every internal error, timeout, corrupt or half-written state file, missing Git, killed runner and lost lock ends in a full run with a warning, never in a smaller selection or a pass. A fault-injection test suite proves each case.                                                                                                                                                                          | 5   |
+| **Flaky failures told apart.** When `benchmark` or `audit` sees a failure, it reruns that test alone on the parent commit and on the change. A test that fails only under load is reported as load-flaky, separately, and never counted as a miss or as a pass. (1.0.2: `MiaDock.test.tsx`, `tournament-pool.test.ts`.)                                                                                                                    | 3   |
+| **No test file is ever invisible.** The built-in ignored directories (`build`, `out`, `dist`…) are skipped as build output, but a file the runner itself collects is always analysed: discovery's list wins over the walker's ignores. `doctor` and `scan` report any file a runner collects that the graph lacks. (OpenPro: `src/tests/build/…test.ts` was never selected.)                                                               | 5   |
+| **`it.each` rows keep their own identity.** A test id holds the row's formatted title, or its index when titles repeat, so reports, the result cache and flaky history count every row. (OpenPro: 8 passing rows counted as fewer.)                                                                                                                                                                                                        | 3   |
+| **Reliability report.** `audit` writes one report: missed tests, unreachable files, flaky tests, fail-safe triggers, and the share of functions checked by fault injection. Published with the benchmarks.                                                                                                                                                                                                                                 | 3   |
+
+**S29 gate:** on the fixtures and the benchmark repositories (the five adopting projects and the Angular application), fault injection finds 0 missed tests, the reachability audit finds 0 unreachable files, and every fail-safe case ends in a full run.
+
+### S30: Python preview (40 pts)
+
+Brought forward from 1.5.0. The Plugin SDK's language contract was designed for this; Python is the first language built on it, as an official plugin marked **preview**: it selects tests and never hides a failure, but its precision is not yet that of the TypeScript analyzer. Driven by OpenProAuto (Python, `unittest`).
+
+| Story                                                                                                                                                                                                                                                                                                                                                                                                                | Pts |
+| -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --- |
+| **Language plugin API in practice.** Symbols, imports and tests from a language plugin feed the same graph, rules, safety modes and reports as TypeScript; a mixed repository (a Python service beside a TypeScript front end) is analysed in one run.                                                                                                                                                               | 13  |
+| **Python analysis.** Modules, classes and functions; `import` and `from … import`, relative imports, packages (`__init__.py`, namespace packages), `src/` layouts and the roots in `pyproject.toml`; `conftest.py` fixtures as edges to the tests below them. Parsed without running Python. Dynamic imports (`importlib`, `__import__`, `getattr` on modules) are uncertainty and select the tests that reach them. | 13  |
+| **pytest and unittest runners.** Tests discovered from each runner's own configuration (`pytest.ini`, `pyproject.toml`, `setup.cfg`, `unittest` discovery patterns); selections run by node id; results read from JUnit XML; a collection error or "no tests collected" is a failure, never a pass. Configs and `conftest.py` are runner inputs.                                                                     | 8   |
+| **Fixtures and OpenProAuto.** A pytest fixture and a `unittest` fixture; OpenProAuto replayed with `benchmark` and checked with S29's audits.                                                                                                                                                                                                                                                                        | 4   |
+| **Python guide.** `documentation/guides/python.md`: what is understood, what is uncertainty, how to turn the preview off.                                                                                                                                                                                                                                                                                            | 2   |
+
+**S30 gate:** on OpenProAuto, the full suite through SmartTest gives the same results as `unittest`; `benchmark` shows 0 missed failures with less test time than the full suite; fault injection finds 0 missed tests. The preview can be turned off per project.
+
+### S31: Rollout without hand work (32 pts)
+
+Every item comes from a problem met on OpenPro. Each was fixed by hand there; here it becomes the default. The two correctness items found there moved to S29.
 
 | Story                                                                                                                                                                                                                                                                                                                                                                                                            | Pts |
 | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --- |
-| **No test file is ever invisible.** The built-in ignored directories (`build`, `out`, `dist`…) are skipped as build output, but a file the runner itself collects is always analysed: discovery's list wins over the walker's ignores. `doctor` and `scan` report any file a runner collects that the graph lacks. (OpenPro: `src/tests/build/…test.ts` was never selected.)                                     | 5   |
-| **`it.each` rows keep their own identity.** A test id holds the row's formatted title, or its index when titles repeat, so reports, the result cache and flaky history count every row. (OpenPro: 8 passing rows counted as fewer.)                                                                                                                                                                              | 3   |
 | **Pre-push reads Git's refs wherever the step runs.** When the refs are missing, `run --push` falls back to the upstream merge-base with a warning instead of `ST_HOOK_PUSH_REFS_MISSING`; `hook install` rewrites a backgrounded test step (`… &`) to receive the refs it saved.                                                                                                                                | 5   |
 | **`init` respects the hook a repository already has.** It detects hook installers that copy scripts (`cp scripts/pre-commit $(git rev-parse --git-path hooks)`) and edits the source script, not the copy in `.git`; when an existing hook already runs related tests (`vitest related`, `jest --findRelatedTests`), it replaces that step in place, in the same hook, instead of adding a second one elsewhere. | 8   |
 | **`--runner <name>` on `run`, `impact`, `benchmark` and `validate-selection`.** Today keeping Playwright out of a parity check or a benchmark needs a copied config. `benchmark` follows `hook.runners` unless told otherwise.                                                                                                                                                                                   | 3   |
@@ -55,7 +84,7 @@ Every item comes from a problem met on OpenPro. Each was fixed by hand there; he
 | **The hook budget explains itself.** When an estimate passes `hook.budgetMs`, the warning names the trigger that widened the selection (a lockfile, a config file) and the files with no recorded duration.                                                                                                                                                                                                      | 3   |
 | **Rollout guide and case study.** `documentation/guides/rollout.md` from the OpenPro migration: parity check, benchmark, hooks per repository, what to leave to CI; the four repositories added to the published benchmarks.                                                                                                                                                                                     | 5   |
 
-**S29 gate:** on a fresh clone of each of OpenPro's four JavaScript repositories, `smarttest init --yes` alone produces a setup equivalent to the hand-tuned one (hook, scope, script placement), the full suite through SmartTest reports the same tests and failures as the runner, and `benchmark` shows 0 missed failures. No test file a runner collects is missing from the graph in any benchmark repository.
+**S31 gate:** on a fresh clone of each of OpenPro's four JavaScript repositories, `smarttest init --yes` alone produces a setup equivalent to the hand-tuned one (hook, scope, script placement), the full suite through SmartTest reports the same tests and failures as the runner, and `benchmark` shows 0 missed failures. No test file a runner collects is missing from the graph in any benchmark repository.
 
 ## 1.2.0: Precision (76 pts)
 
@@ -104,22 +133,20 @@ End-to-end specs are where test time goes, and where running the wrong one is co
 
 **Gate:** a third-party adapter published to npm passes the conformance kit and runs in a benchmark repository; CI annotations on GitHub and GitLab; a shared cache hit verified across two CI runs, with a forged entry rejected.
 
-## 1.5.0: Beyond JavaScript, preview (110 pts)
+## 1.5.0: PHP and backend frameworks, preview (68 pts)
 
-The edge-provider and language contracts of the Plugin SDK were designed for other languages (PRD Release 6). 1.5.0 builds the first two as official plugins, marked **preview**: they select tests and never hide a failure, but their precision is not yet that of the TypeScript analyzer. Both are driven by real repositories: OpenPro's Laravel backend (PHP, Pest) and OpenProAuto (Python, `unittest`).
+Python moved to 1.1.0 (S30). 1.5.0 adds PHP on the same language plugin path, and the backend framework edges for both languages. Driven by OpenPro's Laravel backend (PHP, Pest).
 
-| Story                                                                                                                                                                                                                                        | Pts |
-| -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --- |
-| **Language plugin API in practice.** Symbols, imports and tests from a language plugin feed the same graph, rules, safety modes and reports as TypeScript; mixed repositories (a PHP backend beside a TypeScript front) analysed in one run. | 13  |
-| **Python.** Modules, classes and functions, `import` / `from … import`, relative imports, `conftest.py` fixtures; runners `pytest` and `unittest`.                                                                                           | 21  |
-| **PHP.** Namespaces and PSR-4 autoloading from `composer.json`, classes and methods, `use` statements, Laravel service-container bindings and facades as edges; runners Pest and PHPUnit (`php artisan test`).                               | 26  |
-| **Framework edges.** Laravel routes, migrations and config keys; Django and FastAPI routes and settings; a migration selects the tests that touch its tables.                                                                                | 13  |
-| **Hooks and CI for mixed repositories.** CaptainHook and pre-commit (the Python framework) installed like Husky; `smarttest ci` runs PHP, Python and JavaScript selections side by side.                                                     | 8   |
-| **Benchmarks.** OpenPro's backend and OpenProAuto replayed with `benchmark`; results published with the rest.                                                                                                                                | 8   |
-| **Unresolvable means selected.** Dynamic calls (`$class::$method()`, `getattr`, `importlib`) are uncertainty and select the tests that reach them, as in TypeScript. Documented per language.                                                | 8   |
-| **Documentation.** One guide per language: what is understood, what is uncertainty, how to read `explain` there.                                                                                                                             | 13  |
+| Story                                                                                                                                                                                                          | Pts |
+| -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --- |
+| **PHP.** Namespaces and PSR-4 autoloading from `composer.json`, classes and methods, `use` statements, Laravel service-container bindings and facades as edges; runners Pest and PHPUnit (`php artisan test`). | 26  |
+| **Framework edges.** Laravel routes, migrations and config keys; Django and FastAPI routes and settings; a migration selects the tests that touch its tables.                                                  | 13  |
+| **Hooks and CI for mixed repositories.** CaptainHook and pre-commit (the Python framework) installed like Husky; `smarttest ci` runs PHP, Python and JavaScript selections side by side.                       | 8   |
+| **Benchmarks.** OpenPro's backend replayed with `benchmark` and checked with the S29 audits; results published with the rest.                                                                                  | 8   |
+| **Unresolvable means selected.** Dynamic calls (`$class::$method()`, `new $name`) are uncertainty and select the tests that reach them, as in TypeScript and Python.                                           | 5   |
+| **Documentation.** `documentation/guides/php.md` and the framework edges in the Python guide.                                                                                                                  | 8   |
 
-**Gate:** on OpenPro's backend and OpenProAuto, the full suite through SmartTest gives the same results as the runner, and `benchmark` shows 0 missed failures with less test time than the full suite. Preview plugins can be turned off per project.
+**Gate:** on OpenPro's backend, the full suite through SmartTest gives the same results as the runner, `benchmark` shows 0 missed failures with less test time than the full suite, and fault injection finds 0 missed tests. Preview plugins can be turned off per project.
 
 ---
 
@@ -129,6 +156,6 @@ The edge-provider and language contracts of the Plugin SDK were designed for oth
 - Cloud and team analytics (PRD Release 5).
 - Any change to a frozen contract: config schema, exit codes, `--json` v1 schemas, Plugin SDK v1.
 
-Languages after PHP and Python (Dart, Go, Rust, Kotlin) follow the same plugin path once 1.5.0's preview is stable.
+Languages after Python and PHP (Dart, Go, Rust, Kotlin) follow the same plugin path once their previews are stable.
 
 Previous: [Roadmap to 1.0.0](roadmap.md) · [Delivery log](delivery.md) · [Risks](risks.md)
