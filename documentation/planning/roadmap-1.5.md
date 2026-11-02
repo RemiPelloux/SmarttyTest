@@ -2,25 +2,45 @@
 
 1.0.0 froze SmartTest's contracts. The 1.x line keeps them: every version from 1.1.0 to 1.5.0 is additive (new flags, new config keys with defaults, new adapters), so a config, a script or a `--json` consumer written for 1.0.0 keeps working. Anything that would break a frozen contract waits for 2.0.0 ([contracts](../reference/contracts.md)).
 
-The first real rollout after 1.0.0 set the order. On 1 November 2026 SmartTest went into four of OpenPro's repositories (front, admin, desktop monitor, MCP service): 0 missed failures and 42–96% less test time, but each repository needed hand work that `init` should have done, and a bug hid one test file. 1.1.0 makes that hand work unnecessary. Then precision (1.2.0), the browser (1.3.0), the ecosystem (1.4.0) and the first languages beyond JavaScript (1.5.0).
+The first real rollout after 1.0.0 set the order. On 1 November 2026 SmartTest went into four of OpenPro's repositories (front, admin, desktop monitor, MCP service): 0 missed failures and 42–96% less test time, but each repository needed hand work that `init` should have done, and a bug hid one test file. 1.1.0 adds Angular, which SmartTest does not understand yet, and makes that hand work unnecessary. Then precision (1.2.0), the browser (1.3.0), the ecosystem (1.4.0) and the first languages beyond JavaScript (1.5.0).
 
 Planning is in story points; one sprint is about 40 points. A version ships when its gate is met, not on a date. Sprints continue from S27 (1.0.0).
 
 ## Overview
 
-| Version | Theme                       | Sprints | Points | Gate in one line                                                                 |
-| ------- | --------------------------- | ------- | ------ | -------------------------------------------------------------------------------- |
-| 1.1.0   | Rollout without hand work   | S28     | 40     | `init` alone reproduces the four OpenPro setups; no test file invisible          |
-| 1.2.0   | Precision                   | S29–S30 | 76     | Type-checker resolution; the 20% observed-execution target met on two benchmarks |
-| 1.3.0   | Browser and end-to-end      | S31–S32 | 72     | Source-mapped browser coverage; live-environment specs never run by accident     |
-| 1.4.0   | Ecosystem                   | S33–S34 | 74     | Third-party adapters installable from npm; CI annotations; a shared result cache |
-| 1.5.0   | Beyond JavaScript (preview) | S35–S37 | 110    | Python and PHP selection on OpenPro's backend and OpenProAuto at 0 misses        |
+| Version | Theme                              | Sprints | Points | Gate in one line                                                                            |
+| ------- | ---------------------------------- | ------- | ------ | ------------------------------------------------------------------------------------------- |
+| 1.1.0   | Angular, rollout without hand work | S28–S29 | 80     | Angular workspaces selected and run at 0 misses; `init` alone reproduces the OpenPro setups |
+| 1.2.0   | Precision                          | S30–S31 | 76     | Type-checker resolution; the 20% observed-execution target met on two benchmarks            |
+| 1.3.0   | Browser and end-to-end             | S32–S33 | 72     | Source-mapped browser coverage; live-environment specs never run by accident                |
+| 1.4.0   | Ecosystem                          | S34–S35 | 74     | Third-party adapters installable from npm; CI annotations; a shared result cache            |
+| 1.5.0   | Beyond JavaScript (preview)        | S36–S38 | 110    | Python and PHP selection on OpenPro's backend and OpenProAuto at 0 misses                   |
 
-Total: 372 points, ten sprints (S28–S37).
+Total: 412 points, eleven sprints (S28–S38).
 
 ---
 
-## 1.1.0: Rollout without hand work (40 pts)
+## 1.1.0: Angular, rollout without hand work (80 pts)
+
+Two sprints. S28 adds Angular; S29 removes the hand work the OpenPro rollout needed.
+
+### S28: Angular (40 pts)
+
+Angular is the main TypeScript framework SmartTest does not understand. Most of an Angular app is ordinary TypeScript and is already analysed, but three things are missing. First, components load their template and styles by path (`templateUrl`, `styleUrl`), not by import. Today a change to `foo.component.html` selects no test at all, not even `foo.component.spec.ts`; that is a missed test, not only a missing feature. Second, tests run through `ng test`, not through a runner config. Third, `angular.json` holds what other projects keep in `tsconfig` and runner configs.
+
+| Story                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | Pts |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --- |
+| **Component resources are edges.** `templateUrl`, `styleUrl` and `styleUrls` in `@Component` link the component to its template and styles, and Sass/Less `@use`/`@import` link a stylesheet to its partials. A template or style change selects the tests of that component and of its importers. A path that cannot be resolved is uncertainty. New edge type: a fixture where a template change selects only its component's specs.                                                                                                                                          | 5   |
+| **Angular workspaces detected.** `angular.json` (and Nx `project.json`) read for each project: `root`, `sourceRoot`, the `tsConfig` of its build and test targets, `fileReplacements` (a change to `environment.prod.ts` selects the tests of `environment.ts`'s importers) and global `styles`/`scripts`. `detect` and `doctor` report Angular and its version; `init` proposes the matching runner and scope.                                                                                                                                                                 | 5   |
+| **`ng test` as a runner.** An adapter for the Angular CLI's test builders: `@angular/build:unit-test` (Vitest, the default since Angular 21) and the Karma builders. It reads `include`, `exclude`, `setupFiles`, `providersFile`, `polyfills` and `tsConfig` (all of them runner inputs, so a change selects that project's tests), and runs a selection with `ng test --include` per project. Karma reports per file only; the adapter declares it and does not emulate per-test results (ADR-0005). A run where `ng test` fails before reporting is a failure, never a pass. | 13  |
+| **Jest and Vitest community setups.** `jest-preset-angular` (`setup-jest.ts`, zone setup), `@angular-builders/jest` (Jest config inside `angular.json`) and `@analogjs/vitest-angular` discovered and run through the existing Jest and Vitest adapters.                                                                                                                                                                                                                                                                                                                        | 5   |
+| **Angular code edges.** Lazy routes (`loadComponent`, `loadChildren` with `import()`) link the route file to the loaded code; the legacy string form (`'./x.module#XModule'`) is resolved, or treated as uncertainty when it cannot be. `inject(X)`, constructor injection and `providers` need nothing new, since they import their tokens; a fixture proves it.                                                                                                                                                                                                               | 5   |
+| **Fixtures and a real-world check.** Three fixtures: a standalone Angular 21 app on the unit-test builder, an NgModule app on Karma, and an Nx workspace on Jest. An open-source Angular application replayed with `benchmark` and added to the published benchmarks. The trace and resolution oracles from the 1.0.2 audit are run on it.                                                                                                                                                                                                                                      | 5   |
+| **Angular guide.** `documentation/guides/angular.md`: what is understood, what is uncertainty, the supported builders, and how to read `explain` on a template change.                                                                                                                                                                                                                                                                                                                                                                                                          | 2   |
+
+**S28 gate:** on the three fixtures, a template, style, component, service or `angular.json` change selects the affected specs and no others. The full suite through SmartTest reports the same tests and failures as `ng test`. `benchmark` on the open-source application shows 0 missed failures, and the trace oracle finds no file a spec loads that selection cannot reach.
+
+### S29: Rollout without hand work (40 pts)
 
 Every item comes from a problem met on OpenPro. Each was fixed by hand there; here it becomes the default.
 
@@ -35,7 +55,7 @@ Every item comes from a problem met on OpenPro. Each was fixed by hand there; he
 | **The hook budget explains itself.** When an estimate passes `hook.budgetMs`, the warning names the trigger that widened the selection (a lockfile, a config file) and the files with no recorded duration.                                                                                                                                                                                                      | 3   |
 | **Rollout guide and case study.** `documentation/guides/rollout.md` from the OpenPro migration: parity check, benchmark, hooks per repository, what to leave to CI; the four repositories added to the published benchmarks.                                                                                                                                                                                     | 5   |
 
-**Gate:** on a fresh clone of each of OpenPro's four JavaScript repositories, `smarttest init --yes` alone produces a setup equivalent to the hand-tuned one (hook, scope, script placement), the full suite through SmartTest reports the same tests and failures as the runner, and `benchmark` shows 0 missed failures. No test file a runner collects is missing from the graph in any benchmark repository.
+**S29 gate:** on a fresh clone of each of OpenPro's four JavaScript repositories, `smarttest init --yes` alone produces a setup equivalent to the hand-tuned one (hook, scope, script placement), the full suite through SmartTest reports the same tests and failures as the runner, and `benchmark` shows 0 missed failures. No test file a runner collects is missing from the graph in any benchmark repository.
 
 ## 1.2.0: Precision (76 pts)
 
