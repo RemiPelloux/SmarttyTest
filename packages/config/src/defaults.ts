@@ -13,6 +13,10 @@ export const DEFAULT_INCLUDE = [`**/*.{${SOURCE_EXTENSIONS.join(",")}}`, "**/*.p
 export const DEFAULT_EXCLUDE = [
   "**/*.d.ts",
   "**/node_modules/**",
+  // Yarn's own tooling: its vendored release, plugins, cache and SDKs, and the PnP loader files.
+  "**/.yarn/**",
+  "**/.pnp.cjs",
+  "**/.pnp.loader.mjs",
   "**/.next/**",
   "**/.smarttest/**",
   "smarttest.config.*",

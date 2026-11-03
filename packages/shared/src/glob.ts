@@ -84,6 +84,7 @@ export const DEFAULT_IGNORED_DIRS = new Set([
   ".cache",
   ".vite",
   ".output",
+  ".yarn",
 ]);
 
 /**

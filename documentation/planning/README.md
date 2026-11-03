@@ -21,7 +21,7 @@
 | 0.8.0   | Speed                                         | S21–S23 | 92 of 105               | Released, gate not met                         |
 | 0.9.0   | Hooks, Studio and VS Code                     | S24–S26 | 116                     | Implemented; validation limits in delivery log |
 | 1.0.0   | Stable                                        | S27     | 52 plus carried items   | Released, gate met                             |
-| 1.1.0   | Angular, reliability, Python preview, rollout | S28–S31 | 152                     | Released, gate partly met (see delivery log)   |
+| 1.1.0   | Angular, reliability, Python preview, rollout | S28–S31 | 152                     | Released; S30 time target not met              |
 | 1.2.0   | Precision                                     | S32–S33 | 76                      | Planned                                        |
 | 1.3.0   | Browser and end-to-end                        | S34–S35 | 72                      | Planned                                        |
 | 1.4.0   | Ecosystem                                     | S36–S37 | 74                      | Planned                                        |

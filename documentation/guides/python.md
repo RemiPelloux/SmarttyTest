@@ -45,5 +45,5 @@ Declare the dependencies your code imports, or keep a `.venv` in the project, an
 ## Known limits
 
 - Names reached through dynamic attribute access (`getattr(module, name)`) are not seen; neither are monkeypatched functions.
-- `smarttest audit --traces` and `smarttest trace` record JavaScript execution only; `audit --mutate` covers Python.
-- A Python project beside a TypeScript one in the same repository is analysed by the same run, but this has been checked on the fixtures only.
+- `smarttest trace` (observed execution, which can narrow a selection) records JavaScript only; Python selection is always static. `audit --traces` and `audit --mutate` cover Python.
+- A Python project beside a JavaScript one (`service/pyproject.toml` next to a Vitest app) is analysed by the same run: each side's changes select only its own tests. Its imports resolve from its own folder, as `python -m pytest` run there would.

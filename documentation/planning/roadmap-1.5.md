@@ -65,12 +65,12 @@ The 1.0.2 audit found about 30 ways a change could skip a test it affects. It wa
 
 **S29 gate:** on the fixtures and the benchmark repositories (the five adopting projects and the Angular application), fault injection finds 0 missed tests, the reachability audit finds 0 unreachable files, and every fail-safe case ends in a full run.
 
-**S29 status (3 November 2026): delivered; gate met on the fixtures, Galdia and OpenProAuto, not yet run on the other adopting projects.**
+**S29 status (3 November 2026): delivered; gate met.**
 
 - Delivered: `smarttest audit --mutate`, `--traces` and `--resolution` with one report (`.smarttest/reports/audit.{json,md}`); a nightly workflow auditing every fixture that needs no browser (`pnpm audit:fixtures`); the fault-injection suite for fail-safe cases (`integration-tests/fail-safe.test.ts`); load-flaky failures told apart in `benchmark` and `audit`; collected test files always analysed (`src/tests/build/`) and reported when they are not; `it.each` rows numbered.
 - Found by the audits and fixed: Wasp load-time code in one operation broke tests importing the operations module for another (`--traces` on `edges-vitest`); a Python classmethod building an instance with `cls(...)` did not reach the constructor (`--mutate` on OpenProAuto, 2 missed tests); a unittest class-fixture error failed every file of the run (`--mutate`, 12 failures reported as load-flaky). Fail-safe: an unwritable state folder exited 70 and changes Git could not read stopped `run`; both now run, with a warning.
-- Measured: every fixture without a browser: 0 missed, 0 unreachable, 0 mismatched imports. Galdia: 5,003 imports agree with the compiler; 10 faults, 0 missed. OpenProAuto: 190 faults, 155 caught, 35 survived (no test exercises them), 0 missed.
-- Not done: the audits on LeadsIt, OpenPro's four JavaScript repositories and opal-frontend. `--traces` sees the code a test ran (V8 coverage), not the files it only read (templates, JSON), and does not cover Python.
+- Measured: every fixture: 0 missed, 0 unreachable, 0 mismatched imports. Resolution against the compiler: openpro-front 13,037 imports, opal-frontend 8,455, Galdia 5,003, LeadsIt 4,904 (1 unresolved, as uncertainty), openpro-admin 674, OpenProMonitor 461, openpro-mcp-service 55: no mismatch. Fault injection: OpenProAuto 190 faults, Galdia 10, and 5 each in openpro-front, openpro-admin, openpro-mcp-service, OpenProMonitor, LeadsIt and opal-frontend: 0 missed (most uncaught faults are in code no test runs).
+- `--traces` now records the files a test reads and, for Python, the modules it imports. On the fixtures it found a Python module not linked to its own package's `__init__.py` (fixed). The trace check was run on the fixtures, not on the adopting projects (it runs every test file alone).
 
 ### S30: Python preview (40 pts)
 
@@ -91,7 +91,7 @@ Brought forward from 1.5.0. The Plugin SDK's language contract was designed for 
 - Delivered: `@smarttest/language-python` (modules, classes, methods, module values and load-time code, absolute and relative imports, packages, `src/` layouts and `pythonpath`, `conftest.py` files and fixtures by name, `importlib` as uncertainty) and `@smarttest/adapter-python` (pytest through `--collect-only` and JUnit XML; unittest through a driver on its own loader); detection next to the JavaScript runners; `python.enabled` and `python.interpreter`; two fixtures, a CI job on Linux and Windows, the [Python guide](../guides/python.md).
 - OpenProAuto (295 unittest tests): the full suite through SmartTest gives unittest's 295 results; 29 replayed commits, 0 missed failures; 190 injected faults, 0 missed.
 - Not met: less test time than the full suite. The six commits that touched OpenProAuto were large and selected 9–13 of its 14 test files, and its whole suite runs in 0.6 s, so SmartTest's analysis made those runs about 0.1 s slower than running everything.
-- Not checked: a mixed repository (a Python service beside a TypeScript front end) analysed in one run; Python projects in a subfolder of a JavaScript repository work in the fixtures only.
+- Mixed repository (`mixed-ts-python`: a pytest service beside a Vitest library): one run, each side selects only its own tests; it found that a Python project in a subfolder did not resolve from its own folder (fixed).
 
 ### S31: Rollout without hand work (32 pts)
 
@@ -108,11 +108,12 @@ Every item comes from a problem met on OpenPro. Each was fixed by hand there; he
 
 **S31 gate:** on a fresh clone of each of OpenPro's four JavaScript repositories, `smarttest init --yes` alone produces a setup equivalent to the hand-tuned one (hook, scope, script placement), the full suite through SmartTest reports the same tests and failures as the runner, and `benchmark` shows 0 missed failures. No test file a runner collects is missing from the graph in any benchmark repository.
 
-**S31 status (3 November 2026): delivered; the gate on OpenPro's repositories was not run.**
+**S31 status (3 November 2026): delivered; gate met for the setup, the published benchmarks not updated.**
 
 - Delivered: pre-push without Git's refs on stdin compares with the upstream merge-base, and `hook install` gives the refs to a backgrounded test step; hooks copied into `.git/hooks` by a script are edited at their source, and `init` replaces a test step in place; `--runner` on `run`, `impact`, `validate-selection` and `benchmark`; lockfile and `package.json` changes select by package; the hook budget warning names what widened the selection; the [rollout guide](../guides/rollout.md).
 - Lockfiles on opal-frontend's 12 dependency updates: a `@types/lodash` bump selected 0 of 351 specs instead of all; the other 11 still run everything, each for a stated reason (the Angular builder and the test runner, packages a setup file or a script loads).
-- Not done: `init --yes` on fresh clones of OpenPro's four JavaScript repositories compared with their hand-tuned setups, and the four repositories in the published benchmarks.
+- `init --yes` on the commit before SmartTest in each of OpenPro's four repositories writes the hand-tuned config verbatim and the hook in the same file and stage. Two fixes came from it: a related-tests step kept in pre-push is replaced there (openpro-front), and a hooks folder held in a variable is followed (openpro-admin's `setup-hooks`). The one remaining difference: in openpro-front's parallel pre-push, SmartTest runs before the other steps, not beside them.
+- Not done: the four repositories in the published benchmarks.
 
 ## 1.2.0: Precision (76 pts)
 
