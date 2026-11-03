@@ -2,17 +2,19 @@
  * `smarttest audit` (S29): fault injection, reachability and resolution measure selection. Each
  * check must report a miss when there is one, not only pass on a clean project.
  */
-import { readFile, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
 import { audit, SmartTest } from "@smarttest/core";
 import { describe, expect, it } from "vitest";
-import { loadTraces, saveTraces } from "../packages/core/src/traces.js";
 import { git, materialize } from "./helpers.js";
 
 async function project(config: string, files: Record<string, string> = {}): Promise<string> {
   const dir = await materialize("ts-lib-vitest", { git: true });
   await writeFile(join(dir, "smarttest.config.mjs"), config);
-  for (const [f, text] of Object.entries(files)) await writeFile(join(dir, f), text);
+  for (const [f, text] of Object.entries(files)) {
+    await mkdir(dirname(join(dir, f)), { recursive: true });
+    await writeFile(join(dir, f), text);
+  }
   git(dir, "add", "-A");
   git(dir, "commit", "-q", "-m", "audit setup");
   return dir;
@@ -39,21 +41,17 @@ describe("smarttest audit", () => {
     expect(git(dir, "status", "--porcelain")).toBe("");
   }, 300_000);
 
-  it("reachability reports a file a test loaded that cannot select it", async () => {
-    const dir = await project("export default { adaptive: false };\n");
-    const st = await SmartTest.open({ root: dir });
-    await st.collectTraces();
-    // As if test/numbers.test.ts had loaded src/core/Cache.ts at run time (a link the graph lacks).
-    const store = await loadTraces(st.storeDir);
-    const numbers = store?.tests["test/numbers.test.ts"];
-    expect(numbers).toBeDefined();
-    if (store && numbers) {
-      numbers.fileHashes["src/core/Cache.ts"] = "planted";
-      await saveTraces(st.storeDir, store);
-    }
-    const r = await audit(st, { traces: {} });
+  it("reachability reports a file a test reads that cannot select it", async () => {
+    // Read through a path relative to the working directory: nothing in the code ties it to the
+    // test, so a change to the data would not select it.
+    const dir = await project("export default { adaptive: false };\n", {
+      "data/rates.json": '{ "vat": 20 }\n',
+      "test/rates.test.ts":
+        'import { readFileSync } from "node:fs";\nimport { expect, it } from "vitest";\n\nit("reads the rates", () => {\n  expect(JSON.parse(readFileSync("data/rates.json", "utf8")).vat).toBe(20);\n});\n',
+    });
+    const r = await audit(await SmartTest.open({ root: dir }), { traces: {} });
     expect(r.traces?.unreachable).toEqual([
-      { test: "test/numbers.test.ts", file: "src/core/Cache.ts" },
+      { test: "test/rates.test.ts", file: "data/rates.json" },
     ]);
   }, 300_000);
 

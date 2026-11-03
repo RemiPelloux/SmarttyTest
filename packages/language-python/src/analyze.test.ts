@@ -68,13 +68,16 @@ describe("analyzePython", () => {
     ).toEqual([
       "named __future__:annotations annotations>annotations",
       "namespace os.path *>osp",
-      "side-effect os ",
+      "named os __load__>__load__",
       "namespace json *>json",
       "namespace re *>re",
       "named .base:Source Source>Source",
       "named .base:build build>make",
       "named ..util:first first>first",
       "named ..util:second second>second",
+      // Its own packages: pkg/__init__.py and pkg/feeds/__init__.py run first.
+      "named @package:pkg __load__>__load__",
+      "named @package:pkg/feeds __load__>__load__",
     ]);
   });
   it("finds functions, classes, methods and module values, with what runs at load", () => {

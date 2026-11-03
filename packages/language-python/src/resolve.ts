@@ -12,7 +12,7 @@ import { join } from "node:path";
 import type { ModuleResolver, ResolveResult } from "@smarttest/source-parser";
 import { PYTHON_STDLIB } from "./stdlib.js";
 
-export const PYTHON_RESOLVER_VERSION = "py-r2";
+export const PYTHON_RESOLVER_VERSION = "py-r3";
 
 /** Distribution names whose import name differs (`pip install pyyaml` → `import yaml`). */
 const IMPORT_NAMES: Record<string, string[]> = {
@@ -240,6 +240,11 @@ export class PythonResolver implements ModuleResolver {
       }
       // A fixture of pytest itself or of a plugin (tmp_path, monkeypatch, client…).
       return { external: true };
+    }
+    if (specifier.startsWith("@package:")) {
+      const file = `${specifier.slice("@package:".length)}/__init__.py`;
+      // A folder without __init__.py is a namespace package: nothing runs.
+      return this.isFile(file) ? { resolved: file } : { external: true };
     }
     if (specifier.startsWith("@conftest:")) {
       const dir = specifier.slice("@conftest:".length);

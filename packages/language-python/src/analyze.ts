@@ -16,7 +16,7 @@
 import { sha256 } from "@smarttest/shared";
 import type { FileAnalysis, ImportRecord, SymbolRecord } from "@smarttest/source-parser";
 
-export const PYTHON_ANALYZER_VERSION = "py-2";
+export const PYTHON_ANALYZER_VERSION = "py-3";
 
 type Tok = { t: "name" | "op" | "num" | "str"; v: string; line: number };
 
@@ -257,8 +257,19 @@ function namesOf(toks: readonly Tok[]): {
 
 const CONSTRUCTORS = new Set(["__init__", "__new__", "__post_init__", "__init_subclass__"]);
 
-/** The binding a test's conftest.py import carries: the load, not a unit. */
-export const CONFTEST_LOAD = "__conftest_load__";
+/**
+ * The binding of an import that only loads a module (a package `__init__.py` run before its
+ * modules, a test's conftest.py): its load-time code reaches the importer, its functions do not.
+ */
+export const CONFTEST_LOAD = "__load__";
+
+const loadOnly = (specifier: string, line: number): ImportRecord => ({
+  specifier,
+  kind: "named",
+  bindings: [{ imported: CONFTEST_LOAD, local: CONFTEST_LOAD }],
+  typeOnly: false,
+  line,
+});
 
 /**
  * Fixture names a module asks for: parameters of its functions and methods without a default
@@ -390,13 +401,7 @@ export function analyzePython(path: string, content: string): FileAnalysis {
             // Importing a.b.c runs a/__init__.py and a/b/__init__.py first.
             const parts = mod.split(".");
             for (let p = 1; p < parts.length; p++)
-              imports.push({
-                specifier: parts.slice(0, p).join("."),
-                kind: "side-effect",
-                bindings: [],
-                typeOnly: false,
-                line: t.line,
-              });
+              imports.push(loadOnly(parts.slice(0, p).join("."), t.line));
           }
           if ((tk[j] as Tok | undefined)?.v === ",") j++;
           else break;
@@ -446,13 +451,7 @@ export function analyzePython(path: string, content: string): FileAnalysis {
         if (!mod.startsWith(".")) {
           const parts = mod.split(".");
           for (let p = 1; p < parts.length; p++)
-            imports.push({
-              specifier: parts.slice(0, p).join("."),
-              kind: "side-effect",
-              bindings: [],
-              typeOnly: false,
-              line: t.line,
-            });
+            imports.push(loadOnly(parts.slice(0, p).join("."), t.line));
         }
         return;
       }
@@ -481,6 +480,14 @@ export function analyzePython(path: string, content: string): FileAnalysis {
     }
   };
   for (const l of lines) readImports(l);
+  // Importing a module of a package runs the package's `__init__.py` files first, from the top
+  // (`tests.test_offer` runs tests/__init__.py). `@package:<dir>` resolves to <dir>/__init__.py.
+  {
+    const dirs = path.split("/").slice(0, -1);
+    const own = /(?:^|\/)__init__\.py$/.test(path) ? dirs.length : dirs.length + 1;
+    for (let d = 1; d < own; d++)
+      imports.push(loadOnly(`@package:${dirs.slice(0, d).join("/")}`, 1));
+  }
 
   // pytest: a test loads every conftest.py in its directory and above (their module code,
   // autouse fixtures and hooks run for it: a dummy binding links the load without naming a unit),

@@ -22,8 +22,8 @@ import {
 import { SmartTestError } from "@smarttest/shared";
 import { type ExecutionSummary, executeGroups } from "@smarttest/test-executor";
 import { planExecution } from "@smarttest/test-selector";
+import { observeLoads } from "./observe.js";
 import type { SmartTest } from "./smarttest.js";
-import { loadTraces } from "./traces.js";
 
 export interface AuditOptions {
   mutate?: {
@@ -254,19 +254,15 @@ async function traces(
 ): Promise<NonNullable<AuditReport["traces"]>> {
   const t0 = performance.now();
   const notes: string[] = [];
-  let store = await loadTraces(st.storeDir);
-  if (!store || !Object.keys(store.tests).length) {
-    progress("no traces stored: tracing the tests (one run per test file)");
-    const { index } = await st.loadIndex();
-    const { tests } = await st.discoverTests(index);
-    const files = options.sample ? tests.slice(0, options.sample) : undefined;
-    store = (await st.collectTraces({ ...(files ? { files } : {}), onProgress: progress })).store;
-  }
-  const loaded = new Map<string, string[]>();
-  for (const [test, trace] of Object.entries(store.tests))
-    loaded.set(
-      test,
-      Object.keys(trace.fileHashes).filter((f) => f !== test),
+  progress("tracing each test file alone (code it ran, files it read, Python modules it imported)");
+  const observed = await observeLoads(st, {
+    ...(options.sample ? { sample: options.sample } : {}),
+    onProgress: progress,
+  });
+  const loaded = observed.loaded;
+  if (observed.failed.length)
+    notes.push(
+      `${observed.failed.length} test file(s) recorded nothing (failing, or not runnable alone): ${observed.failed.slice(0, 3).join(", ")}`,
     );
   const files = [...new Set([...loaded.values()].flat())].sort();
   const { reaches, uncertain } = await st.reachability(files);
@@ -276,6 +272,9 @@ async function traces(
   for (const [test, list] of loaded) {
     if (uncertain.has(test)) continue;
     for (const file of list) {
+      // Environment files are tracked by key (a key's readers, or everything for a key no code
+      // reads), not as a whole: a whole-file change is not a change SmartTest can be asked about.
+      if (/(?:^|\/)\.env(?:\.[^/]*)?$/.test(file)) continue;
       pairs++;
       if (reaches.get(file)?.has(test)) continue;
       // The graph alone does not link them: ask the full impact analysis.
@@ -287,9 +286,6 @@ async function traces(
       if (!selected.has(test)) unreachable.push({ test, file });
     }
   }
-  notes.push(
-    "Traces record the code a test ran (V8 coverage); files it read without running them (templates, JSON, fixtures) are not traced yet.",
-  );
   return {
     tests: loaded.size,
     files: files.length,
