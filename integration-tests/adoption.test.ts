@@ -58,12 +58,11 @@ describe("hook install / uninstall", () => {
     expect(plan.remaining.map((r) => r.line)).toEqual([4]); // compound shell step needs review
     await apply(dir, plan.file, plan.plan.after);
     const installed = await readFile(join(dir, plan.file), "utf8");
-    expect(installed.split("\n").slice(0, 3)).toEqual([
-      "#!/bin/sh",
-      '. "$(dirname -- "$0")/_/husky.sh"',
-      "# >>> smarttest >>>",
-    ]);
-    expect(installed).toContain(": # smarttest-replaced: npx vitest run");
+    // In place of the step it replaces: the steps before it (lint, the backend's Jest) run first.
+    const lines = installed.split("\n");
+    expect(lines.slice(0, 5)).toEqual(HOOK.split("\n").slice(0, 5));
+    expect(lines[5]).toBe("# >>> smarttest >>>");
+    expect(installed).toContain("# <<< smarttest <<<\n: # smarttest-replaced: npx vitest run");
     execFileSync("sh", ["-n", join(dir, plan.file)]); // still valid shell
     expect((await planHookInstall(dir, { testCommands: commands })).installed).toBe(true);
     const [undo] = await planHookUninstall(dir);

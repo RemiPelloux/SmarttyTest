@@ -29,6 +29,12 @@ Angular support, and fixes to the commit and push hooks reported by an adopting 
 
 - Results with the same id in one run (`it.each` rows whose title has no placeholder, two `it("works")` in a file) used to be merged into one result, the worst of them. Each now keeps its own id: the second is `<file>::<name> (2)`, the third `(3)`. Reports, the result cache and flaky history count every row (on opal-frontend, 15 rows sharing a title had made SmartTest report 4,039 tests where `ng test` reported 4,054), a failing row is still never hidden, and a retried row keeps its number, so only that row is reported flaky.
 
+### Fixed: faults end in a full run, never in a smaller selection or a pass
+
+- `run` and the hooks no longer stop before any test runs when SmartTest itself hits a fault: changes that cannot be read (Git cannot hash a file it may not read), a plugin whose edge provider fails, or an unexpected error in the analysis select every test, with the reason as a warning. An explicit `--base <ref>` that cannot be read is still an error (exit 4): it is the user's to fix. `impact` still reports the error.
+- A state folder SmartTest cannot write (a file where `.smarttest/state` should be, no permission, a read-only disk) no longer stops the run with exit 70: the run uses a temporary state folder and says so.
+- A new fault-injection suite (`integration-tests/fail-safe.test.ts`) proves each case on a project with a broken test: every state file garbled, half-written or emptied, state signatures deleted, an unwritable state folder, unreadable changes, a failing plugin and a runner killed in the middle of a file. Each run selects at least what a clean run selects and reports the failure.
+
 ### Fixed: commit and push hooks
 
 - A hook installed by SmartTest stops the commit or push when SmartTest is not installed (`smarttest is not installed: install the project's dependencies first…`), instead of printing a warning and letting the change through unchecked. `--no-verify` still skips it. Run `smarttest hook install` again to update an installed hook.

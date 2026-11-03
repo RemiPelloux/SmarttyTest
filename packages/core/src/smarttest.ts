@@ -276,6 +276,20 @@ export function storeTrackedError(tracked: { dir: string; files: string[] }): Sm
 }
 
 /** A temporary state directory, removed when the process exits. */
+/** Why SmartTest cannot write its state folder, or undefined when it can. */
+async function storeUnusable(store: string): Promise<string | undefined> {
+  const { mkdir, writeFile, rm } = await import("node:fs/promises");
+  const probe = join(store, "state", `.probe-${process.pid}`);
+  try {
+    await mkdir(join(store, "state"), { recursive: true });
+    await writeFile(probe, "");
+    await rm(probe, { force: true });
+    return undefined;
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code ?? firstLine(error);
+  }
+}
+
 function temporaryStore(): string {
   const dir = mkdtempSync(join(tmpdir(), "smarttest-store-"));
   process.once("exit", () => rmSync(dir, { recursive: true, force: true }));
@@ -285,8 +299,11 @@ function temporaryStore(): string {
 export interface AnalyzeOptions {
   source?: ChangeSource;
   mode?: SafetyMode;
-  /** Select every test without building the graph (adaptive policy). */
-  everything?: { reason: string };
+  /**
+   * Select every test without building the graph (adaptive policy, `--all`, fail-safe). `warn`:
+   * the reason is also a warning (a fault forced it).
+   */
+  everything?: { reason: string; warn?: boolean };
   /** A ready-made change set (watch mode) instead of `source`. */
   input?: ChangeAnalysisInput;
   /**
@@ -300,7 +317,21 @@ export interface AnalyzeOptions {
    * skipped or passed; a warning says how many.
    */
   runners?: readonly string[];
+  /**
+   * Fail-safe (`run`, hooks): changes that cannot be read, or an unexpected error in the
+   * analysis, select every test with a warning instead of stopping before any test runs. Usage
+   * and configuration errors still stop: they need the user.
+   */
+  failSafe?: boolean;
 }
+
+/** Errors the fail-safe turns into a full run: not a mistake the user must fix first. */
+const recoverable = (error: unknown) =>
+  !(error instanceof SmartTestError) ||
+  (error.category !== "usage" && error.category !== "configuration");
+
+const firstLine = (error: unknown) =>
+  (error instanceof Error ? error.message : String(error)).split("\n")[0]?.slice(0, 300) ?? "";
 
 export interface Analysis {
   /** Project root the analysis ran in (a temporary checkout for isolated hook runs). */
@@ -594,6 +625,8 @@ export class SmartTest {
   readonly storeDir: string;
   /** The project's store is committed to Git (opened with `tolerateTrackedStore`). */
   trackedStore: { dir: string; files: string[] } | undefined;
+  /** Set when the project's state folder cannot be written and a temporary one is used. */
+  storeWarning: string | undefined;
 
   private constructor(
     readonly root: string,
@@ -622,16 +655,22 @@ export class SmartTest {
     const projectStore = rebase(options.storeDir) ?? join(root, loaded.config.storeDir);
     const tracked = await trackedStoreFiles(root, projectStore);
     if (tracked && !options.tolerateTrackedStore) throw storeTrackedError(tracked);
+    // A store SmartTest cannot write (a file where its folder should be, no permission, a full
+    // or read-only disk) must not stop the tests: this run uses a temporary store and says so.
+    const unusable =
+      options.ephemeralStore || tracked ? undefined : await storeUnusable(projectStore);
     // A dry run writes nothing to the project, and state committed to the repository is never
     // read: both work in a temporary store.
     const st = new SmartTest(
       root,
       loaded,
       options.logger ?? silentLogger,
-      options.ephemeralStore || tracked ? temporaryStore() : projectStore,
+      options.ephemeralStore || tracked || unusable ? temporaryStore() : projectStore,
       options.mirror,
     );
     st.trackedStore = tracked;
+    if (unusable)
+      st.storeWarning = `SmartTest's state folder ${relative(root, projectStore) || "."} cannot be written (${unusable}): this run uses a temporary one, so nothing is cached or remembered`;
     return st;
   }
 
@@ -824,8 +863,13 @@ export class SmartTest {
     options: {
       /** A `gitProjectFiles` listing the caller took moments ago (`doctor`): not listed again. */
       gitFiles?: readonly string[];
+      /**
+       * A failing plugin is returned in `pluginFailure` instead of thrown (the fail-safe runs every
+       * test, which needs no plugin edges).
+       */
+      tolerantPlugins?: boolean;
     } = {},
-  ): Promise<{ index: SymbolIndex; stats: UpdateStats }> {
+  ): Promise<{ index: SymbolIndex; stats: UpdateStats; pluginFailure?: unknown }> {
     // One project listing serves detection and the source file set; Git lists while the index
     // is read.
     const listing = options.gitFiles
@@ -890,7 +934,14 @@ export class SmartTest {
       })
       .finally(() => pool?.close());
     await index.save();
-    await this.runPlugins(index);
+    let pluginFailure: unknown;
+    try {
+      await this.runPlugins(index);
+    } catch (error) {
+      if (!options.tolerantPlugins) throw error;
+      this.provided = undefined;
+      pluginFailure = error;
+    }
     if (before) {
       // Changes other files can see (imports, exports, declarations) need a full graph rebuild.
       const changed: string[] = [];
@@ -905,7 +956,7 @@ export class SmartTest {
       this.lastIndexChange = { changed, structural };
       this.indexCache = index;
     }
-    return { index, stats };
+    return { index, stats, ...(pluginFailure !== undefined ? { pluginFailure } : {}) };
   }
 
   private pluginsLoaded: Promise<LoadedPlugin[]> | undefined;
@@ -1276,6 +1327,24 @@ export class SmartTest {
   // ── Analysis & impact ───────────────────────────────────────────────────────────────────
 
   async analyze(options: AnalyzeOptions = {}): Promise<Analysis> {
+    try {
+      const a = await this.analyzeOnce(options);
+      if (this.storeWarning) a.decision.warnings.unshift(this.storeWarning);
+      return a;
+    } catch (error) {
+      if (!options.failSafe || options.everything || !recoverable(error)) throw error;
+      this.logger.warn(`analysis failed, running every test: ${firstLine(error)}`);
+      return this.analyzeOnce({
+        ...options,
+        everything: {
+          reason: `The analysis failed (${firstLine(error)}): every test runs`,
+          warn: true,
+        },
+      });
+    }
+  }
+
+  private async analyzeOnce(options: AnalyzeOptions): Promise<Analysis> {
     const timings: Record<string, number> = {};
     // Change detection (VCS processes) and the index update are independent: run them together
     // (both settle before an error is reported, so nothing keeps writing after it).
@@ -1283,18 +1352,47 @@ export class SmartTest {
       options.input
         ? this.withoutOwnState(options.input)
         : timed(timings, "change detection", () => this.changeInput(options.source)),
-      timed(timings, "index update", () => this.loadIndex()),
+      timed(timings, "index update", () =>
+        this.loadIndex(options.failSafe ? { tolerantPlugins: true } : {}),
+      ),
     ]);
-    if (changed.status === "rejected") throw changed.reason;
     if (updated.status === "rejected") throw updated.reason;
-    const detected = changed.value;
+    let unreadable: string | undefined;
+    if (changed.status === "rejected") {
+      // An explicit `--base <ref>` that cannot be read is the user's to fix (a typo, a ref not
+      // fetched): it stays an error. Hooks and the default source run everything instead.
+      if (!options.failSafe || options.source?.kind === "base" || !recoverable(changed.reason))
+        throw changed.reason;
+      unreadable = `The changes could not be read (${firstLine(changed.reason)}): every test runs`;
+    }
+    const detected: ChangeAnalysisInput =
+      changed.status === "fulfilled"
+        ? changed.value
+        : {
+            changeSet: {
+              provider: "unknown",
+              changes: [],
+              completeness: "unknown",
+              warnings: [],
+            },
+            readBefore: async () => undefined,
+            description: "changes unavailable",
+          };
+    if (unreadable && !options.everything)
+      return this.analyze({
+        ...options,
+        input: detected,
+        everything: { reason: unreadable, warn: true },
+      });
     const only = options.only
       ? await resolveScopePaths(this.root, options.only, detected.changeSet.changes)
       : undefined;
     const scoped = only ? restrictChanges(detected, only.paths) : undefined;
     const input = scoped?.input ?? detected;
     const scope = scoped?.scope;
-    const { index, stats } = updated.value;
+    const { index, stats, pluginFailure } = updated.value;
+    // Without its plugins' edges the graph is incomplete: only a full run is safe.
+    if (pluginFailure !== undefined && !options.everything) throw pluginFailure;
     if (options.everything) {
       const { tests, unassigned, roots, assignment } = restrictRunners(
         await this.discoverTests(index),
@@ -1310,9 +1408,12 @@ export class SmartTest {
         safetyMode: options.mode ?? this.config.mode,
         requestedMode: options.mode ?? this.config.mode,
         reasons: [reason],
-        warnings: scope
-          ? [...(only?.notes ?? []), ...scopeWarnings(scope, input.changeSet.completeness)]
-          : [],
+        warnings: [
+          ...(options.everything.warn ? [options.everything.reason] : []),
+          ...(scope
+            ? [...(only?.notes ?? []), ...scopeWarnings(scope, input.changeSet.completeness)]
+            : []),
+        ],
         fallbackApplied: true,
         details: { triggers: [], seeds: [], trivialSkipped: [], ignored: [], uncertainty: [] },
       } satisfies ImpactResult;
@@ -2209,6 +2310,7 @@ export class SmartTest {
       options.analysis ??
       (await this.analyze({
         ...options,
+        failSafe: true,
         ...(adaptive
           ? {
               everything: {
