@@ -3232,7 +3232,15 @@ export class SmartTest {
     if (profile.vcs.provider === "git") {
       // A hook SmartTest must not edit (shared, owned by a dependency, not a shell script) leaves
       // the rest of the setup intact: init reports it and goes on without the hook.
+      // The hook where the repository already runs its tests: a related-tests step kept in
+      // pre-push (commits stay fast) is replaced there, not doubled by a new pre-commit step.
+      const inHook = (stage: string) =>
+        profile.testCommands.some(
+          (c) => c.line > 0 && c.source.includes(stage) && !c.source.endsWith(".yml"),
+        );
+      const stage = inHook("pre-push") && !inHook("pre-commit") ? "pre-push" : "pre-commit";
       const hook = await planHookInstall(this.root, {
+        stage,
         replace: true,
         testCommands: profile.testCommands,
       }).catch((error: unknown) => {
@@ -3253,7 +3261,7 @@ export class SmartTest {
         plan.files.push(hook.plan);
         if (hook.replaced.length)
           plan.warnings.push(
-            `${hook.file}: ${hook.replaced.length} test step(s) would be commented out and replaced by \`smarttest run --staged\` (${hook.replaced.map((r) => `line ${r.line}`).join(", ")}); \`smarttest hook uninstall\` restores them`,
+            `${hook.file}: ${hook.replaced.length} test step(s) would be commented out and replaced by \`smarttest run ${stage === "pre-push" ? "--push" : "--staged"}\` (${hook.replaced.map((r) => `line ${r.line}`).join(", ")}); \`smarttest hook uninstall\` restores them`,
           );
       }
     }

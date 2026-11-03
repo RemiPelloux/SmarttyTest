@@ -32,6 +32,11 @@ export interface AuditOptions {
     seed?: number;
     /** Stop starting new mutants after this many milliseconds. */
     budgetMs?: number;
+    /**
+     * Only these runners' tests (`--runner`); default: the hook's (`hook.runners`), so a suite
+     * against a live environment is never started. `["all"]`: every runner.
+     */
+    runners?: readonly string[];
   };
   /** Trace the tests first when no traces are stored (`sample`: at most that many files). */
   traces?: { sample?: number };
@@ -138,7 +143,10 @@ async function mutate(
     const { tmpdir } = await import("node:os");
     const store = await mkdtemp(join(tmpdir(), "smarttest-audit-store-"));
     const engine = await Engine.open({ root: checkout.root, storeDir: store });
-    const clean = await engine.analyze({ source: { kind: "uncommitted" } });
+    const runners =
+      options.runners?.[0] === "all" ? undefined : (options.runners ?? engine.config.hook.runners);
+    const scope = runners?.length ? { runners } : {};
+    const clean = await engine.analyze({ source: { kind: "uncommitted" }, ...scope });
     const create = (g: Parameters<SmartTest["createAdapterFor"]>[0]) => engine.createAdapterFor(g);
     const plan = planExecution(
       clean.testFiles,
@@ -186,7 +194,7 @@ async function mutate(
       try {
         let a: Awaited<ReturnType<SmartTest["analyze"]>>;
         try {
-          a = await engine.analyze({ source: { kind: "uncommitted" } });
+          a = await engine.analyze({ source: { kind: "uncommitted" }, ...scope });
         } catch (error) {
           notes.push(
             `${p.file}#${p.name}: the analysis failed with the fault in place (${(error as Error).message.split("\n")[0]}); not counted`,

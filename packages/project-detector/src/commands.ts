@@ -205,8 +205,14 @@ export async function detectCopiedHooks(root: string): Promise<CopiedHook[]> {
       () => true,
       () => false,
     ));
-  for (const { by, text } of texts)
-    for (const raw of text.replace(HOOKS_DIR, ".git/hooks").split(/&&|\|\||;|\n/)) {
+  for (const { by, text } of texts) {
+    // `H=$(git rev-parse --git-path hooks) && cp … "$H/"`: a variable holding the hooks folder.
+    let expanded = text.replace(HOOKS_DIR, ".git/hooks");
+    for (const m of [...expanded.matchAll(/\b([A-Za-z_]\w*)=["']?\.git\/hooks["']?/g)]) {
+      const v = m[1] as string;
+      expanded = expanded.replace(new RegExp(`\\$\\{${v}\\}|\\$${v}\\b`, "g"), ".git/hooks");
+    }
+    for (const raw of expanded.split(/&&|\|\||;|\n/)) {
       const w = words(raw.trim());
       if (w[0] !== "cp" && w[0] !== "install") continue;
       const args: string[] = [];
@@ -232,5 +238,6 @@ export async function detectCopiedHooks(root: string): Promise<CopiedHook[]> {
             out.push({ stage, source, by, command: raw.trim() });
         }
     }
+  }
   return out;
 }

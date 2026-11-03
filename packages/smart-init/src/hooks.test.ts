@@ -385,6 +385,21 @@ describe("init respects the hook the repository has", () => {
     expect(status.notes.join("\n")).toContain(".git/hooks/pre-commit does not run SmartTest yet");
   });
 
+  it("follows a variable holding the hooks folder (openpro-admin's setup-hooks)", async () => {
+    const root = await repo({
+      "package.json": JSON.stringify({
+        scripts: {
+          "setup-hooks":
+            'H=$(git rev-parse --git-path hooks) && cp scripts/pre-commit scripts/pre-push "$H/" && chmod +x "$H/pre-commit"',
+        },
+      }),
+      "scripts/pre-commit": "#!/bin/sh\nnpx eslint .\n",
+      "scripts/pre-push": "#!/bin/sh\nexit 0\n",
+    });
+    expect((await planHookInstall(root, { stage: "pre-commit" })).file).toBe("scripts/pre-commit");
+    expect((await planHookInstall(root, { stage: "pre-push" })).file).toBe("scripts/pre-push");
+  });
+
   it("finds copies made by a shell script or with install -m", async () => {
     const root = await repo({
       "package.json": JSON.stringify({ scripts: { "setup-hooks": "sh scripts/install-hooks.sh" } }),

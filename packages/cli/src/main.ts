@@ -1702,6 +1702,7 @@ async function cmdAudit(ctx: Ctx): Promise<number> {
             ...(mutants !== undefined ? { mutants } : {}),
             ...(seed !== undefined ? { seed } : {}),
             ...(budgetMs !== undefined ? { budgetMs } : {}),
+            ...(flags.runner?.length ? { runners: flags.runner } : {}),
           },
         }
       : {}),

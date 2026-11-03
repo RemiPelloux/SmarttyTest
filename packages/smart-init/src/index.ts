@@ -366,9 +366,11 @@ export async function buildPlan(
   );
   if (hookCommands.length) {
     const hookFile = hookCommands[0]?.source ?? "";
+    // Tests kept in pre-push stay there (see SmartTest.initPlan): the push variant runs.
+    const push = hookCommands.every((c) => c.source.includes("pre-push"));
     recs.push({
       key: "Git hook",
-      value: "smarttest run --staged",
+      value: push ? "smarttest run --push" : "smarttest run --staged",
       reason: `${hookFile} runs ${hookCommands.length} full suite(s) (${[...new Set(hookCommands.map((c) => c.adapter))].join(", ")}); one affected-tests run can replace them`,
       evidence: hookCommands.map((c) => `${c.source}:${c.line}`),
     });
