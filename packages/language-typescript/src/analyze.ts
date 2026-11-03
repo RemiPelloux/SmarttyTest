@@ -14,7 +14,17 @@ import { ProcessScripts } from "./processes.js";
 import { catalogKeys, collectResources, MODEL_MODULES } from "./resources.js";
 import { StaticPathEvaluator } from "./static-path.js";
 
-export const ANALYZER_VERSION = "ts-14";
+export const ANALYZER_VERSION = "ts-16";
+
+/** fs and glob functions that list a directory. */
+const DIR_LISTING = new Set([
+  "readdir",
+  "readdirSync",
+  "opendir",
+  "opendirSync",
+  "glob",
+  "globSync",
+]);
 
 function scriptKind(path: string): ts.ScriptKind {
   if (path.endsWith(".tsx")) return ts.ScriptKind.TSX;
@@ -535,6 +545,7 @@ export function analyzeSource(path: string, content: string): FileAnalysis {
   const dynamicUnresolved: string[] = [];
   const dynamicHints: { pattern: string; line: number; expr: string }[] = [];
   const assetLines: { pattern: string; line: number }[] = [];
+  let listsDirectories = false;
   const pathEval = new StaticPathEvaluator(sf, path);
   const modScope = moduleScope(sf);
   const topUses = new Set<string>();
@@ -1082,6 +1093,14 @@ export function analyzeSource(path: string, content: string): FileAnalysis {
         const pattern = pathEval.evaluateAnchored(arg);
         if (pattern) assetLines.push({ pattern, line: lineOf(n) });
       }
+      // Listing a directory reads what is in it: everything below it, recursively (a test that
+      // scans its sources for translation keys).
+      if (!kind && DIR_LISTING.has(calleeName)) {
+        listsDirectories = true;
+        const dirPattern = arg ? pathEval.evaluateAnchored(arg, true) : undefined;
+        if (dirPattern)
+          assetLines.push({ pattern: `${dirPattern.replace(/\/$/, "")}/**`, line: lineOf(n) });
+      }
       if (kind) {
         if (literal !== undefined) {
           const key = `${kind}:${literal}:${lineOf(n)}`;
@@ -1185,6 +1204,17 @@ export function analyzeSource(path: string, content: string): FileAnalysis {
     }
     addModels([...topRefs], topResources);
   }
+  // A directory walk with a computed path (`walk(dir)` → `readdirSync(dir)`): the directories the
+  // file names from its own location at module level are the ones it scans.
+  if (listsDirectories)
+    for (const st of sf.statements)
+      if (ts.isVariableStatement(st))
+        for (const d of st.declarationList.declarations) {
+          if (!d.initializer) continue;
+          const dir = pathEval.evaluateAnchored(d.initializer, true);
+          if (dir && !/\.[a-z0-9]+$/i.test(dir))
+            assetLines.push({ pattern: `${dir.replace(/\/$/, "")}/**`, line: lineOf(d) });
+        }
   // Asset reads are attributed to the innermost declaration around them.
   const assetReads = assetLines.map((h) => {
     let best: SymbolRecord | undefined;

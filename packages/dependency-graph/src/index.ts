@@ -702,9 +702,19 @@ export class DependencyGraph {
     const test = this.isTest(file);
     const dir = file.includes("/") ? file.slice(0, file.lastIndexOf("/") + 1) : "";
     for (const r of a.assetReads ?? []) {
+      const from = key(file, test ? WHOLE : r.unit);
+      // `process.cwd()/…`: the runner's directory, one of the directories above the file.
+      if (r.pattern.startsWith("@cwd/")) {
+        const rest = r.pattern.slice("@cwd/".length);
+        const parts = dir.split("/").filter(Boolean);
+        for (let i = 0; i <= parts.length; i++) {
+          const base = parts.slice(0, i).join("/");
+          this.assetReads.push({ pattern: posixNormalize(base ? `${base}/${rest}` : rest), from });
+        }
+        continue;
+      }
       const pattern = posixNormalize(`${dir}${r.pattern}`);
-      if (!pattern.startsWith(".."))
-        this.assetReads.push({ pattern, from: key(file, test ? WHOLE : r.unit) });
+      if (!pattern.startsWith("..")) this.assetReads.push({ pattern, from });
     }
     if (test) {
       const actual = new Set(

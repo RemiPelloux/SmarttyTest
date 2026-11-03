@@ -42,6 +42,10 @@ Angular; `smarttest audit`, which measures missed tests instead of assuming none
 
 ### Fixed: a test no change could select
 
+- A module a trigger file imports (a local PostCSS plugin `postcss.config.cjs` requires, a preset a Babel config imports) selected nothing when it changed; it now applies that trigger, like a change to the configuration itself. Found by `audit --traces` on openpro-front (`scripts/postcss/drop-broken-color-mix-fallback.cjs`).
+- A test that walks a directory (`readdirSync` in a recursive function, from a folder built from `import.meta.url`) depends on every file below that folder, and a source file it reads as text is selected by any change to that file, comments included. Found on openpro-front (`adsI18nKeys.test.ts` scans `src/ads/` for translation keys).
+- A file read through `process.cwd()` (`readFileSync(resolve(process.cwd(), "src/ads/index.html"))`) selects the tests reading it; the runner's directory is taken to be one of the directories above the reading file. Found on openpro-front.
+
 - Wasp: code an operation runs when it loads (a top-level statement in `src/ops/getTotal.ts`) breaks every test importing the operations module, since that module loads every operation; only the code calling that operation was selected. Found by `smarttest audit --traces` on the `edges-vitest` fixture. A change inside the operation's function still selects only its callers.
 
 - A test a runner collects inside a folder named like build output (`src/tests/build/`, `e2e/out/`) was never analysed, so no change selected it (OpenPro). `dist`, `build`, `out` and `coverage` are now build output only next to a `package.json`; the default `exclude` no longer lists them.

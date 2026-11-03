@@ -46,6 +46,8 @@ export class StaticPathEvaluator {
     if (directory && !cleaned.startsWith("/") && /^[./]*$/.test(cleaned))
       return posix.normalize(cleaned || ".");
     if (!/[A-Za-z0-9_-]/.test(cleaned.replace(/\*/g, ""))) return undefined; // nothing literal left
+    if (cleaned.startsWith(`${CWD}/`))
+      return `${CWD}/${posix.normalize(cleaned.slice(CWD.length + 1) || ".")}`;
     if (cleaned.startsWith("/")) return undefined; // absolute paths outside our knowledge
     const trailing = cleaned.endsWith("/") ? "/" : "";
     return `${posix.normalize(cleaned)}${trailing}`.replace(/^\.\//, "");
@@ -119,6 +121,18 @@ export class StaticPathEvaluator {
           ? callee.name.text
           : "";
       const args = node.arguments;
+      // `process.cwd()`: the directory the runner starts in, not known here. A marker the graph
+      // resolves against each directory above the file (the project root, a package's folder).
+      if (
+        name === "cwd" &&
+        ts.isPropertyAccessExpression(callee) &&
+        ts.isIdentifier(callee.expression) &&
+        callee.expression.text === "process" &&
+        !args.length
+      ) {
+        this.anchored = true;
+        return `${CWD}/`;
+      }
       if (name === "fileURLToPath" || name === "pathToFileURL" || name === "normalize")
         return args[0] ? this.eval(args[0]) : undefined;
       if (name === "dirname") {
@@ -134,6 +148,9 @@ export class StaticPathEvaluator {
     return undefined;
   }
 }
+
+/** Stands for `process.cwd()` at the start of a path. */
+export const CWD = "@cwd";
 
 /** posix.join that keeps a trailing slash (URL-style directories). */
 function joinKeep(a: string, b: string): string {

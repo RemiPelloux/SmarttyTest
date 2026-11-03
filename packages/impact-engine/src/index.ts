@@ -475,6 +475,9 @@ export function decideImpact(input: ImpactInput): ImpactResult {
       if (change.type === "deleted") continue;
     }
     const diff = input.diffs.get(path);
+    // A test that reads a source file as text (scanning sources for keys, snapshotting a file)
+    // depends on its text, comments included.
+    if (diff) details.seeds.push(...graph.assetReaders(path));
     if (diff) {
       if (diff.trivialOnly && diff.changes.length) {
         if (mode === "fast") {
@@ -583,6 +586,24 @@ export function decideImpact(input: ImpactInput): ImpactResult {
       message: `${direct ? `Directly depends on ${origin}` : `Transitively depends on ${origin} (${hit.depth} hops)`}${hit.confidence !== "high" ? `, confidence ${hit.confidence}` : ""}`,
       path: hit.path,
       confidence: hit.confidence,
+    });
+  }
+
+  // 4a. A change that reaches a trigger file through its imports (a local PostCSS plugin
+  // `postcss.config.cjs` requires, a Babel preset a babel.config imports) changes what that
+  // configuration does: the trigger applies as if the configuration itself had changed.
+  const changedPaths = new Set(changeSet.changes.flatMap((c) => [c.path, c.previousPath ?? ""]));
+  for (const f of traversal.affectedFiles) {
+    if (changedPaths.has(f) || triggerFiles.has(f)) continue;
+    const globalPattern = input.globalTriggers?.find((t) => matchGlob(f, t));
+    const pattern = globalPattern ?? input.triggers.find((t) => matchGlob(f, t));
+    if (!pattern || input.packageChanges?.has(f)) continue;
+    const via = traversal.pathTo(f)?.[0]?.replace(/#.*$/, "") ?? "a changed file";
+    const scope = globalPattern ? "" : dirOf(f);
+    details.triggers.push({ file: f, pattern, scope });
+    selectScope(scope, {
+      kind: "mandatory-trigger",
+      message: `${via} changed, and ${f} loads it (mandatory trigger ${pattern})${scope ? ` — scope ${scope}/` : ""}`,
     });
   }
 

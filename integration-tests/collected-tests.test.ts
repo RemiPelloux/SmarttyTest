@@ -91,6 +91,47 @@ describe("files a runner collects are tests, whatever their name", () => {
     expect((await st.scan()).tests.notAnalysed?.[0]).toContain("checks/extra.ts");
   }, 120_000);
 
+  // openpro-front: postcss.config.cjs requires scripts/postcss/drop-broken-color-mix-fallback.cjs.
+  it("a module a trigger file imports (a local PostCSS plugin) acts like the trigger", async () => {
+    const dir = await vitestProject({
+      "postcss.config.cjs":
+        'module.exports = { plugins: [require("./tools/postcss-plugin.cjs")] };\n',
+      "tools/postcss-plugin.cjs":
+        "module.exports = () => ({ postcssPlugin: 'x' });\nmodule.exports.postcss = true;\n",
+    });
+    await edit(dir, "tools/postcss-plugin.cjs", "'x'", "'y'");
+    const a = await analyze(dir);
+    expect(selectedOf(a)).toEqual([...a.testFiles].sort());
+    expect(a.decision.selectedTests[0]?.reasons.map((r) => r.message).join("\n")).toContain(
+      "tools/postcss-plugin.cjs changed, and postcss.config.cjs loads it",
+    );
+  }, 120_000);
+
+  // openpro-front: adsBootPreloads.test.ts reads resolve(process.cwd(), "src/ads/index.html").
+  it("a file a test reads from process.cwd() selects that test", async () => {
+    const dir = await vitestProject({
+      "data/rates.json": '{ "vat": 20 }\n',
+      "test/rates.test.ts":
+        'import { readFileSync } from "node:fs";\nimport { resolve } from "node:path";\nimport { expect, it } from "vitest";\n\nit("reads", () => expect(JSON.parse(readFileSync(resolve(process.cwd(), "data", "rates.json"), "utf8")).vat).toBe(20));\n',
+    });
+    await edit(dir, "data/rates.json", "20", "21");
+    expect(selectedOf(await analyze(dir))).toEqual(["test/rates.test.ts"]);
+  }, 120_000);
+
+  // openpro-front: adsI18nKeys.test.ts walks src/ads and reads every source file as text.
+  it("a test that walks a directory depends on every file below it", async () => {
+    const dir = await vitestProject({
+      "test/scan.test.ts":
+        'import { readdirSync, readFileSync, statSync } from "node:fs";\nimport { join, resolve } from "node:path";\nimport { fileURLToPath } from "node:url";\nimport { expect, it } from "vitest";\n\nconst ROOT = resolve(fileURLToPath(new URL(".", import.meta.url)), "../src/core");\nconst walk = (d: string): string[] => readdirSync(d).flatMap((e) => (statSync(join(d, e)).isDirectory() ? walk(join(d, e)) : [join(d, e)]));\n\nit("has no TODO", () => {\n  for (const f of walk(ROOT)) expect(readFileSync(f, "utf8")).not.toContain("TODO");\n});\n',
+    });
+    // A comment: no code changes, but the scanning test reads the text.
+    await edit(dir, "src/core/Cache.ts", "export class Cache", "// note\nexport class Cache");
+    expect(selectedOf(await analyze(dir))).toContain("test/scan.test.ts");
+    git(dir, "checkout", "-q", "--", "src/core/Cache.ts");
+    await edit(dir, "src/util/numbers.ts", "Math.min(max,", "Math.min(max + 0,");
+    expect(selectedOf(await analyze(dir))).not.toContain("test/scan.test.ts");
+  }, 120_000);
+
   it("a test another test imports: the walk goes on to the importer", async () => {
     const dir = await vitestProject(
       {
