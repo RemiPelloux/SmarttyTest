@@ -32,8 +32,9 @@ describe("mutationPoints", () => {
   });
   it("a block gets a throw first; an expression body becomes a throwing call", () => {
     const [add, twice] = mutationPoints("a.ts", text);
-    expect(applyMutation(text, add!)).toContain(`{ ${MUTANT_ERROR}\n  return a + b;`);
-    expect(applyMutation(text, twice!)).toContain(`(n: number) => (() => { ${MUTANT_ERROR} })();`);
+    if (!add || !twice) throw new Error("expected two mutation points");
+    expect(applyMutation(text, add)).toContain(`{ ${MUTANT_ERROR}\n  return a + b;`);
+    expect(applyMutation(text, twice)).toContain(`(n: number) => (() => { ${MUTANT_ERROR} })();`);
   });
 });
 
