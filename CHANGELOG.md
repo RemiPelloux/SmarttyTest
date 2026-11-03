@@ -2,7 +2,7 @@
 
 All notable changes are documented here. Releases are managed with [Changesets](https://github.com/changesets/changesets). The project follows [Semantic Versioning](https://semver.org/).
 
-## Unreleased
+## [1.1.1] — patch
 
 ### Fixed
 

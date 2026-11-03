@@ -226,6 +226,10 @@ An audit of 1.0.1 before more projects adopt it, so the fixes ship in one releas
 - Checked after the fixes: the trace oracle finds no file a test loaded that selection cannot reach (Galdia's ops scripts and LeadsIt's MCP server are now linked); resolution agrees with the compiler on 19,233 imports. Replaying 10 commits with full suites on each of the five projects gives 0 selection misses; the two failures the replay flagged (`MiaDock.test.tsx` in openpro-admin, `tournament-pool.test.ts` in Galdia) are tests that fail only under full-suite load, with no dependency on the change.
 - Faster: 400 changed files 1.18 s to 0.51 s (one `git cat-file --batch`), path rules no longer quadratic, `explain` from the last decision 86 ms, `traces.json` about 18 times smaller.
 
+## 1.1.1 · patch (3 November 2026)
+
+- A file named like a test that no runner runs (a Vitest setup file under `__tests__/`, a `*.live.test.ts` the config excludes) is no longer selected as a test that cannot run. Found by openpro-front's pre-push when a push creating a branch compared with the whole history.
+
 ## 1.1.0 · minor (3 November 2026)
 
 Sprints S28–S31 of the [1.x roadmap](roadmap-1.5.md). Per-sprint status and what was not done: the status blocks there.

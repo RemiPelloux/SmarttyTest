@@ -1,6 +1,6 @@
 {
   "name": "@smarttest/project-detector",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Runtime, package manager, framework, test runner and VCS discovery.",
   "license": "Apache-2.0",
   "type": "module",
