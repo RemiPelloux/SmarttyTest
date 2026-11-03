@@ -35,6 +35,10 @@ Angular support, and fixes to the commit and push hooks reported by an adopting 
 - A state folder SmartTest cannot write (a file where `.smarttest/state` should be, no permission, a read-only disk) no longer stops the run with exit 70: the run uses a temporary state folder and says so.
 - A new fault-injection suite (`integration-tests/fail-safe.test.ts`) proves each case on a project with a broken test: every state file garbled, half-written or emptied, state signatures deleted, an unwritable state folder, unreadable changes, a failing plugin and a runner killed in the middle of a file. Each run selects at least what a clean run selects and reports the failure.
 
+### Added: load-flaky failures told apart in `benchmark`
+
+- A failure the selection did not include is run again alone, on the parent commit (as before: failing there means it was already broken) and now on the commit itself. One that passes alone on both failed only next to other tests (load, order, shared state): it is reported as load-flaky (`loadFlaky` in the JSON, its own count in the Markdown report), never counted as a miss or as a pass. In 1.0.2, `MiaDock.test.tsx` (openpro-admin) and `tournament-pool.test.ts` (Galdia) were such failures and had to be checked by hand.
+
 ### Fixed: commit and push hooks
 
 - A hook installed by SmartTest stops the commit or push when SmartTest is not installed (`smarttest is not installed: install the project's dependencies first…`), instead of printing a warning and letting the change through unchecked. `--no-verify` still skips it. Run `smarttest hook install` again to update an installed hook.

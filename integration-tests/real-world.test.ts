@@ -1,6 +1,6 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { benchmarkHistory, SmartTest } from "@smarttest/core";
+import { benchmarkHistory, benchmarkMarkdown, SmartTest } from "@smarttest/core";
 import { describe, expect, it } from "vitest";
 import { edit, git, materialize } from "./helpers.js";
 
@@ -56,6 +56,39 @@ describe("history benchmark", () => {
     expect(b.totals.missed).toBe(0);
     expect(b.totals.smarttestMs).toBeGreaterThan(0);
   }, 180_000);
+
+  // 1.0.2: MiaDock.test.tsx and tournament-pool.test.ts failed only under full-suite load and were
+  // counted as misses. A test failing only next to another is load-flaky, never a miss or a pass.
+  it("a failure that only happens next to other tests is load-flaky, not a miss", async () => {
+    const dir = await materialize("nest-auth-vitest", { git: true });
+    // The holder runs with the catalog tests; the fragile test fails when it sees, in its own
+    // Vitest run (same parent process), the marker the holder wrote. Alone it passes.
+    const marker =
+      'const marker = join(dirname(fileURLToPath(import.meta.url)), ".holder-" + process.ppid);';
+    const header =
+      'import { existsSync, writeFileSync } from "node:fs";\nimport { dirname, join } from "node:path";\nimport { fileURLToPath } from "node:url";\nimport { expect, it } from "vitest";\n';
+    await writeFile(
+      join(dir, "tests/unit/holder.test.ts"),
+      `${header}import { CatalogService } from "../../src/modules/catalog/CatalogService";\n${marker}\nwriteFileSync(marker, "");\nit("holds", () => expect(CatalogService).toBeDefined());\n`,
+    );
+    await writeFile(
+      join(dir, "tests/unit/fragile.test.ts"),
+      `${header}${marker}\nit("fails next to the holder", async () => {\n  for (let i = 0; i < 80 && !existsSync(marker); i++) await new Promise((r) => setTimeout(r, 100));\n  expect(existsSync(marker)).toBe(false);\n}, 20_000);\n`,
+    );
+    await writeFile(join(dir, ".gitignore"), "node_modules\n.smarttest/\n.holder-*\n");
+    git(dir, "add", "-A");
+    git(dir, "commit", "-qm", "holder and fragile tests");
+    await edit(dir, "src/modules/catalog/CatalogService.ts", "sum + p.price", "p.price + sum");
+    git(dir, "commit", "-qam", "catalog: reorder sum");
+    const st = await SmartTest.open({ root: dir });
+    const b = await benchmarkHistory(st, { commits: 1 });
+    const [c] = b.commits;
+    expect(c?.failingInFull).toContain("tests/unit/fragile.test.ts");
+    expect(c?.missed).toEqual([]);
+    expect(c?.loadFlaky).toEqual(["tests/unit/fragile.test.ts"]);
+    expect(b.totals.loadFlaky).toBe(1);
+    expect(benchmarkMarkdown(b)).toContain("load-flaky: tests/unit/fragile.test.ts");
+  }, 240_000);
 
   // OpenPro's front end: vitest.config.ts next to vitest.stryker.config.ts made the project-gated
   // baseline count the one Vitest group twice (226 s gated for a 113 s full run).

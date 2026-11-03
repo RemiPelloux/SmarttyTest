@@ -34,6 +34,12 @@ export interface CommitBenchmark {
   failingInFull: string[];
   missed: string[];
   preexisting: string[];
+  /**
+   * Not selected, failed in the full run, but passed when run alone on this commit and on its
+   * parent: they fail only alongside other tests (load, order, shared state). Reported apart,
+   * never counted as a miss or as a pass (1.0.2: `MiaDock.test.tsx`, `tournament-pool.test.ts`).
+   */
+  loadFlaky?: string[];
   /** Tests ruled out by fresh traces (only with `traces`). */
   observedSkips?: number;
   /** Selected test files answered from the result cache. */
@@ -57,6 +63,7 @@ export interface HistoryBenchmark {
     totalTests: number;
     missed: number;
     preexisting: number;
+    loadFlaky: number;
     cachedTests: number;
     cacheViolations: number;
   };
@@ -278,6 +285,28 @@ export async function benchmarkHistory(
         const failingBefore = new Set(failing(parent));
         for (const f of notSelected) (failingBefore.has(f) ? preexisting : missed).push(f);
       }
+      // A miss that passes when run alone on this commit failed only next to other tests.
+      const loadFlaky: string[] = [];
+      if (missed.length) {
+        await git(wt, ["checkout", "-q", "--detach", "--force", c.sha]);
+        const alone = await executeGroups(
+          planExecution(missed, analysis.runnerRoots, engine.config.adapters, analysis.assignment)
+            .groups,
+          { createAdapter: create, timeoutMs: engine.config.timeoutMs },
+        );
+        const passedAlone = new Set(
+          alone.files.filter((f) => f.status === "passed").map((f) => f.file),
+        );
+        for (const f of [...missed]) {
+          if (!passedAlone.has(f)) continue;
+          loadFlaky.push(f);
+          missed.splice(missed.indexOf(f), 1);
+        }
+        if (loadFlaky.length)
+          progress(
+            `  load-flaky: ${loadFlaky.join(", ")} failed in the full run but pass alone on this commit and its parent`,
+          );
+      }
       results.push({
         sha: c.sha,
         subject: c.subject,
@@ -294,6 +323,7 @@ export async function benchmarkHistory(
         failingInFull: failingFull,
         missed,
         preexisting,
+        ...(loadFlaky.length ? { loadFlaky } : {}),
         ...(analysis.decision.details.observedSkips
           ? { observedSkips: analysis.decision.details.observedSkips.length }
           : {}),
@@ -325,6 +355,7 @@ export async function benchmarkHistory(
         totalTests: sum("totalTests"),
         missed: results.reduce((a, r) => a + r.missed.length, 0),
         preexisting: results.reduce((a, r) => a + r.preexisting.length, 0),
+        loadFlaky: results.reduce((a, r) => a + (r.loadFlaky?.length ?? 0), 0),
         cachedTests: results.reduce((a, r) => a + (r.cachedTests ?? 0), 0),
         cacheViolations: results.reduce((a, r) => a + (r.cacheViolations?.length ?? 0), 0),
       },
@@ -349,13 +380,13 @@ export function benchmarkMarkdown(b: HistoryBenchmark): string {
     `| Saved by SmartTest | ${t.savedVsFullPct}% | ${t.savedVsGatedPct}% | — |`,
     `| Tests run | ${t.totalTests} | — | ${t.selectedTests} |`,
     "",
-    `**Missed failures: ${t.missed}** · failures already present in the parent commit: ${t.preexisting} · cached results: ${t.cachedTests ?? 0} (integrity violations: ${t.cacheViolations ?? 0})`,
+    `**Missed failures: ${t.missed}** · failures already present in the parent commit: ${t.preexisting} · failing only alongside other tests (pass alone, load-flaky): ${t.loadFlaky ?? 0} · cached results: ${t.cachedTests ?? 0} (integrity violations: ${t.cacheViolations ?? 0})`,
     "",
     "| Commit | Changed | Selected | Full | Gated | SmartTest | Missed |",
     "|---|---|---|---|---|---|---|",
     ...b.commits.map(
       (c) =>
-        `| \`${c.sha.slice(0, 8)}\` ${c.subject.slice(0, 50).replace(/\|/g, "\\|")} | ${c.changedFiles} | ${c.selectedTests}/${c.totalTests}${c.fallback ? " (fallback)" : ""} | ${s(c.fullMs)} | ${s(c.projectGatedMs)} | ${s(c.smarttestMs)} | ${c.missed.length ? `❌ ${c.missed.join(", ")}` : "0"} |`,
+        `| \`${c.sha.slice(0, 8)}\` ${c.subject.slice(0, 50).replace(/\|/g, "\\|")} | ${c.changedFiles} | ${c.selectedTests}/${c.totalTests}${c.fallback ? " (fallback)" : ""} | ${s(c.fullMs)} | ${s(c.projectGatedMs)} | ${s(c.smarttestMs)} | ${c.missed.length ? `❌ ${c.missed.join(", ")}` : "0"}${c.loadFlaky?.length ? ` (load-flaky: ${c.loadFlaky.join(", ")})` : ""} |`,
     ),
     "",
     "Times are wall-clock on this machine. SmartTest time includes its analysis overhead.",
