@@ -665,11 +665,16 @@ export class DependencyGraph {
         else this.fileDependents.delete(target);
       }
       this.contributions.delete(f);
-      for (const imp of this.files.get(f)?.imports ?? []) {
-        const list = imp.resolved ? this.moduleDependents.get(imp.resolved) : undefined;
-        if (list && imp.resolved)
+      // The modules it loaded before (its forward set also holds Wasp operations, which have no
+      // resolved import of their own) and the ones it loads now.
+      const loaded = new Set(this.forward.get(f) ?? []);
+      for (const imp of this.files.get(f)?.imports ?? [])
+        if (imp.resolved) loaded.add(imp.resolved);
+      for (const target of loaded) {
+        const list = this.moduleDependents.get(target);
+        if (list)
           this.moduleDependents.set(
-            imp.resolved,
+            target,
             list.filter((k) => !fromChanged(k)),
           );
       }
@@ -718,6 +723,19 @@ export class DependencyGraph {
     for (const imp of a.imports) {
       if (imp.unresolved && !imp.missing)
         unc.push(`unresolved import "${imp.specifier}" (${imp.unresolved})`);
+      // Wasp's generated operations module loads every operation of the app: code an operation
+      // runs when it loads reaches this importer, whichever operations it names (found by
+      // `smarttest audit --traces` on the edges-vitest fixture).
+      if (!imp.resolved && !imp.typeOnly && WASP_OPERATION_MODULES.has(imp.specifier)) {
+        const ops = new Set([...(this.waspOperationsFor(file)?.values() ?? [])].map((o) => o.file));
+        for (const op of ops) {
+          fwd.add(op);
+          const list = this.moduleDependents.get(op);
+          if (list) list.push(key(file, WHOLE));
+          else this.moduleDependents.set(op, [key(file, WHOLE)]);
+        }
+        continue;
+      }
       if (!imp.resolved) continue;
       fwd.add(imp.resolved);
       if (imp.missing) this.deletedFiles.add(imp.resolved);

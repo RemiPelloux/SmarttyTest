@@ -1369,6 +1369,35 @@ export class SmartTest {
     return { tests: found.tests, reaches, uncertain };
   }
 
+  /**
+   * The tests SmartTest selects when the whole of `file` changes, through the full impact
+   * analysis (manual mocks, snapshots, resources, triggers…), in a throwaway store so the
+   * project's last decision is kept. Used by the audit to confirm what the graph alone misses.
+   */
+  async selectedForWholeFile(file: string): Promise<Set<string>> {
+    this.probe ??= SmartTest.open({
+      root: this.root,
+      ...(this.loaded.path ? { configPath: this.loaded.path } : {}),
+      ephemeralStore: true,
+    });
+    const probe = await this.probe;
+    const a = await probe.analyze({
+      input: {
+        changeSet: {
+          provider: "audit",
+          changes: [{ path: file, type: "modified" }],
+          completeness: "complete",
+          warnings: [],
+        },
+        // No previous content: every unit of the file counts as changed.
+        readBefore: async () => undefined,
+        description: `audit · ${file} changed`,
+      },
+    });
+    return new Set(a.decision.selectedTests.map((t) => t.filePath));
+  }
+  private probe: Promise<SmartTest> | undefined;
+
   /** What each runner loads because its configuration names it (setup files, config imports…). */
   async runnerInputs(roots: readonly RunnerRoot[]): Promise<RunnerInputs[]> {
     return Promise.all(roots.map((r) => readRunnerInputs(this.root, r)));

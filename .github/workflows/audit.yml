@@ -1,0 +1,34 @@
+name: Nightly audit
+
+# `smarttest audit` on every fixture that needs no browser: fault injection (one function at a
+# time made to throw), reachability of every file a test loads, and import resolution against
+# the TypeScript compiler. A missed test, an unreachable file or a mismatched import fails it.
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+    inputs:
+      mutants:
+        description: Functions to break per fixture
+        default: "20"
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    name: audit (fixtures)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4 # version from package.json#packageManager
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - run: pnpm audit:fixtures
+        env:
+          AUDIT_MUTANTS: ${{ inputs.mutants || '20' }}

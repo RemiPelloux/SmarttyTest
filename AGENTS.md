@@ -18,6 +18,7 @@ SmartTest selects the tests a change can affect in TypeScript/JavaScript reposit
 - Errors are `SmartTestError` with a stable `code`, a `category` and a `hint`. Exit codes are a public contract (`packages/shared/src/errors.ts`).
 - Every new graph edge type needs a fixture where a targeted change selects only the affected tests, and must keep the regression harness at 0 missed failures.
 - Cached results are `cached-pass`, never `passed` (ADR-0009). Traces never rule out tests in SAFE mode (ADR-0008).
+- Before a release: `pnpm audit:fixtures` passes, and `smarttest audit --resolution --mutate` runs on the adopting projects; record its counts in the delivery log.
 - After a release: update the roadmap statuses, the delivery log, the changelog, rebuild the site (`pnpm site:publish`).
 
 ## Workflow

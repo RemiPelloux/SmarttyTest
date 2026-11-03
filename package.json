@@ -25,6 +25,7 @@
     "extension:verify": "pnpm --dir extensions/vscode verify",
     "extension:pack": "pnpm --dir extensions/vscode package",
     "check:boundaries": "node scripts/check-boundaries.mjs",
+    "audit:fixtures": "node scripts/audit-fixtures.mjs",
     "bundle:cli": "node scripts/release/bundle-cli.mjs",
     "release:publish": "pnpm verify && pnpm bundle:cli && node scripts/release/sbom.mjs && node scripts/release/audit.mjs && npm publish packages/cli/.publish --access public",
     "changeset": "changeset",

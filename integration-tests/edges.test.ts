@@ -42,6 +42,18 @@ describe("edges-vitest", () => {
     ).toEqual(["tests/cart.test.ts"]);
   });
 
+  // The operations module loads every operation: code one runs when it loads breaks every test
+  // importing the module, whichever operations it names (found by `smarttest audit --traces`).
+  it("Wasp: load-time code in an operation selects every importer of the operations module", async () => {
+    expect(
+      await selectedAfter(
+        "src/ops/getTotal.ts",
+        "export function getTotal",
+        'if (Date.now() < 0) throw new Error("load-time");\nexport function getTotal',
+      ),
+    ).toEqual(["tests/badge.test.ts", "tests/cart.test.ts"]);
+  });
+
   it("Prisma: a model change selects the code using that model", async () => {
     expect(
       await selectedAfter("prisma/schema.prisma", "total Int", "total Int\n  note  String?"),

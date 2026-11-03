@@ -154,9 +154,16 @@ async function mutate(
         `${baselineFailing.length} test file(s) fail without any fault (${baselineFailing.slice(0, 3).join(", ")}); they are left out of every comparison`,
       );
     const tests = new Set(clean.testFiles);
+    // SmartTest loads these itself (its configuration, local plugins): breaking one breaks the
+    // analysis, not the code under test.
+    const own = new Set(
+      engine.config.plugins.filter((p) => p.startsWith("./")).map((p) => p.slice(2)),
+    );
+    const ownFile = (f: string) => own.has(f) || /(?:^|\/)smarttest\.config\.[^/]+$/.test(f);
     const points: (MutationPoint & { file: string })[] = [];
     for (const [file] of clean.index.entries()) {
-      if (!CODE.test(file) || tests.has(file) || clean.graph.isTestFile(file)) continue;
+      if (!CODE.test(file) || tests.has(file) || clean.graph.isTestFile(file) || ownFile(file))
+        continue;
       const text = await readFile(join(checkout.root, file), "utf8").catch(() => undefined);
       if (text === undefined) continue;
       for (const p of mutationPoints(file, text)) points.push({ ...p, file });
@@ -173,7 +180,15 @@ async function mutate(
       const original = await readFile(path, "utf8");
       await writeFile(path, applyMutation(original, p));
       try {
-        const a = await engine.analyze({ source: { kind: "uncommitted" } });
+        let a: Awaited<ReturnType<SmartTest["analyze"]>>;
+        try {
+          a = await engine.analyze({ source: { kind: "uncommitted" } });
+        } catch (error) {
+          notes.push(
+            `${p.file}#${p.name}: the analysis failed with the fault in place (${(error as Error).message.split("\n")[0]}); not counted`,
+          );
+          continue;
+        }
         const selected = new Set(a.decision.selectedTests.map((t) => t.filePath));
         const baseline = new Set(baselineFailing);
         const failing = failingFiles(await runAll()).filter((f) => !baseline.has(f));
@@ -253,11 +268,19 @@ async function traces(
   const { reaches, uncertain } = await st.reachability(files);
   const unreachable: { test: string; file: string }[] = [];
   let pairs = 0;
+  const confirmed = new Map<string, Set<string>>();
   for (const [test, list] of loaded) {
     if (uncertain.has(test)) continue;
     for (const file of list) {
       pairs++;
-      if (!reaches.get(file)?.has(test)) unreachable.push({ test, file });
+      if (reaches.get(file)?.has(test)) continue;
+      // The graph alone does not link them: ask the full impact analysis.
+      let selected = confirmed.get(file);
+      if (!selected) {
+        selected = await st.selectedForWholeFile(file);
+        confirmed.set(file, selected);
+      }
+      if (!selected.has(test)) unreachable.push({ test, file });
     }
   }
   notes.push(

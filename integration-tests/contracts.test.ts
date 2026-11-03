@@ -45,6 +45,7 @@ const EXPERIMENTAL = [
   "snapshot",
   "vcs",
   "benchmark",
+  "audit",
   "graph",
   "coverage",
   "report",

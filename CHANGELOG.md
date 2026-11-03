@@ -12,6 +12,8 @@ Angular support, and fixes to the commit and push hooks reported by an adopting 
 - `smarttest audit --traces`: every project file a test loaded at run time (from `smarttest trace`; traced first when none are stored, `--sample n`) must reach that test through the graph, the runner's configuration, or uncertainty. Files a test reads without running them (templates, JSON) are not traced yet.
 - `smarttest audit --resolution`: every import the TypeScript compiler resolves into the project must resolve to the same file in SmartTest; one SmartTest takes for a package is an edge it cannot see.
 - One report, `.smarttest/reports/audit.{json,md}` (`-o file.md` to copy it): missed tests, unreachable files, mismatched imports, load-flaky failures and the share of functions checked. Exit code 1 when a check finds a miss, for CI.
+- A nightly workflow (`.github/workflows/audit.yml`, `pnpm audit:fixtures`) audits every fixture that needs no browser; any miss fails it. Its JSON (`audit --json`) is experimental.
+- Galdia: 5,003 imports agree with the compiler; 10 injected faults, 4 caught, 6 survived (code no test exercises), 0 missed.
 - Checked that each check reports a miss when there is one: a test loading a module by a computed name in FAST mode (missed by design there) is reported by `--mutate`, and a load the graph lacks by `--traces`.
 
 ### Added: lockfile changes select by package
@@ -29,6 +31,8 @@ Angular support, and fixes to the commit and push hooks reported by an adopting 
 - `run`, `impact`, `validate-selection` and `benchmark` take `--runner <name>` (repeatable): an adapter id (`vitest`), an Angular project or a runner's directory. Other runners' tests are left out of the analysis with a warning that counts them, never reported as skipped or passed. Keeping Playwright out of a parity check or a benchmark no longer needs a copied config. `benchmark` follows `hook.runners` when it is set (`--runner all` for every runner). An unknown name fails with `ST_RUNNER_UNKNOWN` and lists the runners there are.
 
 ### Fixed: a test no change could select
+
+- Wasp: code an operation runs when it loads (a top-level statement in `src/ops/getTotal.ts`) breaks every test importing the operations module, since that module loads every operation; only the code calling that operation was selected. Found by `smarttest audit --traces` on the `edges-vitest` fixture. A change inside the operation's function still selects only its callers.
 
 - A test a runner collects inside a folder named like build output (`src/tests/build/`, `e2e/out/`) was never analysed, so no change selected it (OpenPro). `dist`, `build`, `out` and `coverage` are now build output only next to a `package.json`; the default `exclude` no longer lists them.
 - A file a runner collects that SmartTest does not analyse (excluded by `exclude`/`include`, or in a build-output folder) is reported by `impact`, `run`, `doctor` (warning) and `scan` (`tests.notAnalysed`), never dropped silently.
