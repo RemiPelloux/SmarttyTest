@@ -3,19 +3,14 @@
  * compares, per commit, a full run, a project-gated run (suites of the projects a commit touched)
  * and SmartTest's selection — with every missed failure checked against the parent commit.
  */
-import { lstat, mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
-import {
-  exists,
-  linkNodeModules,
-  runProcess,
-  type SafetyMode,
-  SmartTestError,
-} from "@smarttest/shared";
+import { join } from "node:path";
+import { runProcess, type SafetyMode, SmartTestError } from "@smarttest/shared";
 import type { RunnerRoot } from "@smarttest/test-discovery";
 import { type ExecutionSummary, executeGroups } from "@smarttest/test-executor";
 import { planExecution, rootKey } from "@smarttest/test-selector";
+import { prepareCheckout } from "./hook.js";
 import type { SmartTest } from "./smarttest.js";
 
 export interface CommitBenchmark {
@@ -157,20 +152,23 @@ export async function benchmarkHistory(
   const progress = options.onProgress ?? (() => undefined);
   await git(repoRoot, ["worktree", "add", "--detach", "-q", wt, "HEAD"]);
   try {
-    // Reuse installed dependencies: link every node_modules of the project into the worktree.
+    // Installed dependencies and untracked build output, as for the hooks' isolated runs: a plain
+    // link to node_modules made Vite refuse `?url` imports of installed files ("Denied ID").
     const profile = await st.profile();
-    const dirs = ["", ...profile.workspaces.map((w) => w.dir)];
-    for (const d of dirs) {
-      const src = join(st.root, d, "node_modules");
-      const dest = join(wt, prefix, d, "node_modules");
-      if (
-        (await exists(src)) &&
-        !(await lstat(dest).catch(() => undefined)) &&
-        (await exists(dirname(dest)))
-      ) {
-        await linkNodeModules(src, dest);
-      }
-    }
+    const notes = await prepareCheckout({
+      repoRoot,
+      wt,
+      projectRoot: st.root,
+      prefix,
+      nodeModulesDirs: [
+        ...new Set([
+          "",
+          ...profile.workspaces.map((w) => w.dir),
+          ...profile.runners.map((r) => r.dir),
+        ]),
+      ],
+    });
+    for (const n of notes) progress(n);
     const projectRoot = join(wt, prefix);
     const results: CommitBenchmark[] = [];
     const { SmartTest: Engine } = await import("./smarttest.js");

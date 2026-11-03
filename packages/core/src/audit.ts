@@ -39,7 +39,7 @@ export interface AuditOptions {
     runners?: readonly string[];
   };
   /** Trace the tests first when no traces are stored (`sample`: at most that many files). */
-  traces?: { sample?: number };
+  traces?: { sample?: number; runners?: readonly string[] };
   resolution?: boolean;
   onProgress?: (message: string) => void;
 }
@@ -265,9 +265,14 @@ async function traces(
   progress("tracing each test file alone (code it ran, files it read, Python modules it imported)");
   const observed = await observeLoads(st, {
     ...(options.sample ? { sample: options.sample } : {}),
+    ...(options.runners ? { runners: options.runners } : {}),
     onProgress: progress,
   });
   const loaded = observed.loaded;
+  if (observed.compiled.length)
+    notes.push(
+      `${observed.compiled.length} test file(s) run through \`ng test\`, which compiles the project into a bundle first: what such a test loads can barely be observed, so this check says little about them (fault injection still does)`,
+    );
   if (observed.failed.length)
     notes.push(
       `${observed.failed.length} test file(s) recorded nothing (failing, or not runnable alone): ${observed.failed.slice(0, 3).join(", ")}`,

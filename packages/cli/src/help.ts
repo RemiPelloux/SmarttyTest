@@ -114,7 +114,7 @@ export const COMMANDS: Record<string, CommandHelp> = {
       "--mutate  break one function at a time (it throws) in a temporary checkout of HEAD, select, run the full suite: a failing test that was not selected is a missed test",
       "--mutants n  how many functions to break (default 10), sampled with --seed (default 1)",
       "--budget ms  stop starting new mutants after this time",
-      "--runner <name>  with --mutate: only this runner's tests (repeatable); default: the hook's runners (hook.runners) when set, `--runner all` for every runner",
+      "--runner <name>  with --mutate or --traces: only this runner's tests (repeatable); default: the hook's runners (hook.runners) when set, `--runner all` for every runner",
       "--traces  every project file a test loaded at run time must reach that test in the graph (traces the tests first when none are stored)",
       "--sample n  with --traces and no stored traces: trace at most n test files",
       "--resolution  every import must resolve as the TypeScript compiler resolves it",

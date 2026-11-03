@@ -1,17 +1,10 @@
-/**
- * What a test loads at run time, for `smarttest audit --traces`: each test file runs alone with
- * V8 coverage (JavaScript code it ran), a preload that records the files it reads through `fs`
- * (templates, JSON, fixtures), and, for Python, a `sitecustomize` that records the modules it
- * imported and the files it opened. Only the audit uses this; selection never does.
- */
-import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { delimiter, isAbsolute, join, relative } from "node:path";
 import { pathToFileURL } from "node:url";
 import { toPosix } from "@smarttest/shared";
 import { planExecution } from "@smarttest/test-selector";
-import type { SmartTest } from "./smarttest.js";
+import { restrictRunners, type SmartTest } from "./smarttest.js";
 import { readV8Coverage } from "./traces.js";
 
 const JS_RECORDER = `import fs from "node:fs";
@@ -77,10 +70,16 @@ const NOT_PROJECT =
 /** For each test file run, the project files it loaded or read (the test itself excluded). */
 export async function observeLoads(
   st: SmartTest,
-  options: { sample?: number; onProgress?: (m: string) => void } = {},
-): Promise<{ loaded: Map<string, string[]>; failed: string[] }> {
+  options: { sample?: number; runners?: readonly string[]; onProgress?: (m: string) => void } = {},
+): Promise<{ loaded: Map<string, string[]>; failed: string[]; compiled: string[] }> {
   const { index } = await st.loadIndex();
-  const { tests, roots, assignment } = await st.discoverTests(index);
+  // The hook's runners by default, as for `audit --mutate`: never a live end-to-end suite.
+  const scope =
+    options.runners?.[0] === "all" ? undefined : (options.runners ?? st.config.hook.runners);
+  const { tests, roots, assignment } = restrictRunners(
+    await st.discoverTests(index),
+    scope?.length ? scope : undefined,
+  );
   const wanted = options.sample ? tests.slice(0, options.sample) : tests;
   const plan = planExecution(wanted, roots, st.config.adapters, assignment);
   const work = await mkdtemp(join(tmpdir(), "smarttest-observe-"));
@@ -91,6 +90,10 @@ export async function observeLoads(
   await writeFile(join(pyDir, "sitecustomize.py"), PY_RECORDER);
   const loaded = new Map<string, string[]>();
   const failed: string[] = [];
+  const compiled: string[] = [];
+  // Only files the project's version control lists can be part of a change: an ignored build
+  // output a test reads (`ui/dist/…`) never is.
+  const listed = new Set(await st.allFiles());
   const jobs = plan.groups.flatMap((g) => g.files.map((file) => ({ group: g, file })));
   let done = 0;
   try {
@@ -120,9 +123,13 @@ export async function observeLoads(
         // A bundler's module id may carry a query (`x.css?inline`, `x.html?raw`): the file is x.
         for (const f of (await readV8Coverage(coverage, st.root)).executed.keys()) {
           const plain = f.replace(/[?#].*$/, "");
-          if (existsSync(join(st.root, plain))) files.add(plain);
+          if (listed.has(plain)) files.add(plain);
         }
-      for (const name of await readdir(reads).catch(() => [] as string[])) {
+      // `ng test` compiles and type-checks the whole project first: its reads are the compiler's,
+      // not the test's. Only the code the test ran counts there.
+      const compiles = group.adapter === "angular";
+      if (compiles) compiled.push(file);
+      for (const name of compiles ? [] : await readdir(reads).catch(() => [] as string[])) {
         const text = await readFile(join(reads, name), "utf8").catch(() => "");
         let list: string[] = [];
         try {
@@ -140,7 +147,7 @@ export async function observeLoads(
             rel.endsWith(".pyc")
           )
             continue;
-          if (existsSync(join(st.root, rel))) files.add(rel);
+          if (listed.has(rel)) files.add(rel);
         }
       }
       files.delete(file);
@@ -156,5 +163,5 @@ export async function observeLoads(
   } finally {
     await rm(work, { recursive: true, force: true });
   }
-  return { loaded, failed };
+  return { loaded, failed, compiled };
 }

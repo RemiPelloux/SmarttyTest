@@ -1114,3 +1114,27 @@ describe("a hook scope keeps browser specs in CI and out of the hook", () => {
     expect(json.report.summary.passed).toBeGreaterThan(0);
   }, 180_000);
 });
+
+describe("the temporary checkout has the project's untracked build output", () => {
+  it("a test reading a gitignored dist/ file passes there too (openpro-mcp-service: ui/dist)", async () => {
+    const dir = await materialize("ts-lib-vitest", { git: true });
+    await writeFile(join(dir, ".gitignore"), "node_modules\n.smarttest/\ndist/\n");
+    await mkdir(join(dir, "ui", "dist"), { recursive: true });
+    await writeFile(join(dir, "ui", "dist", "page.html"), "<p>built</p>\n");
+    await mkdir(join(dir, "ui", "src"), { recursive: true });
+    await writeFile(join(dir, "ui", "src", "page.ts"), "export const page = 1;\n");
+    await commitAll(dir, "ui");
+    const st = await SmartTest.open({ root: dir });
+    const checkout = await st.headCheckout();
+    try {
+      expect(await readFile(join(checkout.root, "ui", "dist", "page.html"), "utf8")).toBe(
+        "<p>built</p>\n",
+      );
+      expect(checkout.warnings.join("\n")).toContain(
+        "Linked untracked build output from the working tree",
+      );
+    } finally {
+      await checkout.cleanup();
+    }
+  }, 120_000);
+});

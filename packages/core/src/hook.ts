@@ -406,6 +406,83 @@ async function linkNodeModules(
  * A repository without commits has no HEAD to check out: the staged content is materialised from
  * the index with `git checkout-index` instead (there is no Git metadata in that temporary tree).
  */
+/**
+ * Makes a checkout (`wt`, the project at `prefix` inside it) runnable like the working tree:
+ * every node_modules is mirrored (workspace packages point at the checkout, Vite may load the
+ * installed files), and the project's untracked build output is linked. Used by the hooks'
+ * isolated runs, `audit --mutate` and `benchmark`. Returns what could not be isolated.
+ */
+export async function prepareCheckout(options: {
+  repoRoot: string;
+  wt: string;
+  projectRoot: string;
+  prefix: string;
+  nodeModulesDirs: readonly string[];
+}): Promise<string[]> {
+  const { wt } = options;
+  const root = options.prefix ? join(wt, options.prefix) : wt;
+  const clean = cleanGitEnv();
+  const warnings: string[] = [];
+  const repoReal = await realpath(options.repoRoot);
+  let ignoredPaths: Promise<Set<string>> | undefined;
+  const ignored = () => {
+    ignoredPaths ??= git(
+      options.repoRoot,
+      ["ls-files", "--others", "--ignored", "--exclude-standard", "--directory", "-z"],
+      clean,
+    ).then((r) => new Set(names(r.stdout)));
+    return ignoredPaths;
+  };
+  for (const d of options.nodeModulesDirs) {
+    const src = join(options.projectRoot, d, "node_modules");
+    const dest = join(root, d, "node_modules");
+    if (await escapesCheckout(wt, join(root, d))) {
+      warnings.push(
+        `Isolation: ${d || "."} is a link out of the temporary checkout; its node_modules were not mirrored`,
+      );
+      continue;
+    }
+    if (
+      existsSync(src) &&
+      !(await lstat(dest).catch(() => undefined)) &&
+      existsSync(join(root, d))
+    ) {
+      warnings.push(
+        ...(await linkNodeModules(src, dest, repoReal, wt, ignored, options.projectRoot)),
+      );
+    }
+  }
+
+  // The project's own untracked build output (`ui/dist/job-draft.html` a test reads, built by
+  // `npm run build:ui`) is not in the checkout either: without it the tests fail there and
+  // nowhere else. Link it from the working tree, and say it may not match the source.
+  const builtHere: string[] = [];
+  const projectPrefix = options.prefix ? `${toSlash(options.prefix)}/` : "";
+  for (const path of await ignored()) {
+    if (!path.endsWith("/") || !path.startsWith(projectPrefix)) continue;
+    const rel = path.replace(/\/$/, "");
+    const segs = rel.split("/");
+    if (!BUILD_OUTPUT.has(segs[segs.length - 1] as string)) continue;
+    if (segs.some((x) => x === "node_modules" || x === ".smarttest" || x === ".git")) continue;
+    const to = join(wt, rel);
+    if (await lstat(to).catch(() => undefined)) continue;
+    if (!(await lstat(join(wt, ...segs.slice(0, -1))).catch(() => undefined))) continue;
+    await symlink(join(repoReal, rel), to, process.platform === "win32" ? "junction" : "dir").catch(
+      () => undefined,
+    );
+    builtHere.push(rel);
+  }
+  if (builtHere.length)
+    warnings.push(
+      `Linked untracked build output from the working tree (it may not match the content under test): ${builtHere.join(", ")}`,
+    );
+
+  return warnings;
+}
+
+/** Folders a build writes that tests may read: linked into a temporary checkout when untracked. */
+const BUILD_OUTPUT = new Set(["dist", "build", "out", ".output"]);
+
 export async function isolate(options: {
   projectRoot: string;
   repoRoot: string;
@@ -482,36 +559,13 @@ export async function isolate(options: {
     }
     await mkdir(root, { recursive: true });
 
-    const warnings: string[] = [];
-    const repoReal = await realpath(options.repoRoot);
-    let ignoredPaths: Promise<Set<string>> | undefined;
-    const ignored = () => {
-      ignoredPaths ??= git(
-        options.repoRoot,
-        ["ls-files", "--others", "--ignored", "--exclude-standard", "--directory", "-z"],
-        clean,
-      ).then((r) => new Set(names(r.stdout)));
-      return ignoredPaths;
-    };
-    for (const d of options.nodeModulesDirs) {
-      const src = join(options.projectRoot, d, "node_modules");
-      const dest = join(root, d, "node_modules");
-      if (await escapesCheckout(wt, join(root, d))) {
-        warnings.push(
-          `Isolation: ${d || "."} is a link out of the temporary checkout; its node_modules were not mirrored`,
-        );
-        continue;
-      }
-      if (
-        existsSync(src) &&
-        !(await lstat(dest).catch(() => undefined)) &&
-        existsSync(join(root, d))
-      ) {
-        warnings.push(
-          ...(await linkNodeModules(src, dest, repoReal, wt, ignored, options.projectRoot)),
-        );
-      }
-    }
+    const warnings = await prepareCheckout({
+      repoRoot: options.repoRoot,
+      wt,
+      projectRoot: options.projectRoot,
+      prefix: options.prefix,
+      nodeModulesDirs: options.nodeModulesDirs,
+    });
 
     const parts: string[] = [];
     const { unstaged, untracked, staged } = options.aside;

@@ -33,7 +33,7 @@ For each import the TypeScript compiler resolves into the project, with the near
 
 Each test file runs alone while SmartTest records what it loads: the code it ran (V8 coverage), the files it read through `fs` (templates, JSON, fixtures), and for Python the modules it imported and the files it opened. Every such project file must reach that test: through the graph, through the runner's configuration (setup files), or because the test is uncertain and always selected. A pair the graph does not link is confirmed with the full impact analysis before it is reported. `--sample n` limits the run to n test files.
 
-A typical finding: a test reading `data/rates.json` through a path relative to the working directory. Nothing in the code ties the file to the test, so a change to it selects nothing. Read it through a path built from `import.meta.url` or `__dirname`, which SmartTest follows. Environment files are tracked by key and left out of this check.
+A typical finding: a test reading `data/rates.json` through a path relative to the working directory. Nothing in the code ties the file to the test, so a change to it selects nothing. Read it through a path built from `import.meta.url` or `__dirname`, which SmartTest follows. Environment files are tracked by key and left out of this check. So are files version control does not list (an ignored build output a test reads can never be part of a change). Angular specs run by `ng test` execute a compiled bundle, so this check observes little of them; use `--mutate` there.
 
 ## In CI
 

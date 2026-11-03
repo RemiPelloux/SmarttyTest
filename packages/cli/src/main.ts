@@ -1706,7 +1706,14 @@ async function cmdAudit(ctx: Ctx): Promise<number> {
           },
         }
       : {}),
-    ...(flags.traces ? { traces: sample !== undefined ? { sample } : {} } : {}),
+    ...(flags.traces
+      ? {
+          traces: {
+            ...(sample !== undefined ? { sample } : {}),
+            ...(flags.runner?.length ? { runners: flags.runner } : {}),
+          },
+        }
+      : {}),
     ...(flags.resolution ? { resolution: true } : {}),
     onProgress: (m) => {
       if (!flags.json && !flags.quiet) ctx.err(t.dim(m));
