@@ -3,15 +3,27 @@
  */
 import { matchGlob } from "@smarttest/shared";
 
-export type AdapterId = "vitest" | "jest" | "node" | "playwright" | "cypress" | "angular";
+export type AdapterId =
+  | "vitest"
+  | "jest"
+  | "node"
+  | "playwright"
+  | "cypress"
+  | "angular"
+  | "pytest"
+  | "unittest";
 
 /** Union of Vitest and Jest default test patterns. */
 const DEFAULT_TEST_FILE = /(?:^|\/)(?:__tests__\/.+|[^/]+\.(?:test|spec|cy))\.[cm]?[jt]sx?$/;
 const TEST_FILE_IN_TESTS_DIR = /(?:^|\/)__tests__\/[^/]+\.[cm]?[jt]sx?$/;
+/** pytest (`test_*.py`, `*_test.py`) and unittest (`test*.py`) default test modules. */
+const PYTHON_TEST_FILE = /(?:^|\/)(?:test[^/]*|[^/]+_test)\.py$/;
 
 export function isTestFile(path: string, match?: readonly string[]): boolean {
   if (match?.length) return matchGlob(path, match);
-  return DEFAULT_TEST_FILE.test(path) || TEST_FILE_IN_TESTS_DIR.test(path);
+  return (
+    DEFAULT_TEST_FILE.test(path) || TEST_FILE_IN_TESTS_DIR.test(path) || PYTHON_TEST_FILE.test(path)
+  );
 }
 
 export function discoverTestFiles(files: readonly string[], match?: readonly string[]): string[] {

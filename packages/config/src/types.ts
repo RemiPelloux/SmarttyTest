@@ -3,7 +3,23 @@ import type { SafetyMode } from "@smarttest/shared";
 export type TestLayout = "mirror" | "colocated" | "domain" | "custom";
 export type TestCategory = "unit" | "integration" | "e2e";
 export type RiskLevel = "low" | "medium" | "high" | "critical";
-export type AdapterId = "vitest" | "jest" | "node" | "playwright" | "cypress" | "angular";
+export type AdapterId =
+  | "vitest"
+  | "jest"
+  | "node"
+  | "playwright"
+  | "cypress"
+  | "angular"
+  | "pytest"
+  | "unittest";
+
+/** Python (preview). */
+export interface PythonConfig {
+  /** Analyse `.py` files and run pytest/unittest (default true). */
+  enabled?: boolean;
+  /** Interpreter that runs the tests (default: `.venv`/`venv`, `VIRTUAL_ENV`, then `python3`). */
+  interpreter?: string;
+}
 
 /** Explicit runner declaration (overrides detection). */
 export interface RunnerDeclaration {
@@ -121,6 +137,8 @@ export interface SmartTestConfig {
   retries?: number;
   /** Run the whole suite without analysis when it is faster than analysing (default true). */
   adaptive?: boolean;
+  /** Python projects (preview). */
+  python?: PythonConfig;
   /** Per-project conventions, keyed by directory ("backend", "apps/web"). */
   projects?: Record<string, ProjectConfig>;
   /** Reuse passing results whose inputs are all unchanged (default true; reported as cached). */
@@ -161,6 +179,7 @@ export interface ResolvedConfig {
   rules: Rule[];
   retries: number;
   adaptive: boolean;
+  python: { enabled: boolean; interpreter?: string };
   projects: Record<string, ProjectConfig>;
   cache: boolean;
   parallelGroups: number | "auto";

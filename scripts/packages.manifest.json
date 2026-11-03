@@ -93,6 +93,12 @@
       "description": "JavaScript language adapter (ESM, CJS, JSX)."
     },
     {
+      "name": "language-python",
+      "epic": "SRC",
+      "deps": ["shared", "plugin-sdk", "source-parser"],
+      "description": "Python language analyzer and module resolver (preview): modules, classes, functions, imports, conftest.py."
+    },
+    {
       "name": "symbol-index",
       "epic": "SRC",
       "deps": ["shared", "source-parser"],
@@ -155,6 +161,12 @@
       "epic": "EXE",
       "deps": ["shared", "plugin-sdk"],
       "description": "Angular CLI test runner adapter (ng test: unit-test builder with Vitest or Karma)."
+    },
+    {
+      "name": "adapter-python",
+      "epic": "EXE",
+      "deps": ["shared", "plugin-sdk"],
+      "description": "pytest and unittest runner adapters (preview)."
     },
     {
       "name": "adapter-jest",
@@ -239,7 +251,9 @@
         "adapter-playwright",
         "coverage-engine",
         "test-generator",
-        "report-engine"
+        "report-engine",
+        "language-python",
+        "adapter-python"
       ],
       "description": "Application core: orchestrates engines behind a stable API used by the CLI and (later) Studio."
     },

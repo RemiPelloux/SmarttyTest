@@ -162,6 +162,19 @@
       "description": "Run the whole suite without analysis when that is faster (default true).",
       "type": "boolean"
     },
+    "python": {
+      "description": "Python projects (preview): analyse .py files and run pytest/unittest.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean", "description": "Default true." },
+        "interpreter": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Interpreter that runs the tests."
+        }
+      }
+    },
     "projects": {
       "description": "Per-project conventions, keyed by directory (\"backend\", \"apps/web\").",
       "type": "object",
@@ -293,7 +306,7 @@
       "enum": ["fast", "balanced", "safe"]
     },
     "adapter": {
-      "enum": ["vitest", "jest", "node", "playwright", "cypress", "angular"]
+      "enum": ["vitest", "jest", "node", "playwright", "cypress", "angular", "pytest", "unittest"]
     },
     "layout": {
       "enum": ["mirror", "colocated", "domain", "custom"]

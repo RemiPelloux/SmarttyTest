@@ -9,7 +9,16 @@ const MODES = ["fast", "balanced", "safe"];
 const RISKS = ["low", "medium", "high", "critical"];
 const CATEGORIES = ["unit", "integration", "e2e"];
 const LAYOUTS = ["mirror", "colocated", "domain", "custom"];
-const ADAPTERS = ["vitest", "jest", "node", "playwright", "cypress", "angular"];
+const ADAPTERS = [
+  "vitest",
+  "jest",
+  "node",
+  "playwright",
+  "cypress",
+  "angular",
+  "pytest",
+  "unittest",
+];
 const FORMATS = ["html", "json", "junit", "markdown"];
 const POLICIES = ["exclude", "test-source", "rebuild-required"];
 const VISIBILITIES = ["public", "protected", "private"];
@@ -40,6 +49,7 @@ const TOP_KEYS: Record<string, string[] | null> = {
   rules: null,
   retries: null,
   adaptive: null,
+  python: ["enabled", "interpreter"],
   cache: null,
   hook: ["checks", "budgetMs", "runners", "exclude"],
   parallelGroups: null,
@@ -193,6 +203,17 @@ export function validateConfig(raw: unknown): { errors: ConfigIssue[]; warnings:
   if (c.adaptive !== undefined && typeof c.adaptive !== "boolean")
     err("adaptive", "must be a boolean");
   if (c.cache !== undefined && typeof c.cache !== "boolean") err("cache", "must be a boolean");
+  if (c.python !== undefined) {
+    const py = c.python as Record<string, unknown>;
+    if (typeof py !== "object" || py === null || Array.isArray(py))
+      err("python", "must be an object");
+    else {
+      if (py.enabled !== undefined && typeof py.enabled !== "boolean")
+        err("python.enabled", "must be a boolean");
+      if (py.interpreter !== undefined && (typeof py.interpreter !== "string" || !py.interpreter))
+        err("python.interpreter", "must be a non-empty string");
+    }
+  }
   if (
     c.parallelGroups !== undefined &&
     c.parallelGroups !== "auto" &&

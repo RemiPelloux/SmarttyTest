@@ -8,6 +8,7 @@ import { CypressAdapter } from "@smarttest/adapter-cypress";
 import { JestAdapter } from "@smarttest/adapter-jest";
 import { NodeTestAdapter } from "@smarttest/adapter-node";
 import { PlaywrightAdapter } from "@smarttest/adapter-playwright";
+import { PytestAdapter, UnittestAdapter } from "@smarttest/adapter-python";
 import { VitestAdapter } from "@smarttest/adapter-vitest";
 import {
   BUILTIN_TRIGGERS,
@@ -30,7 +31,6 @@ import {
   type ProvidedGraphInput,
 } from "@smarttest/dependency-graph";
 import { decideImpact, explainTest, type ImpactResult } from "@smarttest/impact-engine";
-import type { TypeScriptResolver } from "@smarttest/language-typescript";
 import { SnapshotStore } from "@smarttest/native-snapshots";
 import { detectProject, type ProjectProfile } from "@smarttest/project-detector";
 import {
@@ -103,7 +103,7 @@ import {
   type SetupPlan,
   suggestHookRunners,
 } from "@smarttest/smart-init";
-import type { FileAnalysis } from "@smarttest/source-parser";
+import type { FileAnalysis, ModuleResolver } from "@smarttest/source-parser";
 import { LOCALE_PATH } from "@smarttest/source-parser";
 import { SymbolIndex, type UpdateStats } from "@smarttest/symbol-index";
 import {
@@ -621,7 +621,7 @@ function canonicalRoot(root: string): string {
 
 export class SmartTest {
   private profileCache: ProjectProfile | undefined;
-  private resolver: TypeScriptResolver | undefined;
+  private resolver: ModuleResolver | undefined;
   readonly storeDir: string;
   /** The project's store is committed to Git (opened with `tolerateTrackedStore`). */
   trackedStore: { dir: string; files: string[] } | undefined;
@@ -715,11 +715,18 @@ export class SmartTest {
     const generatedExcludes = this.config.generated
       .filter((g) => g.policy === "exclude")
       .map((g) => g.path);
-    return walkFiles(this.root, {
+    const files = await walkFiles(this.root, {
       include: this.config.include,
       exclude: [...this.config.exclude, ...generatedExcludes],
       ...(gitFiles ? { gitFiles } : {}),
     });
+    // Python (preview) can be turned off per project; a virtual environment is not the project.
+    return files.filter(
+      (f) =>
+        !f.endsWith(".py") ||
+        (this.config.python.enabled &&
+          !/(?:^|\/)(?:\.?venv|env|site-packages|__pycache__)\//.test(f)),
+    );
   }
 
   async allFiles(): Promise<string[]> {
@@ -747,6 +754,9 @@ export class SmartTest {
         }));
     if (this.config.adapters.length)
       roots = roots.filter((r) => this.config.adapters.includes(r.adapter));
+    // Python is a preview: `python: { enabled: false }` leaves its runners out too.
+    if (!this.config.python.enabled)
+      roots = roots.filter((r) => r.adapter !== "pytest" && r.adapter !== "unittest");
     // A dependency without config still runs from the package dir; prefer roots with config at equal depth.
     return roots;
   }
@@ -883,16 +893,26 @@ export class SmartTest {
     // Cold start (no index, or one from another analyzer version) of a large project: parser
     // threads start before files are read, so their start-up overlaps with reading.
     const sample = index.entries().values().next().value as FileAnalysis | undefined;
-    const { ts: typescript, analyzers: ANALYZERS } = await lang;
+    const { ts: typescript, py: python, analyzers: ANALYZERS } = await lang;
     const cold =
       index.size === 0 ||
       (sample !== undefined && !ANALYZERS.some((a) => a.version === sample.analyzerVersion));
     const profile = await this.profile(gitFiles);
     for (const w of index.loadWarnings) this.logger.warn(w);
-    const resolver = new typescript.TypeScriptResolver(
+    const tsResolver = new typescript.TypeScriptResolver(
       this.root,
       profile.workspaces.map((w) => ({ name: w.name, dir: w.dir, manifest: w.manifest })),
     );
+    // Python files resolve their imports the Python way (preview).
+    const pyResolver = new python.PythonResolver(this.root);
+    const resolver = {
+      resolve: (from: string, specifier: string) =>
+        from.endsWith(".py")
+          ? pyResolver.resolve(from, specifier)
+          : tsResolver.resolve(from, specifier),
+      resolvePattern: (from: string, pattern: string) => tsResolver.resolvePattern(from, pattern),
+      inputsFor: (files: readonly string[]) => tsResolver.inputsFor(files),
+    };
     const files = await this.sourceFiles(gitFiles);
     // Every file the resolver reads to resolve these files (tsconfig/jsconfig and what they
     // extend or reference, package.json files) keys the stored resolutions.
@@ -902,11 +922,12 @@ export class SmartTest {
         ...profile.layout.tsconfigFiles,
         ...profile.workspaces.map((w) => `${w.dir}/package.json`),
         ...resolver.inputsFor(files),
+        ...(files.some((f) => f.endsWith(".py")) ? pyResolver.inputs() : []),
       ]),
     ];
     const { readFile } = await import("node:fs/promises");
     // RESOLVER_VERSION: a SmartTest upgrade that resolves differently re-resolves every import.
-    const contextKey = `${typescript.RESOLVER_VERSION}\n${(
+    const contextKey = `${typescript.RESOLVER_VERSION}+${python.PYTHON_RESOLVER_VERSION}\n${(
       await Promise.all(
         contextFiles.map(
           async (f) =>
@@ -2375,6 +2396,14 @@ export class SmartTest {
     if (group.adapter === "playwright") return new PlaywrightAdapter(base);
     if (group.adapter === "cypress")
       return new CypressAdapter({ ...base, files: () => this.sourceFilesForSnapshots() });
+    if (group.adapter === "pytest" || group.adapter === "unittest") {
+      const py = {
+        projectRoot: this.root,
+        cwd,
+        ...(this.config.python.interpreter ? { interpreter: this.config.python.interpreter } : {}),
+      };
+      return group.adapter === "pytest" ? new PytestAdapter(py) : new UnittestAdapter(py);
+    }
     if (group.adapter === "node")
       return new NodeTestAdapter({
         projectRoot: this.root,

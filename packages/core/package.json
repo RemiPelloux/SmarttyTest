@@ -52,7 +52,9 @@
     "@smarttest/adapter-playwright": "workspace:*",
     "@smarttest/coverage-engine": "workspace:*",
     "@smarttest/test-generator": "workspace:*",
-    "@smarttest/report-engine": "workspace:*"
+    "@smarttest/report-engine": "workspace:*",
+    "@smarttest/language-python": "workspace:*",
+    "@smarttest/adapter-python": "workspace:*"
   },
   "smarttest": {
     "epic": "FND",

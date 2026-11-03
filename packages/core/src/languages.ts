@@ -6,16 +6,24 @@
 import type { Analyzer } from "@smarttest/source-parser";
 
 type TypeScriptLanguage = typeof import("@smarttest/language-typescript");
+type PythonLanguage = typeof import("@smarttest/language-python");
 
-let loading: Promise<{ ts: TypeScriptLanguage; analyzers: Analyzer[] }> | undefined;
+let loading:
+  | Promise<{ ts: TypeScriptLanguage; py: PythonLanguage; analyzers: Analyzer[] }>
+  | undefined;
 
-export function languages(): Promise<{ ts: TypeScriptLanguage; analyzers: Analyzer[] }> {
+export function languages(): Promise<{
+  ts: TypeScriptLanguage;
+  py: PythonLanguage;
+  analyzers: Analyzer[];
+}> {
   loading ??= (async () => {
-    const [ts, js] = await Promise.all([
+    const [ts, js, py] = await Promise.all([
       import("@smarttest/language-typescript"),
       import("@smarttest/language-javascript"),
+      import("@smarttest/language-python"),
     ]);
-    return { ts, analyzers: [ts.typescriptAnalyzer, js.javascriptAnalyzer] };
+    return { ts, py, analyzers: [ts.typescriptAnalyzer, js.javascriptAnalyzer, py.pythonAnalyzer] };
   })();
   return loading;
 }

@@ -93,6 +93,12 @@
     },
     {
       "path": "../report-engine"
+    },
+    {
+      "path": "../language-python"
+    },
+    {
+      "path": "../adapter-python"
     }
   ]
 }

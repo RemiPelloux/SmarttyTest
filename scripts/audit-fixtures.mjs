@@ -25,7 +25,7 @@ import { fileURLToPath } from "node:url";
 const repo = join(dirname(fileURLToPath(import.meta.url)), "..");
 const fixtures = join(repo, "fixtures", "projects");
 const cli = join(repo, "packages", "cli", "dist", "bin.js");
-const NO_BROWSER = new Set(["vitest", "jest", "node"]);
+const NO_BROWSER = new Set(["vitest", "jest", "node", "pytest", "unittest"]);
 const mutants = process.env.AUDIT_MUTANTS ?? "20";
 const seed = process.env.AUDIT_SEED ?? "1";
 

@@ -44,6 +44,9 @@
       "path": "packages/language-javascript"
     },
     {
+      "path": "packages/language-python"
+    },
+    {
       "path": "packages/symbol-index"
     },
     {
@@ -69,6 +72,9 @@
     },
     {
       "path": "packages/adapter-angular"
+    },
+    {
+      "path": "packages/adapter-python"
     },
     {
       "path": "packages/adapter-jest"

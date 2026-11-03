@@ -171,6 +171,7 @@ const KITCHEN_SINK = {
   rules: [rule],
   retries: 1,
   adaptive: true,
+  python: { enabled: true, interpreter: ".venv/bin/python" },
   projects: {
     backend: {
       tests: {

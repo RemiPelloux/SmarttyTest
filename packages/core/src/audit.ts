@@ -12,6 +12,7 @@
  */
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { pythonMutationPoints } from "@smarttest/language-python";
 import {
   applyMutation,
   CompilerResolver,
@@ -92,7 +93,7 @@ export interface AuditReport {
   };
 }
 
-const CODE = /\.[cm]?[jt]sx?$/;
+const CODE = /\.(?:[cm]?[jt]sx?|py)$/;
 
 function failingFiles(s: ExecutionSummary): string[] {
   return s.files
@@ -166,7 +167,10 @@ async function mutate(
         continue;
       const text = await readFile(join(checkout.root, file), "utf8").catch(() => undefined);
       if (text === undefined) continue;
-      for (const p of mutationPoints(file, text)) points.push({ ...p, file });
+      const found = file.endsWith(".py")
+        ? pythonMutationPoints(file, text)
+        : mutationPoints(file, text);
+      for (const p of found) points.push({ ...p, file });
     }
     points.sort((x, y) => x.file.localeCompare(y.file) || x.start - y.start);
     const sample = shuffle(points, seed).slice(0, wanted);
@@ -306,6 +310,8 @@ async function resolution(st: SmartTest): Promise<NonNullable<AuditReport["resol
   let uncertain = 0;
   const mismatches: NonNullable<AuditReport["resolution"]>["mismatches"] = [];
   for (const [file, a] of index.entries()) {
+    // The TypeScript compiler judges JavaScript and TypeScript imports only.
+    if (file.endsWith(".py")) continue;
     for (const imp of a.imports) {
       // Only module specifiers the compiler can judge: no assets, queries or virtual modules.
       if (

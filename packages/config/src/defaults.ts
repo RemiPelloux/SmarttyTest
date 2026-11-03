@@ -2,7 +2,8 @@ import type { ResolvedConfig, Rule, SmartTestConfig } from "./types.js";
 
 export const SOURCE_EXTENSIONS = ["ts", "tsx", "mts", "cts", "js", "jsx", "mjs", "cjs"] as const;
 
-export const DEFAULT_INCLUDE = [`**/*.{${SOURCE_EXTENSIONS.join(",")}}`];
+/** Python files are analysed too (preview, `python: { enabled: false }` turns it off). */
+export const DEFAULT_INCLUDE = [`**/*.{${SOURCE_EXTENSIONS.join(",")}}`, "**/*.py"];
 
 /**
  * Build output (`dist/`, `build/`, `out/`, `coverage/` next to a `package.json`) is skipped by the
@@ -45,6 +46,18 @@ export const BUILTIN_TRIGGERS = [
   "**/.babelrc*",
   "**/.swcrc",
   "**/postcss.config.*",
+  // Python (preview): what changes how tests are collected or which packages they import.
+  "**/pyproject.toml",
+  "**/setup.py",
+  "**/setup.cfg",
+  "**/pytest.ini",
+  "**/tox.ini",
+  "**/requirements*.txt",
+  "**/Pipfile",
+  "**/Pipfile.lock",
+  "**/poetry.lock",
+  "**/uv.lock",
+  "**/.python-version",
   "**/.postcssrc*",
   "**/tailwind.config.*",
   "**/{vitest,jest}.setup.*",
@@ -85,6 +98,10 @@ export function resolveConfig(config: SmartTestConfig = {}): ResolvedConfig {
     rules: config.rules ?? [],
     retries: config.retries ?? 0,
     adaptive: config.adaptive ?? true,
+    python: {
+      enabled: config.python?.enabled ?? true,
+      ...(config.python?.interpreter ? { interpreter: config.python.interpreter } : {}),
+    },
     projects: config.projects ?? {},
     cache: config.cache ?? true,
     parallelGroups: config.parallelGroups ?? "auto",

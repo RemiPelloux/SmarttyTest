@@ -72,7 +72,15 @@ export interface PackageManifest {
 }
 
 export interface RunnerInfo {
-  adapter: "vitest" | "jest" | "node" | "playwright" | "cypress" | "angular";
+  adapter:
+    | "vitest"
+    | "jest"
+    | "node"
+    | "playwright"
+    | "cypress"
+    | "angular"
+    | "pytest"
+    | "unittest";
   dir: string;
   configFile?: string;
   /** Test file patterns given on the command line (node --test). */
@@ -361,6 +369,73 @@ const CUSTOM_JEST_CONFIG = /^jest(?:\.[\w-]+)?\.config(?:\.[\w-]+)?\.(?:[cm]?[jt
 function scriptConfig(cmd: string, runner: string): string | undefined {
   const m = new RegExp(`\\b${runner}\\b[^&|;]*?(?:--config[= ]|\\s-c\\s)([^\\s&|;]+)`).exec(cmd);
   return m?.[1]?.replace(/^\.\//, "");
+}
+
+const PYTHON_MARKERS = [
+  "pyproject.toml",
+  "setup.py",
+  "setup.cfg",
+  "pytest.ini",
+  "tox.ini",
+  "requirements.txt",
+  "conftest.py",
+];
+
+/**
+ * Python projects (preview): the root and every folder holding a Python project file. pytest when
+ * it is configured (`pytest.ini`, `[tool.pytest.ini_options]`, `[tool:pytest]`), has a
+ * `conftest.py` or is a declared dependency; otherwise unittest, when test modules exist.
+ */
+async function detectPythonRunners(root: string, files: readonly string[]): Promise<RunnerInfo[]> {
+  const py = files.filter((f) => f.endsWith(".py"));
+  if (!py.length) return [];
+  const dirOf = (f: string) => (f.includes("/") ? f.slice(0, f.lastIndexOf("/")) : "");
+  const dirs = new Set<string>();
+  for (const f of files) {
+    const name = f.split("/").pop() ?? "";
+    if (
+      PYTHON_MARKERS.includes(name) &&
+      f.split("/").length <= 4 &&
+      !/(?:^|\/)(?:node_modules|\.venv|venv|site-packages)\//.test(f)
+    )
+      dirs.add(name === "conftest.py" ? "" : dirOf(f));
+  }
+  const testModule = /(?:^|\/)(?:test[^/]*|[^/]+_test)\.py$/;
+  if (py.some((f) => testModule.test(f))) dirs.add("");
+  const out: RunnerInfo[] = [];
+  const inside = (f: string, d: string) => d === "" || f.startsWith(`${d}/`);
+  for (const dir of [...dirs].sort()) {
+    // The deepest Python project owns its files: the root keeps only what no subproject holds.
+    const owned = py.filter(
+      (f) =>
+        inside(f, dir) &&
+        ![...dirs].some((d) => d !== dir && d.startsWith(dir ? `${dir}/` : "") && inside(f, d)),
+    );
+    const tests = owned.filter((f) => testModule.test(f));
+    if (!tests.length) continue;
+    const read = async (f: string) => (await readText(join(root, dir, f))) ?? "";
+    const cfg = `${await read("pytest.ini")}\n${await read("pyproject.toml")}\n${await read("setup.cfg")}\n${await read("tox.ini")}`;
+    const reqs = `${await read("requirements.txt")}\n${await read("requirements-dev.txt")}\n${await read("pyproject.toml")}`;
+    const evidence: string[] = [];
+    const prefix = dir ? `${dir}/` : "";
+    if (files.includes(`${prefix}pytest.ini`)) evidence.push(`${prefix}pytest.ini`);
+    if (/\[tool\.pytest\.ini_options\]|\[tool:pytest\]|\[pytest\]/.test(cfg))
+      evidence.push(`pytest settings in ${prefix || "./"}`);
+    if (owned.some((f) => f.endsWith("conftest.py"))) evidence.push(`${prefix}conftest.py`);
+    if (/(?:^|["'\s])pytest\b/m.test(reqs)) evidence.push("pytest is a declared dependency");
+    out.push(
+      evidence.length
+        ? { adapter: "pytest", dir, evidence }
+        : {
+            adapter: "unittest",
+            dir,
+            evidence: [
+              `${tests.length} test module(s) (${tests.slice(0, 2).join(", ")}) and no pytest setup`,
+            ],
+          },
+    );
+  }
+  return out;
 }
 
 async function detectRunners(
@@ -812,7 +887,6 @@ export async function detectProject(
   const gitFiles = options.gitFiles ?? (await gitProjectFiles(root));
   const files = options.files ?? (await walkFiles(root, gitFiles ? { gitFiles } : {}));
   const workspaces = await detectWorkspaces(root, manifest, gitFiles);
-  if (!manifest && !workspaces.length) warnings.push("No package.json found in this project");
   const manifests = [
     ...(manifest ? [{ dir: "", manifest }] : []),
     ...workspaces.map((w) => ({ dir: w.dir, manifest: w.manifest })),
@@ -823,7 +897,13 @@ export async function detectProject(
   const isTest =
     options.isTestFile ??
     ((f: string) => /(?:^|\/)(?:__tests__\/.+|[^/]+\.(?:test|spec|cy))\.[cm]?[jt]sx?$/.test(f));
-  const runners = await detectRunners(root, manifests);
+  const runners = [
+    ...(await detectRunners(root, manifests)),
+    ...(await detectPythonRunners(root, files)),
+  ];
+  const python = runners.some((r) => r.adapter === "pytest" || r.adapter === "unittest");
+  if (!manifest && !workspaces.length && !python)
+    warnings.push("No package.json found in this project");
   if (!runners.length)
     warnings.push("No Jest or Vitest setup detected — install one to run tests through SmartTest");
   const vcs = await detectVcs(root, gitFiles);

@@ -120,6 +120,16 @@ export async function readRunnerInputs(
     return out;
   }
 
+  // pytest and unittest (preview): their configuration files. conftest.py files are imports of
+  // the tests below them (language-python), so they and what they import select those tests.
+  if (root.adapter === "pytest" || root.adapter === "unittest") {
+    for (const name of ["pytest.ini", "pyproject.toml", "setup.cfg", "tox.ini"]) {
+      const file = root.dir ? `${root.dir}/${name}` : name;
+      if (await isFile(join(projectRoot, file))) out.configs.push({ file });
+    }
+    return out;
+  }
+
   // The configuration files: the runner's own (or the vite config Vitest falls back to) and,
   // transitively, the local modules they import.
   const facts: { file: string; facts: RunnerConfigFacts }[] = [];

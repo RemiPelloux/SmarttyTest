@@ -35,3 +35,7 @@ Thumbs.db
 # documentation site build and design-inspection output
 site/dist/
 .taste-skill/
+
+# Python fixtures run natively
+__pycache__/
+.pytest_cache/
