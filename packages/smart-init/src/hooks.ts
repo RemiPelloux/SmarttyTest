@@ -7,7 +7,7 @@
 import { execFileSync } from "node:child_process";
 import { existsSync, realpathSync } from "node:fs";
 import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
-import type { ExistingTestCommand } from "@smarttest/project-detector";
+import { detectCopiedHooks, type ExistingTestCommand } from "@smarttest/project-detector";
 import { exists, readJson, readText, SmartTestError } from "@smarttest/shared";
 import type { FilePlan } from "./index.js";
 
@@ -44,6 +44,11 @@ export interface HookTarget {
    * `@borderless/ts-scripts`: the file belongs to the package and is replaced on the next install.
    */
   dependency?: string;
+  /**
+   * The hook is a script the repository copies into Git's hooks directory: the command and where
+   * it lives. SmartTest edits the source; the copy is updated by running that command again.
+   */
+  copiedBy?: { by: string; command: string };
 }
 
 export interface HookPlan extends HookTarget {
@@ -186,7 +191,20 @@ export async function detectHookTarget(
       evidence: "simple-git-hooks in package.json",
       stage,
     });
-  candidates.push(gitHookTarget(root, stage));
+  // A script the repository keeps and copies into .git/hooks: the copy is overwritten by the next
+  // install, so the source is the hook to edit.
+  const copied = (await detectCopiedHooks(root)).find((c) => c.stage === stage);
+  candidates.push(
+    copied
+      ? {
+          manager: "git",
+          file: copied.source,
+          evidence: `${copied.source}, copied into .git/hooks by ${copied.by}`,
+          stage,
+          copiedBy: { by: copied.by, command: copied.command },
+        }
+      : gitHookTarget(root, stage),
+  );
   return candidates.find((c) => c.manager === prefer) ?? (candidates[0] as HookTarget);
 }
 
@@ -322,13 +340,34 @@ function installScript(
             ? `${l.match(/^\s*/)?.[0] ?? ""}${bg ? REPLACED_BG : REPLACED}${l.trim()}`
             : `# ${l}`;
       }
-  // After the shebang and husky's own preamble.
+  // After the shebang and husky's own preamble, or, in a pre-commit hook, in place of the first
+  // test step it replaces, so the steps before it keep running first. A pre-push block stays on
+  // top: it must read Git's refs before any other step reads stdin.
   let at = 0;
   if (lines[0]?.startsWith("#!")) at = 1;
   while (at < lines.length && /husky\.sh/.test(lines[at] ?? "")) at++;
+  const first = replace && stage === "pre-commit" ? Math.min(...steps.map((s) => s.line - 1)) : -1;
+  if (first > at && first < lines.length && !inCompound(lines, first)) at = first;
   if (addBlock) lines.splice(at, 0, block(stage, prefix));
   const out = lines.join("\n");
   return out.endsWith("\n") ? out : `${out}\n`;
+}
+
+/**
+ * Whether a line sits inside a compound command (`if`, a loop, a function, a `{ … }` group or a
+ * continued line), where a block of its own cannot go.
+ */
+function inCompound(lines: readonly string[], at: number): boolean {
+  let depth = 0;
+  for (let i = 0; i < at; i++) {
+    const l = (lines[i] ?? "").replace(/#.*$/, "").trim();
+    if ((lines[i] ?? "").trimEnd().endsWith("\\") && i === at - 1) return true;
+    for (const w of l.split(/[\s;]+/)) {
+      if (/^(?:if|for|while|until|case|\{)$/.test(w) || /\)\{$/.test(w)) depth++;
+      if (/^(?:fi|done|esac|\})$/.test(w)) depth--;
+    }
+  }
+  return depth > 0;
 }
 
 /** Gives the pre-push refs to the backgrounded test steps of a script (see `withRefs`). */
@@ -494,6 +533,10 @@ export async function planHookInstall(
   const replaceable = steps.filter(canReplace);
   const safeListed = replaceable.map((s) => ({ line: s.line, command: s.command }));
   const notes: string[] = [];
+  if (target.copiedBy)
+    notes.push(
+      `${target.file} is copied into .git/hooks by ${target.copiedBy.by} (\`${target.copiedBy.command}\`): run it again so the installed hook gets the change`,
+    );
   let installed: boolean;
   if (target.manager === "simple-git-hooks") {
     const pkg =
@@ -501,6 +544,13 @@ export async function planHookInstall(
     installed = ANY_SMARTTEST.test(pkg["simple-git-hooks"]?.[stage] ?? "");
   } else {
     installed = isInstalled(section, stage);
+  }
+  if (installed && target.copiedBy) {
+    const copy = gitHookTarget(root, stage).file;
+    if (!isInstalled(await readText(join(root, copy)), stage))
+      notes.push(
+        `${copy} does not run SmartTest yet: it is an older copy of ${target.file}; run ${target.copiedBy.by} (\`${target.copiedBy.command}\`)`,
+      );
   }
   const base = { ...target, installed, notes };
   if (installed) {

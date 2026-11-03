@@ -356,3 +356,51 @@ describe.each(SHELLS)("missing install under %s", (shell) => {
     },
   );
 });
+
+describe("init respects the hook the repository has", () => {
+  it("a hook script copied into .git/hooks is edited at its source", async () => {
+    const hook = "#!/bin/sh\nnpx eslint .\nnpx vitest run\n";
+    const root = await repo({
+      "package.json": JSON.stringify({
+        scripts: { prepare: "cp scripts/hooks/pre-commit $(git rev-parse --git-path hooks)/" },
+      }),
+      "scripts/hooks/pre-commit": hook,
+    });
+    const testCommands = await detectTestCommands(root, [""]);
+    expect(testCommands.some((c) => c.source === "scripts/hooks/pre-commit")).toBe(true);
+    const plan = await planHookInstall(root, { stage: "pre-commit", replace: true, testCommands });
+    expect(plan.file).toBe("scripts/hooks/pre-commit");
+    expect(plan.evidence).toContain("copied into .git/hooks by package.json#scripts.prepare");
+    expect(plan.notes.join("\n")).toContain("run it again");
+    // In place of the step it replaces: the lint step still runs first.
+    const after = (plan.plan.after as string).split("\n");
+    const lint = after.indexOf("npx eslint .");
+    expect(lint).toBeGreaterThan(0);
+    expect(after.findIndex((l) => l.includes(">>> smarttest >>>"))).toBeGreaterThan(lint);
+    expect(after.some((l) => l.includes("smarttest-replaced: npx vitest run"))).toBe(true);
+    // Installed at the source, not yet copied: status says so.
+    await writeFile(join(root, plan.file), plan.plan.after as string);
+    const status = await planHookInstall(root, { stage: "pre-commit" });
+    expect(status.installed).toBe(true);
+    expect(status.notes.join("\n")).toContain(".git/hooks/pre-commit does not run SmartTest yet");
+  });
+
+  it("finds copies made by a shell script or with install -m", async () => {
+    const root = await repo({
+      "package.json": JSON.stringify({ scripts: { "setup-hooks": "sh scripts/install-hooks.sh" } }),
+      "scripts/install-hooks.sh": "#!/bin/sh\ninstall -m 755 tools/push-hook .git/hooks/pre-push\n",
+      "tools/push-hook": "#!/bin/sh\nexit 0\n",
+    });
+    const plan = await planHookInstall(root, { stage: "pre-push" });
+    expect(plan.file).toBe("tools/push-hook");
+    expect(plan.copiedBy?.by).toBe("scripts/install-hooks.sh");
+  });
+
+  it("stays on top when the step is inside an if", async () => {
+    const hook = '#!/bin/sh\nif [ -z "$CI" ]; then\n  npx vitest run\nfi\n';
+    const root = await repo({ "package.json": "{}", ".git/hooks/pre-commit": hook });
+    const testCommands = await detectTestCommands(root, [""]);
+    const plan = await planHookInstall(root, { stage: "pre-commit", replace: true, testCommands });
+    expect((plan.plan.after as string).split("\n")[1]).toBe("# >>> smarttest >>>");
+  });
+});

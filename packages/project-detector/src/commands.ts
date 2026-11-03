@@ -127,7 +127,8 @@ export async function detectTestCommands(
   const scripts =
     (await readJson<{ scripts?: Record<string, string> }>(join(root, "package.json")))?.scripts ??
     {};
-  for (const f of HOOK_FILES) {
+  const copied = (await detectCopiedHooks(root)).map((c) => c.source);
+  for (const f of [...new Set([...HOOK_FILES, ...copied])]) {
     const text = await readText(join(root, f));
     if (text) out.push(...(await scanScript(root, f, text, scripts)));
   }
@@ -154,5 +155,82 @@ export async function detectTestCommands(
         });
     }
   }
+  return out;
+}
+
+/** A hook script the repository keeps in its own tree and copies into Git's hooks directory. */
+export interface CopiedHook {
+  stage: "pre-commit" | "pre-push";
+  /** Project-relative script that is copied (`scripts/hooks/pre-commit`). */
+  source: string;
+  /** Where the copy command lives (`package.json#scripts.prepare`, `scripts/install-hooks.sh`). */
+  by: string;
+  command: string;
+}
+
+/** Git's hooks directory however a script spells it: `$(git rev-parse --git-path hooks)`, … */
+const HOOKS_DIR =
+  /\$\(\s*git rev-parse --git-path hooks\s*\)|`\s*git rev-parse --git-path hooks\s*`|\$\(\s*git rev-parse --git-(?:common-)?dir\s*\)\/hooks|`\s*git rev-parse --git-(?:common-)?dir\s*`\/hooks/g;
+
+/** Words of one shell command, quotes removed (no expansion). */
+function words(command: string): string[] {
+  return [...command.matchAll(/"([^"]*)"|'([^']*)'|(\S+)/g)].map((m) => m[1] ?? m[2] ?? m[3] ?? "");
+}
+
+/**
+ * Hook scripts that `package.json` scripts (or the shell scripts they run) copy into `.git/hooks`
+ * with `cp` or `install`: SmartTest must edit the source, since the copy is overwritten by the
+ * next install. (A symbolic link needs nothing: Git's path already resolves to the source.)
+ */
+export async function detectCopiedHooks(root: string): Promise<CopiedHook[]> {
+  const scripts =
+    (await readJson<{ scripts?: Record<string, string> }>(join(root, "package.json")))?.scripts ??
+    {};
+  const texts: { by: string; text: string }[] = Object.entries(scripts).map(([name, text]) => ({
+    by: `package.json#scripts.${name}`,
+    text,
+  }));
+  // Shell scripts a package script runs (`sh scripts/install-hooks.sh`, `./setup-hooks.sh`).
+  for (const { text } of [...texts])
+    for (const m of text.matchAll(
+      /(?:^|[\s;&|])(?:(?:ba|z|da)?sh\s+)?((?:\.\/)?[\w./-]+\.sh)\b/g,
+    )) {
+      const file = (m[1] as string).replace(/^\.\//, "");
+      const body = await readText(join(root, file));
+      if (body) texts.push({ by: file, text: body });
+    }
+  const out: CopiedHook[] = [];
+  const isDir = async (p: string) =>
+    !!(await readdir(join(root, p)).then(
+      () => true,
+      () => false,
+    ));
+  for (const { by, text } of texts)
+    for (const raw of text.replace(HOOKS_DIR, ".git/hooks").split(/&&|\|\||;|\n/)) {
+      const w = words(raw.trim());
+      if (w[0] !== "cp" && w[0] !== "install") continue;
+      const args: string[] = [];
+      for (let i = 1; i < w.length; i++) {
+        const a = w[i] as string;
+        if (a.startsWith("-")) {
+          if (w[0] === "install" && /^-[mgo]$/.test(a)) i++; // `install -m 755 …`
+          continue;
+        }
+        args.push(a);
+      }
+      const dest = args.pop();
+      if (!dest || !/(?:^|\/)\.git\/hooks(?:\/|$)/.test(dest) || !args.length) continue;
+      const destName = dest.replace(/\/$/, "").split("/").pop() ?? "";
+      for (const stage of ["pre-commit", "pre-push"] as const)
+        for (const src of args) {
+          const clean = src.replace(/^\.\//, "").replace(/\/\*$/, "").replace(/\/$/, "");
+          let source: string | undefined;
+          if (destName === stage) source = clean;
+          else if (clean.split("/").pop() === stage) source = clean;
+          else if (src.endsWith("/*") || (await isDir(clean))) source = `${clean}/${stage}`;
+          if (source && (await readText(join(root, source))) !== undefined)
+            out.push({ stage, source, by, command: raw.trim() });
+        }
+    }
   return out;
 }

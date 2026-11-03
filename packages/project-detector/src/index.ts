@@ -20,7 +20,12 @@ import {
 } from "@smarttest/shared";
 import { detectTestCommands, type ExistingTestCommand } from "./commands.js";
 
-export { detectTestCommands, type ExistingTestCommand } from "./commands.js";
+export {
+  type CopiedHook,
+  detectCopiedHooks,
+  detectTestCommands,
+  type ExistingTestCommand,
+} from "./commands.js";
 
 export interface Evidence {
   value: string;
