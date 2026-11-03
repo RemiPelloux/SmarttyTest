@@ -164,6 +164,14 @@ import {
   unknownCheckProjects,
 } from "./hook.js";
 import { languages } from "./languages.js";
+import {
+  LOCKFILE,
+  lockfileDiff,
+  MANIFEST,
+  manifestDiff,
+  type PackageImpact,
+  packageImpact,
+} from "./lockfiles.js";
 import { outsideLinks } from "./outside.js";
 import { ParsePool, parallelParsingAvailable } from "./parse-pool.js";
 import { type LoadedPlugin, loadPlugins, pluginsChanged, runEdgeProviders } from "./plugins.js";
@@ -378,12 +386,37 @@ export interface SelectionValidation {
   decision: ImpactResult;
 }
 
+/** Triggers and fallbacks that selected tests, by message, with how many each selected. */
+export function widenedBy(
+  selected: readonly { reasons: readonly { kind: string; message: string }[] }[],
+): { reason: string; tests: number }[] {
+  const counts = new Map<string, number>();
+  for (const t of selected)
+    for (const m of new Set(
+      t.reasons
+        .filter((r) => r.kind === "mandatory-trigger" || r.kind === "fallback")
+        .map((r) => r.message),
+    ))
+      counts.set(m, (counts.get(m) ?? 0) + 1);
+  return [...counts]
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .slice(0, 3)
+    .map(([reason, tests]) => ({ reason, tests }));
+}
+
 export interface HookEstimate {
   estimateMs: number;
   budgetMs: number;
   slowest: { file: string; ms: number }[];
   /** Selected files with no recorded duration yet. */
   unknown: number;
+  /** The first of them, by path. */
+  unknownFiles: string[];
+  /**
+   * What widened the selection: triggers and fallbacks (a lockfile, a config file, an
+   * unresolved import) with the number of tests each selected, largest first.
+   */
+  widenedBy: { reason: string; tests: number }[];
   checks: { name: string; project: string; command: string }[];
 }
 
@@ -1266,12 +1299,17 @@ export class SmartTest {
       this.semanticDiffs(input, index, graphDiff, resources),
     );
     const traceView = await this.traceView(input, index);
+    const inputs = await this.runnerInputs(roots);
     const runners = await timed(timings, "runner configuration", async () =>
       runnerHits({
         ...this.runnerGraphView(index, graph, assignment),
-        inputs: await this.runnerInputs(roots),
+        inputs,
         changeSet: input.changeSet,
       }),
+    );
+    // A lockfile or package.json change: the code importing the packages that changed.
+    const packageChanges = await timed(timings, "package changes", () =>
+      this.packageChanges(input, index, inputs),
     );
     // A changed stylesheet reaches code through the stylesheets that import it (Sass partials).
     const changedSheets = input.changeSet.changes
@@ -1301,6 +1339,7 @@ export class SmartTest {
             ...(typeCheckedTests.size ? { typeCheckedTests } : {}),
             ...(replacements.size ? { replacements } : {}),
             ...(stylesheetImporterMap.size ? { stylesheetImporters: stylesheetImporterMap } : {}),
+            ...(packageChanges.size ? { packageChanges } : {}),
             // A plugin module inside the project decides edges: changing it widens to everything.
             globalTriggers: this.config.plugins
               .filter((p) => p.startsWith("./"))
@@ -1590,6 +1629,11 @@ export class SmartTest {
             .slice(0, 5)
             .map((f) => ({ file: f, ms: durations[f] ?? 0 })),
           unknown: selected.length - known.length,
+          unknownFiles: selected
+            .filter((f) => durations[f] === undefined)
+            .sort()
+            .slice(0, 5),
+          widenedBy: widenedBy(a.decision.selectedTests),
           checks: planned,
         });
         options.onAnalysis?.(a);
@@ -1797,6 +1841,92 @@ export class SmartTest {
       kept: notSaved ? 0 : Object.keys(store.tests).length,
       store,
     };
+  }
+
+  /**
+   * Changed lockfiles and `package.json` files, by package (lockfiles.ts). Added or deleted ones
+   * are left out: they stay triggers that select everything in their folder.
+   */
+  private async packageChanges(
+    input: ChangeAnalysisInput,
+    index: SymbolIndex,
+    inputs: readonly RunnerInputs[],
+  ): Promise<Map<string, PackageImpact>> {
+    const out = new Map<string, PackageImpact>();
+    const changed = input.changeSet.changes.filter(
+      (c) => c.type === "modified" && (LOCKFILE.test(c.path) || MANIFEST.test(c.path)),
+    );
+    if (!changed.length) return out;
+    const { readFile } = await import("node:fs/promises");
+    const read = (f: string) => readFile(join(this.root, f), "utf8").catch(() => undefined);
+    const files = await this.allFiles();
+    const declared = new Set<string>();
+    for (const f of files.filter(
+      (x) => MANIFEST.test(x) && !x.split("/").includes("node_modules"),
+    )) {
+      try {
+        const pkg = JSON.parse((await read(f)) ?? "{}") as Record<string, Record<string, unknown>>;
+        for (const sec of [
+          "dependencies",
+          "devDependencies",
+          "optionalDependencies",
+          "peerDependencies",
+        ])
+          for (const n of Object.keys(pkg[sec] ?? {})) declared.add(n);
+      } catch {
+        // An unreadable package.json is reported elsewhere.
+      }
+    }
+    const configFiles = new Set<string>();
+    for (const ri of inputs) {
+      for (const c of ri.configs) configFiles.add(c.file);
+      for (const l of ri.loads) configFiles.add(l.file);
+    }
+    const triggers = [...BUILTIN_TRIGGERS, ...this.config.triggers];
+    const isConfig = (f: string) => configFiles.has(f) || triggers.some((t) => matchGlob(f, t));
+    // `ng build`/`ng serve` builders an Angular workspace's test targets do not use.
+    const notLoadedByTests = new Set<string>();
+    const angularJson = files.filter((f) => f === "angular.json" || f.endsWith("/angular.json"));
+    if (angularJson.length) {
+      const builders: string[] = [];
+      for (const f of angularJson)
+        for (const t of angularTestTargets((await read(f)) ?? "")) builders.push(t.builder);
+      if (!builders.some((b) => b.startsWith("@angular-devkit/build-angular")))
+        notLoadedByTests.add("@angular-devkit/build-angular");
+    }
+    let texts: { file: string; text: string }[] | undefined;
+    for (const c of changed) {
+      const diff = (LOCKFILE.test(c.path) ? lockfileDiff : manifestDiff)(
+        c.path,
+        await input.readBefore(c.path),
+        await read(c.path),
+      );
+      if (!texts && !("full" in diff)) {
+        texts = [];
+        for (const f of files)
+          if (
+            !LOCKFILE.test(f) &&
+            !MANIFEST.test(f) &&
+            (STYLESHEET.test(f) || f.endsWith("angular.json") || (isConfig(f) && !index.get(f)))
+          ) {
+            const text = await read(f);
+            if (text !== undefined) texts.push({ file: f, text });
+          }
+      }
+      out.set(
+        c.path,
+        packageImpact({
+          path: c.path,
+          diff,
+          files: index.entries().values(),
+          declared,
+          isConfig,
+          texts: texts ?? [],
+          notLoadedByTests,
+        }),
+      );
+    }
+    return out;
   }
 
   private async semanticDiffs(

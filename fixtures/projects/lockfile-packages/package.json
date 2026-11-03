@@ -1,0 +1,12 @@
+{
+  "name": "fixture-lockfile-packages",
+  "private": true,
+  "type": "module",
+  "scripts": { "test": "vitest run" },
+  "dependencies": {
+    "date-lib": "^2.0.0",
+    "left-pad": "^1.3.0",
+    "money-lib": "^1.0.0"
+  },
+  "devDependencies": { "@types/left-pad": "^1.2.0", "eslint": "^9.0.0", "vitest": "^5.0.5" }
+}

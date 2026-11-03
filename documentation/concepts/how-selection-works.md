@@ -65,11 +65,21 @@ A test that replaces module M with a factory mock (`vi.mock("./m", () => …)`, 
 | Files the config names, and everything they import       | every test of that runner (setup files, global setup/teardown, test environment, Cypress support file, `node --test --import`/`--require`) |
 | A local file an alias / `moduleNameMapper` maps to       | tests that import the mapped specifier (every test of the runner when none is analysed, e.g. stylesheets)                                  |
 | PostCSS/Tailwind config, `.babelrc`, setup-named files   | full suite for their directory                                                                                                             |
-| `package.json` dependencies, lockfiles                   | full suite (affected workspace in monorepos)                                                                                               |
+| `package.json` dependencies, lockfiles                   | the code importing the packages that changed (see below); the full suite (affected workspace in monorepos) when that cannot be told apart  |
 | `.env`, `.env.test`, `.env.local`…                       | full suite, unless every changed key is read by analysed code (then its readers)                                                           |
 | Unresolved import or dynamic pattern touching the change | widened per mode, see below                                                                                                                |
 
 The config is read statically. When a setting that names files is computed (`setupFiles: findSetups()`), SmartTest says so in a warning, selects every test of that runner for a changed file no test imports, and never caches that runner's results. `smarttest explain test/setup.ts` lists the runners that load a file and why ("setup file of vitest (setupFiles in vitest.config.ts)").
+
+Lockfiles (`package-lock.json`, `pnpm-lock.yaml`, `yarn.lock`, Classic and Berry) and `package.json` are read by package. The packages whose resolved entry changed, and every package depending on them up to the ones the project declares, select the code that imports them, and an `@types/x` package the code importing `x`. A dependency bump then runs the tests that use that package, not the whole suite. Everything is still selected when SmartTest cannot tell that apart safely, and the trigger's reason says which case it is:
+
+- a test or build tool changed, or anything it depends on (Vitest, Jest, Vite, esbuild, Babel, TypeScript, the Angular CLI and builders, Playwright, Cypress, jsdom…); a builder an Angular workspace's test targets do not use, such as `@angular-devkit/build-angular` beside `@angular/build:unit-test`, does not count;
+- a declared package no analysed file imports (a runner plugin, a CLI a script runs, a type package), except lint, format and commit tools (ESLint, Prettier, Husky, lint-staged…);
+- a runner's config or setup file imports it, or a config or stylesheet names it (`preset: "ts-jest"`, `@use "bootstrap/…"`);
+- a lockfile setting changed (its version, `settings`, `overrides`, Yarn's `__metadata`), the lockfile cannot be read, or it was added or deleted;
+- any `package.json` field other than the dependency lists and metadata changed (`scripts`, `type`, `exports`, a `jest` section…).
+
+A file with an import SmartTest cannot evaluate (`require(name)`) may load any package: it is selected with every lockfile change.
 
 Rules can add triggers but cannot remove the built-in ones.
 

@@ -66,7 +66,17 @@ export interface ImpactInput {
    * it replaces. Code imports the replaced file, so a change to the replacement seeds that file.
    */
   replacements?: ReadonlyMap<string, readonly string[]>;
+  /**
+   * Changed lockfiles and `package.json` files, by package: the files importing a package that
+   * changed (or one that depends on it), or `full` with the reason everything must run. A path
+   * absent here is a plain trigger.
+   */
+  packageChanges?: ReadonlyMap<string, PackageChange>;
 }
+
+export type PackageChange =
+  | { packages: string[]; importers: { file: string; package: string }[] }
+  | { full: string };
 
 /** A changed file that a runner's configuration makes a dependency of some of its tests. */
 export interface RunnerHit {
@@ -292,13 +302,25 @@ export function decideImpact(input: ImpactInput): ImpactResult {
   }
 
   // 2. Mandatory triggers (cannot be disabled by rules). An environment file whose changed keys
-  // are all read by analysed code selects those readers instead.
+  // are all read by analysed code selects those readers instead, and a lockfile or manifest whose
+  // changed packages are all imported by analysed code selects those importers.
+  const packageSeeded = new Set<string>();
   for (const change of changeSet.changes) {
     for (const path of [change.path, change.previousPath].filter((p): p is string => !!p)) {
       if (narrowed.has(path) && !input.globalTriggers?.some((t) => matchGlob(path, t))) continue;
       const globalPattern = input.globalTriggers?.find((t) => matchGlob(path, t));
       const pattern = globalPattern ?? input.triggers.find((t) => matchGlob(path, t));
       if (!pattern) continue;
+      const pc = input.packageChanges?.get(path);
+      if (pc && "importers" in pc && !globalPattern) {
+        packageSeeded.add(path);
+        details.ignored.push(
+          pc.packages.length
+            ? `${path} (packages ${pc.packages.slice(0, 5).join(", ")}${pc.packages.length > 5 ? ` and ${pc.packages.length - 5} more` : ""}; their importers selected instead of trigger)`
+            : `${path} (no package changed)`,
+        );
+        continue;
+      }
       const rc = input.resources?.get(path);
       if (rc?.kind === "env" && change.type === "modified") {
         const { unmatched } = graph.resourceSeeds("env", rc.keys);
@@ -312,9 +334,10 @@ export function decideImpact(input: ImpactInput): ImpactResult {
       }
       const scope = globalPattern ? "" : dirOf(path);
       details.triggers.push({ file: path, pattern, scope });
+      const why = pc && "full" in pc ? `: ${pc.full.replace(`${path}: `, "")}` : "";
       const reason: SelectionReason = {
         kind: "mandatory-trigger",
-        message: `${path} changed (mandatory trigger ${pattern})${scope ? ` — scope ${scope}/` : ""}`,
+        message: `${path} changed (mandatory trigger ${pattern})${scope ? ` — scope ${scope}/` : ""}${why}`,
       };
       selectScope(scope, reason);
     }
@@ -348,7 +371,7 @@ export function decideImpact(input: ImpactInput): ImpactResult {
   const triggerFiles = new Set(details.triggers.map((t) => t.file));
   for (const change of changeSet.changes) {
     const path = change.path;
-    if (triggerFiles.has(path) || resourceSeeded.has(path)) continue;
+    if (triggerFiles.has(path) || resourceSeeded.has(path) || packageSeeded.has(path)) continue;
     // Generated outputs: a generator input change stands for its outputs (rebuild required).
     const gens = (input.generated ?? []).filter((g) => g.from.some((f) => matchGlob(path, f)));
     if (gens.length) {
@@ -520,6 +543,33 @@ export function decideImpact(input: ImpactInput): ImpactResult {
         path: [file, ...hit.path],
         confidence: hit.confidence,
       });
+  }
+
+  // 3c. Packages a lockfile or manifest change touched: the code importing them.
+  for (const path of packageSeeded) {
+    const pc = input.packageChanges?.get(path);
+    if (!pc || !("importers" in pc)) continue;
+    const byPackage = new Map<string, string[]>();
+    for (const { file, package: name } of pc.importers)
+      byPackage.set(name, [...(byPackage.get(name) ?? []), file]);
+    for (const [name, files] of byPackage) {
+      const seeds = files.map((f) => ({ file: f, units: ["*"] }));
+      details.seeds.push(...seeds);
+      for (const f of files)
+        if (known.has(f))
+          select(f, {
+            kind: "direct-dependency",
+            message: `Imports ${name}, which changed in ${path}`,
+            path: [path, f],
+          });
+      for (const hit of graph.dependentsOf(seeds).tests.values())
+        select(hit.test, {
+          kind: hit.depth <= 1 ? "direct-dependency" : "transitive-dependency",
+          message: `Uses ${name}, which changed in ${path} (through ${hit.path[0]?.replace(/#.*$/, "") ?? files[0]})`,
+          path: [path, ...hit.path],
+          confidence: hit.confidence,
+        });
+    }
   }
 
   // 4. Traverse the graph.

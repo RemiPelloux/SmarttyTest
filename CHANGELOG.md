@@ -6,6 +6,16 @@ All notable changes are documented here. Releases are managed with [Changesets](
 
 Angular support, and fixes to the commit and push hooks reported by an adopting project. Additive under the [semver policy](documentation/reference/contracts.md#semver-policy): a new `angular` adapter and `runners[].project` in the config schema; nothing frozen changes. Some selections grow (Angular templates and stylesheets, files a type-checking runner compiles), and a hook now stops the commit when SmartTest is not installed. Run `smarttest hook install` again to update an installed hook.
 
+### Added: lockfile changes select by package
+
+- A change to `package-lock.json`, `pnpm-lock.yaml` or `yarn.lock` (Classic and Berry) is diffed by package: the packages whose resolved entry changed, and the packages depending on them, select the code that imports them, and `@types/x` the code importing `x`. A `package.json` change to its dependency lists does the same. Before, any lockfile or `package.json` change selected every test. On opal-frontend, a `@types/lodash` bump selected 0 of 351 specs instead of all.
+- Everything is still selected, with the reason in the trigger message, when the change cannot be told apart safely: a test or build tool or something it depends on, a declared package no analysed file imports (lint and format tools excepted), a package a runner config or setup file loads or a stylesheet names, a lockfile setting, or another `package.json` field. Most of opal-frontend's dependency updates are such cases (the Angular builder lists the `@angular/*` packages as peers; `test-setup.ts` loads the shared component library), and still run everything.
+- New fixture `lockfile-packages`.
+
+### Added: the hook budget explains itself
+
+- When the estimate passes `hook.budgetMs`, the warning names what widened the selection ("346 tests: yarn.lock changed …: vitest changed, a test or build tool") and the files with no recorded duration.
+
 ### Fixed: commit and push hooks
 
 - A hook installed by SmartTest stops the commit or push when SmartTest is not installed (`smarttest is not installed: install the project's dependencies first…`), instead of printing a warning and letting the change through unchecked. `--no-verify` still skips it. Run `smarttest hook install` again to update an installed hook.

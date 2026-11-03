@@ -212,7 +212,12 @@ async function cmdHookRun(ctx: Ctx): Promise<number> {
         ctx.out(
           `Estimated ${formatDuration(e.estimateMs)} exceeds the ${formatDuration(e.budgetMs)} budget${e.unknown ? `; ${e.unknown} files have no duration yet` : ""}.`,
         );
+        for (const w of e.widenedBy) ctx.out(`  ${w.tests} tests: ${w.reason}`);
         for (const f of e.slowest.slice(0, 3)) ctx.out(`  ${f.file}: ${formatDuration(f.ms)}`);
+        if (e.unknownFiles.length)
+          ctx.out(
+            `  no duration yet: ${e.unknownFiles.join(", ")}${e.unknown > e.unknownFiles.length ? ` and ${e.unknown - e.unknownFiles.length} more` : ""}`,
+          );
         ctx.out("Consider pre-push checks or `smarttest trace --stale` to refine selection.");
       },
     });

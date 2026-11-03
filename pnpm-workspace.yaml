@@ -7,6 +7,8 @@ packages:
   # Installed with npm by the `angular (real install)` CI job only: the Angular CLI and build
   # toolchain stay out of every `pnpm install`.
   - "!fixtures/projects/angular-cli"
+  # Declares packages that are never installed: SmartTest reads its lockfile, nothing runs it.
+  - "!fixtures/projects/lockfile-packages"
 minimumReleaseAgeExclude:
   - "@biomejs/biome@2.6.4"
   - "@biomejs/cli-android-arm64@2.6.4"
