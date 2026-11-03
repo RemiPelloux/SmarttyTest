@@ -1687,6 +1687,60 @@ async function cmdVcs(ctx: Ctx): Promise<number> {
   });
 }
 
+async function cmdAudit(ctx: Ctx): Promise<number> {
+  const { t, flags } = ctx;
+  const st = await ctx.open();
+  const { audit, auditFailed, auditMarkdown } = await import("@smarttest/core");
+  const mutants = intFlag(flags.mutants, "mutants");
+  const seed = intFlag(flags.seed, "seed");
+  const budgetMs = intFlag(flags.budget, "budget");
+  const sample = intFlag(flags.sample, "sample");
+  const r = await audit(st, {
+    ...(flags.mutate
+      ? {
+          mutate: {
+            ...(mutants !== undefined ? { mutants } : {}),
+            ...(seed !== undefined ? { seed } : {}),
+            ...(budgetMs !== undefined ? { budgetMs } : {}),
+          },
+        }
+      : {}),
+    ...(flags.traces ? { traces: sample !== undefined ? { sample } : {} } : {}),
+    ...(flags.resolution ? { resolution: true } : {}),
+    onProgress: (m) => {
+      if (!flags.json && !flags.quiet) ctx.err(t.dim(m));
+    },
+  });
+  const md = auditMarkdown(r);
+  const reportPath = join(st.storeDir, "reports", "audit.md");
+  await writeFileAtomic(reportPath, md);
+  await writeFileAtomic(
+    join(st.storeDir, "reports", "audit.json"),
+    `${JSON.stringify(r, null, 2)}\n`,
+  );
+  if (flags.output) await writeFileAtomic(join(ctx.root, flags.output), md);
+  if (flags.json) ctx.json("audit", r);
+  else {
+    const n = (x: number) => (x ? t.red(String(x)) : t.green("0"));
+    ctx.out();
+    ctx.out(`${t.bold("SmartTest audit")} · ${r.project}`);
+    if (r.resolution)
+      ctx.out(
+        `  ${pad("Resolution", 16)}${r.resolution.imports} imports · ${r.resolution.agree} agree · mismatches ${n(r.resolution.mismatches.length)}`,
+      );
+    if (r.traces)
+      ctx.out(
+        `  ${pad("Reachability", 16)}${r.traces.tests} tests · ${r.traces.pairs} loaded files · unreachable ${n(r.traces.unreachable.length)}`,
+      );
+    if (r.mutate)
+      ctx.out(
+        `  ${pad("Fault injection", 16)}${r.mutate.mutants.length} of ${r.mutate.functions} functions · ${r.mutate.caught} caught · ${r.mutate.survived} survived · missed ${n(r.mutate.missed)}${r.mutate.loadFlaky ? t.dim(` · ${r.mutate.loadFlaky} load-flaky`) : ""}`,
+      );
+    ctx.out(`  ${t.dim("Report")} ${rel(ctx, reportPath)}`);
+  }
+  return auditFailed(r) ? ExitCode.PolicyFailure : ExitCode.Success;
+}
+
 async function cmdBenchmark(ctx: Ctx): Promise<number> {
   const { t, flags } = ctx;
   const st = await ctx.open();
@@ -1982,6 +2036,7 @@ const HANDLERS: Record<string, (ctx: Ctx) => Promise<number>> = {
   snapshot: cmdSnapshot,
   vcs: cmdVcs,
   graph: cmdGraph,
+  audit: cmdAudit,
   benchmark: cmdBenchmark,
   trace: cmdTrace,
   hook: cmdHook,

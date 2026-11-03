@@ -6,6 +6,14 @@ All notable changes are documented here. Releases are managed with [Changesets](
 
 Angular support, and fixes to the commit and push hooks reported by an adopting project. Additive under the [semver policy](documentation/reference/contracts.md#semver-policy): a new `angular` adapter and `runners[].project` in the config schema; nothing frozen changes. Some selections grow (Angular templates and stylesheets, files a type-checking runner compiles), and a hook now stops the commit when SmartTest is not installed. Run `smarttest hook install` again to update an installed hook.
 
+### Added: `smarttest audit` measures selection
+
+- `smarttest audit --mutate` breaks one function at a time (it throws on entry) in a temporary checkout of HEAD, lets SmartTest select for that change, then runs the full suite: a test that fails but was not selected is a missed test, by definition. Functions are sampled with `--mutants n` (default 10) and `--seed n`, within `--budget ms`; failures that also happen without the fault are left out, and a miss that passes alone with the fault in place is load-flaky. The project's files are never touched.
+- `smarttest audit --traces`: every project file a test loaded at run time (from `smarttest trace`; traced first when none are stored, `--sample n`) must reach that test through the graph, the runner's configuration, or uncertainty. Files a test reads without running them (templates, JSON) are not traced yet.
+- `smarttest audit --resolution`: every import the TypeScript compiler resolves into the project must resolve to the same file in SmartTest; one SmartTest takes for a package is an edge it cannot see.
+- One report, `.smarttest/reports/audit.{json,md}` (`-o file.md` to copy it): missed tests, unreachable files, mismatched imports, load-flaky failures and the share of functions checked. Exit code 1 when a check finds a miss, for CI.
+- Checked that each check reports a miss when there is one: a test loading a module by a computed name in FAST mode (missed by design there) is reported by `--mutate`, and a load the graph lacks by `--traces`.
+
 ### Added: lockfile changes select by package
 
 - A change to `package-lock.json`, `pnpm-lock.yaml` or `yarn.lock` (Classic and Berry) is diffed by package: the packages whose resolved entry changed, and the packages depending on them, select the code that imports them, and `@types/x` the code importing `x`. A `package.json` change to its dependency lists does the same. Before, any lockfile or `package.json` change selected every test. On opal-frontend, a `@types/lodash` bump selected 0 of 351 specs instead of all.

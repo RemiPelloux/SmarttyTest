@@ -1288,6 +1288,87 @@ export class SmartTest {
     return { tests, unassigned, helpers, roots, assignment, warnings, perRoot };
   }
 
+  /**
+   * A temporary checkout of HEAD with the installed packages linked (as for a pre-push hook),
+   * where `audit --mutate` can break code without touching the working tree.
+   */
+  async headCheckout(): Promise<{
+    root: string;
+    warnings: string[];
+    cleanup: () => Promise<void>;
+  }> {
+    if ((await this.provider()) !== "git" || !(await this.git().hasHead()))
+      throw new SmartTestError("audit --mutate needs a Git repository with at least one commit", {
+        code: "ST_AUDIT_NEEDS_GIT",
+        category: "usage",
+        hint: "Commit the project first: the faults are injected into a temporary checkout of HEAD.",
+      });
+    const git = this.git();
+    const profile = await this.profile();
+    const iso = await isolate({
+      projectRoot: this.root,
+      repoRoot: await git.root(),
+      prefix: await git.prefix(),
+      kind: "push",
+      input: await this.changeInput({ kind: "uncommitted" }),
+      aside: { unstaged: [], untracked: [], staged: [] },
+      nodeModulesDirs: [
+        ...new Set([
+          "",
+          ...profile.workspaces.map((w) => w.dir),
+          ...profile.runners.map((r) => r.dir),
+        ]),
+      ],
+    });
+    return { root: iso.root, warnings: iso.warnings, cleanup: iso.cleanup };
+  }
+
+  /**
+   * For each file, the tests a change to the whole file reaches: through the graph, through a
+   * runner's configuration (setup files and what they import), or because the test is uncertain
+   * and selected on every change in BALANCED and SAFE. The audit's trace oracle compares this with
+   * what each test loaded at run time.
+   */
+  async reachability(files: readonly string[]): Promise<{
+    tests: string[];
+    reaches: Map<string, Set<string>>;
+    uncertain: Set<string>;
+  }> {
+    const { index } = await this.loadIndex();
+    const found = await this.discoverTests(index);
+    const e2e = new Set(
+      [...found.assignment]
+        .filter(([, r]) => r.adapter === "playwright" || r.adapter === "cypress")
+        .map(([t]) => t),
+    );
+    const graph = await this.analysisGraph(index, e2e);
+    graph.setDiscovery(found);
+    const uncertain = new Set(
+      found.tests.filter((t) => graph.uncertaintyReachableFrom(t, 1).length),
+    );
+    const hits = runnerHits({
+      ...this.runnerGraphView(index, graph, found.assignment),
+      inputs: await this.runnerInputs(found.roots),
+      changeSet: {
+        provider: "audit",
+        changes: files.map((path) => ({ path, type: "modified" as const })),
+        completeness: "complete",
+        warnings: [],
+      },
+    }).hits;
+    const reaches = new Map<string, Set<string>>();
+    for (const f of files) {
+      const set = new Set<string>([
+        ...graph.dependentsOf([{ file: f, units: ["*"] }]).tests.keys(),
+      ]);
+      for (const r of graph.assetReaders(f))
+        for (const t of graph.dependentsOf([r]).tests.keys()) set.add(t);
+      reaches.set(f, set);
+    }
+    for (const h of hits) for (const t of h.tests) reaches.get(h.file)?.add(t);
+    return { tests: found.tests, reaches, uncertain };
+  }
+
   /** What each runner loads because its configuration names it (setup files, config imports…). */
   async runnerInputs(roots: readonly RunnerRoot[]): Promise<RunnerInputs[]> {
     return Promise.all(roots.map((r) => readRunnerInputs(this.root, r)));

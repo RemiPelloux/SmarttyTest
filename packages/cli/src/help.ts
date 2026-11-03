@@ -105,6 +105,21 @@ export const COMMANDS: Record<string, CommandHelp> = {
     ],
     changes: true,
   },
+  audit: {
+    summary:
+      "Measure selection instead of trusting it: inject faults, check traces and import resolution",
+    usage:
+      "smarttest audit [--mutate [--mutants n] [--seed n] [--budget ms]] [--traces [--sample n]] [--resolution] [--json] [-o file.md]",
+    flags: [
+      "--mutate  break one function at a time (it throws) in a temporary checkout of HEAD, select, run the full suite: a failing test that was not selected is a missed test",
+      "--mutants n  how many functions to break (default 10), sampled with --seed (default 1)",
+      "--budget ms  stop starting new mutants after this time",
+      "--traces  every project file a test loaded at run time must reach that test in the graph (traces the tests first when none are stored)",
+      "--sample n  with --traces and no stored traces: trace at most n test files",
+      "--resolution  every import must resolve as the TypeScript compiler resolves it",
+      "exit code 1 when any check finds a miss; reports in .smarttest/reports/audit.{json,md}",
+    ],
+  },
   benchmark: {
     summary:
       "Replay recent commits: full run vs project-gated run vs SmartTest, with missed failures checked",

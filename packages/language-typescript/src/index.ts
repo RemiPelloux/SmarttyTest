@@ -6,6 +6,14 @@ import type { Analyzer, FileAnalysis } from "@smarttest/source-parser";
 import { ANALYZER_VERSION, analyzeSource } from "./analyze.js";
 
 export { ANALYZER_VERSION, analyzeSource, tokenHash } from "./analyze.js";
+export {
+  applyMutation,
+  type CompilerResolution,
+  CompilerResolver,
+  MUTANT_ERROR,
+  type MutationPoint,
+  mutationPoints,
+} from "./oracle.js";
 export { RESOLVER_VERSION, TypeScriptResolver, type WorkspaceEntry } from "./resolve.js";
 export {
   type ConfigLoadedFile,

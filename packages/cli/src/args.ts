@@ -60,6 +60,12 @@ export const OPTIONS = {
   fresh: { type: "boolean" },
   units: { type: "string" },
   commits: { type: "string" },
+  // audit
+  mutate: { type: "boolean" },
+  mutants: { type: "string" },
+  seed: { type: "string" },
+  budget: { type: "string" },
+  resolution: { type: "boolean" },
   since: { type: "string" },
   sample: { type: "string" },
   resume: { type: "boolean" },

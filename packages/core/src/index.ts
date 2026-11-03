@@ -14,6 +14,14 @@ export { ExitCode, SmartTestError, toExitCode, VERSION } from "@smarttest/shared
 export type { FilePlan, Recommendation, SetupPlan } from "@smarttest/smart-init";
 export type { GenerationItem, SyncReport } from "@smarttest/test-generator";
 export type { ChangeSource } from "@smarttest/vcs-core";
+export {
+  type AuditOptions,
+  type AuditReport,
+  audit,
+  auditFailed,
+  auditMarkdown,
+  type MutantResult,
+} from "./audit.js";
 export { type CiContext, type CiPlan, detectCi, prepareCi } from "./ci.js";
 export {
   benchmarkHistory,
