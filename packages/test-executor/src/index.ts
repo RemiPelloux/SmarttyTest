@@ -152,10 +152,13 @@ export async function executeGroups(
       }
       const meta = run.meta ?? {};
       const seenFiles = new Set<string>();
-      // Duplicate test names are legal (Vitest, Jest, Cypress): two results with
-      // the same id inside ONE attempt are two tests, never a retry. Merge them
-      // worst-first so a failing instance can't be hidden by a passing namesake.
+      // Duplicate test names are legal (Vitest, Jest, Cypress; `it.each` rows whose title has no
+      // placeholder): two results with the same id inside ONE attempt are two tests, never a
+      // retry. Each keeps its own identity: the second is `<id> (2)`, the third `<id> (3)`, so
+      // reports, the result cache and flaky history count every row. A retry reports them in the
+      // same order, so a row keeps its number across attempts.
       const thisAttempt = new Map<string, TestExecution>();
+      const occurrences = new Map<string, number>();
       // Failures in files the runner ran beyond the selection (a Playwright setup project, a file
       // its config adds): they are not this selection's tests, but the run failed, so they block it.
       const outside: TestExecution[] = [];
@@ -167,18 +170,12 @@ export async function executeGroups(
           continue; // a passing result of a file beyond the selection is not reported
         }
         seenFiles.add(file);
-        const same = thisAttempt.get(exec.testId);
-        if (!same) {
-          thisAttempt.set(exec.testId, exec);
-          continue;
-        }
-        const worse = RANK.indexOf(exec.status) > RANK.indexOf(same.status) ? exec : same;
-        const error = worse.error ?? same.error ?? exec.error;
-        thisAttempt.set(exec.testId, {
-          ...worse,
-          durationMs: same.durationMs + exec.durationMs,
-          ...(error ? { error } : {}),
-        });
+        const n = (occurrences.get(exec.testId) ?? 0) + 1;
+        occurrences.set(exec.testId, n);
+        let id = n === 1 ? exec.testId : `${exec.testId} (${n})`;
+        // A test really named `x (2)` beside two `x`: never merge two results into one id.
+        while (n > 1 && thisAttempt.has(id)) id = `${id}'`;
+        thisAttempt.set(id, id === exec.testId ? exec : { ...exec, testId: id });
       }
       for (const exec of thisAttempt.values()) {
         // Only a pass in a LATER attempt of the same test turns a failure into flaky.

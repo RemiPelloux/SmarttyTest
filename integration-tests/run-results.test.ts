@@ -55,3 +55,26 @@ describe("failures outside any test fail the run (Vitest)", () => {
     expect(run?.error?.message).toContain("unhandled boom");
   }, 120_000);
 });
+
+describe("it.each rows keep their own identity (Vitest)", () => {
+  it("rows with the same title are counted one by one", async () => {
+    const root = await materialize("nest-auth-vitest");
+    await writeFile(
+      join(root, "tests/rows.test.ts"),
+      'import { expect, it } from "vitest";\nit.each([1, 2, 3, 4])("doubles", (n) => expect(n * 2).toBe(n === 3 ? 7 : n * 2));\n',
+    );
+    const res = await executeGroups(
+      [{ adapter: "vitest", dir: "", files: ["tests/rows.test.ts"] }],
+      {
+        createAdapter: () => new VitestAdapter({ projectRoot: root, cwd: root }),
+      },
+    );
+    const tests = res.files[0]?.tests ?? [];
+    expect(tests.map((t) => [t.testId, t.status])).toEqual([
+      ["tests/rows.test.ts::doubles", "passed"],
+      ["tests/rows.test.ts::doubles (2)", "passed"],
+      ["tests/rows.test.ts::doubles (3)", "failed"],
+      ["tests/rows.test.ts::doubles (4)", "passed"],
+    ]);
+  }, 120_000);
+});

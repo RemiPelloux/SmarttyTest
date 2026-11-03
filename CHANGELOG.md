@@ -25,6 +25,10 @@ Angular support, and fixes to the commit and push hooks reported by an adopting 
 - A test a runner collects inside a folder named like build output (`src/tests/build/`, `e2e/out/`) was never analysed, so no change selected it (OpenPro). `dist`, `build`, `out` and `coverage` are now build output only next to a `package.json`; the default `exclude` no longer lists them.
 - A file a runner collects that SmartTest does not analyse (excluded by `exclude`/`include`, or in a build-output folder) is reported by `impact`, `run`, `doctor` (warning) and `scan` (`tests.notAnalysed`), never dropped silently.
 
+### Fixed: tests that share a name are counted one by one
+
+- Results with the same id in one run (`it.each` rows whose title has no placeholder, two `it("works")` in a file) used to be merged into one result, the worst of them. Each now keeps its own id: the second is `<file>::<name> (2)`, the third `(3)`. Reports, the result cache and flaky history count every row (opal-frontend: 4,054 results instead of 4,039), a failing row is still never hidden, and a retried row keeps its number, so only that row is reported flaky.
+
 ### Fixed: commit and push hooks
 
 - A hook installed by SmartTest stops the commit or push when SmartTest is not installed (`smarttest is not installed: install the project's dependencies first…`), instead of printing a warning and letting the change through unchecked. `--no-verify` still skips it. Run `smarttest hook install` again to update an installed hook.

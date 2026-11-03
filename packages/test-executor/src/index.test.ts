@@ -323,3 +323,55 @@ describe("executeGroups", () => {
     expect(aggregateStatus([t("flaky"), t("failed")])).toBe("failed");
   });
 });
+
+describe("tests that share a name", () => {
+  const rows = (statuses: ("passed" | "failed")[][]): TestAdapter => {
+    let attempt = 0;
+    return {
+      ...fakeAdapter({}),
+      execute: async () => {
+        const now = statuses[attempt++] ?? [];
+        return {
+          adapter: "fake",
+          executions: now.map((status) => ({
+            testId: "a.test.ts::adds",
+            status,
+            durationMs: 1,
+            attempts: 1,
+          })),
+          startedAt: "",
+          finishedAt: "",
+        };
+      },
+    };
+  };
+  const group = [{ adapter: "fake", dir: "", files: ["a.test.ts"] }];
+
+  it("each row keeps its own id, and a failing row is not hidden by a passing one", async () => {
+    const run = await executeGroups(group, {
+      createAdapter: () => rows([["passed", "failed", "passed"]]),
+    });
+    const tests = run.files[0]?.tests ?? [];
+    expect(tests.map((t) => [t.testId, t.status])).toEqual([
+      ["a.test.ts::adds", "passed"],
+      ["a.test.ts::adds (2)", "failed"],
+      ["a.test.ts::adds (3)", "passed"],
+    ]);
+    expect(run.files[0]?.status).toBe("failed");
+  });
+
+  it("a retried row keeps its number, so a pass on retry is flaky for that row only", async () => {
+    const run = await executeGroups(group, {
+      retries: 1,
+      createAdapter: () =>
+        rows([
+          ["passed", "failed"],
+          ["passed", "passed"],
+        ]),
+    });
+    expect(run.files[0]?.tests.map((t) => [t.testId, t.status])).toEqual([
+      ["a.test.ts::adds", "passed"],
+      ["a.test.ts::adds (2)", "flaky"],
+    ]);
+  });
+});
