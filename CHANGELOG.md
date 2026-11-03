@@ -27,7 +27,7 @@ Angular support, and fixes to the commit and push hooks reported by an adopting 
 
 ### Fixed: tests that share a name are counted one by one
 
-- Results with the same id in one run (`it.each` rows whose title has no placeholder, two `it("works")` in a file) used to be merged into one result, the worst of them. Each now keeps its own id: the second is `<file>::<name> (2)`, the third `(3)`. Reports, the result cache and flaky history count every row (opal-frontend: 4,054 results instead of 4,039), a failing row is still never hidden, and a retried row keeps its number, so only that row is reported flaky.
+- Results with the same id in one run (`it.each` rows whose title has no placeholder, two `it("works")` in a file) used to be merged into one result, the worst of them. Each now keeps its own id: the second is `<file>::<name> (2)`, the third `(3)`. Reports, the result cache and flaky history count every row (on opal-frontend, 15 rows sharing a title had made SmartTest report 4,039 tests where `ng test` reported 4,054), a failing row is still never hidden, and a retried row keeps its number, so only that row is reported flaky.
 
 ### Fixed: commit and push hooks
 
