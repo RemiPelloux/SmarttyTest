@@ -53,6 +53,44 @@ describe("files a runner collects are tests, whatever their name", () => {
     expect(selectedOf(a)).toEqual(["checks/numbers.ts"]);
   }, 120_000);
 
+  it("a collected test inside a folder named like build output (OpenPro: src/tests/build/)", async () => {
+    const dir = await vitestProject(
+      {
+        "src/tests/build/numbers.test.ts":
+          'import { expect, it } from "vitest";\nimport { clamp } from "../../util/numbers";\n\nit("clamps", () => expect(clamp(12, 0, 10)).toBe(10));\n',
+        "src/tests/build/helper.ts": "export const ten = 10;\n",
+        "src/tests/out/uses-helper.test.ts":
+          'import { expect, it } from "vitest";\nimport { ten } from "../build/helper";\n\nit("ten", () => expect(ten).toBe(10));\n',
+      },
+      ["test/numbers.test.ts"],
+    );
+    await edit(dir, "src/util/numbers.ts", "Math.min(max,", "Math.min(max + 1,");
+    const a = await analyze(dir);
+    expect(a.testFiles).toContain("src/tests/build/numbers.test.ts");
+    expect(selectedOf(a)).toEqual(["src/tests/build/numbers.test.ts"]);
+    // A helper beside it, in the same folder, is analysed too.
+    git(dir, "checkout", "-q", "--", "src/util/numbers.ts");
+    await edit(dir, "src/tests/build/helper.ts", "10", "11");
+    expect(selectedOf(await analyze(dir))).toEqual(["src/tests/out/uses-helper.test.ts"]);
+  }, 120_000);
+
+  it("a file the runner collects that SmartTest does not analyse is reported, never silent", async () => {
+    const dir = await vitestProject({
+      "smarttest.config.mjs": 'export default { exclude: ["checks/**"] };\n',
+      "vitest.config.ts":
+        'import { defineConfig } from "vitest/config";\nexport default defineConfig({ test: { include: ["test/**/*.test.ts", "checks/**/*.ts"] } });\n',
+      "checks/extra.ts": 'import { it } from "vitest";\nit("extra", () => {});\n',
+    });
+    const st = await SmartTest.open({ root: dir });
+    const a = await st.analyze({ mode: "balanced" });
+    expect(a.decision.warnings.join("\n")).toContain(
+      "1 file(s) vitest collects are not analysed, so no change selects them (e.g. checks/extra.ts)",
+    );
+    const doctor = await st.doctor();
+    expect(doctor.find((c) => c.message.includes("checks/extra.ts"))?.severity).toBe("warn");
+    expect((await st.scan()).tests.notAnalysed?.[0]).toContain("checks/extra.ts");
+  }, 120_000);
+
   it("a test another test imports: the walk goes on to the importer", async () => {
     const dir = await vitestProject(
       {

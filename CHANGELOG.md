@@ -20,6 +20,11 @@ Angular support, and fixes to the commit and push hooks reported by an adopting 
 
 - `run`, `impact`, `validate-selection` and `benchmark` take `--runner <name>` (repeatable): an adapter id (`vitest`), an Angular project or a runner's directory. Other runners' tests are left out of the analysis with a warning that counts them, never reported as skipped or passed. Keeping Playwright out of a parity check or a benchmark no longer needs a copied config. `benchmark` follows `hook.runners` when it is set (`--runner all` for every runner). An unknown name fails with `ST_RUNNER_UNKNOWN` and lists the runners there are.
 
+### Fixed: a test no change could select
+
+- A test a runner collects inside a folder named like build output (`src/tests/build/`, `e2e/out/`) was never analysed, so no change selected it (OpenPro). `dist`, `build`, `out` and `coverage` are now build output only next to a `package.json`; the default `exclude` no longer lists them.
+- A file a runner collects that SmartTest does not analyse (excluded by `exclude`/`include`, or in a build-output folder) is reported by `impact`, `run`, `doctor` (warning) and `scan` (`tests.notAnalysed`), never dropped silently.
+
 ### Fixed: commit and push hooks
 
 - A hook installed by SmartTest stops the commit or push when SmartTest is not installed (`smarttest is not installed: install the project's dependencies first…`), instead of printing a warning and letting the change through unchecked. `--no-verify` still skips it. Run `smarttest hook install` again to update an installed hook.

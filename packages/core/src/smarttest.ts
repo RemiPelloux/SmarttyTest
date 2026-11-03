@@ -1202,8 +1202,14 @@ export class SmartTest {
       // A fallback is not cached: the failure must be reported again until it is fixed.
       if (!failed) nextCache[key] = files;
       let count = 0;
+      // Collected by the runner but not analysed: no change can select them. Never silent.
+      const invisible = failed ? [] : files.filter((f) => !analysedSet.has(f));
+      if (invisible.length)
+        warnings.push(
+          `${invisible.length} file(s) ${root.adapter}${root.dir ? ` (${root.dir})` : ""} collects are not analysed, so no change selects them (e.g. ${invisible.slice(0, 3).join(", ")}): they are excluded by SmartTest's \`exclude\`/\`include\` or sit in a build-output folder; analyse them, or make the runner skip them`,
+        );
       for (const f of files) {
-        if (!analysedSet.has(f)) continue; // excluded by smarttest config
+        if (!analysedSet.has(f)) continue; // reported above
         // A pattern fallback does not take files other files import: helpers, not specs.
         if (failed && imported.has(f)) continue;
         const prev = assignment.get(f);
@@ -3585,12 +3591,21 @@ export class SmartTest {
         });
       }
       for (const w of dw)
-        out.push({
-          severity: "error",
-          check: "runner",
-          message: w,
-          hint: "Is the runner installed? Try running it directly.",
-        });
+        out.push(
+          w.includes("are not analysed, so no change selects them")
+            ? {
+                severity: "warn",
+                check: "runner",
+                message: w,
+                hint: "A test no change can select only runs with `--all`. Remove its folder from `exclude`, or exclude it in the runner's config too.",
+              }
+            : {
+                severity: "error",
+                check: "runner",
+                message: w,
+                hint: "Is the runner installed? Try running it directly.",
+              },
+        );
       if (unassigned.length)
         out.push({
           severity: "warn",
@@ -3847,7 +3862,7 @@ export class SmartTest {
     const { index, stats } = await this.loadIndex();
     const profile = await this.profile();
     const graph = this.buildGraph(index);
-    const { tests, unassigned } = await this.discoverTests(index);
+    const { tests, unassigned, warnings: discoveryWarnings } = await this.discoverTests(index);
     const unresolved: { file: string; specifier: string; reason: string }[] = [];
     for (const a of index.entries().values())
       for (const i of a.imports)
@@ -3866,7 +3881,18 @@ export class SmartTest {
         durationMs: stats.durationMs,
       },
       graph: graph.stats,
-      tests: { total: tests.length, unassigned },
+      tests: {
+        total: tests.length,
+        unassigned,
+        // Files a runner collects that the graph lacks (excluded, or in a build-output folder).
+        ...(discoveryWarnings.some((w) => w.includes("are not analysed, so no change selects them"))
+          ? {
+              notAnalysed: discoveryWarnings.filter((w) =>
+                w.includes("are not analysed, so no change selects them"),
+              ),
+            }
+          : {}),
+      },
       unresolved,
       dynamic,
     };

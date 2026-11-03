@@ -799,6 +799,7 @@ async function cmdScan(ctx: Ctx): Promise<number> {
     `  ${pad(t.dim("Runners"), 14)}${p.runners.map((r) => `${r.adapter}${r.dir ? ` (${r.dir})` : ""}`).join(", ") || t.yellow("none")}`,
   );
   ctx.out(`  ${pad(t.dim("Tests"), 14)}${s.tests.total} files · layout ${p.tests.layout}`);
+  for (const w of s.tests.notAnalysed ?? []) ctx.out(`  ${pad("", 14)}${t.yellow("▲")} ${w}`);
   ctx.out(`  ${pad(t.dim("Changes"), 14)}${s.vcs === "git" ? "git" : "native snapshots"}`);
   ctx.out(
     `  ${pad(t.dim("Index"), 14)}${s.index.files} files · ${s.index.symbols} symbols · ${s.index.imports} imports · ${formatDuration(s.index.durationMs)} (${s.index.parsed} parsed, ${s.index.reused} cached)`,

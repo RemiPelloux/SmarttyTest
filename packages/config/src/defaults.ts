@@ -4,12 +4,14 @@ export const SOURCE_EXTENSIONS = ["ts", "tsx", "mts", "cts", "js", "jsx", "mjs",
 
 export const DEFAULT_INCLUDE = [`**/*.{${SOURCE_EXTENSIONS.join(",")}}`];
 
+/**
+ * Build output (`dist/`, `build/`, `out/`, `coverage/` next to a `package.json`) is skipped by the
+ * file walker (`PACKAGE_OUTPUT_DIRS`), not here: a glob such as `**\/build/**` also hid the tests
+ * a project keeps in `src/tests/build/`, which its runner collects.
+ */
 export const DEFAULT_EXCLUDE = [
   "**/*.d.ts",
   "**/node_modules/**",
-  "**/dist/**",
-  "**/build/**",
-  "**/coverage/**",
   "**/.next/**",
   "**/.smarttest/**",
   "smarttest.config.*",

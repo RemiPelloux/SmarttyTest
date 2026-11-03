@@ -1,4 +1,4 @@
-import { type Dirent, readdirSync, statSync } from "node:fs";
+import { type Dirent, existsSync, readdirSync, statSync } from "node:fs";
 import { readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { runProcess } from "./proc.js";
@@ -86,6 +86,30 @@ export const DEFAULT_IGNORED_DIRS = new Set([
   ".output",
 ]);
 
+/**
+ * Build-output folder names that are also ordinary folder names (`src/tests/build/`): they are
+ * build output only at a package root, next to a `package.json`.
+ */
+export const PACKAGE_OUTPUT_DIRS = new Set(["dist", "build", "out", "coverage"]);
+
+/**
+ * Whether a file is under an ignored folder. With the default folders, `dist`, `build`, `out`
+ * and `coverage` count only at a package root (`hasManifest(dir)`), so a test kept in
+ * `src/tests/build/` is still analysed (OpenPro). A custom set applies everywhere.
+ */
+function underIgnored(
+  file: string,
+  ignored: ReadonlySet<string>,
+  hasManifest: (dir: string) => boolean,
+): boolean {
+  const segs = file.split("/").slice(0, -1);
+  return segs.some((seg, i) => {
+    if (!ignored.has(seg)) return false;
+    if (ignored !== DEFAULT_IGNORED_DIRS || !PACKAGE_OUTPUT_DIRS.has(seg)) return true;
+    return hasManifest(segs.slice(0, i).join("/"));
+  });
+}
+
 export interface WalkOptions {
   include?: readonly string[];
   exclude?: readonly string[];
@@ -171,14 +195,15 @@ export async function walkFiles(
   if (options.useGit !== false) {
     const fromGit = options.gitFiles ?? (await gitProjectFiles(root));
     if (fromGit) {
+      const manifests = new Set(
+        fromGit
+          .filter((f) => f === "package.json" || f.endsWith("/package.json"))
+          .map((f) => f.slice(0, -"package.json".length).replace(/\/$/, "")),
+      );
+      // The project root is a package root even when its manifest is ignored or missing.
+      const hasManifest = (dir: string) => dir === "" || manifests.has(dir);
       return fromGit
-        .filter(
-          (f) =>
-            !f
-              .split("/")
-              .slice(0, -1)
-              .some((seg) => ignored.has(seg)),
-        )
+        .filter((f) => !underIgnored(f, ignored, hasManifest))
         .filter((f) => !options.include || matchGlob(f, options.include))
         .filter((f) => !options.exclude || !matchGlob(f, options.exclude))
         .sort();
@@ -195,7 +220,14 @@ export async function walkFiles(
     for (const entry of entries) {
       const childRel = rel ? `${rel}/${entry.name}` : entry.name;
       if (entry.isDirectory()) {
-        if (ignored.has(entry.name)) continue;
+        if (
+          ignored.has(entry.name) &&
+          (ignored !== DEFAULT_IGNORED_DIRS ||
+            !PACKAGE_OUTPUT_DIRS.has(entry.name) ||
+            rel === "" ||
+            existsSync(join(dir, "package.json")))
+        )
+          continue;
         if (options.exclude && matchGlob(childRel, options.exclude)) continue;
         await visit(join(dir, entry.name), childRel);
       } else if (entry.isFile()) {
