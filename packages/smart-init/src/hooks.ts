@@ -195,6 +195,19 @@ const shellQuote = (s: string) => `'${s.replace(/'/g, "'\\''")}'`;
 /** Pre-push refs read once by the block, then given back to the rest of the user's script. */
 const REFS = "smarttest_refs";
 const PIPE_REFS = `printf '%s\\n' "$${REFS}" | `;
+/** Ends a user's backgrounded step that SmartTest made receive the pre-push refs. */
+const REFS_MARK = "# smarttest: pre-push refs";
+
+/** A step run in the background (`cmd &`, not `cmd &&`). */
+const backgrounded = (line: string) =>
+  /(?:^|[^&])&\s*$/.test(line.replace(/\s+#.*$/, "")) && !/&&\s*$/.test(line);
+
+/**
+ * A backgrounded step gets /dev/null as stdin (POSIX sh without job control), so Git's pre-push
+ * refs never reach it: it is given the refs the block saved.
+ */
+const withRefs = (line: string) =>
+  `${line.match(/^\s*/)?.[0] ?? ""}${PIPE_REFS}${line.trim()} ${REFS_MARK}`;
 
 /**
  * The SmartTest block. Git runs hooks at the top-level of the worktree, so a project in a
@@ -318,6 +331,19 @@ function installScript(
   return out.endsWith("\n") ? out : `${out}\n`;
 }
 
+/** Gives the pre-push refs to the backgrounded test steps of a script (see `withRefs`). */
+function refsToBackground(text: string, steps: readonly { line: number }[]): string {
+  const lines = text.split("\n");
+  for (const s of steps) {
+    const i = s.line - 1;
+    const l = lines[i] ?? "";
+    if (l.includes(MARK) || l.includes(REFS_MARK) || /^\s*#/.test(l) || !backgrounded(l)) continue;
+    if (/<|\|/.test(l.replace(/&\s*$/, ""))) continue; // its own stdin or a pipeline: left as is
+    lines[i] = withRefs(l);
+  }
+  return lines.join("\n");
+}
+
 function uninstallScript(text: string): string {
   const lines = text.split("\n");
   const out: string[] = [];
@@ -343,6 +369,11 @@ function uninstallScript(text: string): string {
       continue;
     }
     restoring = false;
+    if (l.includes(REFS_MARK)) {
+      const indent = l.match(/^\s*/)?.[0] ?? "";
+      out.push(`${indent}${l.trim().replace(PIPE_REFS, "").replace(` ${REFS_MARK}`, "")}`);
+      continue;
+    }
     out.push(l);
   }
   return out.join("\n");
@@ -503,6 +534,10 @@ export async function planHookInstall(
     const replaceExisting = options.replace && safeListed.length > 0 && script;
     if (replaceExisting)
       upgrade = installScript(upgrade ?? current, replaceable, true, stage, false);
+    if (script && stage === "pre-push" && current !== undefined) {
+      const piped = refsToBackground(upgrade ?? current, listed);
+      if (piped !== (upgrade ?? current)) upgrade = piped;
+    }
     return {
       ...base,
       plan: {
@@ -565,6 +600,15 @@ export async function planHookInstall(
       true,
       prefix,
     );
+    // Line numbers are the original script's: the block is inserted above them.
+    if (stage === "pre-push" && current !== undefined) {
+      const blockLines = block(stage, prefix).split("\n").length;
+      const at = after.split("\n").findIndex((l) => l.trim() === START);
+      after = refsToBackground(
+        after,
+        listed.map((s) => (s.line - 1 >= at ? { ...s, line: s.line + blockLines } : s)),
+      );
+    }
   }
   return {
     ...base,

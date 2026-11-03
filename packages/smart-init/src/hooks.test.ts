@@ -2,6 +2,7 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { chmod, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, delimiter, dirname, join } from "node:path";
+import { detectTestCommands } from "@smarttest/project-detector";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { type HookStage, planHookInstall, planHookUninstall } from "./hooks.js";
 
@@ -115,6 +116,23 @@ describe.each(SHELLS)("pre-push stdin under %s", (shell) => {
       env: fake.env,
     });
     expect(allowed.status).toBe(0);
+  });
+
+  it("a backgrounded test step receives the refs too, and uninstall restores it", async () => {
+    const original = "#!/bin/sh\nnpx vitest related --run &\nwait $!\n";
+    const root = await repo({ "package.json": "{}", ".git/hooks/pre-push": original });
+    const fake = await fakeSmartTest(root);
+    const testCommands = await detectTestCommands(root, [""]);
+    expect(testCommands.map((c) => c.command)).toContain("npx vitest related --run &");
+    const plan = await planHookInstall(root, { stage: "pre-push", testCommands });
+    await writeFile(join(root, plan.file), plan.plan.after as string, { mode: 0o755 });
+    expect(plan.plan.after).toContain("| npx vitest related --run & # smarttest: pre-push refs");
+    const r = spawnSync(shell, [plan.file], { cwd: root, input: REFS, env: fake.env });
+    expect(r.status).toBe(0);
+    // The fake records the last call's stdin: the backgrounded step, after SmartTest's.
+    expect(await fake.stdin()).toBe(REFS);
+    const undo = await planHookUninstall(root, "git", ["pre-push"]);
+    expect(undo[0]?.after).toBe(original);
   });
 
   it("fails the hook when SmartTest fails, before the user's steps", async () => {

@@ -77,6 +77,11 @@ export interface BenchmarkOptions {
   /** Collect traces at each parent commit so selection can use observed execution. */
   traces?: boolean;
   mode?: SafetyMode;
+  /**
+   * Only these runners (`--runner`); default: the hook's (`hook.runners`), so a benchmark measures
+   * what the hook runs. `["all"]`: every runner.
+   */
+  runners?: readonly string[];
   configPath?: string;
   onProgress?: (message: string) => void;
 }
@@ -184,12 +189,17 @@ export async function benchmarkHistory(
         root: projectRoot,
         ...(configPath ? { configPath } : {}),
       });
+      const runners =
+        options.runners?.[0] === "all"
+          ? undefined
+          : (options.runners ?? engine.config.hook.runners);
       let analysis: Awaited<ReturnType<SmartTest["analyze"]>>;
       try {
         [analysis] = await wall(() =>
           engine.analyze({
             source: { kind: "base", ref: `${c.sha}^`, direct: true, target: c.sha },
             ...(options.mode ? { mode: options.mode } : {}),
+            ...(runners?.length ? { runners } : {}),
           }),
         );
       } catch (error) {

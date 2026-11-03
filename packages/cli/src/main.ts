@@ -335,6 +335,7 @@ async function cmdRun(ctx: Ctx): Promise<number> {
       ...(source ? { source } : {}),
       ...(mode ? { mode } : {}),
       ...(only ? { only } : {}),
+      ...(flags.runner?.length ? { runners: flags.runner } : {}),
       all: !!flags.all,
       ...(flags["no-cache"] ? { cache: false } : {}),
       ...(shard ? { shard } : {}),
@@ -523,6 +524,7 @@ async function cmdImpact(ctx: Ctx): Promise<number> {
     ...(source ? { source } : {}),
     ...(mode ? { mode } : {}),
     ...(only ? { only } : {}),
+    ...(flags.runner?.length ? { runners: flags.runner } : {}),
   });
   if (flags.json) {
     ctx.json("impact", {
@@ -746,7 +748,11 @@ async function cmdValidate(ctx: Ctx): Promise<number> {
   const spinner = new Spinner(ctx.io, !flags.json && !!ctx.io.stderr.isTTY);
   spinner.start("Running selection analysis and the full reference suite…");
   const v = await st
-    .validateSelection({ ...(source ? { source } : {}), ...(mode ? { mode } : {}) })
+    .validateSelection({
+      ...(source ? { source } : {}),
+      ...(mode ? { mode } : {}),
+      ...(flags.runner?.length ? { runners: flags.runner } : {}),
+    })
     .finally(() => spinner.stop());
   if (flags.json) ctx.json("validate-selection", v);
   else {
@@ -1705,6 +1711,7 @@ async function cmdBenchmark(ctx: Ctx): Promise<number> {
     ...(previous ? { previous } : {}),
     ...(flags.traces ? { traces: true } : {}),
     ...(flags["no-cache"] ? { cache: false } : {}),
+    ...(flags.runner?.length ? { runners: flags.runner } : {}),
     onCommit: async (results) => {
       await writeFileAtomic(
         jsonPath,

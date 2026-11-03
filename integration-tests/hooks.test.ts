@@ -274,6 +274,24 @@ describe("pre-push runs the commits being pushed", () => {
     expect(result.outcome?.report.summary.failed).toBeGreaterThan(0);
   }, 120_000);
 
+  it("without the refs on stdin (a backgrounded step), it still tests the unpushed commits", async () => {
+    const dir = await materialize("ts-lib-vitest", { git: true });
+    await edit(dir, stringsTest, 'toBe("Ada")', 'toBe("Adah")');
+    await commitAll(dir, "broken");
+    vi.stubEnv("GIT_EXEC_PATH", "/usr/lib/git-core"); // as when Git starts the hook
+    try {
+      const result = await (await SmartTest.open({ root: dir })).runHook("pre-push", {
+        cache: false,
+        refs: [],
+      });
+      expect(result.warnings.join("\n")).toContain("the refs being pushed were not on stdin");
+      expect(result.outcome?.report.summary.failed).toBeGreaterThan(0);
+      expect(result.outcome?.exitCode).not.toBe(0);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  }, 120_000);
+
   it("fails on a committed failure even when the working tree fixed it", async () => {
     const dir = await materialize("ts-lib-vitest", { git: true });
     await edit(dir, stringsTest, 'toBe("Ada")', 'toBe("Adah")');

@@ -16,10 +16,15 @@ Angular support, and fixes to the commit and push hooks reported by an adopting 
 
 - When the estimate passes `hook.budgetMs`, the warning names what widened the selection ("346 tests: yarn.lock changed …: vitest changed, a test or build tool") and the files with no recorded duration.
 
+### Added: `--runner <name>`
+
+- `run`, `impact`, `validate-selection` and `benchmark` take `--runner <name>` (repeatable): an adapter id (`vitest`), an Angular project or a runner's directory. Other runners' tests are left out of the analysis with a warning that counts them, never reported as skipped or passed. Keeping Playwright out of a parity check or a benchmark no longer needs a copied config. `benchmark` follows `hook.runners` when it is set (`--runner all` for every runner). An unknown name fails with `ST_RUNNER_UNKNOWN` and lists the runners there are.
+
 ### Fixed: commit and push hooks
 
 - A hook installed by SmartTest stops the commit or push when SmartTest is not installed (`smarttest is not installed: install the project's dependencies first…`), instead of printing a warning and letting the change through unchecked. `--no-verify` still skips it. Run `smarttest hook install` again to update an installed hook.
 - The hook's time estimate counts the runner's parallel workers: per runner, the larger of its slowest file and its total over its workers (`--workers` / `workers`, or the runner's default). It used to add every file's duration as if they ran one after another, so a run of 19.5 s was announced as "Estimated 2m 27s exceeds the 1m 0s budget".
+- A pre-push step that does not receive Git's refs on stdin (run in the background with `&`, or behind a tool that keeps stdin) compares HEAD with its upstream merge-base, with a warning, instead of failing with `ST_HOOK_PUSH_REFS_MISSING`. `hook install` gives the refs the SmartTest block saved to a backgrounded test step in the same hook (`printf … | npx vitest related --run &`), and `hook uninstall` restores the line.
 - The staged checkout no longer reports "Isolation incomplete" for pnpm's hoisted links (`node_modules/.pnpm/node_modules/<workspace package>`): only an installed package importing a workspace package it does not declare goes through them, and project code resolves workspace packages to the content under test. Checked in a pnpm workspace with an unstaged edit that would fail the test. An installed package that does depend on a workspace package is still reported, now by name.
 
 ### Fixed: Angular templates and styles selected no test

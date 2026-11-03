@@ -294,6 +294,12 @@ export interface AnalyzeOptions {
    * selection (`--only`). The dependency analysis is not restricted.
    */
   only?: readonly string[];
+  /**
+   * Only the tests of these runners (`--runner`): an adapter id (`vitest`), an Angular project or
+   * a runner's directory. Other runners' tests are left out of the analysis, never reported as
+   * skipped or passed; a warning says how many.
+   */
+  runners?: readonly string[];
 }
 
 export interface Analysis {
@@ -384,6 +390,48 @@ export interface SelectionValidation {
   analysisOverheadMs: number;
   savedPct: number;
   decision: ImpactResult;
+}
+
+/**
+ * Keeps the tests of the named runners (`--runner`): an adapter id, an Angular project, or a
+ * runner's directory. An unknown name is an error listing the runners there are.
+ */
+export function restrictRunners<
+  T extends {
+    tests: string[];
+    roots: RunnerRoot[];
+    assignment: Map<string, RunnerRoot>;
+    warnings?: string[];
+  },
+>(found: T, names: readonly string[] | undefined): T {
+  if (!names?.length) return found;
+  const matches = (r: RunnerRoot, n: string) =>
+    r.adapter === n || r.project === n || (r.dir !== "" && r.dir === n.replace(/\/$/, ""));
+  for (const n of names)
+    if (!found.roots.some((r) => matches(r, n)))
+      throw new SmartTestError(`No runner named "${n}"`, {
+        code: "ST_RUNNER_UNKNOWN",
+        category: "usage",
+        hint: `Runners here: ${[...new Set(found.roots.flatMap((r) => [r.adapter, ...(r.project ? [r.project] : [])]))].join(", ") || "none"}. Pass an adapter id, an Angular project or a runner's directory.`,
+      });
+  const kept = found.roots.filter((r) => names.some((n) => matches(r, n)));
+  const assignment = new Map([...found.assignment].filter(([, r]) => kept.includes(r)));
+  const tests = found.tests.filter((t) => assignment.has(t));
+  const left = found.tests.length - tests.length;
+  return {
+    ...found,
+    tests,
+    roots: kept,
+    assignment,
+    warnings: [
+      ...(found.warnings ?? []),
+      ...(left
+        ? [
+            `--runner ${names.join(", ")}: ${left} test file(s) of other runners are left out of this analysis (not selected, not run, not counted)`,
+          ]
+        : []),
+    ],
+  };
 }
 
 /** Triggers and fallbacks that selected tests, by message, with how many each selected. */
@@ -1242,7 +1290,10 @@ export class SmartTest {
     const scope = scoped?.scope;
     const { index, stats } = updated.value;
     if (options.everything) {
-      const { tests, unassigned, roots, assignment } = await this.discoverTests(index);
+      const { tests, unassigned, roots, assignment } = restrictRunners(
+        await this.discoverTests(index),
+        options.runners,
+      );
       const reason = { kind: "fallback" as const, message: options.everything.reason };
       const decision = {
         selectedTests: tests.map((t) => ({ testId: t, filePath: t, reasons: [reason] })),
@@ -1282,7 +1333,7 @@ export class SmartTest {
       roots,
       assignment,
       warnings: discoveryWarnings,
-    } = await this.discoverTests(index);
+    } = restrictRunners(await this.discoverTests(index), options.runners);
     const e2eTests = new Set(
       [...assignment]
         .filter(([, r]) => r.adapter === "playwright" || r.adapter === "cypress")
@@ -1532,15 +1583,16 @@ export class SmartTest {
       return { stage, skipped: true, checks: [], warnings: [], durationMs: 0 };
     }
     let remoteShas: string[] | undefined;
+    let refsWarning: string | undefined;
     if (stage === "pre-push") {
       const fromHook = isHookContext();
       const refs = options.refs ?? (fromHook ? await readPrePushRefs() : []);
+      // Git gives the refs on stdin; a step that does not receive it (run in the background, or
+      // behind a tool that keeps stdin) still tests what the push sends from HEAD: the commits
+      // since the upstream merge-base, or everything when there is no upstream.
       if (fromHook && !refs.length)
-        throw new SmartTestError("Could not read the refs being pushed from the pre-push hook", {
-          code: "ST_HOOK_PUSH_REFS_MISSING",
-          category: "usage",
-          hint: "Run `git push` normally: the hook receives the refs on stdin.",
-        });
+        refsWarning =
+          "pre-push: the refs being pushed were not on stdin (the step runs in the background or behind a tool that keeps stdin); compared HEAD with its upstream merge-base instead. `smarttest hook install` passes the refs to a backgrounded step.";
       await assertPushIsHead(this.root, refs);
       if (onlyDeletions(refs)) {
         // Deleting a branch pushes no content; comparing with an empty tree would run (and could
@@ -1570,7 +1622,7 @@ export class SmartTest {
     // The config under test (the staged one inside a temporary checkout), never the dirty copy.
     let active = this.config;
     let checksPromise: Promise<CheckResult[]> = Promise.resolve([]);
-    const warnings: string[] = [];
+    const warnings: string[] = refsWarning ? [refsWarning] : [];
     // Workspace packages are projects too: a check scoped to one must find it.
     const workspaces = (await this.profile()).workspaces.map((w) => w.dir);
     const outcome = await this.run({

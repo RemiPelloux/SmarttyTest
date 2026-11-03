@@ -53,9 +53,10 @@ export const COMMANDS: Record<string, CommandHelp> = {
   impact: {
     summary: "Compute which tests a change affects, without running them",
     usage:
-      "smarttest impact [--base <ref> [--target <ref>] | --staged | --push | --uncommitted | --since-snapshot] [--only <path>] [--mode fast|balanced|safe] [--json]",
+      "smarttest impact [--base <ref> [--target <ref>] | --staged | --push | --uncommitted | --since-snapshot] [--only <path>] [--runner <name>] [--mode fast|balanced|safe] [--json]",
     flags: [
       "--only <path>  only the changes in this file or directory (repeatable); the dependency analysis still covers the project",
+      "--runner <name>  only the tests of this runner (repeatable): an adapter id such as vitest, an Angular project or a runner directory; other runners' tests are left out",
       "--mode fast|balanced|safe  safety mode (default from config, else balanced)",
     ],
     changes: true,
@@ -63,12 +64,13 @@ export const COMMANDS: Record<string, CommandHelp> = {
   run: {
     summary: "Run affected tests (default) or the full suite",
     usage:
-      "smarttest run [--affected | --all] [--base <ref> | --staged | --push | …] [--only <path>] [--mode m] [--coverage] [--retries n] [--timeout ms] [--workers n] [--format html|json|junit|markdown] [--open] [-o dir]",
+      "smarttest run [--affected | --all] [--base <ref> | --staged | --push | …] [--only <path>] [--runner <name>] [--mode m] [--coverage] [--retries n] [--timeout ms] [--workers n] [--format html|json|junit|markdown] [--open] [-o dir]",
     flags: [
       "--affected  analyse changes and run affected tests (default)",
       "--all  full suite through the same pipeline",
       "--hook  commit-hook profile, with --staged or --push: fail-fast, affected-project checks, duration records; not with --shard, --only or --all",
       "--only <path>  only the changes in this file or directory (repeatable); tests other changes affect are not run",
+      "--runner <name>  only the tests of this runner (repeatable): an adapter id such as vitest, an Angular project or a runner directory; other runners' tests are left out",
       "--mode fast|balanced|safe  safety mode (default from config, else balanced)",
       "--coverage  collect coverage (scope: selected or full)",
       "--retries n  retry failures; a pass after retry is reported as flaky",
@@ -96,15 +98,18 @@ export const COMMANDS: Record<string, CommandHelp> = {
   },
   "validate-selection": {
     summary: "Compare the selection against a full reference run",
-    usage: "smarttest validate-selection [--base <ref>] [--mode m] [--json]",
-    flags: ["--mode fast|balanced|safe  safety mode of the selection being validated"],
+    usage: "smarttest validate-selection [--base <ref>] [--runner <name>] [--mode m] [--json]",
+    flags: [
+      "--mode fast|balanced|safe  safety mode of the selection being validated",
+      "--runner <name>  compare only this runner's tests (repeatable), e.g. leave Playwright out",
+    ],
     changes: true,
   },
   benchmark: {
     summary:
       "Replay recent commits: full run vs project-gated run vs SmartTest, with missed failures checked",
     usage:
-      "smarttest benchmark [--commits n | --since <ref>] [--sample n] [--resume] [--traces] [--mode m] [--json] [-o file.md]",
+      "smarttest benchmark [--commits n | --since <ref>] [--sample n] [--resume] [--traces] [--runner <name>] [--mode m] [--json] [-o file.md]",
     flags: [
       "--commits n  how many recent commits to replay (default 10)",
       "--since <ref>  replay every first-parent commit after <ref>",
@@ -112,6 +117,7 @@ export const COMMANDS: Record<string, CommandHelp> = {
       "--resume  reuse commits already measured in .smarttest/reports/benchmark.json",
       "--traces  trace the tests at each parent commit so selection uses observed execution",
       "--mode fast|balanced|safe  safety mode of the replayed selections",
+      "--runner <name>  only this runner's tests (repeatable); default: the hook's runners (hook.runners) when set, `--runner all` for every runner",
       "--no-cache  never reuse cached passes while replaying",
       "-o, --output <file.md>  also write the Markdown report there",
     ],
