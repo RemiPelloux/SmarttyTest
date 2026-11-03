@@ -107,6 +107,35 @@ describe("files a runner collects are tests, whatever their name", () => {
     );
   }, 120_000);
 
+  // openpro-front: src/__tests__/performance/setup.ts, a Vitest setup file named like a test.
+  it("a setup file named like a test is a runner input, never a test that cannot run", async () => {
+    const dir = await vitestProject({
+      "vitest.config.ts":
+        'import { fileURLToPath } from "node:url";\nimport { defineConfig } from "vitest/config";\nexport default defineConfig({\n  resolve: { alias: { "@lib": fileURLToPath(new URL("./src", import.meta.url)) } },\n  test: { setupFiles: ["./test/__tests__/setup.ts"], exclude: ["**/node_modules/**", "test/__tests__/setup.ts"] },\n});\n',
+      "test/__tests__/setup.ts": "export const ready = true;\n",
+    });
+    await edit(dir, "test/__tests__/setup.ts", "true", "false");
+    const a = await analyze(dir);
+    expect(a.unassignedTests).not.toContain("test/__tests__/setup.ts");
+    expect(selectedOf(a)).toEqual([...a.testFiles].sort());
+    expect(selectedOf(a)).not.toContain("test/__tests__/setup.ts");
+  }, 120_000);
+
+  // openpro-front: exclude: ["**/*.live.test.ts"]; a push creating a branch compares with the
+  // whole history, so the excluded live test counted as an added test no runner collects.
+  it("a changed test file the config excludes is not selected", async () => {
+    const dir = await vitestProject({
+      "smarttest.config.json": `${JSON.stringify({ exclude: ["**/*.live.test.ts"] })}\n`,
+      "vitest.config.ts":
+        'import { fileURLToPath } from "node:url";\nimport { defineConfig } from "vitest/config";\nexport default defineConfig({\n  resolve: { alias: { "@lib": fileURLToPath(new URL("./src", import.meta.url)) } },\n  test: { exclude: ["**/node_modules/**", "**/*.live.test.ts"] },\n});\n',
+      "test/cdn.live.test.ts":
+        'import { expect, it } from "vitest";\n\nit("live", () => expect(1).toBe(1));\n',
+    });
+    await edit(dir, "test/cdn.live.test.ts", "toBe(1)", "toBe(2)");
+    const a = await analyze(dir);
+    expect(selectedOf(a)).not.toContain("test/cdn.live.test.ts");
+  }, 120_000);
+
   // openpro-front: adsBootPreloads.test.ts reads resolve(process.cwd(), "src/ads/index.html").
   it("a file a test reads from process.cwd() selects that test", async () => {
     const dir = await vitestProject({

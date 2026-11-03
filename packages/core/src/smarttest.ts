@@ -1133,9 +1133,13 @@ export class SmartTest {
     const imported = new Set<string>();
     for (const [file, a] of index.entries())
       for (const i of a.imports) if (i.resolved && i.resolved !== file) imported.add(i.resolved);
+    // So is a test-named file a runner loads itself (`__tests__/setup.ts` in `setupFiles`): a
+    // change to it reaches the runner's tests as a runner input, not as a test of its own.
+    const runnerLoaded = new Set<string>();
+    const helper = (f: string) => imported.has(f) || runnerLoaded.has(f);
     const split = (uncollected: string[]) => ({
-      unassigned: uncollected.filter((f) => !imported.has(f)),
-      helpers: uncollected.filter((f) => imported.has(f)),
+      unassigned: uncollected.filter((f) => !helper(f)),
+      helpers: uncollected.filter(helper),
     });
     const assignment = new Map<string, RunnerRoot>();
     const warnings: string[] = [];
@@ -1150,6 +1154,11 @@ export class SmartTest {
         warnings,
         perRoot,
       };
+    for (const root of roots) {
+      const inputs = await readRunnerInputs(this.root, root).catch(() => undefined);
+      for (const x of [...(inputs?.loads ?? []), ...(inputs?.mappings ?? [])])
+        runnerLoaded.add(x.file);
+    }
     const inRoot = (f: string, root: RunnerRoot) => root.dir === "" || f.startsWith(`${root.dir}/`);
     if (this.config.tests.discovery === "static") {
       const unassigned: string[] = [];

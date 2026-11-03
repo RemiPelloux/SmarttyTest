@@ -2,6 +2,12 @@
 
 All notable changes are documented here. Releases are managed with [Changesets](https://github.com/changesets/changesets). The project follows [Semantic Versioning](https://semver.org/).
 
+## Unreleased
+
+### Fixed
+
+- A changed file named like a test that no runner runs (a Vitest setup file under `__tests__/`, or a `*.live.test.ts` the config excludes) was selected as a test and reported as not run, failing the hook. A file a runner loads (setup files, module mappings) is a helper, and a file the analysis excludes is never a test. Seen on openpro-front when a push creating a branch compared with the whole history.
+
 ## [1.1.0] — minor
 
 Angular; `smarttest audit`, which measures missed tests instead of assuming none; a Python preview (pytest and unittest); lockfile changes selected by package; and fixes found by the audits and by an adopting project's hooks. Additive under the [semver policy](documentation/reference/contracts.md#semver-policy): new adapters (`angular`, `pytest`, `unittest`), `runners[].project` and `python` in the config schema, new commands and flags (`audit`, `--runner`), and `"python"` as an analysis language; nothing frozen changes. Some selections grow (Angular templates and stylesheets, Wasp load-time code, files a type-checking runner compiles), some shrink (dependency updates), a hook now stops the commit when SmartTest is not installed, and `run` no longer stops before any test runs when SmartTest hits a fault. Python files are analysed by default; `python: { enabled: false }` turns that off. Run `smarttest hook install` again to update an installed hook.

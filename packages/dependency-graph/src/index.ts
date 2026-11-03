@@ -1482,10 +1482,14 @@ export class DependencyGraph {
 
   /**
    * A test file, as traversals see it: a file a runner collects, or (where no runner said) a file
-   * named like a test, and never a helper.
+   * named like a test, and never a helper. A file the analysis leaves out (`exclude`) is never a
+   * test, whatever its name: nothing runs it.
    */
   isTestFile(path: string): boolean {
-    return (this.collected.has(path) || this.isTest(path)) && !this.helpers.has(path);
+    return (
+      (this.collected.has(path) || (this.isTest(path) && this.files.has(path))) &&
+      !this.helpers.has(path)
+    );
   }
 
   /** Shortest dependency path from a changed unit (`file` or `file#Unit`) to another file. */
