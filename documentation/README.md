@@ -8,6 +8,9 @@ Guides
 - [Running in CI](guides/ci.md)
 - [Plugins](guides/plugins.md)
 - [Angular](guides/angular.md)
+- [Python (preview)](guides/python.md)
+- [Auditing selection](guides/audit.md)
+- [Rolling out to a repository](guides/rollout.md)
 
 Concepts
 - [How selection works](concepts/how-selection-works.md)

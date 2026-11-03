@@ -226,14 +226,16 @@ An audit of 1.0.1 before more projects adopt it, so the fixes ship in one releas
 - Checked after the fixes: the trace oracle finds no file a test loaded that selection cannot reach (Galdia's ops scripts and LeadsIt's MCP server are now linked); resolution agrees with the compiler on 19,233 imports. Replaying 10 commits with full suites on each of the five projects gives 0 selection misses; the two failures the replay flagged (`MiaDock.test.tsx` in openpro-admin, `tournament-pool.test.ts` in Galdia) are tests that fail only under full-suite load, with no dependency on the change.
 - Faster: 400 changed files 1.18 s to 0.51 s (one `git cat-file --batch`), path rules no longer quadratic, `explain` from the last decision 86 ms, `traces.json` about 18 times smaller.
 
-## 1.1.0 · minor (2 November 2026)
+## 1.1.0 · minor (3 November 2026)
 
-Sprint S28 of the [1.x roadmap](roadmap-1.5.md), released on its own; S29–S31 became 1.2.0.
+Sprints S28–S31 of the [1.x roadmap](roadmap-1.5.md). Per-sprint status and what was not done: the status blocks there.
 
-- Angular: component templates and styles (`templateUrl`, `styleUrl(s)`) and Sass/Less/CSS imports are edges; `angular.json` is read per project (test and build targets, `fileReplacements`, global styles and scripts, setup files); a new `angular` runner runs `ng test <project> --include …` for the unit-test builder and `@angular-builders/jest`; `jest-preset-angular` and Analog run through the Jest and Vitest runners; lazy routes in both forms. Builders that type-check select every spec reaching a changed file.
-- Checked on a real Angular 22 workspace (new CI job) and on HMCTS's opal-frontend (354 spec files): the same results as `ng test`, 10 commits replayed at 0 missed failures, 4% less test time overall and 19% on the commits that did not change `yarn.lock`.
-- Not delivered: Karma targets are listed, never run (`ST_ANGULAR_KARMA_UNSUPPORTED`); Nx workspaces moved to 1.5.0; ngx-datatable's Chromium run not checked.
-- Hooks: a missing SmartTest install stops the commit or push; the time estimate counts parallel workers; the pnpm "isolation incomplete" warning fires only for an installed package that depends on a workspace package (a hoisted link was a false alarm, checked in a pnpm workspace).
+- S28 Angular: component templates and styles and Sass/Less/CSS imports are edges; `angular.json` read per project; an `angular` runner through `ng test` for the unit-test builder and `@angular-builders/jest`; Karma listed, never run; Nx moved to 1.4.0. opal-frontend: the same results as `ng test`, 10 commits at 0 missed failures.
+- S29 Reliability: `smarttest audit --mutate | --traces | --resolution`, a nightly fixture audit, a fault-injection suite for the fail-safe cases, load-flaky failures told apart, tests in folders named like build output analysed, `it.each` rows numbered. The audits found three bugs, fixed in this release (a Wasp load-time edge, Python `cls(...)` construction, a unittest fixture error failing every file). Galdia: 5,003 imports agree with the compiler, 10 faults 0 missed. Not yet run on the other adopting projects.
+- S30 Python preview: pytest and unittest, analysed without running Python. OpenProAuto: unittest's 295 results, 29 commits 0 missed, 190 faults 0 missed; not faster than its 0.6 s suite on the commits that touched it.
+- S31 Rollout: lockfile and `package.json` changes select by package (opal-frontend: 1 of 12 dependency updates narrowed, the others run everything for a stated reason), `--runner`, pre-push without refs on stdin, copied hooks edited at their source, the hook budget explains itself, a rollout guide. Not run: `init --yes` on fresh clones of OpenPro's repositories.
+- Hooks (from an adopting project's feedback): a missing install stops the commit or push; the estimate counts parallel workers; the pnpm isolation warning fires only when it applies.
+- Fail-safe: changes that cannot be read, a failing plugin or an unexpected analysis error run every test with a warning; an unwritable state folder uses a temporary one.
 
 ## After 1.0.0
 

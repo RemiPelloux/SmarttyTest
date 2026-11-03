@@ -22,7 +22,7 @@ export default defineConfig({
 
 **Karma.** Karma gives no report per test, so SmartTest cannot say which spec failed. Rather than report a run from its exit code alone, it stops with `ST_ANGULAR_KARMA_UNSUPPORTED`. Angular's migration (`ng generate @schematics/angular:refactor-jasmine-vitest`) moves a project to the unit-test builder with Vitest.
 
-**Nx workspaces** (projects in `project.json`, run with `nx test`) are not read yet; they are part of the monorepo orchestration planned for 1.5.0.
+**Nx workspaces** (projects in `project.json`, run with `nx test`) are not read yet; they are part of the monorepo orchestration planned for 1.4.0.
 
 ## What selects a spec
 

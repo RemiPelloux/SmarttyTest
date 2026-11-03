@@ -4,7 +4,15 @@ All notable changes are documented here. Releases are managed with [Changesets](
 
 ## [1.1.0] — minor
 
-Angular support, and fixes to the commit and push hooks reported by an adopting project. Additive under the [semver policy](documentation/reference/contracts.md#semver-policy): a new `angular` adapter and `runners[].project` in the config schema; nothing frozen changes. Some selections grow (Angular templates and stylesheets, files a type-checking runner compiles), and a hook now stops the commit when SmartTest is not installed. Run `smarttest hook install` again to update an installed hook.
+Angular; `smarttest audit`, which measures missed tests instead of assuming none; a Python preview (pytest and unittest); lockfile changes selected by package; and fixes found by the audits and by an adopting project's hooks. Additive under the [semver policy](documentation/reference/contracts.md#semver-policy): new adapters (`angular`, `pytest`, `unittest`), `runners[].project` and `python` in the config schema, new commands and flags (`audit`, `--runner`), and `"python"` as an analysis language; nothing frozen changes. Some selections grow (Angular templates and stylesheets, Wasp load-time code, files a type-checking runner compiles), some shrink (dependency updates), a hook now stops the commit when SmartTest is not installed, and `run` no longer stops before any test runs when SmartTest hits a fault. Python files are analysed by default; `python: { enabled: false }` turns that off. Run `smarttest hook install` again to update an installed hook.
+
+### Added: Python (preview)
+
+- pytest and unittest projects are detected next to the JavaScript runners (`smarttest doctor`: `unittest (.) collects 14 test file(s)`) and run through their runner: pytest from `--collect-only` and its JUnit XML, unittest through its own loader. A file that does not import, or in which pytest collects nothing, is a failure, never a pass.
+- `.py` files are analysed without running Python: functions, classes, methods, module values and the code that runs at load; absolute and relative imports, packages, `src/` layouts and `pythonpath`; `conftest.py` files, and fixtures linked by name to the nearest `conftest.py` that names them (autouse fixtures and `pytest_*` hooks reach every test below). `importlib.import_module(name)` and imports found nowhere (project, standard library, declared or installed packages) are uncertainty.
+- Config: `python.enabled` (default true) and `python.interpreter`; `SMARTTEST_PYTHON` overrides. Python project files (`pyproject.toml`, `pytest.ini`, `requirements*.txt`, `poetry.lock`…) are triggers.
+- OpenProAuto (295 unittest tests): the full suite through SmartTest gives unittest's results; 29 replayed commits, 0 missed failures; 190 injected faults, 0 missed. Its suite runs in 0.6 s, so selection does not save time there. Guide: [Python](documentation/guides/python.md).
+
 
 ### Added: `smarttest audit` measures selection
 
