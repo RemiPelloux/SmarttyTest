@@ -78,4 +78,20 @@ describe("PythonResolver", () => {
       external: true,
     });
   });
+  it("a Python project in a subfolder resolves from its own folder, with its own dependencies", async () => {
+    const root = await project({
+      "package.json": "{}",
+      "service/pyproject.toml": '[project]\ndependencies = ["fastapi"]\n',
+      "service/api/__init__.py": "",
+      "service/api/hello.py": "",
+      "service/tests/test_hello.py": "",
+      "api/hello.py": "", // a same-named module at the root must not win
+    });
+    const r = new PythonResolver(root);
+    expect(r.resolve("service/tests/test_hello.py", "api.hello:greet")).toEqual({
+      resolved: "service/api/hello.py",
+    });
+    expect(r.resolve("service/tests/test_hello.py", "fastapi")).toEqual({ external: true });
+    expect(r.resolve("api/hello.py", "fastapi").reason).toContain("no module");
+  });
 });

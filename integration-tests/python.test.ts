@@ -163,3 +163,38 @@ describe.skipIf(!python)("python-unittest", () => {
     ]);
   }, 120_000);
 });
+
+describe.skipIf(!python)("mixed-ts-python", () => {
+  it("one run analyses a TypeScript library and a Python service, each with its runner", async () => {
+    const dir = await materialize("mixed-ts-python", { git: true });
+    const st = await SmartTest.open({ root: dir });
+    expect((await st.runnerRoots()).map((r) => `${r.adapter}:${r.dir}`).sort()).toEqual([
+      "pytest:service",
+      "vitest:",
+    ]);
+    const run = await st.run({ all: true, formats: [] });
+    expect(run.exitCode).toBe(0);
+    expect(run.report.executions.map((e) => e.file).sort()).toEqual([
+      "service/tests/test_hello.py",
+      "service/tests/test_shout.py",
+      "test/cache.test.ts",
+      "test/labeler.test.ts",
+      "test/numbers.test.ts",
+      "test/strings.test.ts",
+    ]);
+  }, 120_000);
+
+  it("a Python change selects Python tests only, a TypeScript change TypeScript tests only", async () => {
+    const py = await after("mixed-ts-python", [
+      ["service/api/hello.py", 'f"Hello {name}"', 'f"Hello {name}" + ""'],
+    ]);
+    expect(selected(py.analysis)).toEqual([
+      "service/tests/test_hello.py",
+      "service/tests/test_shout.py",
+    ]);
+    const ts = await after("mixed-ts-python", [
+      ["src/util/strings.ts", "s.charAt(0).toUpperCase()", "s.charAt(0).toUpperCase() + ''"],
+    ]);
+    expect(selected(ts.analysis)).toEqual(["test/labeler.test.ts", "test/strings.test.ts"]);
+  }, 120_000);
+});
