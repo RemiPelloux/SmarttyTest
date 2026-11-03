@@ -24,7 +24,7 @@ export interface WorkspaceEntry {
  * the tsconfig project that includes the file, imports outside the root; 4: bundler and
  * test-runner aliases, root-absolute glob patterns).
  */
-export const RESOLVER_VERSION = 4;
+export const RESOLVER_VERSION = 5;
 const ALIAS_TOOLS = Object.keys(ALIAS_CONFIGS) as AliasTool[];
 const BUILTINS = new Set(builtinModules);
 /**

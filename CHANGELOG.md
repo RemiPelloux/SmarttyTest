@@ -36,6 +36,10 @@ Angular; `smarttest audit`, which measures missed tests instead of assuming none
 
 - When the estimate passes `hook.budgetMs`, the warning names what widened the selection ("346 tests: yarn.lock changed …: vitest changed, a test or build tool") and the files with no recorded duration.
 
+### Added: `// smarttest-loads:` for computed imports
+
+- A comment on or above a computed `import()`/`require()` names, relative to the project root, what it may load (`// smarttest-loads: plugins/*.mjs`). Those files become its dependencies instead of uncertainty, which selected every test reaching the import on every change. SmartTest's own config and plugin loaders are annotated: on this repository a core change selects 37 of 114 test files instead of 53, a fixture change 17 instead of 53.
+
 ### Added: `--runner <name>`
 
 - `run`, `impact`, `validate-selection` and `benchmark` take `--runner <name>` (repeatable): an adapter id (`vitest`), an Angular project or a runner's directory. Other runners' tests are left out of the analysis with a warning that counts them, never reported as skipped or passed. Keeping Playwright out of a parity check or a benchmark no longer needs a copied config. `benchmark` follows `hook.runners` when it is set (`--runner all` for every runner). An unknown name fails with `ST_RUNNER_UNKNOWN` and lists the runners there are.
@@ -44,6 +48,8 @@ Angular; `smarttest audit`, which measures missed tests instead of assuming none
 
 - A module a trigger file imports (a local PostCSS plugin `postcss.config.cjs` requires, a preset a Babel config imports) selected nothing when it changed; it now applies that trigger, like a change to the configuration itself. Found by `audit --traces` on openpro-front (`scripts/postcss/drop-broken-color-mix-fallback.cjs`).
 - A test that walks a directory (`readdirSync` in a recursive function, from a folder built from `import.meta.url`) depends on every file below that folder, and a source file it reads as text is selected by any change to that file, comments included. Found on openpro-front (`adsI18nKeys.test.ts` scans `src/ads/` for translation keys).
+- A part of a read path SmartTest cannot evaluate (`resolve(process.cwd(), "public", AVATAR.slice(1))`) matches files at any depth below the known part; it matched one level only, so openpro-admin's `public/assistant/mia-avatar.png` selected no test.
+- A computed worker or import path written with the compiled extension (`new URL("./parse-worker.js", import.meta.url)`) finds its `.ts` source instead of being uncertainty.
 - A file read through `process.cwd()` (`readFileSync(resolve(process.cwd(), "src/ads/index.html"))`) selects the tests reading it; the runner's directory is taken to be one of the directories above the reading file. Found on openpro-front.
 
 - Wasp: code an operation runs when it loads (a top-level statement in `src/ops/getTotal.ts`) breaks every test importing the operations module, since that module loads every operation; only the code calling that operation was selected. Found by `smarttest audit --traces` on the `edges-vitest` fixture. A change inside the operation's function still selects only its callers.

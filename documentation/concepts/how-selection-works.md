@@ -83,6 +83,19 @@ A file with an import SmartTest cannot evaluate (`require(name)`) may load any p
 
 Rules can add triggers but cannot remove the built-in ones.
 
+### Computed imports and reads
+
+A computed path SmartTest can evaluate is an edge: string constants, `+` and template literals, `__dirname`, `import.meta.url`, `new URL(…, import.meta.url)`, `join`/`resolve`, and `process.cwd()` (taken to be one of the directories above the file). A part it cannot evaluate matches any file at any depth below the known part, so `resolve(process.cwd(), "public", AVATAR.slice(1))` reads anything under `public/`. A path written with the compiled extension (`new Worker(new URL("./worker.js", import.meta.url))`) finds the `.ts` source. A file that lists a directory (`readdirSync`) reads everything below the folders it names from its own location.
+
+Anything else is uncertainty. When the author knows what a computed import loads (a config loader, a plugin loader), a comment says so, relative to the project root, and those files become its dependencies:
+
+```ts
+// smarttest-loads: plugins/*.mjs, config/*.mjs
+const mod = await import(pathToFileURL(file).href);
+```
+
+The comment is on the import's line or the line above; it replaces the uncertainty, so name every place the import can load from.
+
 ## 5. Observed execution
 
 When `smarttest trace` has recorded which functions each test ran, a fresh trace can rule out a test that static analysis reaches but that never ran the changed code, and can add a test static analysis missed. SAFE mode only adds. → [Runtime evidence](runtime-evidence.md)

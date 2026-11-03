@@ -63,6 +63,8 @@ async function importConfigModule(root: string, file: string): Promise<unknown> 
   assertNoSymlinkBelow(root, tmp);
   await writeFileAtomic(tmp, js);
   try {
+    // A compiled copy of the project's configuration (SmartTest's own analysis of this repository).
+    // smarttest-loads: **/smarttest.config.*
     const mod = (await import(pathToFileURL(tmp).href)) as { default?: unknown };
     return mod.default ?? mod;
   } finally {

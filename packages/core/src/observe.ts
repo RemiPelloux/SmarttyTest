@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { delimiter, isAbsolute, join, relative } from "node:path";
@@ -71,7 +72,13 @@ const NOT_PROJECT =
 export async function observeLoads(
   st: SmartTest,
   options: { sample?: number; runners?: readonly string[]; onProgress?: (m: string) => void } = {},
-): Promise<{ loaded: Map<string, string[]>; failed: string[]; compiled: string[] }> {
+): Promise<{
+  loaded: Map<string, string[]>;
+  failed: string[];
+  compiled: string[];
+  /** Untracked build output a test read (`ui/dist/…`), by folder: built from sources SmartTest cannot name. */
+  builtOutputs: Map<string, Set<string>>;
+}> {
   const { index } = await st.loadIndex();
   // The hook's runners by default, as for `audit --mutate`: never a live end-to-end suite.
   const scope =
@@ -91,6 +98,7 @@ export async function observeLoads(
   const loaded = new Map<string, string[]>();
   const failed: string[] = [];
   const compiled: string[] = [];
+  const builtOutputs = new Map<string, Set<string>>();
   // Only files the project's version control lists can be part of a change: an ignored build
   // output a test reads (`ui/dist/…`) never is.
   const listed = new Set(await st.allFiles());
@@ -148,6 +156,14 @@ export async function observeLoads(
           )
             continue;
           if (listed.has(rel)) files.add(rel);
+          else {
+            const out = /^(.*?(?:^|\/)(?:dist|build|out|\.output))\//.exec(rel)?.[1];
+            if (out && existsSync(join(st.root, rel))) {
+              const set = builtOutputs.get(out) ?? new Set<string>();
+              set.add(file);
+              builtOutputs.set(out, set);
+            }
+          }
         }
       }
       files.delete(file);
@@ -163,5 +179,5 @@ export async function observeLoads(
   } finally {
     await rm(work, { recursive: true, force: true });
   }
-  return { loaded, failed, compiled };
+  return { loaded, failed, compiled, builtOutputs };
 }

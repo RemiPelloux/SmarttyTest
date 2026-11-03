@@ -171,6 +171,8 @@ export async function loadPlugins(root: string, specs: readonly string[]): Promi
     // URL makes a long-lived process (watch mode, Studio) load an edited plugin, not the old one.
     const hash = await pluginFileHash(path);
     try {
+      // The plugins a configuration lists (in this repository: the fixtures' and its own).
+      // smarttest-loads: fixtures/projects/*/tools/*.mjs, scripts/smarttest/*.mjs
       mod = (await import(`${pathToFileURL(path).href}?v=${hash}`)) as { default?: unknown };
     } catch (error) {
       throw new SmartTestError(`Plugin ${spec} failed to load: ${(error as Error).message}`, {

@@ -444,15 +444,34 @@ export class SymbolIndex {
         const targets = new Set<string>();
         const unmatched: string[] = [];
         for (const h of analysis.dynamicHints) {
-          const rel = posix.normalize(posix.join(dir === "." ? "" : dir, h.pattern));
-          const match = (p: string) =>
+          // `@root/…`: a glob relative to the project root (a `smarttest-loads:` annotation).
+          const rel = h.pattern.startsWith("@root/")
+            ? posix.normalize(h.pattern.slice("@root/".length))
+            : posix.normalize(posix.join(dir === "." ? "" : dir, h.pattern));
+          const literal = (p: string) =>
             p.includes("*")
               ? options.files.filter((f) => matchGlob(f, p))
               : wanted.has(p)
                 ? [p]
                 : [];
+          // `new Worker(new URL("./worker.js", import.meta.url))` names the compiled file; the
+          // project holds worker.ts (TypeScript maps .js to .ts for static imports the same way).
+          const match = (p: string) => {
+            const found = literal(p);
+            if (found.length) return found;
+            const m = /\.(m|c)?js(x?)$/.exec(p);
+            if (!m) return found;
+            const base = p.slice(0, m.index);
+            const ts = m[1] ? `.${m[1]}ts` : m[2] ? ".tsx" : ".ts";
+            return [...literal(`${base}${ts}`), ...(m[1] ? [] : literal(`${base}.tsx`))];
+          };
           // A root-absolute pattern (`/src/pages/*.ts`) starts at the Vite root: the resolver's.
           let hits = rel.startsWith("..") || h.pattern.startsWith("/") ? [] : match(rel);
+          if (h.pattern.startsWith("@root/")) {
+            // Declared by the author: what matches is what it loads, nothing else is guessed.
+            for (const f of hits) targets.add(f);
+            continue;
+          }
           // An aliased or root-absolute pattern (`import.meta.glob("@/pages/*.ts")`).
           if (!hits.length) {
             const aliased = options.resolver.resolvePattern?.(analysis.path, h.pattern);

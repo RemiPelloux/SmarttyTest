@@ -14,7 +14,7 @@ import { ProcessScripts } from "./processes.js";
 import { catalogKeys, collectResources, MODEL_MODULES } from "./resources.js";
 import { StaticPathEvaluator } from "./static-path.js";
 
-export const ANALYZER_VERSION = "ts-16";
+export const ANALYZER_VERSION = "ts-18";
 
 /** fs and glob functions that list a directory. */
 const DIR_LISTING = new Set([
@@ -546,6 +546,23 @@ export function analyzeSource(path: string, content: string): FileAnalysis {
   const dynamicHints: { pattern: string; line: number; expr: string }[] = [];
   const assetLines: { pattern: string; line: number }[] = [];
   let listsDirectories = false;
+  const sourceLines = content.split(/\r?\n/);
+  /**
+   * `// smarttest-loads: <glob>[, <glob>…]` on a computed import's line or the line above: the
+   * author states, relative to the project root, what it may load (a config loader, a plugin
+   * loader). Those files become its dependencies instead of uncertainty.
+   */
+  const declaredLoads = (line: number): string[] | undefined => {
+    for (const l of [sourceLines[line], sourceLines[line - 1]]) {
+      const m = /smarttest-loads:\s*(.+?)\s*(?:\*\/)?$/.exec(l ?? "");
+      if (m?.[1])
+        return m[1]
+          .split(",")
+          .map((g) => g.trim())
+          .filter(Boolean);
+    }
+    return undefined;
+  };
   const pathEval = new StaticPathEvaluator(sf, path);
   const modScope = moduleScope(sf);
   const topUses = new Set<string>();
@@ -1129,10 +1146,14 @@ export function analyzeSource(path: string, content: string): FileAnalysis {
           }
           if (kind === "require") cjs = true;
         } else if (kind === "dynamic" || kind === "require") {
-          // Try to evaluate computed paths (constants, new URL(…, import.meta.url), resolve(__dirname…)).
-          const pattern = arg ? pathEval.evaluate(arg) : undefined;
           const expr = `line ${lineOf(n) + 1}: ${n.getText(sf).slice(0, 80)}`;
-          if (pattern) dynamicHints.push({ pattern, line: lineOf(n), expr });
+          const declared = declaredLoads(lineOf(n));
+          // Try to evaluate computed paths (constants, new URL(…, import.meta.url), resolve(__dirname…)).
+          const pattern = declared ? undefined : arg ? pathEval.evaluate(arg) : undefined;
+          if (declared)
+            for (const g of declared)
+              dynamicHints.push({ pattern: `@root/${g}`, line: lineOf(n), expr });
+          else if (pattern) dynamicHints.push({ pattern, line: lineOf(n), expr });
           else dynamicUnresolved.push(expr);
         }
       }

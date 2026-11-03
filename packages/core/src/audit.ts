@@ -269,6 +269,14 @@ async function traces(
     onProgress: progress,
   });
   const loaded = observed.loaded;
+  const generated = new Set(st.config.generated.map((g) => g.path));
+  for (const [out, tests] of observed.builtOutputs) {
+    if ([...generated].some((g) => g.startsWith(out))) continue;
+    const src = out.replace(/\/?(?:dist|build|out|\.output)$/, "") || ".";
+    notes.push(
+      `${tests.size} test file(s) read the untracked build output ${out}/ (e.g. ${[...tests][0]}): a change to its sources selects them only once SmartTest knows what builds it. Declare it: generated: [{ path: "${out}/**", policy: "rebuild-required", from: ["${src === "." ? "src" : src}/**"] }]`,
+    );
+  }
   if (observed.compiled.length)
     notes.push(
       `${observed.compiled.length} test file(s) run through \`ng test\`, which compiles the project into a bundle first: what such a test loads can barely be observed, so this check says little about them (fault injection still does)`,

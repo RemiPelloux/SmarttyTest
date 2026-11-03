@@ -42,7 +42,11 @@ export class StaticPathEvaluator {
   evaluate(node: ts.Expression, directory = false): string | undefined {
     const raw = this.eval(node);
     if (raw === undefined) return undefined;
-    const cleaned = raw.replace(/^file:\/\//, "").replace(/\*+/g, "*");
+    const cleaned = raw
+      .replace(/^file:\/\//, "")
+      .replace(/\*+/g, "*")
+      .split(ANY_DEPTH)
+      .join("**");
     if (directory && !cleaned.startsWith("/") && /^[./]*$/.test(cleaned))
       return posix.normalize(cleaned || ".");
     if (!/[A-Za-z0-9_-]/.test(cleaned.replace(/\*/g, ""))) return undefined; // nothing literal left
@@ -142,12 +146,17 @@ export class StaticPathEvaluator {
       if (name === "resolve" || name === "join") {
         const parts = args.map((a) => this.eval(a));
         if (!parts.length || parts[0] === undefined) return undefined;
-        return parts.slice(1).reduce<string>((acc, p) => joinKeep(acc, p ?? "*"), parts[0]);
+        // An unknown part may hold several segments (`MIA_AVATAR_FILE.slice(1)` is
+        // "assistant/mia-avatar.png"): it matches any depth.
+        return parts.slice(1).reduce<string>((acc, p) => joinKeep(acc, p ?? ANY_DEPTH), parts[0]);
       }
     }
     return undefined;
   }
 }
+
+/** An unknown part of a joined path: any number of segments (becomes `**`). */
+const ANY_DEPTH = "\u0000any\u0000";
 
 /** Stands for `process.cwd()` at the start of a path. */
 export const CWD = "@cwd";

@@ -132,6 +132,34 @@ describe("files a runner collects are tests, whatever their name", () => {
     expect(selectedOf(await analyze(dir))).not.toContain("test/scan.test.ts");
   }, 120_000);
 
+  // openpro-admin: resolve(process.cwd(), "public", MIA_AVATAR_FILE.slice(1)).
+  it("an unknown part of a read path matches files at any depth below the known part", async () => {
+    const dir = await vitestProject({
+      "src/avatar.ts": 'export const AVATAR = "/assistant/mia.png";\n',
+      "public/assistant/mia.png": "png-1\n",
+      "test/avatar.test.ts":
+        'import { readFileSync } from "node:fs";\nimport { resolve } from "node:path";\nimport { expect, it } from "vitest";\nimport { AVATAR } from "../src/avatar";\n\nit("ships the avatar", () => expect(readFileSync(resolve(process.cwd(), "public", AVATAR.slice(1)), "utf8")).toContain("png"));\n',
+    });
+    await edit(dir, "public/assistant/mia.png", "png-1", "png-2");
+    expect(selectedOf(await analyze(dir))).toEqual(["test/avatar.test.ts"]);
+  }, 120_000);
+
+  it("a computed import annotated with smarttest-loads depends on what it declares, not uncertainty", async () => {
+    const dir = await vitestProject({
+      "plugins/a.mjs": "export default 1;\n",
+      "src/loader.ts":
+        "export async function load(name: string) {\n  // smarttest-loads: plugins/*.mjs\n  return import(`../plugins/${name}.mjs?t=${Date.now()}`);\n}\n",
+      "test/loader.test.ts":
+        'import { expect, it } from "vitest";\nimport { load } from "../src/loader";\n\nit("loads", async () => expect((await load("a")).default).toBe(1));\n',
+    });
+    await edit(dir, "plugins/a.mjs", "1", "2");
+    expect(selectedOf(await analyze(dir))).toEqual(["test/loader.test.ts"]);
+    git(dir, "checkout", "-q", "--", "plugins/a.mjs");
+    // No longer uncertain: an unrelated change does not select it.
+    await edit(dir, "src/util/numbers.ts", "Math.min(max,", "Math.min(max + 0,");
+    expect(selectedOf(await analyze(dir))).not.toContain("test/loader.test.ts");
+  }, 120_000);
+
   it("a test another test imports: the walk goes on to the importer", async () => {
     const dir = await vitestProject(
       {
