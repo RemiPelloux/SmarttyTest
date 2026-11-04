@@ -136,6 +136,9 @@ class BatchProcess {
     this.broken = true;
     if (this.idle) clearTimeout(this.idle);
     this.idle = undefined;
+    // Awaited: Node must stay up until the process is gone (an unreferenced child would let it
+    // exit first, with the caller's work unfinished).
+    if (this.child.exitCode === null && this.child.signalCode === null) this.setRef(true);
     try {
       this.child.stdin.end();
     } catch {
