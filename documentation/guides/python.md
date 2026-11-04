@@ -11,7 +11,7 @@ SmartTest selects and runs the tests of Python projects that use pytest or unitt
 
 A Python project is the project root, or any folder with a `pyproject.toml`, `setup.py`, `setup.cfg`, `pytest.ini`, `tox.ini`, `requirements.txt` or `conftest.py`; `smarttest doctor` shows `pytest (.) collects 12 test file(s)`.
 
-The interpreter is, in this order: `SMARTTEST_PYTHON`, `python.interpreter` in the config, the project's `.venv` or `venv`, the active `VIRTUAL_ENV`, then `python3` (`python` on Windows).
+The interpreter is, in this order: `SMARTTEST_PYTHON`, `python.interpreter` in the config, the project's `.venv` or `venv`, the active `VIRTUAL_ENV`, then `python3` (`python` on Windows). A bare command (`python3.13`) is looked up on `PATH`; a relative path (`.venv/bin/python`) is relative to the project.
 
 ```ts
 export default defineConfig({

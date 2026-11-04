@@ -703,6 +703,9 @@ figcaption {
   border-radius: 50%;
   background: var(--cyan);
 }
+.dot-guides {
+  background: var(--ink);
+}
 .dot-concepts {
   background: var(--pass);
 }

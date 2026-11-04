@@ -14,8 +14,8 @@ const ROOT = resolve(import.meta.dirname, "../..");
 const SITE = join(ROOT, "site");
 const DIST = join(SITE, "dist");
 const REPO = "https://github.com/RemiPelloux/SmarttyTest";
-const manifest = JSON.parse(await readFile(join(ROOT, "scripts/packages.manifest.json"), "utf8"));
-const VERSION = manifest.version;
+// The published package's version (the manifest's own version field is not bumped by releases).
+const VERSION = JSON.parse(await readFile(join(ROOT, "packages/cli/package.json"), "utf8")).version;
 
 /** Repository Markdown file → site path. */
 const pages = new Map();
@@ -38,57 +38,169 @@ await walk("documentation");
 pages.set("CHANGELOG.md", "docs/changelog.html");
 pages.set("benchmarks/RESULTS.md", "docs/benchmarks.html");
 
-/** Sidebar groups (site paths). */
+/** Sidebar groups (site paths), with the line the overview page shows for each page. */
 const NAV = [
   [
     "Start",
     [
-      ["Overview", "docs/index.html"],
-      ["Getting started", "docs/guides/getting-started.html"],
-      ["Commit and push hooks", "docs/guides/commit-hooks.html"],
-      ["Studio", "docs/guides/studio.html"],
-      ["VS Code", "docs/guides/vscode.html"],
-      ["Running in CI", "docs/guides/ci.html"],
+      ["Overview", "docs/index.html", "Where to begin, what is new, and every page in one place."],
+      [
+        "Getting started",
+        "docs/guides/getting-started.html",
+        "Install, run `smarttest init`, read the first selection.",
+      ],
+      [
+        "Commit and push hooks",
+        "docs/guides/commit-hooks.html",
+        "Test exactly what is committed or pushed, in a temporary checkout when needed.",
+      ],
+      [
+        "Running in CI",
+        "docs/guides/ci.html",
+        "Pick the base, deepen shallow clones, shard by recorded durations.",
+      ],
+      [
+        "Rolling out to a repository",
+        "docs/guides/rollout.html",
+        "The steps that caught a problem in each real rollout, in order.",
+      ],
+    ],
+  ],
+  [
+    "Guides",
+    [
+      [
+        "Auditing selection",
+        "docs/guides/audit.html",
+        "Inject faults, record traces and compare imports to measure missed tests.",
+      ],
+      [
+        "Angular",
+        "docs/guides/angular.html",
+        "Templates and styles as edges, `angular.json` per project, `ng test`.",
+      ],
+      [
+        "Python (preview)",
+        "docs/guides/python.html",
+        "pytest and unittest, analysed without running Python.",
+      ],
+      [
+        "Studio",
+        "docs/guides/studio.html",
+        "A local browser view of the analysis: impact, tests and evidence.",
+      ],
+      [
+        "VS Code",
+        "docs/guides/vscode.html",
+        "Which tests protect a function, on hover; run what a change affects.",
+      ],
+      [
+        "Plugins",
+        "docs/guides/plugins.html",
+        "The frozen Plugin SDK: edges, rules, reporters and adapters.",
+      ],
     ],
   ],
   [
     "Concepts",
     [
-      ["How selection works", "docs/concepts/how-selection-works.html"],
-      ["Safety model", "docs/concepts/safety-model.html"],
-      ["Runtime evidence", "docs/concepts/runtime-evidence.html"],
-      ["Running less, faster", "docs/concepts/speed.html"],
-      ["Change tracking", "docs/concepts/change-tracking.html"],
-      ["Rules", "docs/concepts/rules.html"],
+      [
+        "How selection works",
+        "docs/concepts/how-selection-works.html",
+        "From a diff to symbols, the dependency graph and a selection with reasons.",
+      ],
+      [
+        "Safety model",
+        "docs/concepts/safety-model.html",
+        "What SmartTest never does, and why unsure means selected.",
+      ],
+      [
+        "Runtime evidence",
+        "docs/concepts/runtime-evidence.html",
+        "Traces of what a test ran, combined with the static graph.",
+      ],
+      [
+        "Running less, faster",
+        "docs/concepts/speed.html",
+        "Result cache, fail-fast order, parallel runners, adaptive mode.",
+      ],
+      [
+        "Change tracking",
+        "docs/concepts/change-tracking.html",
+        "Git, Mercurial, Subversion, or snapshots without version control.",
+      ],
+      [
+        "Rules",
+        "docs/concepts/rules.html",
+        "Architecture as testing policy: critical paths, required tests.",
+      ],
     ],
   ],
   [
     "Reference",
     [
-      ["CLI", "docs/reference/cli.html"],
-      ["Configuration", "docs/reference/configuration.html"],
-      ["Benchmarks", "docs/benchmarks.html"],
-      ["Changelog", "docs/changelog.html"],
+      ["CLI", "docs/reference/cli.html", "Every command and flag, with exit codes."],
+      [
+        "Configuration",
+        "docs/reference/configuration.html",
+        "Every key of `smarttest.config`, with defaults.",
+      ],
+      [
+        "Public contracts",
+        "docs/reference/contracts.html",
+        "What is frozen at 1.0.0 and what needs a major version.",
+      ],
+      [
+        "Benchmarks",
+        "docs/benchmarks.html",
+        "Selection and speed on the fixture harness, regenerated each release.",
+      ],
+      ["Changelog", "docs/changelog.html", "What changed in each version."],
     ],
   ],
   [
     "Results",
     [
-      ["Case study: LeadsIt", "docs/case-studies/leadsit.html"],
-      ["External repositories", "docs/case-studies/external-repositories.html"],
-      ["Benchmarks for 1.0.0", "docs/case-studies/benchmarks-1.0.html"],
+      [
+        "Case study: LeadsIt",
+        "docs/case-studies/leadsit.html",
+        "The first real migration: six projects, no root package.",
+      ],
+      [
+        "Benchmarks for 1.0.0",
+        "docs/case-studies/benchmarks-1.0.html",
+        "Real repositories replayed at 0 missed failures.",
+      ],
+      [
+        "External repositories",
+        "docs/case-studies/external-repositories.html",
+        "The 0.6.0 adoption check on repositories never seen before.",
+      ],
     ],
   ],
   [
     "Project",
     [
-      ["Roadmap", "docs/planning/roadmap.html"],
-      ["Delivery log", "docs/planning/delivery.html"],
-      ["Architecture", "docs/architecture/overview.html"],
-      ["Decision records", "docs/architecture/adr/index.html"],
-      ["Design system", "docs/design/design-system.html"],
-      ["Studio design brief", "docs/design/studio.html"],
-      ["Specification", "docs/product/PRD.html"],
+      ["Roadmap", "docs/planning/roadmap.html", "What comes next, in points, with exit gates."],
+      ["Roadmap 1.x", "docs/planning/roadmap-1.5.html", "The 1.x sprints and their status."],
+      ["Delivery log", "docs/planning/delivery.html", "What each version actually delivered."],
+      ["Architecture", "docs/architecture/overview.html", "Packages, boundaries and data flow."],
+      ["Decision records", "docs/architecture/adr/index.html", "Accepted architecture decisions."],
+      [
+        "Security review",
+        "docs/architecture/security-review.html",
+        "The 1.0.0 review of what SmartTest reads, writes and runs.",
+      ],
+      [
+        "Design system",
+        "docs/design/design-system.html",
+        "Tokens, type and colour shared by Studio and this site.",
+      ],
+      [
+        "Specification",
+        "docs/product/PRD.html",
+        "The product specification; sections are cited as §11.4.",
+      ],
     ],
   ],
 ];
@@ -189,6 +301,7 @@ await cp(join(ROOT, "documentation/assets/logo.svg"), join(DIST, "assets/logo.sv
 
 const searchIndex = [];
 const docsList = [];
+let overview;
 for (const [srcFile, sitePath] of pages) {
   let md = await readFile(join(ROOT, srcFile), "utf8");
   if (srcFile === "documentation/README.md")
@@ -197,7 +310,8 @@ for (const [srcFile, sitePath] of pages) {
   const title = r.title || posix.basename(srcFile, ".md");
   const out = join(DIST, sitePath);
   await mkdir(dirname(out), { recursive: true });
-  await writeFile(out, docPage({ sitePath, srcFile, title, ...r }));
+  if (sitePath === "docs/index.html") overview = { srcFile, out };
+  else await writeFile(out, docPage({ sitePath, srcFile, title, ...r }));
   const words = md.split(/\s+/).length;
   searchIndex.push({
     t: title,
@@ -205,6 +319,48 @@ for (const [srcFile, sitePath] of pages) {
     h: r.headings.filter((h) => h.level <= 3).map((h) => [h.text, h.id]),
   });
   docsList.push({ title, sitePath, minutes: Math.max(1, Math.round(words / 230)) });
+}
+// The overview: a start path, what is new, and every page with its one-line description.
+{
+  const minutes = (p) => docsList.find((d) => d.sitePath === p)?.minutes;
+  const inline = (t) => escHtml(t).replace(/`([^`]+)`/g, "<code>$1</code>");
+  const groups = NAV.map(([group, items]) => {
+    const cards = items
+      .filter(([, p]) => p !== "docs/index.html")
+      .map(([label, p, desc]) => {
+        const m = minutes(p);
+        return `<li><a class="card" href="${rel("docs/index.html", p)}"><span class="card-title">${escHtml(label)}</span><span class="card-desc">${inline(desc)}</span>${m ? `<span class="card-meta">${m} min read</span>` : ""}</a></li>`;
+      })
+      .join("");
+    const id = group.toLowerCase();
+    return `<h2 id="${id}">${group}<a class="anchor" href="#${id}" aria-label="Link to this section">#</a></h2><ul class="cards">${cards}</ul>`;
+  }).join("\n");
+  const html = `<h1 id="smarttest-documentation">SmartTest documentation</h1>
+<p class="lead">SmartTest reads a change, follows it through your code to the tests that can detect a regression, and runs only those, through Jest, Vitest, <code>node --test</code>, Playwright, Cypress, Angular, pytest or unittest. When it cannot rule a test out, it runs it.</p>
+<ol class="start-path">
+  <li><a href="guides/getting-started.html"><span class="step">1</span><span class="step-title">Install and look</span><code>smarttest init</code><span class="step-desc">Install <code>@tkmremi/smarttest</code> as a dev dependency; <code>init</code> detects the runners and explains the config before writing it.</span></a></li>
+  <li><a href="guides/commit-hooks.html"><span class="step">2</span><span class="step-title">Gate commits and pushes</span><code>smarttest hook install</code><span class="step-desc">Runs the affected tests on exactly what is committed or pushed.</span></a></li>
+  <li><a href="guides/ci.html"><span class="step">3</span><span class="step-title">Run it in CI</span><code>smarttest ci</code><span class="step-desc">Finds the base, deepens shallow clones, and keeps the full suite where you want it.</span></a></li>
+</ol>
+<aside class="whats-new" aria-labelledby="new-in"><p class="whats-new-title" id="new-in">New in ${VERSION.replace(/\.\d+$/, "")}</p><ul>
+  <li><a href="guides/audit.html"><code>smarttest audit</code></a> measures missed tests on your project instead of assuming none.</li>
+  <li><a href="guides/angular.html">Angular</a> workspaces, and a <a href="guides/python.html">Python preview</a> for pytest and unittest.</li>
+  <li>Lockfile changes select by package, and <a href="guides/rollout.html">a rollout guide</a> from six real repositories.</li>
+</ul><p><a href="changelog.html">Full changelog</a></p></aside>
+${groups}
+<p class="overview-foot">Section numbers such as §11.4 refer to the <a href="product/PRD.html">specification</a>. The same pages are in the repository under <code>documentation/</code>.</p>`;
+  const headings = NAV.map(([group]) => ({ level: 2, text: group, id: group.toLowerCase() }));
+  await writeFile(
+    overview.out,
+    docPage({
+      sitePath: "docs/index.html",
+      srcFile: overview.srcFile,
+      title: "SmartTest documentation",
+      html,
+      headings,
+      hasMermaid: false,
+    }).replace('<body class="docs">', '<body class="docs docs-overview">'),
+  );
 }
 for (const [src, out] of assetsToCopy) {
   await mkdir(dirname(join(DIST, out)), { recursive: true });

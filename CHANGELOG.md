@@ -6,6 +6,7 @@ All notable changes are documented here. Releases are managed with [Changesets](
 
 ### Fixed
 
+- `SMARTTEST_PYTHON=python` (a bare command) is looked up on `PATH`; it resolved to a file named `python` in the project, so no Python test could start.
 - A changed file named like a test that no runner runs (a Vitest setup file under `__tests__/`, or a `*.live.test.ts` the config excludes) was selected as a test and reported as not run, failing the hook. A file a runner loads (setup files, module mappings) is a helper, and a file the analysis excludes is never a test. Seen on openpro-front when a push creating a branch compared with the whole history.
 
 ## [1.1.0] — minor
