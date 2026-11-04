@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parsePytestJunit } from "./index.js";
+import { parsePytestJunit, pythonInterpreter } from "./index.js";
 
 describe("parsePytestJunit", () => {
   it("reads passes, failures, skips, classes and collection errors", () => {
@@ -18,5 +18,22 @@ describe("parsePytestJunit", () => {
     ]);
     expect(out[1]?.error?.message).toContain("assert 1 == 2\nE assert 1 == 2 & more");
     expect(out[1]?.durationMs).toBe(100);
+  });
+});
+
+describe("pythonInterpreter", () => {
+  it("looks a bare command up on PATH and resolves a relative path in the project (CI: SMARTTEST_PYTHON=python)", () => {
+    const saved = process.env.SMARTTEST_PYTHON;
+    try {
+      process.env.SMARTTEST_PYTHON = "python";
+      expect(pythonInterpreter("/repo")).toBe("python");
+      process.env.SMARTTEST_PYTHON = ".venv/bin/python";
+      expect(pythonInterpreter("/repo").replaceAll("\\", "/")).toMatch(
+        /\/repo\/\.venv\/bin\/python$/,
+      );
+    } finally {
+      if (saved === undefined) delete process.env.SMARTTEST_PYTHON;
+      else process.env.SMARTTEST_PYTHON = saved;
+    }
   });
 });

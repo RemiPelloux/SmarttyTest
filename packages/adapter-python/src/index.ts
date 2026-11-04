@@ -40,7 +40,10 @@ export interface PythonAdapterOptions {
 /** The Python a project runs its tests with. */
 export function pythonInterpreter(cwd: string, configured?: string): string {
   const explicit = process.env.SMARTTEST_PYTHON || configured;
-  if (explicit) return isAbsolute(explicit) ? explicit : resolve(cwd, explicit);
+  // A bare command (`python`, `python3.13`) is looked up on PATH; a relative path
+  // (`.venv/bin/python`) is the project's.
+  if (explicit)
+    return isAbsolute(explicit) || !/[\\/]/.test(explicit) ? explicit : resolve(cwd, explicit);
   const win = process.platform === "win32";
   for (const env of [".venv", "venv"]) {
     const p = win ? join(cwd, env, "Scripts", "python.exe") : join(cwd, env, "bin", "python");
