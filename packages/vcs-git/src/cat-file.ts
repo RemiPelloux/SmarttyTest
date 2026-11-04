@@ -12,6 +12,8 @@ import { runProcess, scopedEnv } from "@smarttest/shared";
 
 /** How long an idle batch process stays up before its input is closed (it then exits). */
 const IDLE_MS = 2_000;
+/** How long a closed batch process has to exit before it is killed. */
+const CLOSE_MS = 5_000;
 
 interface Request {
   name: string;
@@ -29,6 +31,8 @@ class BatchProcess {
   private body: { size: number; blob: boolean } | undefined;
   private idle: NodeJS.Timeout | undefined;
   broken = false;
+  /** Settles once the process is gone, its working directory and the repository's files released. */
+  readonly exited: Promise<void>;
 
   constructor(cwd: string, config: readonly string[], env: NodeJS.ProcessEnv) {
     this.child = spawn("git", [...config, "cat-file", "--batch"], {
@@ -37,12 +41,21 @@ class BatchProcess {
       stdio: ["pipe", "pipe", "pipe"],
       windowsHide: true,
     });
+    this.exited = new Promise((resolve) => {
+      this.child.on("close", () => {
+        this.fail();
+        resolve();
+      });
+      this.child.on("error", () => {
+        this.fail();
+        // A process that never started emits no `close`.
+        if (this.child.pid === undefined) resolve();
+      });
+    });
     this.child.stdout.on("data", (chunk: Buffer) => this.onData(chunk));
     // Drained so a chatty stderr never blocks the process.
     this.child.stderr.on("data", () => undefined);
     this.child.stdin.on("error", () => this.fail());
-    this.child.on("error", () => this.fail());
-    this.child.on("close", () => this.fail());
     this.setRef(false);
   }
 
@@ -74,7 +87,7 @@ class BatchProcess {
     this.queue.shift()?.resolve(reply);
     if (this.queue.length) return;
     this.setRef(false);
-    this.idle = setTimeout(() => this.close(), IDLE_MS);
+    this.idle = setTimeout(() => void this.close(), IDLE_MS);
     this.idle.unref();
   }
 
@@ -114,14 +127,23 @@ class BatchProcess {
     this.setRef(false);
   }
 
-  close(): void {
-    if (this.queue.length) return;
+  /**
+   * Ends the process: git answers the names already sent, then exits at the end of its input.
+   * Settles once it has exited, since Windows cannot delete a directory a process still runs in.
+   * A process that does not exit in time is killed (what was still waiting is read with git show).
+   */
+  close(): Promise<void> {
     this.broken = true;
+    if (this.idle) clearTimeout(this.idle);
+    this.idle = undefined;
     try {
       this.child.stdin.end();
     } catch {
       // Already closed.
     }
+    const kill = setTimeout(() => this.child.kill(), CLOSE_MS);
+    kill.unref();
+    return this.exited.finally(() => clearTimeout(kill));
   }
 }
 
@@ -137,6 +159,8 @@ function gitEnvKey(env: NodeJS.ProcessEnv): string {
 
 export class BlobReader {
   private readonly processes = new Map<string, BatchProcess>();
+  /** Every process not yet exited, including idle ones already closing. */
+  private readonly live = new Set<BatchProcess>();
 
   constructor(private readonly config: readonly string[]) {}
 
@@ -151,8 +175,11 @@ export class BlobReader {
       const key = `${cwd}\u0000${gitEnvKey(env)}`;
       let proc = this.processes.get(key);
       if (!proc || proc.broken) {
-        proc = new BatchProcess(cwd, this.config, env);
-        this.processes.set(key, proc);
+        const started = new BatchProcess(cwd, this.config, env);
+        this.live.add(started);
+        void started.exited.then(() => this.live.delete(started));
+        this.processes.set(key, started);
+        proc = started;
       }
       const reply = await proc.read(name);
       if (reply.kind === "blob") return reply.text;
@@ -162,8 +189,12 @@ export class BlobReader {
     return res.code === 0 ? res.stdout : undefined;
   }
 
-  close(): void {
-    for (const p of this.processes.values()) p.close();
+  /**
+   * Ends every batch process this reader started and settles once they have all exited (an idle
+   * one may still be exiting). The reader stays usable: a later read starts a new process.
+   */
+  async close(): Promise<void> {
     this.processes.clear();
+    await Promise.all([...this.live].map((p) => p.close()));
   }
 }

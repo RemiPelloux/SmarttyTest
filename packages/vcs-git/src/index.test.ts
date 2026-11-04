@@ -97,6 +97,7 @@ describe("git change sets", () => {
         ["modified", "../shared/x.ts"],
       ]);
       expect(await input.readBefore("src/m.ts")).toContain("n = 2");
+      await input.close?.();
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
@@ -121,6 +122,7 @@ describe("git change sets", () => {
       const input = await adapter.getChangeInput({ kind: "uncommitted" });
       expect(input.changeSet.changes).toMatchObject([{ type: "modified", path: "lib/x.ts" }]);
       expect(await input.readBefore("lib/x.ts")).toBe("export const x = 1;\n");
+      await input.close?.();
       git("commit", "-q", "-am", "bump");
       const committed = await new GitAdapter(dir).getChangeInput({
         kind: "base",

@@ -33,6 +33,11 @@ export interface ChangeAnalysisInput {
   readBefore(path: string): Promise<string | undefined>;
   /** Human description, e.g. "git · main…working tree". */
   description: string;
+  /**
+   * Ends the processes `readBefore` keeps open and settles once they have exited (Windows cannot
+   * delete a repository a process still runs in). `readBefore` stays usable: it starts them again.
+   */
+  close?(): Promise<void>;
 }
 
 export interface ChangeProvider {

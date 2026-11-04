@@ -2066,6 +2066,8 @@ export async function main(
 ): Promise<number> {
   let t = theme(colorEnabled(io));
   let jsonMode = argv.includes("--json");
+  // Closed when the command ends: no Git process they started outlives it.
+  const instances: SmartTest[] = [];
   try {
     const parsed = parse(argv);
     const { flags } = parsed;
@@ -2134,6 +2136,7 @@ export async function main(
             ...(options.ephemeralStore ? { ephemeralStore: true } : {}),
             ...(options.tolerateTrackedStore ? { tolerateTrackedStore: true } : {}),
           });
+          instances.push(opened);
           opened.useLogger(
             createLogger({
               level: flags.verbose ? "debug" : "info",
@@ -2191,5 +2194,7 @@ export async function main(
       );
     }
     return code;
+  } finally {
+    await Promise.all(instances.map((st) => st.close()));
   }
 }
