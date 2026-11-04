@@ -177,6 +177,7 @@ describe("files a runner collects are tests, whatever their name", () => {
     const dir = await vitestProject({
       "plugins/a.mjs": "export default 1;\n",
       "src/loader.ts":
+        // biome-ignore lint/suspicious/noTemplateCurlyInString: the fixture's source is a template literal.
         "export async function load(name: string) {\n  // smarttest-loads: plugins/*.mjs\n  return import(`../plugins/${name}.mjs?t=${Date.now()}`);\n}\n",
       "test/loader.test.ts":
         'import { expect, it } from "vitest";\nimport { load } from "../src/loader";\n\nit("loads", async () => expect((await load("a")).default).toBe(1));\n',

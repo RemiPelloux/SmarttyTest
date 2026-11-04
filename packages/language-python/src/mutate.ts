@@ -34,7 +34,7 @@ export function pythonMutationPoints(path: string, text: string): PythonMutation
     const head = lines[def];
     const body = lines[def + 1];
     // One-line definitions (`def f(): return 1`) have no indented body to put a statement in.
-    if (!head || head.toks.at(-1)?.v !== ":" || !body || body.indent <= head.indent) continue;
+    if (head?.toks.at(-1)?.v !== ":" || !body || body.indent <= head.indent) continue;
     const at = (lineStart[head.end] ?? src.length) - 1; // the newline ending the signature
     out.push({
       name: s.qualifiedName,

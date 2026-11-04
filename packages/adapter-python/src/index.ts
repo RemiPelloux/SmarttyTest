@@ -257,7 +257,7 @@ export class PytestAdapter implements TestAdapter {
 }
 
 /** The unittest driver: loads the given modules and writes one JSON record per test. */
-const UNITTEST_DRIVER = String.raw`
+const UNITTEST_DRIVER = `
 import json, sys, time, traceback, unittest
 out, names = sys.argv[1], sys.argv[2:]
 sys.path.insert(0, ".")

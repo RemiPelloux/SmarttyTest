@@ -7,7 +7,7 @@
  * (requirements, pyproject, Pipfile, setup.cfg) or installed in the project's virtual environment.
  * Anything else is unresolved: uncertainty, so the tests that reach it are selected.
  */
-import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import type { ModuleResolver, ResolveResult } from "@smarttest/source-parser";
 import { PYTHON_STDLIB } from "./stdlib.js";
