@@ -24,6 +24,11 @@ import { topLevelSymbols } from "@smarttest/source-parser";
 
 export const WHOLE = "*";
 const ANY = "@any";
+/**
+ * Seed unit reaching only a file's file-level dependents and re-exporters (importers that depend
+ * on the file as a whole), not its symbols' users nor the code its loading runs.
+ */
+export const FILE_DEPENDENTS = ANY;
 const INIT = "@init";
 export const RESOURCE = "@resource";
 /** Framework modules whose exports are the project's own operations (Wasp). */
@@ -102,7 +107,7 @@ interface Dep {
 type LocalTarget = { file: string; unit: string } | { file: string; namespace: true };
 
 /** Version of `serialize()` output; bump on any change to it or to how the graph is built. */
-export const GRAPH_FORMAT = 2;
+export const GRAPH_FORMAT = 3;
 
 interface SerializedGraph {
   format: number;
@@ -287,12 +292,41 @@ export class DependencyGraph {
     return m;
   }
 
-  /** Resolves an exported name to its defining unit, following re-exports (barrels). */
-  resolveExport(
+  /**
+   * Resolves an exported name to its defining unit, following re-exports (barrels). A namespace
+   * re-export (`export * as ns from "./x"`, `import * as ns from "./x"; export { ns }`) resolves
+   * to the whole of `./x`.
+   */
+  resolveExport(file: string, name: string): { file: string; unit: string } | undefined {
+    const t = this.resolveExportTarget(file, name);
+    return t && "namespace" in t ? { file: t.file, unit: WHOLE } : t;
+  }
+
+  /**
+   * Seeds for a file whose named re-exports changed (`FileSemanticDiff.reexports`): the unit
+   * each name now resolves to (its importers are linked to that unit), and the file's file-level
+   * dependents and re-exporters (`FILE_DEPENDENTS`): importers whose name no longer resolves,
+   * namespace importers that escape, side-effect imports. A name that resolves nowhere in the
+   * project (an external re-export) is covered by the second seed.
+   */
+  reexportSeeds(file: string, names: readonly string[]): Seed[] {
+    const out: Seed[] = [{ file, units: [ANY] }];
+    for (const n of names) {
+      const r = this.resolveExport(file, n);
+      if (r) out.push({ file: r.file, units: [r.unit] });
+    }
+    return out;
+  }
+
+  /**
+   * `resolveExport`, keeping namespace re-exports as namespaces: an importer of `ns` that only
+   * reads its members (`ns.price()`) depends on those members, through any depth of barrels.
+   */
+  private resolveExportTarget(
     file: string,
     name: string,
     seen = new Set<string>(),
-  ): { file: string; unit: string } | undefined {
+  ): LocalTarget | undefined {
     const visitKey = `${file}:${name}`;
     if (seen.has(visitKey)) return undefined;
     seen.add(visitKey);
@@ -305,14 +339,18 @@ export class DependencyGraph {
       if (this.topSymbol(file, local.local)) return { file, unit: local.local };
       for (const imp of a.imports) {
         const b = imp.bindings.find((x) => x.local === local.local);
-        if (b && imp.resolved && b.imported !== "*")
-          return (
-            this.resolveExport(imp.resolved, b.imported, seen) ?? {
-              file: imp.resolved,
-              unit: WHOLE,
-            }
-          );
-        if (b && imp.resolved) return { file: imp.resolved, unit: WHOLE };
+        if (!b || !imp.resolved) continue;
+        // A CommonJS `require` bound whole is a module object, not an ES namespace: kept whole.
+        if (b.imported === "*")
+          return imp.kind === "namespace"
+            ? { file: imp.resolved, namespace: true }
+            : { file: imp.resolved, unit: WHOLE };
+        return (
+          this.resolveExportTarget(imp.resolved, b.imported, seen) ?? {
+            file: imp.resolved,
+            unit: WHOLE,
+          }
+        );
       }
     }
     for (const imp of a.imports) {
@@ -320,8 +358,8 @@ export class DependencyGraph {
       const b = imp.bindings.find((x) => x.local === name);
       if (b)
         return b.imported === "*"
-          ? { file: imp.resolved, unit: WHOLE }
-          : (this.resolveExport(imp.resolved, b.imported, seen) ?? {
+          ? { file: imp.resolved, namespace: true }
+          : (this.resolveExportTarget(imp.resolved, b.imported, seen) ?? {
               file: imp.resolved,
               unit: WHOLE,
             });
@@ -329,7 +367,7 @@ export class DependencyGraph {
     if (name !== "default") {
       for (const imp of a.imports) {
         if (imp.kind === "reexport-all" && imp.resolved) {
-          const r = this.resolveExport(imp.resolved, name, seen);
+          const r = this.resolveExportTarget(imp.resolved, name, seen);
           if (r) return r;
         }
       }
@@ -357,7 +395,7 @@ export class DependencyGraph {
           for (const b of imp.bindings) {
             if (b.imported === "*") cache.set(b.local, { file: imp.resolved, namespace: true });
             else {
-              const r = this.resolveExport(imp.resolved, b.imported);
+              const r = this.resolveExportTarget(imp.resolved, b.imported);
               cache.set(b.local, r ?? { file: imp.resolved, unit: WHOLE });
             }
           }

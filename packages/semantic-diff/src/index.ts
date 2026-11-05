@@ -15,6 +15,12 @@ export interface FileSemanticDiff {
   units: string[];
   /** True when every change is comment-only/formatting (may be skipped in FAST mode only). */
   trivialOnly: boolean;
+  /**
+   * Names whose named re-export changed (`export { a as b } from "./x"` added, removed, renamed or
+   * pointed elsewhere) in a file that loads the same modules before and after: the importers of
+   * those names are affected, not every importer of the file (see `DependencyGraph.reexportSeeds`).
+   */
+  reexports?: string[];
   confidence: "high" | "medium" | "low";
 }
 
@@ -192,6 +198,7 @@ export function diffFile(input: DiffInput): FileSemanticDiff {
     });
     units.add(WHOLE_FILE);
   }
+  let reexports: string[] | undefined;
   if (before.importsHash !== after.importsHash) {
     const key = (i: FileAnalysis["imports"][number]) =>
       `${i.kind}|${i.specifier}|${i.bindings.map((b) => `${b.imported}>${b.local}`).join(",")}`;
@@ -202,18 +209,20 @@ export function diffFile(input: DiffInput): FileSemanticDiff {
       ...before.imports.filter((i) => !afterKeys.has(key(i))),
     ];
     const locals = new Set(changedImports.flatMap((i) => i.bindings.map((b) => b.local)));
+    reexports = changedNamedReexports(before, after, changedImports);
     const sideEffects = changedImports.some(
       (i) =>
         i.kind === "side-effect" ||
-        i.kind === "reexport" ||
-        i.kind === "reexport-all" ||
+        ((i.kind === "reexport" || i.kind === "reexport-all") && !reexports) ||
         i.kind === "mock",
     );
     filtered.push({
       filePath: path,
-      kind: "import",
+      kind: reexports ? "exported-api" : "import",
       confidence: "high",
-      notes: changedImports.map((i) => i.specifier).join(", "),
+      notes: reexports
+        ? `re-exports changed: ${reexports.slice(0, 5).join(", ")}${reexports.length > 5 ? "…" : ""}`
+        : changedImports.map((i) => i.specifier).join(", "),
     });
     if (sideEffects || after.topLevelRefs.some((r) => locals.has(r))) units.add(WHOLE_FILE);
     for (const s of after.symbols)
@@ -245,6 +254,7 @@ export function diffFile(input: DiffInput): FileSemanticDiff {
     path,
     changes: filtered,
     units: units.has(WHOLE_FILE) ? [WHOLE_FILE] : [...units].sort(),
+    ...(reexports && !units.has(WHOLE_FILE) ? { reexports } : {}),
     trivialOnly,
     confidence: filtered.some((c) => c.confidence === "low")
       ? "low"
@@ -252,6 +262,36 @@ export function diffFile(input: DiffInput): FileSemanticDiff {
         ? "medium"
         : "high",
   };
+}
+
+/**
+ * The exported names a re-export change affects, when every changed import is a named ES
+ * re-export (`export { a, b as c } from "./x"`) and the file loads the same modules before and
+ * after. Undefined otherwise: a module newly loaded or no longer loaded runs (or stops running) its
+ * load-time code for every importer, `export *` changes names that only the graph can list, and a
+ * namespace re-export (`export * as ns`) or a CommonJS re-export is not a single name's binding.
+ */
+function changedNamedReexports(
+  before: FileAnalysis,
+  after: FileAnalysis,
+  changedImports: readonly FileAnalysis["imports"][number][],
+): string[] | undefined {
+  if (!changedImports.length) return undefined;
+  for (const i of changedImports)
+    if (i.kind !== "reexport" || i.bindings.some((b) => b.imported === "*")) return undefined;
+  const loaded = (a: FileAnalysis) => [...new Set(a.imports.map((i) => i.specifier))].sort().join();
+  if (loaded(before) !== loaded(after)) return undefined;
+  const bindings = (a: FileAnalysis) => {
+    const m = new Map<string, string>();
+    for (const i of a.imports)
+      if (i.kind === "reexport")
+        for (const b of i.bindings) m.set(b.local, `${i.specifier}\0${b.imported}\0${i.typeOnly}`);
+    return m;
+  };
+  const b = bindings(before);
+  const a = bindings(after);
+  const names = [...new Set([...b.keys(), ...a.keys()])].filter((n) => b.get(n) !== a.get(n));
+  return names.length ? names.sort() : undefined;
 }
 
 function hasCommentDelta(
