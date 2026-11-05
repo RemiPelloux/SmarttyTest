@@ -1,0 +1,34 @@
+{
+    "name": "smarttest/php-phpunit-fixture",
+    "description": "A plain PHPUnit project: PSR-4, PSR-0, classmap and files autoloading.",
+    "type": "project",
+    "license": "MIT",
+    "require": {
+        "php": "^8.2"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^11.5"
+    },
+    "autoload": {
+        "psr-4": {
+            "Shop\\": "src/"
+        },
+        "psr-0": {
+            "Legacy_": "lib/"
+        },
+        "classmap": [
+            "classes/"
+        ],
+        "files": [
+            "src/helpers.php"
+        ]
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Shop\\Tests\\": "tests/"
+        }
+    },
+    "config": {
+        "sort-packages": true
+    }
+}
