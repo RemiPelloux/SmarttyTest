@@ -53,19 +53,20 @@ interface IndexFile {
 
 /** Header line of a full index (schema 3). */
 interface IndexHeader extends Omit<IndexFile, "files"> {
-  /**
-   * Each analysis without its lazy fields; a lazy field it has is kept in its place with the
-   * placeholder 0, so a loaded analysis has the same keys, in the same order, as the one saved.
-   */
+  /** Each analysis without its lazy fields (`LAZY_FIELDS`). */
   files: Record<string, Record<string, unknown>>;
-  /** path → [start, end) of its lazy fields' JSON object, in the text after the header line. */
-  parts: Record<string, [number, number]>;
+  /**
+   * path → [start, end, fields]: where its lazy fields' JSON object is in the text after the
+   * header line ([start, end)), and which lazy fields it has (bit i: `LAZY_FIELDS[i]`).
+   */
+  parts: Record<string, [number, number, number]>;
 }
 
 /**
  * Fields of an analysis that few readers need on a typical run (the symbols of the files a change
  * reaches, the top-level uses of a changed file): stored apart from the header and parsed for a
- * file the first time one of them is read. Together they are most of the index.
+ * file the first time one of them is read. Together they are most of the index. The order is part
+ * of the stored format (the field bits of `IndexHeader.parts`).
  */
 const LAZY_FIELDS = [
   "symbols",
@@ -77,12 +78,15 @@ const LAZY_FIELDS = [
   "catalogKeys",
 ] as const;
 const LAZY = new Set<string>(LAZY_FIELDS);
+const ALL_FIELDS = (1 << LAZY_FIELDS.length) - 1;
 
 /** Where the lazy fields of a loaded analysis are, until one of them is first read. */
 interface LazyPart {
   text: string;
   start: number;
   end: number;
+  /** The fields given accessors (bits of `LAZY_FIELDS`). */
+  fields: number;
 }
 const lazyParts = new WeakMap<object, LazyPart>();
 
@@ -92,50 +96,50 @@ function materialize(a: object): void {
   if (!part) throw new Error("symbol index: a lazy field without its stored part");
   lazyParts.delete(a);
   const values = JSON.parse(part.text.slice(part.start, part.end)) as Record<string, unknown>;
-  for (const field of LAZY_FIELDS)
-    if (Object.getOwnPropertyDescriptor(a, field)?.get)
+  LAZY_FIELDS.forEach((field, bit) => {
+    if (part.fields & (1 << bit))
       Object.defineProperty(a, field, {
         value: values[field],
         writable: true,
         enumerable: true,
         configurable: true,
       });
+  });
 }
 
 /** One accessor per lazy field, shared by every analysis (no closure per file). */
-const LAZY_ACCESSORS = new Map<string, PropertyDescriptor>(
-  LAZY_FIELDS.map((field) => [
-    field,
-    {
-      get(this: Record<string, unknown>) {
-        materialize(this);
-        return this[field];
-      },
-      set(this: Record<string, unknown>, value: unknown) {
-        materialize(this);
-        this[field] = value;
-      },
-      enumerable: true,
-      configurable: true,
-    },
-  ]),
-);
+const LAZY_ACCESSORS: PropertyDescriptor[] = LAZY_FIELDS.map((field) => ({
+  get(this: Record<string, unknown>) {
+    materialize(this);
+    return this[field];
+  },
+  set(this: Record<string, unknown>, value: unknown) {
+    materialize(this);
+    this[field] = value;
+  },
+  enumerable: true,
+  configurable: true,
+}));
 
-/** Whether `p` can be the [start, end) of a stored part in `text`, whose body starts at `base`. */
-const isPart = (text: string, base: number, p: unknown): p is [number, number] =>
+/** Whether `p` can be the part of a file in `text`, whose body starts at `base`. */
+const isPart = (text: string, base: number, p: unknown): p is [number, number, number] =>
   Array.isArray(p) &&
-  p.length === 2 &&
+  p.length === 3 &&
   Number.isInteger(p[0]) &&
   Number.isInteger(p[1]) &&
+  Number.isInteger(p[2]) &&
   p[0] >= 0 &&
   p[1] > p[0] &&
+  p[2] >= 0 &&
+  p[2] <= ALL_FIELDS &&
   base + p[1] <= text.length &&
   text.charCodeAt(base + p[0]) === 123 && // {
   text.charCodeAt(base + p[1] - 1) === 125; // }
 
 /**
  * The analyses of a schema-3 index, their lazy fields left in `text` until read; undefined when
- * the text is not a complete index of that layout.
+ * the text is not a complete index of that layout. A loaded analysis has the keys it was saved
+ * with; its lazy ones come last.
  */
 function readLazyIndex(
   text: string,
@@ -159,16 +163,18 @@ function readLazyIndex(
     return undefined;
   const base = nl + 1;
   const files = new Map<string, FileAnalysis>();
-  for (const [path, a] of Object.entries(header.files)) {
+  for (const path in header.files) {
+    const a = header.files[path];
     const p = header.parts[path];
     if (!a || typeof a !== "object" || !isPart(text, base, p)) return undefined;
-    let lazy = false;
-    for (const key of Object.keys(a))
-      if (LAZY.has(key)) {
-        Object.defineProperty(a, key, LAZY_ACCESSORS.get(key) as PropertyDescriptor);
-        lazy = true;
-      }
-    if (lazy) lazyParts.set(a, { text, start: base + p[0], end: base + p[1] });
+    // New accessor properties: far cheaper than turning existing data properties into accessors.
+    const fields = p[2];
+    if (fields) {
+      for (let bit = 0; bit < LAZY_FIELDS.length; bit++)
+        if (fields & (1 << bit))
+          Object.defineProperty(a, LAZY_FIELDS[bit] as string, LAZY_ACCESSORS[bit] as object);
+      lazyParts.set(a, { text, start: base + p[0], end: base + p[1], fields });
+    }
     files.set(path, a as unknown as FileAnalysis);
   }
   return { header, files };
@@ -181,24 +187,25 @@ function readLazyIndex(
 function lazyIndexChunks(data: IndexFile): string[] {
   const body: string[] = [];
   const files: Record<string, Record<string, unknown>> = {};
-  const parts: Record<string, [number, number]> = {};
+  const parts: Record<string, [number, number, number]> = {};
   let offset = 0;
   for (const [path, a] of Object.entries(data.files)) {
     const stored = lazyParts.get(a);
     const record = a as unknown as Record<string, unknown>;
     const skeleton: Record<string, unknown> = {};
     const values: Record<string, unknown> = {};
+    let fields = 0;
     for (const key of Object.keys(a)) {
       if (!LAZY.has(key)) skeleton[key] = record[key];
-      else if (stored) skeleton[key] = 0;
-      else if (record[key] !== undefined) {
-        skeleton[key] = 0;
+      else if (!stored && record[key] !== undefined) {
         values[key] = record[key];
+        fields |= 1 << LAZY_FIELDS.indexOf(key as (typeof LAZY_FIELDS)[number]);
       }
     }
+    if (stored) fields = stored.fields;
     const part = stored ? stored.text.slice(stored.start, stored.end) : JSON.stringify(values);
     files[path] = skeleton;
-    parts[path] = [offset, offset + part.length];
+    parts[path] = [offset, offset + part.length, fields];
     offset += part.length;
     body.push(part);
   }

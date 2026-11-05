@@ -61,7 +61,14 @@ const state = (root: string, f: string) =>
     (t) => JSON.parse(t.split("\n")[0] as string) as Record<string, unknown>,
     () => undefined,
   );
-const snapshot = (i: SymbolIndex) => JSON.stringify([...i.entries()]);
+/** Keys sorted: a loaded analysis lists its lazily read fields last. */
+const canonical = (v: unknown) =>
+  JSON.stringify(v, (_k, x: unknown) =>
+    x && typeof x === "object" && !Array.isArray(x)
+      ? Object.fromEntries(Object.entries(x).sort(([a], [b]) => a.localeCompare(b)))
+      : x,
+  );
+const snapshot = (i: SymbolIndex) => canonical([...i.entries()]);
 
 describe("SymbolIndex persistence", () => {
   it("writes a small delta for a few changed files and loads exactly what it saved", async () => {
@@ -193,7 +200,7 @@ describe("SymbolIndex lazy fields", () => {
     expect(loaded.get("f1.ts")?.topLevelRefs).toEqual(["f"]);
     expect(lazy(loaded.get("f1.ts"))).toBe(false);
     expect(lazy(loaded.get("f2.ts"))).toBe(true);
-    // Same keys, order and values as the analyses that were saved.
+    // Same keys and values as the analyses that were saved.
     expect(snapshot(loaded)).toBe(eager);
     expect("topLevelUses" in (loaded.get("f0.ts") as FileAnalysis)).toBe(true);
     expect("topLevelUses" in (loaded.get("f1.ts") as FileAnalysis)).toBe(false);
@@ -478,7 +485,7 @@ describe("SymbolIndex: adding or removing files re-resolves only what they can a
     const scratch = await run(fresh, files);
     expect(scratch.stats.resolvedAll).toBe(true);
     const sorted = (i: SymbolIndex) =>
-      JSON.stringify([...i.entries()].sort(([a], [b]) => a.localeCompare(b)));
+      canonical([...i.entries()].sort(([a], [b]) => a.localeCompare(b)));
     expect(sorted(scratch.index)).toBe(sorted(second.index));
     // Removing the shadowing files brings the earlier resolutions back.
     for (const f of shadows) await rm(join(root, f));
