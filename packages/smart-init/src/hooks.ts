@@ -233,9 +233,12 @@ const withRefs = (line: string) =>
  * A pre-push hook's refs arrive on stdin; the block reads them once, passes them to SmartTest and
  * restores them for the user's own steps (a `while read local_ref …` guard still sees them).
  */
-const block = (stage: HookStage, prefix = "") => {
+const block = (stage: HookStage, prefix = "", pidVar?: string) => {
   const push = stage === "pre-push";
   const command = `${push ? PIPE_REFS : ""}${HOOK_COMMANDS[stage]}`;
+  // In a parallel pre-push (`step & PID=$!` … `wait $PID`), SmartTest takes the replaced step's
+  // place as a background job under the same variable: the script's own `wait` collects it.
+  const parallel = push && pidVar !== undefined;
   return [
     START,
     push
@@ -245,9 +248,15 @@ const block = (stage: HookStage, prefix = "") => {
     ...(prefix
       ? [
           `if [ -x ${shellQuote(`${prefix}/node_modules/.bin/smarttest`)} ]; then`,
-          `  (cd ${shellQuote(prefix)} && ${command}) || exit 1`,
+          parallel
+            ? `  (cd ${shellQuote(prefix)} && ${command}) &`
+            : `  (cd ${shellQuote(prefix)} && ${command}) || exit 1`,
         ]
-      : ["if [ -x node_modules/.bin/smarttest ]; then", `  ${command} || exit 1`]),
+      : [
+          "if [ -x node_modules/.bin/smarttest ]; then",
+          parallel ? `  ${command} &` : `  ${command} || exit 1`,
+        ]),
+    ...(parallel ? [`  ${pidVar}=$!`] : []),
     "else",
     // Without SmartTest nothing checks the change: stop rather than let it through unchecked.
     `  echo "smarttest is not installed: install the project's dependencies first. The affected tests were not run, so the ${push ? "push" : "commit"} stops here (--no-verify skips this check)." >&2`,
@@ -260,6 +269,30 @@ const block = (stage: HookStage, prefix = "") => {
     END,
   ].join("\n");
 };
+
+/** The PID variable of a parallel step SmartTest replaced (`: # smarttest-replaced: PID=$!`). */
+const REPLACED_PID = /# smarttest-replaced: ([A-Za-z_]\w*)=\$!\s*$/m;
+const replacedPid = (text: string | undefined) => (text ? REPLACED_PID.exec(text)?.[1] : undefined);
+
+/**
+ * A backgrounded test step whose job the script keeps and waits for (`step &`, then `PID=$!`, then
+ * `wait $PID` somewhere): its PID line, and the variable.
+ */
+function parallelStep(
+  lines: readonly string[],
+  step: ExistingTestCommand,
+): { pidLine: number; pidVar: string } | undefined {
+  const cmd = commandLines([...lines], step.line - 1);
+  const last = cmd[cmd.length - 1] ?? step.line - 1;
+  if (!backgrounded(lines[last] ?? "")) return undefined;
+  const m = /^\s*([A-Za-z_]\w*)=\$!\s*$/.exec(lines[last + 1] ?? "");
+  if (!m?.[1]) return undefined;
+  const pidVar = m[1];
+  const waits = new RegExp(`\\bwait\\s+"?\\$\\{?${pidVar}\\b`);
+  return lines.some((l) => waits.test(l.replace(/#.*$/, "")))
+    ? { pidLine: last + 1, pidVar }
+    : undefined;
+}
 
 /** Replaces the first marked block with a fresh one (an upgrade from an older install). */
 function replaceBlock(text: string, fresh: string): string {
@@ -329,6 +362,12 @@ function installScript(
   prefix = "",
 ): string {
   const lines = (text ?? "#!/bin/sh\n").split("\n");
+  // A pre-push that runs its steps in parallel keeps doing so: the first replaced step whose job
+  // is waited for hands its PID variable to SmartTest's background job.
+  const parallel =
+    replace && stage === "pre-push"
+      ? steps.map((s) => ({ s, p: parallelStep(lines, s) })).find((x) => x.p)
+      : undefined;
   if (replace)
     for (const s of steps)
       for (const [k, i] of commandLines(lines, s.line - 1).entries()) {
@@ -337,9 +376,14 @@ function installScript(
         const bg = /&\s*$/.test(s.command) && !/&&\s*$/.test(s.command);
         lines[i] =
           k === 0
-            ? `${l.match(/^\s*/)?.[0] ?? ""}${bg ? REPLACED_BG : REPLACED}${l.trim()}`
+            ? `${l.match(/^\s*/)?.[0] ?? ""}${bg && parallel?.s !== s ? REPLACED_BG : REPLACED}${l.trim()}`
             : `# ${l}`;
       }
+  if (parallel?.p) {
+    const i = parallel.p.pidLine;
+    const l = lines[i] ?? "";
+    lines[i] = `${l.match(/^\s*/)?.[0] ?? ""}${REPLACED}${l.trim()}`;
+  }
   // After the shebang and husky's own preamble, or, in a pre-commit hook, in place of the first
   // test step it replaces, so the steps before it keep running first. A pre-push block stays on
   // top: it must read Git's refs before any other step reads stdin.
@@ -348,7 +392,7 @@ function installScript(
   while (at < lines.length && /husky\.sh/.test(lines[at] ?? "")) at++;
   const first = replace && stage === "pre-commit" ? Math.min(...steps.map((s) => s.line - 1)) : -1;
   if (first > at && first < lines.length && !inCompound(lines, first)) at = first;
-  if (addBlock) lines.splice(at, 0, block(stage, prefix));
+  if (addBlock) lines.splice(at, 0, block(stage, prefix, parallel?.p?.pidVar));
   const out = lines.join("\n");
   return out.endsWith("\n") ? out : `${out}\n`;
 }
@@ -570,7 +614,7 @@ export async function planHookInstall(
     } else if (script && current?.split("\n").some((l) => l.trim() === START)) {
       // A marked block is rewritten whole: older blocks consumed pre-push stdin or did not
       // enter a project in a subdirectory.
-      const fresh = replaceBlock(current, block(stage, prefix));
+      const fresh = replaceBlock(current, block(stage, prefix, replacedPid(current)));
       if (fresh !== current) upgrade = fresh;
     } else if (old && old !== HOOK_COMMANDS[stage] && current) {
       upgrade = current.replace(section as string, () =>
@@ -582,8 +626,13 @@ export async function planHookInstall(
       if (withStdin !== (upgrade ?? current)) upgrade = withStdin;
     }
     const replaceExisting = options.replace && safeListed.length > 0 && script;
-    if (replaceExisting)
+    if (replaceExisting) {
       upgrade = installScript(upgrade ?? current, replaceable, true, stage, false);
+      // A step now replaced in parallel: the block starts SmartTest in the background.
+      const pid = replacedPid(upgrade);
+      if (pid && pid !== replacedPid(current))
+        upgrade = replaceBlock(upgrade, block(stage, prefix, pid));
+    }
     if (script && stage === "pre-push" && current !== undefined) {
       const piped = refsToBackground(upgrade ?? current, listed);
       if (piped !== (upgrade ?? current)) upgrade = piped;

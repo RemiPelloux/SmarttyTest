@@ -34,8 +34,11 @@ describe("0.9 hook installation", () => {
     const testCommands = await detectTestCommands(root, []);
     const p = await planHookInstall(root, { stage: "pre-push", replace: true, testCommands });
     expect(p.replaced).toHaveLength(1);
-    expect(p.plan.after).toContain("smarttest run --push --hook");
-    expect(p.plan.after).toContain("true & # smarttest-replaced:");
+    expect(p.plan.after).toContain("smarttest run --push --hook &");
+    // The step ran in parallel and the script waits for its PID: SmartTest takes that PID.
+    expect(p.plan.after).toContain("  PID_TESTS=$!\n");
+    expect(p.plan.after).toContain(": # smarttest-replaced: npx vitest related");
+    expect(p.plan.after).toContain(": # smarttest-replaced: PID_TESTS=$!");
     await writeFile(join(root, p.file), p.plan.after as string);
     // With SmartTest installed (a stand-in that succeeds), the script goes on after the block and
     // the replaced background job still has a PID to wait for.
@@ -56,6 +59,66 @@ describe("0.9 hook installation", () => {
     });
     expect(repeat.plan.action).toBe("skip");
     expect(repeat.remaining).toEqual([]);
+    const undo = await planHookUninstall(root, "husky", ["pre-push"]);
+    expect(undo[0]?.after).toBe(original);
+  });
+
+  it("keeps a parallel pre-push parallel: SmartTest runs beside the other steps and its failure fails the push", async () => {
+    const original = [
+      "#!/bin/sh",
+      "PUSH_REFS=$(cat)",
+      "CHANGED=$(echo src/a.ts)",
+      "FAIL=0",
+      'sleep 0.3 > "$OUT.tsc" &',
+      "PID_TSC=$!",
+      'if [ -n "$CHANGED" ]; then',
+      "  npx vitest related --run --passWithNoTests $CHANGED &",
+      "  PID_TESTS=$!",
+      "fi",
+      "wait $PID_TSC || FAIL=1",
+      'if [ -n "$PID_TESTS" ]; then',
+      '  wait $PID_TESTS || { echo "tests failed"; FAIL=1; }',
+      "fi",
+      'exit "$FAIL"',
+      "",
+    ].join("\n");
+    const root = await repo({
+      "package.json": '{"devDependencies":{"husky":"9","vitest":"4"}}',
+      ".husky/pre-push": original,
+    });
+    const p = await planHookInstall(root, {
+      stage: "pre-push",
+      replace: true,
+      testCommands: await detectTestCommands(root, []),
+    });
+    expect(p.replaced).toHaveLength(1);
+    const after = p.plan.after as string;
+    expect(after).toContain("smarttest run --push --hook &\n  PID_TESTS=$!");
+    await writeFile(join(root, p.file), after);
+    await mkdir(join(root, "node_modules/.bin"), { recursive: true });
+    await writeFile(join(root, "node_modules/.bin/smarttest"), "#!/bin/sh\n", { mode: 0o755 });
+    const bin = join(root, ".fake-bin");
+    await mkdir(bin, { recursive: true });
+    const run = (code: number) => {
+      // The fake SmartTest records the refs it received and exits with `code`.
+      execFileSync("sh", [
+        "-c",
+        `printf '#!/bin/sh\\ncat > "$OUT.refs"\\nexit ${code}\\n' > ${bin}/npx; chmod +x ${bin}/npx`,
+      ]);
+      return execFileSync("sh", [p.file], {
+        cwd: root,
+        input: "refs/heads/x abc refs/heads/x 000\n",
+        stdio: "pipe",
+        env: {
+          ...process.env,
+          OUT: join(root, "out"),
+          PATH: `${bin}${delimiter}${process.env.PATH ?? ""}`,
+        },
+      });
+    };
+    run(0);
+    expect(await readFile(join(root, "out.refs"), "utf8")).toContain("refs/heads/x abc");
+    expect(() => run(1)).toThrow();
     const undo = await planHookUninstall(root, "husky", ["pre-push"]);
     expect(undo[0]?.after).toBe(original);
   });
