@@ -10,10 +10,12 @@ All notable changes are documented here. Releases are managed with [Changesets](
 - A barrel whose change only adds, removes, renames or repoints named re-exports (`export { total as cartTotal } from "./cart"`), loading the same modules before and after, selects the importers of the names that changed and the barrel's file-level importers. Before, any edit of a barrel selected every importer of it.
 - Still conservative, and selected for any change behind the barrel: members read by a computed name (`ns[name]`), namespaces passed on, side-effect imports, names that resolve to no project module, CommonJS barrels; and every importer when the barrel's loaded modules, `export *` lists or load-time code change. See [Barrels and re-exports](documentation/concepts/how-selection-works.md#barrels-and-re-exports).
 - The persisted graph's format changes (2 → 3): it is rebuilt once after the upgrade.
+- Measured with `benchmark --traces --mode safe`: six commits replayed on a history of `barrels-vitest` select 12 test files instead of 19, 0 missed; unjs/ufo's published window (12 commits, `export *` barrel) selects the same 107 of 168, 0 missed, since its changes were already followed to the symbol. Fault injection (`pnpm audit:fixtures`): 0 missed on every fixture, `barrels-vitest` included (12 of 12 functions).
 
 ### Added: selection precision in `smarttest benchmark`
 
 - With `--traces`, `benchmark` reports the share of selected test files whose trace ran the changed code, per commit and in total ("Precision: 50% of measured selected test files ran the changed code (1/2)"). A file without a fresh trace, or selected for something a trace cannot see (configuration, environment, types, a trigger, a rule), is unmeasured and never counted as precise; without traces, precision is reported as unmeasured, never 100%. See [Selection precision](documentation/concepts/runtime-evidence.md#selection-precision).
+- First measures: 55% on the `barrels-vitest` history (6 of 11 measured files; the rest are tests that read the barrel by a computed name, selected for any change behind it); 100% on unjs/ufo's window (8 of 8 measured; the 99 others are full-suite fallbacks of release and dependency commits, which traces cannot judge).
 - `benchmark --json` (experimental) gains `commits[].precision` and `totals.precision`: `{ ran, notRan, unmeasured, pct }`, with `pct` null when nothing was measured. Existing fields are unchanged.
 
 ## [1.1.1] — patch
