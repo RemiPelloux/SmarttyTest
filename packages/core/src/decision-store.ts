@@ -25,22 +25,28 @@ export function encodeDecisionRecord(record: Record<string, unknown>): string {
   const strings: string[] = [];
   const stringIds = new Map<string, number>();
   const nodes: number[] = [];
-  const nodeIds = new Map<string, number>();
+  // The children of each node (index: node + 1, so the root is 0), by string: thousands of paths
+  // of hundreds of elements each make this the hot loop of a large selection.
+  const children: (Map<string, number> | undefined)[] = [];
   const node = (path: readonly string[]): number => {
     let parent = -1;
     for (const s of path) {
-      let sid = stringIds.get(s);
-      if (sid === undefined) {
-        sid = strings.length;
-        strings.push(s);
-        stringIds.set(s, sid);
+      let next = children[parent + 1];
+      if (!next) {
+        next = new Map();
+        children[parent + 1] = next;
       }
-      const key = `${parent}:${sid}`;
-      let id = nodeIds.get(key);
+      let id = next.get(s);
       if (id === undefined) {
+        let sid = stringIds.get(s);
+        if (sid === undefined) {
+          sid = strings.length;
+          strings.push(s);
+          stringIds.set(s, sid);
+        }
         id = nodes.length / 2;
         nodes.push(parent, sid);
-        nodeIds.set(key, id);
+        next.set(s, id);
       }
       parent = id;
     }
