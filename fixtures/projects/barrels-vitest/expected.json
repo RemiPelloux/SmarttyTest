@@ -1,7 +1,7 @@
 {
   "runners": ["vitest"],
   "vcs": "git",
-  "testFiles": 11,
+  "testFiles": 12,
   "mutations": [
     { "file": "src/shop/pricing.ts", "find": "return cents / 100;", "replace": "return cents / 10;", "expectFailing": ["test/price.test.ts", "test/lookup.test.ts"] },
     { "file": "src/shop/pricing.ts", "find": "(1 - pct / 100)", "replace": "(1 - pct / 10)", "expectFailing": ["test/discount.test.ts"] },
@@ -11,7 +11,7 @@
     { "file": "src/greet.ts", "find": "Hello", "replace": "Hi", "expectFailing": ["test/greet.test.ts"] },
     { "file": "src/shop/index.ts", "find": "total as cartTotal", "replace": "count as cartTotal", "expectFailing": ["test/cart.test.ts"] },
     { "file": "src/shop/index.ts", "find": "total as cartTotal, count", "replace": "total as cartTotal", "expectFailing": ["test/count.test.ts"] },
-    { "file": "src/shop/pricing.ts", "find": "export function discount", "replace": "if (Math.min(1, 2) === 1) throw new Error(\"load-time\");\nexport function discount", "expectFailing": ["test/cart.test.ts", "test/count.test.ts", "test/discount.test.ts", "test/greet.test.ts", "test/lookup.test.ts", "test/money.test.ts", "test/price.test.ts"] },
+    { "file": "src/shop/pricing.ts", "find": "export function discount", "replace": "if (Math.min(1, 2) === 1) throw new Error(\"load-time\");\nexport function discount", "expectFailing": ["test/cart.test.ts", "test/count.test.ts", "test/discount.test.ts", "test/greet.test.ts", "test/lookup.test.ts", "test/money.test.ts", "test/percent.test.ts", "test/price.test.ts"] },
     { "file": "src/plugins/alpha.ts", "find": "\"alpha\"", "replace": "\"ALPHA\"", "expectFailing": ["test/alpha.test.ts"] },
     { "file": "src/plugins/index.ts", "find": "registry[plugin.name] = plugin;", "replace": "registry[plugin.name.toUpperCase()] = plugin.name.length > 4 ? plugin : (() => { throw new Error(\"beta\"); })();", "expectFailing": ["test/alpha.test.ts", "test/beta.test.ts"] },
     { "file": "src/legacy/two.cjs", "find": "return 2;", "replace": "return 3;", "expectFailing": ["test/two.test.ts"] }

@@ -26,6 +26,7 @@ const ALL_SHOP = [
   "test/greet.test.ts",
   LOOKUP,
   "test/money.test.ts",
+  "test/percent.test.ts",
   "test/price.test.ts",
 ];
 
@@ -49,7 +50,7 @@ describe("barrels-vitest: pruning", () => {
     ]);
   });
 
-  it("`export * as format`: importers reading `format.money`", async () => {
+  it("`export * as format`: importers reading `format.money`, not `format.percent`", async () => {
     expect(await selectedAfter("src/format.ts", "`$${", "`€${")).toEqual([
       LOOKUP,
       "test/money.test.ts",
