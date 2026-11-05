@@ -369,4 +369,23 @@ export class TraceView {
     if (!t.known[file]?.includes(name)) return true; // name not reported: cannot tell
     return ran.includes(name);
   }
+
+  /**
+   * `executed`, answering only what the trace shows: true when it ran the unit (or, for `*`,
+   * loaded its file, which runs its module code), false when it did not load the file or V8
+   * reported the function without running it, undefined when the trace cannot tell (no trace, a
+   * value, a constructor, a function V8 did not name, a unit added since the trace). For measuring
+   * precision, where "cannot tell" must not count either way.
+   */
+  ran(test: string, file: string, unit: string): boolean | undefined {
+    const t = this.store?.tests[test];
+    if (!t) return undefined;
+    const ran = t.executed[file];
+    if (!ran) return false;
+    if (unit === "*") return true;
+    if (unit.endsWith(".@init")) return undefined;
+    const name = unit.includes(".") ? unit.slice(unit.indexOf(".") + 1) : unit;
+    if (!t.known[file]?.includes(name)) return undefined;
+    return ran.includes(name);
+  }
 }

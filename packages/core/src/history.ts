@@ -11,6 +11,7 @@ import type { RunnerRoot } from "@smarttest/test-discovery";
 import { type ExecutionSummary, executeGroups } from "@smarttest/test-executor";
 import { planExecution, rootKey } from "@smarttest/test-selector";
 import { prepareCheckout } from "./hook.js";
+import { measurePrecision, type SelectionPrecision, sumPrecision } from "./precision.js";
 import type { SmartTest } from "./smarttest.js";
 
 export interface CommitBenchmark {
@@ -41,6 +42,11 @@ export interface CommitBenchmark {
   cachedTests?: number;
   /** Cached passes that failed in the full run of the same commit (must be 0). */
   cacheViolations?: string[];
+  /**
+   * How many selected test files ran the changed code, from fresh traces (`--traces`). Without
+   * traces every selected file is unmeasured and `pct` is null.
+   */
+  precision?: SelectionPrecision;
 }
 
 export interface HistoryBenchmark {
@@ -61,6 +67,8 @@ export interface HistoryBenchmark {
     loadFlaky: number;
     cachedTests: number;
     cacheViolations: number;
+    /** Summed over the commits; `pct` null when no selected test file was measured. */
+    precision?: SelectionPrecision;
   };
 }
 
@@ -235,6 +243,13 @@ export async function benchmarkHistory(
         }),
       );
       const selected = analysis.decision.selectedTests.map((t) => t.filePath);
+      const precision = measurePrecision({
+        selected: analysis.decision.selectedTests,
+        seeds: analysis.decision.details.seeds,
+        files: analysis.index,
+        dependentsOf: (seeds) => analysis.graph.dependentsOf(seeds),
+        traces: analysis.traces,
+      });
       // SmartTest's own run: validated cache, fail-fast order, parallel runner groups.
       const [outcome, selectedMs] = await wall(() =>
         engine.run({
@@ -327,6 +342,7 @@ export async function benchmarkHistory(
           : {}),
         ...(cached.length ? { cachedTests: cached.length } : {}),
         ...(cacheViolations.length ? { cacheViolations } : {}),
+        precision,
       });
       await options.onCommit?.(results);
       const last = results.at(-1) as CommitBenchmark;
@@ -356,6 +372,7 @@ export async function benchmarkHistory(
         loadFlaky: results.reduce((a, r) => a + (r.loadFlaky?.length ?? 0), 0),
         cachedTests: results.reduce((a, r) => a + (r.cachedTests ?? 0), 0),
         cacheViolations: results.reduce((a, r) => a + (r.cacheViolations?.length ?? 0), 0),
+        precision: sumPrecision(results),
       },
     };
   } finally {
@@ -378,17 +395,32 @@ export function benchmarkMarkdown(b: HistoryBenchmark): string {
     `| Saved by SmartTest | ${t.savedVsFullPct}% | ${t.savedVsGatedPct}% | — |`,
     `| Tests run | ${t.totalTests} | — | ${t.selectedTests} |`,
     "",
+    `**Precision: ${precisionText(t.precision)}**`,
+    "",
     `**Missed failures: ${t.missed}** · failures already present in the parent commit: ${t.preexisting} · failing only alongside other tests (pass alone, load-flaky): ${t.loadFlaky ?? 0} · cached results: ${t.cachedTests ?? 0} (integrity violations: ${t.cacheViolations ?? 0})`,
     "",
-    "| Commit | Changed | Selected | Full | Gated | SmartTest | Missed |",
-    "|---|---|---|---|---|---|---|",
+    "| Commit | Changed | Selected | Ran the change | Full | Gated | SmartTest | Missed |",
+    "|---|---|---|---|---|---|---|---|",
     ...b.commits.map(
       (c) =>
-        `| \`${c.sha.slice(0, 8)}\` ${c.subject.slice(0, 50).replace(/\|/g, "\\|")} | ${c.changedFiles} | ${c.selectedTests}/${c.totalTests}${c.fallback ? " (fallback)" : ""} | ${s(c.fullMs)} | ${s(c.projectGatedMs)} | ${s(c.smarttestMs)} | ${c.missed.length ? `❌ ${c.missed.join(", ")}` : "0"}${c.loadFlaky?.length ? ` (load-flaky: ${c.loadFlaky.join(", ")})` : ""} |`,
+        `| \`${c.sha.slice(0, 8)}\` ${c.subject.slice(0, 50).replace(/\|/g, "\\|")} | ${c.changedFiles} | ${c.selectedTests}/${c.totalTests}${c.fallback ? " (fallback)" : ""} | ${c.precision?.pct != null ? `${c.precision.ran}/${c.precision.ran + c.precision.notRan}` : "unmeasured"} | ${s(c.fullMs)} | ${s(c.projectGatedMs)} | ${s(c.smarttestMs)} | ${c.missed.length ? `❌ ${c.missed.join(", ")}` : "0"}${c.loadFlaky?.length ? ` (load-flaky: ${c.loadFlaky.join(", ")})` : ""} |`,
     ),
     "",
     "Times are wall-clock on this machine. SmartTest time includes its analysis overhead.",
     "",
   ];
   return lines.join("\n");
+}
+
+/**
+ * Precision in words: a percentage only when traces measured at least one selected test file,
+ * never 100% by default.
+ */
+export function precisionText(p: SelectionPrecision | undefined): string {
+  if (!p || p.pct === null)
+    return p && p.ran + p.notRan + p.unmeasured === 0
+      ? "unmeasured (nothing selected)"
+      : "unmeasured (no fresh trace answered for a selected test file; record traces with --traces)";
+  const measured = p.ran + p.notRan;
+  return `${p.pct}% of measured selected test files ran the changed code (${p.ran}/${measured}${p.unmeasured ? `; ${p.unmeasured} unmeasured` : ""})`;
 }
