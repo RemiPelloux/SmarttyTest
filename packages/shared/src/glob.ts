@@ -103,12 +103,18 @@ function underIgnored(
   ignored: ReadonlySet<string>,
   hasManifest: (dir: string) => boolean,
 ): boolean {
-  const segs = file.split("/").slice(0, -1);
-  return segs.some((seg, i) => {
-    if (!ignored.has(seg)) return false;
-    if (ignored !== DEFAULT_IGNORED_DIRS || !PACKAGE_OUTPUT_DIRS.has(seg)) return true;
-    return hasManifest(segs.slice(0, i).join("/"));
-  });
+  // Called for every project file on each run: no arrays, one slice per folder.
+  let start = 0;
+  for (let slash = file.indexOf("/"); slash >= 0; slash = file.indexOf("/", start)) {
+    const seg = file.slice(start, slash);
+    if (ignored.has(seg)) {
+      if (ignored !== DEFAULT_IGNORED_DIRS || !PACKAGE_OUTPUT_DIRS.has(seg)) return true;
+      // The folder holding `seg` ("" at the root).
+      if (hasManifest(start === 0 ? "" : file.slice(0, start - 1))) return true;
+    }
+    start = slash + 1;
+  }
+  return false;
 }
 
 export interface WalkOptions {

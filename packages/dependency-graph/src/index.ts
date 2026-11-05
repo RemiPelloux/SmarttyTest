@@ -1419,6 +1419,16 @@ export class DependencyGraph {
       if (out.length > 1 && !out[0]?.includes("#") && out[1]?.startsWith(`${out[0]}#`)) out.shift();
       return out;
     };
+    // The file of a key, split once: every test's path walks back through the same keys.
+    const fileOfKey = new Map<string, string>();
+    const fileOf = (k: string) => {
+      let f = fileOfKey.get(k);
+      if (f === undefined) {
+        f = k.slice(0, k.indexOf("#"));
+        fileOfKey.set(k, f);
+      }
+      return f;
+    };
     const firstKeyOfFile = new Map<string, string>();
     const pushDeps = (target: string, from: string) => {
       for (const d of this.deps.get(target) ?? []) push(d.from, from, d.confidence);
@@ -1438,7 +1448,7 @@ export class DependencyGraph {
             path[path.length - 1] = file;
           const files: string[] = [];
           for (let c = parent.get(k)?.from; c !== undefined; c = parent.get(c)?.from)
-            files.push(c.slice(0, c.indexOf("#")));
+            files.push(fileOf(c));
           tests.set(file, {
             test: file,
             path,
