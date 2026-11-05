@@ -2,7 +2,7 @@ import { statSync } from "node:fs";
 import { cp, mkdir, mkdtemp, readFile, rm, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, posix } from "node:path";
-import { sha256 } from "@smarttest/shared";
+import { removeStateFile, sha256, writeStateFile } from "@smarttest/shared";
 import type { Analyzer, FileAnalysis, ModuleResolver } from "@smarttest/source-parser";
 import { describe, expect, it } from "vitest";
 import { SymbolIndex } from "./index.js";
@@ -55,9 +55,10 @@ async function update(root: string, files: string[], contextKey = "ctx") {
   return { index, stats };
 }
 
+/** A state file's JSON; for the full index, its header line. */
 const state = (root: string, f: string) =>
   readFile(join(root, ".smarttest", "state", f), "utf8").then(
-    (t) => JSON.parse(t) as Record<string, unknown>,
+    (t) => JSON.parse(t.split("\n")[0] as string) as Record<string, unknown>,
     () => undefined,
   );
 const snapshot = (i: SymbolIndex) => JSON.stringify([...i.entries()]);
@@ -131,17 +132,148 @@ describe("SymbolIndex persistence", () => {
   });
 });
 
+describe("SymbolIndex lazy fields", () => {
+  /** An analyzer filling every lazily stored field (and leaving some optional ones out). */
+  const rich: Analyzer = {
+    ...analyzer,
+    analyze: (path, content) => {
+      const a = analyzer.analyze(path, content);
+      const n = content.length;
+      return {
+        ...a,
+        symbols: [
+          {
+            id: `${path}#f`,
+            name: "f",
+            qualifiedName: "f",
+            kind: "function",
+            exportNames: ["f"],
+            range: { start: { line: 0, column: 0 }, end: { line: 1, column: n } },
+            signature: "() => é\u{1f600}",
+            tokenHash: `t${n}`,
+            textHash: `x${n}`,
+            refs: ["g"],
+            decorators: [],
+          },
+        ] as FileAnalysis["symbols"],
+        topLevelRefs: ["f"],
+        ...(n % 2 ? { topLevelUses: ["f.call"] } : {}),
+        ...(n % 3 ? { catalogKeys: { "a.b": "h" } } : {}),
+      };
+    },
+  };
+  const open = async (root: string, files: string[]) => {
+    const index = await SymbolIndex.load(join(root, ".smarttest"));
+    const stats = await index.update({
+      root,
+      files,
+      analyzers: [rich],
+      resolver: { resolve: () => ({ reason: "none" }) },
+      contextKey: "ctx",
+    });
+    await index.save();
+    return { index, stats };
+  };
+  const lazy = (a: FileAnalysis | undefined) =>
+    !!a && !!Object.getOwnPropertyDescriptor(a, "symbols")?.get;
+
+  it("loads every field as saved, parsing a file's lazy fields only when one is read", async () => {
+    const files = Object.fromEntries(
+      Array.from({ length: 6 }, (_, i) => [`f${i}.ts`, "x".repeat(i + 1)]),
+    );
+    const root = await project(files);
+    const paths = Object.keys(files);
+    const first = await open(root, paths);
+    const eager = snapshot(first.index);
+
+    const loaded = await SymbolIndex.load(join(root, ".smarttest"));
+    expect(loaded.loadWarnings).toEqual([]);
+    expect([...loaded.entries().values()].every(lazy)).toBe(true);
+    // Reading one lazy field of a file materializes that file only.
+    expect(loaded.get("f1.ts")?.topLevelRefs).toEqual(["f"]);
+    expect(lazy(loaded.get("f1.ts"))).toBe(false);
+    expect(lazy(loaded.get("f2.ts"))).toBe(true);
+    // Same keys, order and values as the analyses that were saved.
+    expect(snapshot(loaded)).toBe(eager);
+    expect("topLevelUses" in (loaded.get("f0.ts") as FileAnalysis)).toBe(true);
+    expect("topLevelUses" in (loaded.get("f1.ts") as FileAnalysis)).toBe(false);
+  });
+
+  it("writes untouched files back unparsed in a full write, and reads them back the same", async () => {
+    const files = Object.fromEntries(Array.from({ length: 80 }, (_, i) => [`f${i}.ts`, `${i}`]));
+    const root = await project(files);
+    const paths = Object.keys(files);
+    await open(root, paths);
+    // As saved (in path order), every field read.
+    const eager = snapshot(await SymbolIndex.load(join(root, ".smarttest")));
+    // A new resolution context: every file is resolved again, a full write follows.
+    const index = await SymbolIndex.load(join(root, ".smarttest"));
+    await index.update({
+      root,
+      files: paths,
+      analyzers: [rich],
+      resolver: { resolve: () => ({ reason: "none" }) },
+      contextKey: "ctx2",
+    });
+    expect([...index.entries().values()].filter(lazy).length).toBe(paths.length);
+    index.get("f3.ts")?.symbols; // one materialized file, written from its values
+    await index.save();
+    const reloaded = await SymbolIndex.load(join(root, ".smarttest"));
+    expect(reloaded.loadWarnings).toEqual([]);
+    expect(snapshot(reloaded)).toBe(eager);
+  });
+
+  it("reads a schema-2 index and rewrites it in the current layout", async () => {
+    const root = await project({ "a.ts": "1", "b.ts": "22" });
+    const first = await open(root, ["a.ts", "b.ts"]);
+    const header = (await state(root, "index.json")) as Record<string, unknown>;
+    const legacy = {
+      schemaVersion: 2,
+      baseId: "legacy",
+      contextKey: header.contextKey,
+      stats: header.stats,
+      others: header.others,
+      files: Object.fromEntries(first.index.entries()),
+    };
+    await writeStateFile(join(root, ".smarttest", "state", "index.json"), JSON.stringify(legacy));
+    await removeStateFile(join(root, ".smarttest", "state", "index-delta.json"));
+    const loaded = await SymbolIndex.load(join(root, ".smarttest"));
+    expect(loaded.loadWarnings).toEqual([]);
+    expect(snapshot(loaded)).toBe(snapshot(first.index));
+    const again = await open(root, ["a.ts", "b.ts"]);
+    expect(again.stats.parsed).toBe(0);
+    const rewritten = await state(root, "index.json");
+    expect(rewritten?.schemaVersion).toBe(3);
+    expect(rewritten?.parts).toBeDefined();
+    expect(snapshot(await SymbolIndex.load(join(root, ".smarttest")))).toBe(snapshot(first.index));
+  });
+
+  it("rebuilds an index whose lazy parts do not match its header", async () => {
+    const root = await project({ "a.ts": "1", "b.ts": "22" });
+    await open(root, ["a.ts", "b.ts"]);
+    const file = join(root, ".smarttest", "state", "index.json");
+    const text = await readFile(file, "utf8");
+    // Authenticated, but cut short: the last part lies past the end.
+    await writeStateFile(file, text.slice(0, -3));
+    const loaded = await SymbolIndex.load(join(root, ".smarttest"));
+    expect(loaded.size).toBe(0);
+    expect(loaded.loadWarnings.join()).toMatch(/rebuilt/);
+  });
+});
+
 describe("SymbolIndex trust (SR-16)", () => {
   it("never uses an index or delta it did not write, even with matching hashes and stats", async () => {
     const root = await project({ "a.ts": 'import "./b"', "b.ts": "1" });
     await update(root, ["a.ts", "b.ts"]);
     // A crafted index: the right content hash and stats for a.ts, but its import of b.ts removed
     // (that edge would select a.ts's tests when b.ts changes). Written without the MAC.
+    const file = join(root, ".smarttest", "state", "index.json");
+    const text = await readFile(file, "utf8");
     const stored = (await state(root, "index.json")) as {
       files: Record<string, FileAnalysis>;
     };
     stored.files["a.ts"] = { ...(stored.files["a.ts"] as FileAnalysis), imports: [] };
-    await writeFile(join(root, ".smarttest", "state", "index.json"), JSON.stringify(stored));
+    await writeFile(file, `${JSON.stringify(stored)}${text.slice(text.indexOf("\n"))}`);
     const loaded = await SymbolIndex.load(join(root, ".smarttest"));
     expect(loaded.size).toBe(0);
     expect(loaded.loadWarnings.join()).toMatch(/rebuilt/);
