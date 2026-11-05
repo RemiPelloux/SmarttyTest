@@ -2,6 +2,13 @@
 
 All notable changes are documented here. Releases are managed with [Changesets](https://github.com/changesets/changesets). The project follows [Semantic Versioning](https://semver.org/).
 
+## Unreleased
+
+### Changed
+
+- A push that creates a branch compares with the last commit a pre-push hook passed on, not with the whole history. On openpro-front a new branch meant 14,377 changed files and a 27-minute hook. A commit pushed with the hook bypassed has no passed record, so a new branch carrying it still checks it; with no passed record at all, the whole history is still compared.
+- `init` keeps a parallel pre-push parallel: when the test step it replaces runs in the background and the script waits for its PID (`step & PID=$!` … `wait $PID`), SmartTest starts as a background job under that variable instead of running before the other steps. `hook uninstall` restores the script.
+
 ## [1.1.1] — patch
 
 ### Fixed
