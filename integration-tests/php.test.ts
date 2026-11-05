@@ -379,7 +379,9 @@ describe.skipIf(!php)("init in a PHP repository", () => {
       "npx --yes @tkmremi/smarttest run --push --hook",
     ]);
     // The replaced command is kept, so `smarttest hook uninstall` can restore it.
-    expect(JSON.stringify(after)).toContain("smarttest-replaced: bash scripts/test-changed.sh");
+    expect(JSON.stringify(after)).toContain(
+      "SmartTest: affected tests, in place of: bash scripts/test-changed.sh",
+    );
     // `hook uninstall` gives the replaced actions back.
     await writeFile(join(dir, "captainhook.json"), hook?.after ?? "");
     const [restore] = await st.hookUninstallPlan();

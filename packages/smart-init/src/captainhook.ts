@@ -3,7 +3,7 @@
  * action. An action that already runs the project's tests (`vendor/bin/phpunit`,
  * `php artisan test`, Pest, or a script that runs them, such as `scripts/test-changed.sh`) is
  * replaced in place, in the same hook; the command it replaces is kept in the action's label
- * (`smarttest-replaced: …`), so `smarttest hook uninstall` restores it.
+ * (`SmartTest: affected tests, in place of: …`), so `smarttest hook uninstall` restores it.
  */
 import { existsSync } from "node:fs";
 import { join } from "node:path";
@@ -11,7 +11,8 @@ import { readJson, readText } from "@smarttest/shared";
 import type { FilePlan } from "./index.js";
 
 export const CAPTAINHOOK_FILE = "captainhook.json";
-const MARK = "smarttest-replaced: ";
+/** The label CaptainHook shows for SmartTest's action; it keeps the command it replaced. */
+const MARK = "SmartTest: affected tests, in place of: ";
 const OWN = /smarttest(?:@[\w.-]+)?\s+run\b/;
 
 type Stage = "pre-commit" | "pre-push";

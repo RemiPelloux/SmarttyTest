@@ -429,7 +429,24 @@ export async function buildPlan(
     });
   }
   const pkgText = await readText(join(root, "package.json"));
-  if (pkgText) {
+  // A PHP application with a package.json for its front-end assets (Vite) runs SmartTest through
+  // npx: npm scripts would name a `smarttest` that is not installed there.
+  const phpFirst =
+    !!pkgText &&
+    profile.runners.some((r) => r.adapter === "phpunit") &&
+    !profile.runners.some(
+      (r) => r.dir === "" && !["phpunit", "pytest", "unittest"].includes(r.adapter),
+    ) &&
+    !/"@tkmremi\/smarttest"\s*:/.test(pkgText);
+  if (phpFirst)
+    files.push({
+      path: "package.json",
+      action: "skip",
+      reason:
+        "SmartTest is not one of its dependencies: run it with `npx --yes @tkmremi/smarttest` (or `npm install -D @tkmremi/smarttest` to add the scripts)",
+      risk: "low",
+    });
+  else if (pkgText) {
     try {
       const pkg = JSON.parse(pkgText) as { scripts?: Record<string, string> };
       const scripts = { ...(pkg.scripts ?? {}) };
