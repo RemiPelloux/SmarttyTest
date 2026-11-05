@@ -202,6 +202,22 @@ describe.skipIf(!ready("php-phpunit"))("php-phpunit", () => {
     );
   }, 180_000);
 
+  it("benchmark replays a commit in a temporary checkout with Composer's packages", async () => {
+    const dir = await materializePhp("php-phpunit");
+    await edit(dir, "src/Pricing/Rounding.php", "(int) round($amount)", "(int) floor($amount)");
+    git(dir, "commit", "-qam", "round down");
+    const st = await SmartTest.open({ root: dir });
+    const { benchmarkHistory } = await import("@smarttest/core");
+    const b = await benchmarkHistory(st, { commits: 1 });
+    const c = b.commits[0];
+    // The full run in the checkout passes (its autoloader loads the checkout's classes, so the
+    // change is tested): no infrastructure error, nothing missed.
+    expect(c?.failingInFull).toEqual([]);
+    expect(c?.missed).toEqual([]);
+    // Discount::apply calls Rounding::cents: Discount's users and the uncertain plugin test.
+    expect(c?.selectedTests).toBe(3);
+  }, 240_000);
+
   it("can be turned off per project", async () => {
     const dir = await materializePhp("php-phpunit");
     await writeFile(join(dir, "smarttest.config.json"), '{ "php": { "enabled": false } }\n');
