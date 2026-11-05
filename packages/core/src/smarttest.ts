@@ -813,6 +813,27 @@ export class SmartTest {
   }
 
   async changeInput(source?: ChangeSource): Promise<ChangeAnalysisInput> {
+    const input = await this.detectChanges(source);
+    if (input.close) this.closers.add(input.close);
+    return input;
+  }
+
+  /**
+   * How to end the processes of the change inputs handed out (their `readBefore` may keep a VCS
+   * process running). Only the closers are kept, not the inputs and the contents they cached.
+   */
+  private readonly closers = new Set<() => Promise<void>>();
+
+  /**
+   * Ends the VCS processes this instance keeps for reading previous file versions, and settles
+   * once they have exited: await it before deleting the project (Windows cannot delete a folder a
+   * process runs in). The instance stays usable; a later read starts them again.
+   */
+  async close(): Promise<void> {
+    await Promise.all([...this.closers].map((close) => close()));
+  }
+
+  private async detectChanges(source?: ChangeSource): Promise<ChangeAnalysisInput> {
     const src = source ?? (await this.defaultSource());
     if (src.kind === "snapshot")
       return this.withoutOwnState(await this.snapshots().getChangeInput(src));
@@ -1481,6 +1502,10 @@ export class SmartTest {
           warn: true,
         },
       });
+    } finally {
+      // The previous versions read for this analysis: no Git process outlives it (a later read
+      // through `analysis.input` starts one again, which `close()` ends).
+      await this.close();
     }
   }
 
@@ -2434,6 +2459,15 @@ export class SmartTest {
   }
 
   async run(options: RunOptions = {}): Promise<RunOutcome> {
+    try {
+      return await this.runOnce(options);
+    } finally {
+      // The previous versions read for this run: no Git process outlives it.
+      await this.close();
+    }
+  }
+
+  private async runOnce(options: RunOptions): Promise<RunOutcome> {
     const kind = options.source?.kind;
     if (
       (kind === "staged" || kind === "push") &&

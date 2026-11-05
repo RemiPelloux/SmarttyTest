@@ -41,7 +41,7 @@ describe("previous versions through one git cat-file --batch", () => {
       const read = await Promise.all(names.map((f) => blobs.read(dir, "HEAD", f)));
       for (const [i, f] of names.entries()) expect(read[i]).toBe(show(dir, `HEAD:${f}`));
     } finally {
-      blobs.close();
+      await blobs.close();
       await rm(dir, { recursive: true, force: true });
     }
   });
@@ -53,7 +53,7 @@ describe("previous versions through one git cat-file --batch", () => {
       expect(await blobs.read(dir, "HEAD", "missing.ts")).toBeUndefined();
       expect(await blobs.read(dir, "HEAD", "a.ts")).toBe("export const a = 1;\n");
     } finally {
-      blobs.close();
+      await blobs.close();
       await rm(dir, { recursive: true, force: true });
     }
   });
@@ -66,7 +66,7 @@ describe("previous versions through one git cat-file --batch", () => {
       const text = await blobs.read(dir, "HEAD", "bin.dat");
       expect(text).toBe(bytes.toString("utf8"));
     } finally {
-      blobs.close();
+      await blobs.close();
       await rm(dir, { recursive: true, force: true });
     }
   });
@@ -86,7 +86,7 @@ describe("previous versions through one git cat-file --batch", () => {
       expect(await pending).toBe("export const b = 2;\n");
       expect(await blobs.read(dir, "HEAD", "a.ts")).toBe("export const a = 1;\n");
     } finally {
-      blobs.close();
+      await blobs.close();
       await rm(dir, { recursive: true, force: true });
     }
   });
@@ -103,6 +103,7 @@ describe("previous versions through one git cat-file --batch", () => {
       );
       expect(before).toEqual(Array.from({ length: 20 }, (_, i) => `export const v = ${i};\n`));
       expect(await input.readBefore("nope.ts")).toBeUndefined();
+      await input.close?.();
     } finally {
       await rm(dir, { recursive: true, force: true });
     }

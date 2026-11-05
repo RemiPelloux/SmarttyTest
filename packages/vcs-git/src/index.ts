@@ -361,7 +361,12 @@ export class GitAdapter implements VersionControlAdapter, ChangeProvider {
       if (repoPath.startsWith("../")) return undefined;
       return this.showAt(blobs, beforeRev, repoPath);
     };
-    return { changeSet: scoped, readBefore, description: `git · ${describeSource(source)}` };
+    return {
+      changeSet: scoped,
+      readBefore,
+      description: `git · ${describeSource(source)}`,
+      close: () => blobs.close(),
+    };
   }
 
   /**

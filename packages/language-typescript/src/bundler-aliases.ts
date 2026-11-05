@@ -191,6 +191,9 @@ export function matchAlias(config: AliasConfig, specifier: string): AliasHit | u
       apply = (r) => r + specifier.slice(f.length);
     }
     const candidates = rule.targets.map((t) => {
+      // Captures go into the target as written: once joined into a path, a Windows separator
+      // would swallow Babel's `\1` (`./src/\1` → `src\1`).
+      if (rule.regex) return materialize({ ...t, path: apply(t.path) }, config.dir, config.root);
       const base = materialize(t, config.dir, config.root);
       return base.abs !== undefined ? { abs: apply(base.abs) } : { spec: apply(base.spec ?? "") };
     });

@@ -370,6 +370,8 @@ class Studio {
     this.clients.clear();
     if (this.heartbeat) clearInterval(this.heartbeat);
     this.heartbeat = null;
+    // Snapshots read previous versions through `analysis.input`: end those Git processes too.
+    await this.st.close();
   }
 }
 

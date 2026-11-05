@@ -206,7 +206,8 @@ export class VitestAdapter implements TestAdapter {
 export function vitestFailedSuiteText(stderr: string, file: string): string | undefined {
   const blocks: string[] = [];
   for (const block of stderr.split(/^ *FAIL +/m).slice(1)) {
-    const shown = /^(\S+)/.exec(block)?.[1];
+    // `tests/a.test.ts > d`, or with the suite's line (`tests/a.test.ts:2 > d`, seen on Windows).
+    const shown = /^(\S+?)(?::\d+){0,2}(?=\s|$)/.exec(block)?.[1];
     if (!shown || !(shown === file || file.endsWith(`/${shown}`))) continue;
     blocks.push(`FAIL ${block.split(/^⎯/m)[0]?.trimEnd()}`);
   }
