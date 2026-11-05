@@ -28,9 +28,18 @@ export function encodeDecisionRecord(record: Record<string, unknown>): string {
   // The children of each node (index: node + 1, so the root is 0), by string: thousands of paths
   // of hundreds of elements each make this the hot loop of a large selection.
   const children: (Map<string, number> | undefined)[] = [];
+  // The previous path and its nodes: consecutive paths mostly share a long beginning.
+  let previous: readonly string[] = [];
+  const previousIds: number[] = [];
   const node = (path: readonly string[]): number => {
-    let parent = -1;
-    for (const s of path) {
+    const max = Math.min(path.length, previous.length);
+    let k = 0;
+    while (k < max && path[k] === previous[k]) k++;
+    previous = path;
+    previousIds.length = k;
+    let parent = k ? (previousIds[k - 1] as number) : -1;
+    for (let i = k; i < path.length; i++) {
+      const s = path[i] as string;
       let next = children[parent + 1];
       if (!next) {
         next = new Map();
@@ -49,6 +58,7 @@ export function encodeDecisionRecord(record: Record<string, unknown>): string {
         next.set(s, id);
       }
       parent = id;
+      previousIds.push(id);
     }
     return parent;
   };
