@@ -11,18 +11,24 @@ export type AdapterId =
   | "cypress"
   | "angular"
   | "pytest"
-  | "unittest";
+  | "unittest"
+  | "phpunit";
 
 /** Union of Vitest and Jest default test patterns. */
 const DEFAULT_TEST_FILE = /(?:^|\/)(?:__tests__\/.+|[^/]+\.(?:test|spec|cy))\.[cm]?[jt]sx?$/;
 const TEST_FILE_IN_TESTS_DIR = /(?:^|\/)__tests__\/[^/]+\.[cm]?[jt]sx?$/;
 /** pytest (`test_*.py`, `*_test.py`) and unittest (`test*.py`) default test modules. */
 const PYTHON_TEST_FILE = /(?:^|\/)(?:test[^/]*|[^/]+_test)\.py$/;
+/** PHPUnit's default suffix (`*Test.php`), which Pest uses too. */
+const PHP_TEST_FILE = /(?:^|\/)[^/]*Test\.php$/;
 
 export function isTestFile(path: string, match?: readonly string[]): boolean {
   if (match?.length) return matchGlob(path, match);
   return (
-    DEFAULT_TEST_FILE.test(path) || TEST_FILE_IN_TESTS_DIR.test(path) || PYTHON_TEST_FILE.test(path)
+    DEFAULT_TEST_FILE.test(path) ||
+    TEST_FILE_IN_TESTS_DIR.test(path) ||
+    PYTHON_TEST_FILE.test(path) ||
+    PHP_TEST_FILE.test(path)
   );
 }
 

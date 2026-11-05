@@ -18,6 +18,7 @@ const ADAPTERS = [
   "angular",
   "pytest",
   "unittest",
+  "phpunit",
 ];
 const FORMATS = ["html", "json", "junit", "markdown"];
 const POLICIES = ["exclude", "test-source", "rebuild-required"];
@@ -50,6 +51,7 @@ const TOP_KEYS: Record<string, string[] | null> = {
   retries: null,
   adaptive: null,
   python: ["enabled", "interpreter"],
+  php: ["enabled", "binary"],
   cache: null,
   hook: ["checks", "budgetMs", "runners", "exclude"],
   parallelGroups: null,
@@ -212,6 +214,17 @@ export function validateConfig(raw: unknown): { errors: ConfigIssue[]; warnings:
         err("python.enabled", "must be a boolean");
       if (py.interpreter !== undefined && (typeof py.interpreter !== "string" || !py.interpreter))
         err("python.interpreter", "must be a non-empty string");
+    }
+  }
+  if (c.php !== undefined) {
+    const php = c.php as Record<string, unknown>;
+    if (typeof php !== "object" || php === null || Array.isArray(php))
+      err("php", "must be an object");
+    else {
+      if (php.enabled !== undefined && typeof php.enabled !== "boolean")
+        err("php.enabled", "must be a boolean");
+      if (php.binary !== undefined && (typeof php.binary !== "string" || !php.binary))
+        err("php.binary", "must be a non-empty string");
     }
   }
   if (

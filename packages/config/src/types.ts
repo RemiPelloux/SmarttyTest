@@ -11,7 +11,8 @@ export type AdapterId =
   | "cypress"
   | "angular"
   | "pytest"
-  | "unittest";
+  | "unittest"
+  | "phpunit";
 
 /** Python (preview). */
 export interface PythonConfig {
@@ -19,6 +20,14 @@ export interface PythonConfig {
   enabled?: boolean;
   /** Interpreter that runs the tests (default: `.venv`/`venv`, `VIRTUAL_ENV`, then `python3`). */
   interpreter?: string;
+}
+
+/** PHP (preview). */
+export interface PhpConfig {
+  /** Analyse `.php` files and run PHPUnit or Pest (default true). */
+  enabled?: boolean;
+  /** PHP binary that runs the tests (default: `SMARTTEST_PHP`, then `php` on PATH). */
+  binary?: string;
 }
 
 /** Explicit runner declaration (overrides detection). */
@@ -139,6 +148,8 @@ export interface SmartTestConfig {
   adaptive?: boolean;
   /** Python projects (preview). */
   python?: PythonConfig;
+  /** PHP projects (preview). */
+  php?: PhpConfig;
   /** Per-project conventions, keyed by directory ("backend", "apps/web"). */
   projects?: Record<string, ProjectConfig>;
   /** Reuse passing results whose inputs are all unchanged (default true; reported as cached). */
@@ -180,6 +191,7 @@ export interface ResolvedConfig {
   retries: number;
   adaptive: boolean;
   python: { enabled: boolean; interpreter?: string };
+  php: { enabled: boolean; binary?: string };
   projects: Record<string, ProjectConfig>;
   cache: boolean;
   parallelGroups: number | "auto";

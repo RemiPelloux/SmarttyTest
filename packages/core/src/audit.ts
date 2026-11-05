@@ -12,6 +12,7 @@
  */
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { phpMutationPoints } from "@smarttest/language-php";
 import { pythonMutationPoints } from "@smarttest/language-python";
 import {
   applyMutation,
@@ -98,7 +99,7 @@ export interface AuditReport {
   };
 }
 
-const CODE = /\.(?:[cm]?[jt]sx?|py)$/;
+const CODE = /\.(?:[cm]?[jt]sx?|py|php)$/;
 
 function failingFiles(s: ExecutionSummary): string[] {
   return s.files
@@ -177,7 +178,9 @@ async function mutate(
       if (text === undefined) continue;
       const found = file.endsWith(".py")
         ? pythonMutationPoints(file, text)
-        : mutationPoints(file, text);
+        : file.endsWith(".php")
+          ? phpMutationPoints(file, text)
+          : mutationPoints(file, text);
       for (const p of found) points.push({ ...p, file });
     }
     points.sort((x, y) => x.file.localeCompare(y.file) || x.start - y.start);
@@ -328,7 +331,7 @@ async function resolution(st: SmartTest): Promise<NonNullable<AuditReport["resol
   const mismatches: NonNullable<AuditReport["resolution"]>["mismatches"] = [];
   for (const [file, a] of index.entries()) {
     // The TypeScript compiler judges JavaScript and TypeScript imports only.
-    if (file.endsWith(".py")) continue;
+    if (file.endsWith(".py") || file.endsWith(".php")) continue;
     for (const imp of a.imports) {
       // Only module specifiers the compiler can judge: no assets, queries or virtual modules.
       if (

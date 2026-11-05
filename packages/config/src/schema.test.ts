@@ -172,6 +172,7 @@ const KITCHEN_SINK = {
   retries: 1,
   adaptive: true,
   python: { enabled: true, interpreter: ".venv/bin/python" },
+  php: { enabled: true, binary: "php8.3" },
   projects: {
     backend: {
       tests: {

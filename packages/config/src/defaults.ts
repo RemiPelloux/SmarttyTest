@@ -2,8 +2,11 @@ import type { ResolvedConfig, Rule, SmartTestConfig } from "./types.js";
 
 export const SOURCE_EXTENSIONS = ["ts", "tsx", "mts", "cts", "js", "jsx", "mjs", "cjs"] as const;
 
-/** Python files are analysed too (preview, `python: { enabled: false }` turns it off). */
-export const DEFAULT_INCLUDE = [`**/*.{${SOURCE_EXTENSIONS.join(",")}}`, "**/*.py"];
+/**
+ * Python and PHP files are analysed too (previews: `python: { enabled: false }` and
+ * `php: { enabled: false }` turn them off).
+ */
+export const DEFAULT_INCLUDE = [`**/*.{${SOURCE_EXTENSIONS.join(",")}}`, "**/*.py", "**/*.php"];
 
 /**
  * Build output (`dist/`, `build/`, `out/`, `coverage/` next to a `package.json`) is skipped by the
@@ -62,6 +65,13 @@ export const BUILTIN_TRIGGERS = [
   "**/poetry.lock",
   "**/uv.lock",
   "**/.python-version",
+  // PHP (preview): which packages are installed and how PHPUnit collects and boots the tests.
+  "**/composer.json",
+  "**/composer.lock",
+  "**/phpunit.xml",
+  "**/phpunit.xml.dist",
+  "**/phpunit.dist.xml",
+  "**/.env.testing",
   "**/.postcssrc*",
   "**/tailwind.config.*",
   "**/{vitest,jest}.setup.*",
@@ -105,6 +115,10 @@ export function resolveConfig(config: SmartTestConfig = {}): ResolvedConfig {
     python: {
       enabled: config.python?.enabled ?? true,
       ...(config.python?.interpreter ? { interpreter: config.python.interpreter } : {}),
+    },
+    php: {
+      enabled: config.php?.enabled ?? true,
+      ...(config.php?.binary ? { binary: config.php.binary } : {}),
     },
     projects: config.projects ?? {},
     cache: config.cache ?? true,

@@ -102,7 +102,10 @@ export async function observeLoads(
   // Only files the project's version control lists can be part of a change: an ignored build
   // output a test reads (`ui/dist/…`) never is.
   const listed = new Set(await st.allFiles());
-  const jobs = plan.groups.flatMap((g) => g.files.map((file) => ({ group: g, file })));
+  // PHP (preview) records no trace: a test without one is never ruled out by traces.
+  const jobs = plan.groups
+    .filter((g) => g.adapter !== "phpunit")
+    .flatMap((g) => g.files.map((file) => ({ group: g, file })));
   let done = 0;
   try {
     for (const { group, file } of jobs) {
