@@ -2,7 +2,7 @@
 
 | Document                                                        | Content                                                                                    |
 | --------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
-| [Roadmap to 1.5.0](roadmap-1.5.md)                              | 1.1.0 to 1.5.0: stories in points and exit gates, Angular, reliability, Python and PHP     |
+| [Roadmap to 1.6.0](roadmap-1.5.md)                              | 1.1.0 to 1.6.0: stories in points and exit gates, Angular, reliability, Python and PHP     |
 | [Roadmap to 1.0.0](roadmap.md)                                  | Every version with its stories in points, status and exit gate                             |
 | [Delivery log](delivery.md)                                     | Sprints S11 to S26 (0.3.0 to 0.9.0): what was done, partial, moved, and each gate's result |
 | [Foundation backlog](foundation/README.md)                      | Sprints S0 to S10: the first 103 stories, delivered in 0.1.0 and 0.2.0                     |
@@ -22,9 +22,10 @@
 | 0.9.0   | Hooks, Studio and VS Code                     | S24–S26 | 116                     | Implemented; validation limits in delivery log |
 | 1.0.0   | Stable                                        | S27     | 52 plus carried items   | Released, gate met                             |
 | 1.1.0   | Angular, reliability, Python preview, rollout | S28–S31 | 152                     | Released; S30 time target not met              |
-| 1.2.0   | Precision                                     | S32–S33 | 76                      | Planned                                        |
-| 1.3.0   | Browser and end-to-end                        | S34–S35 | 72                      | Planned                                        |
-| 1.4.0   | Ecosystem                                     | S36–S37 | 74                      | Planned                                        |
-| 1.5.0   | PHP and backend frameworks (preview)          | S38–S39 | 68                      | Planned                                        |
+| 1.2.0   | PHP preview                                   | S32     | 40                      | Next                                           |
+| 1.3.0   | Precision                                     | S33–S34 | 76                      | Planned                                        |
+| 1.4.0   | Browser and end-to-end                        | S35–S36 | 72                      | Planned                                        |
+| 1.5.0   | Ecosystem                                     | S37–S38 | 74                      | Planned                                        |
+| 1.6.0   | Backend frameworks (preview)                  | S39     | 28                      | Planned                                        |
 
-After 1.5.0: AI test engineering and cloud (2.0.0), more languages. [Roadmap to 1.5.0](roadmap-1.5.md).
+After 1.6.0: AI test engineering and cloud (2.0.0), more languages. [Roadmap to 1.6.0](roadmap-1.5.md).

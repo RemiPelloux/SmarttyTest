@@ -1,8 +1,8 @@
-# Roadmap to 1.5.0
+# Roadmap to 1.6.0
 
-1.0.0 froze SmartTest's contracts. The 1.x line keeps them: every version from 1.1.0 to 1.5.0 is additive (new flags, new config keys with defaults, new adapters), so a config, a script or a `--json` consumer written for 1.0.0 keeps working. Anything that would break a frozen contract waits for 2.0.0 ([contracts](../reference/contracts.md)).
+1.0.0 froze SmartTest's contracts. The 1.x line keeps them: every version from 1.1.0 to 1.6.0 is additive (new flags, new config keys with defaults, new adapters), so a config, a script or a `--json` consumer written for 1.0.0 keeps working. Anything that would break a frozen contract waits for 2.0.0 ([contracts](../reference/contracts.md)).
 
-The first real rollout after 1.0.0 set the order. On 1 November 2026 SmartTest went into four of OpenPro's repositories (front, admin, desktop monitor, MCP service): 0 missed failures and 42–96% less test time, but each repository needed hand work that `init` should have done, and a bug hid one test file. 1.1.0 adds Angular, proves selection is reliable with checks that inject real faults, brings Python forward as a preview, and makes that hand work unnecessary. Then precision (1.2.0), the browser (1.3.0), the ecosystem (1.4.0) and PHP (1.5.0).
+The first real rollout after 1.0.0 set the order. On 1 November 2026 SmartTest went into four of OpenPro's repositories (front, admin, desktop monitor, MCP service): 0 missed failures and 42–96% less test time, but each repository needed hand work that `init` should have done, and a bug hid one test file. 1.1.0 adds Angular, proves selection is reliable with checks that inject real faults, brings Python forward as a preview, and makes that hand work unnecessary. OpenPro's backend needs PHP next, so a PHP preview comes forward to 1.2.0. Then precision (1.3.0), the browser (1.4.0), the ecosystem (1.5.0) and the backend frameworks (1.6.0).
 
 Planning is in story points; one sprint is about 40 points. A version ships when its gate is met, not on a date. Sprints continue from S27 (1.0.0).
 
@@ -11,10 +11,11 @@ Planning is in story points; one sprint is about 40 points. A version ships when
 | Version | Theme                                                    | Sprints | Points | Gate in one line                                                                                                                  |
 | ------- | -------------------------------------------------------- | ------- | ------ | --------------------------------------------------------------------------------------------------------------------------------- |
 | 1.1.0   | Angular, reliability, Python preview, rollout (released) | S28–S31 | 152    | Angular and Python selected at 0 misses; a fault-injection audit finds no missed test; `init` alone reproduces the OpenPro setups |
-| 1.2.0   | Precision                                                | S32–S33 | 76     | Type-checker resolution; the 20% observed-execution target met on two benchmarks                                                  |
-| 1.3.0   | Browser and end-to-end                                   | S34–S35 | 72     | Source-mapped browser coverage; live-environment specs never run by accident                                                      |
-| 1.4.0   | Ecosystem                                                | S36–S37 | 74     | Third-party adapters installable from npm; CI annotations; a shared result cache                                                  |
-| 1.5.0   | PHP and backend frameworks (preview)                     | S38–S39 | 68     | PHP selection on OpenPro's backend at 0 misses; Django, FastAPI and Laravel edges                                                 |
+| 1.2.0   | PHP preview                                              | S32     | 40     | PHP selection on OpenPro's backend at 0 misses, through PHPUnit and the existing CaptainHook hooks                                |
+| 1.3.0   | Precision                                                | S33–S34 | 76     | Type-checker resolution; the 20% observed-execution target met on two benchmarks                                                  |
+| 1.4.0   | Browser and end-to-end                                   | S35–S36 | 72     | Source-mapped browser coverage; live-environment specs never run by accident                                                      |
+| 1.5.0   | Ecosystem                                                | S37–S38 | 74     | Third-party adapters installable from npm; CI annotations; a shared result cache                                                  |
+| 1.6.0   | Backend frameworks (preview)                             | S39     | 28     | Laravel, Django and FastAPI edges; a migration selects the tests that touch its tables                                            |
 
 Total: 442 points, twelve sprints (S28–S39).
 
@@ -45,7 +46,7 @@ Angular is the main TypeScript framework SmartTest does not understand. Most of 
 - Delivered: component resources and stylesheet imports as edges; `angular.json` read per project (test and build targets, `fileReplacements`, global styles); the `angular` runner through `ng test` for the unit-test builder and `@angular-builders/jest`; `jest-preset-angular` and Analog through the Jest and Vitest runners; lazy routes in both forms; the `angular-vitest` fixture in the regression harness; the real-install `angular-cli` fixture (Angular 22) with its own CI job; the [Angular guide](../guides/angular.md).
 - Found while testing and fixed: a type error in an export no spec runs fails `ng test`, so any non-cosmetic change to a file a spec imports selects it on builders that type-check; a Vitest `runnerConfig` is part of `ng test`, not a runner of its own.
 - Changed: Karma has no per-test report, so a Karma target is listed but never run (`ST_ANGULAR_KARMA_UNSUPPORTED`), instead of results read from its exit code.
-- Moved: Nx workspaces (`project.json`, `nx test`) to the monorepo orchestration story of 1.4.0. The NgModule-on-Karma fixture is dropped with Karma.
+- Moved: Nx workspaces (`project.json`, `nx test`) to the monorepo orchestration story of 1.5.0. The NgModule-on-Karma fixture is dropped with Karma.
 - Real-world check: HMCTS's [opal-frontend](https://github.com/hmcts/opal-frontend) (354 spec files, 4,054 tests). The full suite through SmartTest gives the same results as `ng test` (4,039 test ids: 15 `it.each` rows share a title, the S29 identity story). Ten commits replayed: **0 missed failures**, 4% less time overall. Four of the five commits that ran everything changed `yarn.lock` (S31's lockfile story); on the other five, 19% less time. The largest selections come from one service injected into 145 specs, which 1.2.0's type-checker resolution addresses. swimlane's ngx-datatable (a Karma app beside a library on the unit-test builder in Chromium): both projects are detected and the library's 21 specs are listed through `ng test` and selected; their run in Chromium was not checked (the browser download did not complete on this machine).
 
 ### S29: Reliability (40 pts)
@@ -115,7 +116,27 @@ Every item comes from a problem met on OpenPro. Each was fixed by hand there; he
 - `init --yes` on the commit before SmartTest in each of OpenPro's four repositories writes the hand-tuned config verbatim and the hook in the same file and stage. Two fixes came from it: a related-tests step kept in pre-push is replaced there (openpro-front), and a hooks folder held in a variable is followed (openpro-admin's `setup-hooks`). The one remaining difference: in openpro-front's parallel pre-push, SmartTest runs before the other steps, not beside them.
 - Not done: the four repositories in the published benchmarks.
 
-## 1.2.0: Precision (76 pts)
+## 1.2.0: PHP preview (40 pts)
+
+Brought forward from 1.5.0 because OpenPro needs it now. OpenPro's backend is Laravel 12 on PHPUnit 11: 2,001 test files, 4,669 PHP files under `app/`, and CaptainHook hooks that run a home-made `scripts/test-changed.sh` before each commit and push. PHP is the second language on the plugin path Python opened in S30, and ships the same way: an official plugin marked **preview**, which selects tests and never hides a failure.
+
+### S32: PHP preview (40 pts)
+
+SmartTest stays an npm package. It reads PHP source in TypeScript, without running PHP, and runs the project's own `vendor/bin/phpunit` (or `php artisan test`, or Pest) as a subprocess, as the Python adapter runs pytest. A PHP repository needs Node on the machine, not a `package.json`.
+
+| Story                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | Pts |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --- |
+| **PHP analysis.** Namespaces; `use` statements (grouped, aliased, `use function`, `use const`); classes, interfaces, traits and enums with their methods, constants and properties; `extends`, `implements` and trait `use` as edges; names in the same namespace used without `use`. Files found through `composer.json` (`autoload` and `autoload-dev`: PSR-4, PSR-0, `classmap`, `files`) and `require`/`include` of literal paths. A method used through `$this->`, `self::`, `static::` or a typed parameter links to that method; any other use links to the whole class.               | 13  |
+| **Laravel container edges.** Facades link to the class behind them (`getFacadeAccessor`, the aliases in `config/app.php`); `bind`, `singleton` and `scoped` in service providers link an interface to its implementation; `app(X::class)`, `resolve()` and `make()` link to `X`; the providers in `bootstrap/providers.php` are loaded by every test that boots the application.                                                                                                                                                                                                              | 5   |
+| **Unresolvable means selected.** Dynamic names (`new $class`, `$class::$method()`, `app($name)`, `call_user_func` with a variable, string class names built at run time) are uncertainty and select the tests that reach them, as in TypeScript and Python.                                                                                                                                                                                                                                                                                                                                   | 3   |
+| **PHPUnit and Pest runners.** Tests discovered from `phpunit.xml` (`testsuites`, `directory`, `suffix`, `exclude`) and listed with `--list-tests-xml`; a selection run by file with results read from `--log-junit`; `php artisan test` and Pest detected and used when the project uses them. `phpunit.xml`, its `bootstrap`, `tests/TestCase.php`, `.env.testing` and `database/migrations` are runner inputs: a change to them selects every test that boots the application. A fatal error, a test file PHPUnit collects nothing from, or "No tests executed" is a failure, never a pass. | 8   |
+| **Hooks in a PHP repository.** `init` on a repository with `composer.json` and no `package.json`: SmartTest runs through `npx`, `php.enabled` and `php.binary` in the config, and a CaptainHook action that already runs changed tests (`scripts/test-changed.sh`) is replaced in place, as S31 does for Husky.                                                                                                                                                                                                                                                                               | 3   |
+| **Fixtures and OpenPro's backend.** A plain PHPUnit fixture and a Laravel fixture (facade, container binding, feature test with `RefreshDatabase`); openpro-backend checked for parity, replayed with `benchmark` and audited with `audit --resolution --mutate`.                                                                                                                                                                                                                                                                                                                             | 5   |
+| **PHP guide.** `documentation/guides/php.md`: installing with Node beside PHP, what is understood, what is uncertainty, how to turn the preview off.                                                                                                                                                                                                                                                                                                                                                                                                                                          | 3   |
+
+**S32 gate:** on openpro-backend, the full suite through SmartTest gives the same results as `php artisan test`; `benchmark` shows 0 missed failures with less test time than the full suite; fault injection finds 0 missed tests; `init --yes` replaces `test-changed.sh` in its CaptainHook hooks. The preview can be turned off per project.
+
+## 1.3.0: Precision (76 pts)
 
 Run fewer tests for the same safety. Two items have been carried since 0.3.0 and 0.8.0.
 
@@ -131,7 +152,7 @@ Run fewer tests for the same safety. Two items have been carried since 0.3.0 and
 
 **Gate:** type-checker resolution on at least two benchmark repositories with 0 misses; the 20% observed-execution reduction met on at least two of them; analysis at 10,000 modules under 500 ms in process.
 
-## 1.3.0: Browser and end-to-end (72 pts)
+## 1.4.0: Browser and end-to-end (72 pts)
 
 End-to-end specs are where test time goes, and where running the wrong one is costly: on OpenPro, the Playwright suite targets a live environment.
 
@@ -148,7 +169,7 @@ End-to-end specs are where test time goes, and where running the wrong one is co
 
 **Gate:** on OpenPro's front, a component change selects the Playwright specs that render it, from source-mapped coverage; no live-environment spec runs in `run`, `benchmark` or a hook without `--live`; 0 missed failures across the end-to-end benchmarks.
 
-## 1.4.0: Ecosystem (74 pts)
+## 1.5.0: Ecosystem (74 pts)
 
 | Story                                                                                                                                                                                                                                                          | Pts |
 | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --- |
@@ -162,20 +183,18 @@ End-to-end specs are where test time goes, and where running the wrong one is co
 
 **Gate:** a third-party adapter published to npm passes the conformance kit and runs in a benchmark repository; CI annotations on GitHub and GitLab; a shared cache hit verified across two CI runs, with a forged entry rejected.
 
-## 1.5.0: PHP and backend frameworks, preview (68 pts)
+## 1.6.0: Backend frameworks, preview (28 pts)
 
-Python moved to 1.1.0 (S30). 1.5.0 adds PHP on the same language plugin path, and the backend framework edges for both languages. Driven by OpenPro's Laravel backend (PHP, Pest).
+PHP moved to 1.2.0 (S32), as Python moved to 1.1.0 (S30). What is left is the framework knowledge for both languages, which turns the coarse edges of the previews (every test that boots the application) into precise ones.
 
-| Story                                                                                                                                                                                                          | Pts |
-| -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --- |
-| **PHP.** Namespaces and PSR-4 autoloading from `composer.json`, classes and methods, `use` statements, Laravel service-container bindings and facades as edges; runners Pest and PHPUnit (`php artisan test`). | 26  |
-| **Framework edges.** Laravel routes, migrations and config keys; Django and FastAPI routes and settings; a migration selects the tests that touch its tables.                                                  | 13  |
-| **Hooks and CI for mixed repositories.** CaptainHook and pre-commit (the Python framework) installed like Husky; `smarttest ci` runs PHP, Python and JavaScript selections side by side.                       | 8   |
-| **Benchmarks.** OpenPro's backend replayed with `benchmark` and checked with the S29 audits; results published with the rest.                                                                                  | 8   |
-| **Unresolvable means selected.** Dynamic calls (`$class::$method()`, `new $name`) are uncertainty and select the tests that reach them, as in TypeScript and Python.                                           | 5   |
-| **Documentation.** `documentation/guides/php.md` and the framework edges in the Python guide.                                                                                                                  | 8   |
+| Story                                                                                                                                                                                                                                                                               | Pts |
+| ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --- |
+| **Framework edges.** Laravel routes (a controller change selects the feature tests that call its routes), migrations and config keys (`config('x.y')`); Django and FastAPI routes and settings; a migration selects the tests that touch its tables instead of every database test. | 13  |
+| **Hooks and CI for mixed repositories.** pre-commit (the Python framework) installed like Husky and CaptainHook; `smarttest ci` runs PHP, Python and JavaScript selections side by side.                                                                                            | 5   |
+| **Benchmarks.** The framework edges replayed on openpro-backend and OpenProAuto and checked with the S29 audits; results published with the rest.                                                                                                                                   | 5   |
+| **Documentation.** The framework edges in the PHP and Python guides.                                                                                                                                                                                                                | 5   |
 
-**Gate:** on OpenPro's backend, the full suite through SmartTest gives the same results as the runner, `benchmark` shows 0 missed failures with less test time than the full suite, and fault injection finds 0 missed tests. Preview plugins can be turned off per project.
+**Gate:** on openpro-backend, a controller change selects only the feature tests that reach it and a migration only the tests that touch its tables, at 0 missed failures; fault injection finds 0 missed tests.
 
 ---
 
