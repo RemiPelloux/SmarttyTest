@@ -579,6 +579,35 @@ describe("a real pre-push hook", () => {
     120_000,
   );
 
+  it("compares a new branch with the last commit a pre-push hook passed on", async () => {
+    const { dir, remote } = await setup();
+    expect(push(dir, "main").status).toBe(0);
+    git(dir, "checkout", "-q", "-b", "docs");
+    await writeFile(join(dir, "notes.md"), "notes\n");
+    await commitAll(dir, "notes");
+    const result = push(dir, "docs");
+    expect(result.status, result.stderr).toBe(0);
+    const records = JSON.parse(await readFile(join(dir, ".smarttest/state/hooks.json"), "utf8"));
+    // Only the branch's own commit: a markdown file, so no test (the whole history selects them all).
+    expect(records.runs.at(-1).selected).toBe(0);
+    expect(git(remote, "rev-parse", "docs").trim()).toBe(git(dir, "rev-parse", "HEAD").trim());
+  }, 120_000);
+
+  it("still checks a commit pushed with the hook bypassed when a new branch carries it", async () => {
+    const { dir, remote } = await setup();
+    expect(push(dir, "main").status).toBe(0);
+    await edit(dir, stringsTest, 'toBe("Ada")', 'toBe("Adah")');
+    git(dir, "add", "-A");
+    git(dir, "-c", "core.hooksPath=/dev/null", "commit", "-m", "bypassed broken test");
+    git(dir, "-c", "core.hooksPath=/dev/null", "push", "origin", "main");
+    const result = push(dir, "HEAD:refs/heads/new-target");
+    expect(result.status, result.stderr).not.toBe(0);
+    expect(
+      spawnSync("git", ["--git-dir", remote, "rev-parse", "--verify", "refs/heads/new-target"])
+        .status,
+    ).not.toBe(0);
+  }, 120_000);
+
   it("runs the committed content and rejects a failing push", async () => {
     const { dir, remote } = await setup();
     expect(push(dir, "main").status).toBe(0);

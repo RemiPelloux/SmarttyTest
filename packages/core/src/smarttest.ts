@@ -148,6 +148,7 @@ import {
   isHookContext,
   isolate,
   type LeftToCi,
+  lastVerifiedCommit,
   loadHookRecords,
   median,
   normalizeProject,
@@ -1856,6 +1857,7 @@ export class SmartTest {
     }
     let remoteShas: string[] | undefined;
     let refsWarning: string | undefined;
+    let newBranchNote: string | undefined;
     if (stage === "pre-push") {
       const fromHook = isHookContext();
       const refs = options.refs ?? (fromHook ? await readPrePushRefs() : []);
@@ -1883,6 +1885,15 @@ export class SmartTest {
       }
       if (refs.length || options.refs !== undefined)
         remoteShas = refs.filter((ref) => !/^0+$/.test(ref.localSha)).map((ref) => ref.remoteSha);
+      // A push that creates a branch: compare with the last commit a pre-push hook passed on,
+      // not with the whole history (which on a large repository runs every test).
+      if (remoteShas?.length === 1 && /^0+$/.test(remoteShas[0] ?? "")) {
+        const verified = await lastVerifiedCommit(this.root, records);
+        if (verified) {
+          remoteShas = [verified];
+          newBranchNote = `pre-push: new branch; compared with ${verified.slice(0, 10)}, the last commit a pre-push hook passed on`;
+        }
+      }
     }
     const source: ChangeSource =
       stage === "pre-commit"
@@ -1894,7 +1905,7 @@ export class SmartTest {
     // The config under test (the staged one inside a temporary checkout), never the dirty copy.
     let active = this.config;
     let checksPromise: Promise<CheckResult[]> = Promise.resolve([]);
-    const warnings: string[] = refsWarning ? [refsWarning] : [];
+    const warnings: string[] = [refsWarning, newBranchNote].filter((w): w is string => !!w);
     // Workspace packages are projects too: a check scoped to one must find it.
     const workspaces = (await this.profile()).workspaces.map((w) => w.dir);
     const outcome = await this.run({

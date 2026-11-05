@@ -862,6 +862,32 @@ export async function commitsWithoutHook(
   };
 }
 
+/**
+ * The most recent commit in HEAD's history whose tree a pre-push hook passed on, if any within
+ * `limit` commits. A push that creates a branch has no remote commit to compare with: its changes
+ * are counted from here, the last state a hook verified, instead of from the first commit. A
+ * commit pushed with the hook bypassed has no passed record, so it is never trusted this way.
+ */
+export async function lastVerifiedCommit(
+  cwd: string,
+  records: HookRecords,
+  limit = 1000,
+): Promise<string | undefined> {
+  const trees = new Set(
+    records.runs
+      .filter((x) => x.passed && x.stage === "pre-push" && !x.nothingPushed && x.tree)
+      .map((x) => x.tree),
+  );
+  if (!trees.size) return undefined;
+  const r = await git(cwd, ["log", `-${limit}`, "--format=%H %T", "HEAD"]);
+  if (r.code !== 0) return undefined;
+  for (const line of r.stdout.split("\n")) {
+    const [sha, tree] = line.split(" ");
+    if (sha && tree && trees.has(tree)) return sha;
+  }
+  return undefined;
+}
+
 export const median = (xs: readonly number[]) =>
   xs.length ? ([...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)] as number) : 0;
 
