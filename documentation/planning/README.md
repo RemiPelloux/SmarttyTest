@@ -22,10 +22,10 @@
 | 0.9.0   | Hooks, Studio and VS Code                     | S24–S26 | 116                     | Implemented; validation limits in delivery log |
 | 1.0.0   | Stable                                        | S27     | 52 plus carried items   | Released, gate met                             |
 | 1.1.0   | Angular, reliability, Python preview, rollout | S28–S31 | 152                     | Released; S30 time target not met              |
-| 1.2.0   | PHP preview                                   | S32     | 40                      | Next                                           |
-| 1.3.0   | Precision                                     | S33–S34 | 76                      | Planned                                        |
-| 1.4.0   | Browser and end-to-end                        | S35–S36 | 72                      | Planned                                        |
-| 1.5.0   | Ecosystem                                     | S37–S38 | 74                      | Planned                                        |
-| 1.6.0   | Backend frameworks (preview)                  | S39     | 28                      | Planned                                        |
+| 1.2.0   | PHP preview, rollout follow-ups, precision    | S32–S33 | 77                      | Next                                           |
+| 1.3.0   | Precision                                     | S34–S35 | 52                      | Planned                                        |
+| 1.4.0   | Browser and end-to-end                        | S36–S37 | 72                      | Planned                                        |
+| 1.5.0   | Ecosystem                                     | S38–S39 | 74                      | Planned                                        |
+| 1.6.0   | Backend frameworks (preview)                  | S40     | 28                      | Planned                                        |
 
 After 1.6.0: AI test engineering and cloud (2.0.0), more languages. [Roadmap to 1.6.0](roadmap-1.5.md).
