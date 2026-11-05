@@ -93,10 +93,8 @@ class AppServiceProvider { public function register(): void {
     expect(r.resolve(from, "@bind-key/payments")).toEqual({
       resolved: "app/Services/Payments.php",
     });
-    // A binding whose class cannot be read: the provider that declares it.
-    expect(r.resolve(from, "@bind-key/clock")).toEqual({
-      resolved: "app/Providers/AppServiceProvider.php",
-    });
+    // A binding whose class cannot be read adds nothing (booting tests load every provider).
+    expect(r.resolve(from, "@bind-key/clock")).toEqual({ external: true });
     expect(r.resolve(from, "@bind-key/cache")).toEqual({ external: true });
     expect(r.resolve("tests/TestCase.php", "@app-boot")).toEqual({ resolved: "bootstrap/app.php" });
     expect(r.resolve("tests/Feature/HomeTest.php", "@pest/tests/Feature")).toEqual({

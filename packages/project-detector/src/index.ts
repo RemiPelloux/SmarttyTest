@@ -478,6 +478,10 @@ async function detectPhpRunners(root: string, files: readonly string[]): Promise
       }
     const tests = owned.filter((f) => /(?:^|\/)[^/]*Test\.php$/.test(f));
     if (!configFile && !tests.length) continue;
+    // A package inside the application (`packages/sdk`, installed into the application's vendor/
+    // as a path repository) runs its own tests only once installed itself; until then its tests
+    // are reported as collected by no runner.
+    if (dir && !(await exists(join(root, prefix, "vendor", "autoload.php")))) continue;
     const composer = (await readText(join(root, prefix, "composer.json"))) ?? "";
     const evidence: string[] = [];
     if (configFile) evidence.push(configFile);

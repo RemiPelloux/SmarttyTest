@@ -323,11 +323,14 @@ export class PhpResolver implements ModuleResolver {
       const key = isClass ? fromPath(specifier.slice(7)) : specifier.slice(10);
       const b = this.bindings().get(isClass ? `class:${lc(key)}` : `key:${key}`);
       if (!b) return external;
+      // An interface (or a key) bound to a class: that class. A class bound to itself, or a
+      // closure whose class cannot be read, adds nothing: the container only builds it for a
+      // test that boots the application, and such a test already loads every provider.
       if (b.concrete && lc(b.concrete) !== lc(key)) {
         const c = this.findClass(b.concrete, up(b.file));
         if (c.file) return { resolved: c.file };
       }
-      return { resolved: b.file };
+      return external;
     }
     if (specifier === "@app-boot") {
       const p = this.composerOf(fromDir);

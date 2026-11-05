@@ -57,6 +57,7 @@ const TYPE_KEYWORDS = new Set([
 
 /** Words followed by `(` that are not function calls. */
 const NOT_CALLS = new Set([
+  "from",
   "if",
   "elseif",
   "else",
@@ -304,6 +305,30 @@ function readPhp(
   const moduleCode: Tok[] = [];
   const module = collected();
 
+  /**
+   * `// smarttest-loads: <glob>[, <glob>…]` (or after `#`, or in a block comment) on a dynamic line or the line
+   * above: the author states, relative to the project root, what it may load. Those files become
+   * its dependencies instead of uncertainty.
+   */
+  const declaredLoads = (line: number): string[] | undefined => {
+    for (const l of [srcLines[line - 1], srcLines[line - 2]]) {
+      const m = /smarttest-loads:\s*(.+?)\s*(?:\*\/)?$/.exec(l ?? "");
+      if (m?.[1])
+        return m[1]
+          .split(",")
+          .map((g) => g.trim())
+          .filter(Boolean);
+    }
+    return undefined;
+  };
+  /** A name SmartTest cannot read: uncertainty, unless a `smarttest-loads:` comment says. */
+  const unreadable = (what: string, line: number) => {
+    const globs = declaredLoads(line);
+    if (globs)
+      for (const g of globs)
+        dynamicHints.push({ pattern: `@root/${g.replace(/^\.?\//, "")}`, line, expr: what });
+    else dynamicUnresolved.push(`${what} on line ${line}`);
+  };
   const addImport = (rec: ImportRecord) => {
     const k = `${rec.kind}|${rec.specifier}|${rec.bindings.map((b) => b.local).join(",")}`;
     if (importKeys.has(k)) return;
@@ -619,7 +644,7 @@ function readPhp(
       } else if (v?.t === "var" && pathVars.has(v.v)) {
         pathTarget(pathVars.get(v.v) as string, t.line, v.v);
       } else {
-        dynamicUnresolved.push(`${t.v} with a path built at run time on line ${t.line}`);
+        unreadable(`${t.v} with a path built at run time`, t.line);
       }
       continue;
     }
@@ -774,8 +799,7 @@ function readPhp(
     const to = Math.min(upTo, toks.length);
     const types = new Map<string, string[]>(ctx.params ?? []);
     const values = classValuesOf(from, to);
-    const dynamic = (what: string, line: number) =>
-      dynamicUnresolved.push(`${what} on line ${line}`);
+    const dynamic = unreadable;
     const useMember = (local: string, member: string) => {
       c.refs.add(local);
       c.uses.add(`${local}.${member}`);
@@ -970,7 +994,7 @@ function readPhp(
           const body = toks[h]?.v === "{" ? close(h) : h;
           for (let b = h + 1; b < body; b++)
             if (toks[b]?.v === "use" && toks[b - 1] && /^[;{}]$/.test((toks[b - 1] as Tok).v))
-              for (let u = b + 1; u < body && toks[u]?.v !== ";"; u++) {
+              for (let u = b + 1; u < body && toks[u]?.v !== ";" && toks[u]?.v !== "{"; u++) {
                 const x = toks[u] as Tok;
                 if (x.t === "name") {
                   c.escapes.add(classRef(resolveClass(x.v), x.line));
@@ -1082,12 +1106,13 @@ function readPhp(
       if (TYPE_KEYWORDS.has(lw) || NOT_CALLS.has(lw)) continue;
       // A bare name: a class in a type position (`Foo $x`, `?Foo`, `A|B`): its members are linked
       // where they are used. Otherwise a constant.
+      // (In code, `A | B` is a bitwise or of constants: only a parameter list has union types.)
       if (
         next?.t === "var" ||
-        prev?.v === "?" ||
-        prev?.v === "|" ||
-        next?.v === "|" ||
-        (prev?.v === ":" && (toks[k - 2]?.v === ")" || toks[k - 2]?.v === "?"))
+        (ctx.declaring && (prev?.v === "?" || prev?.v === "|" || next?.v === "|")) ||
+        (prev?.v === ":" &&
+          (toks[k - 2]?.v === ")" || toks[k - 2]?.v === "?") &&
+          (next?.v === "{" || next?.v === "=>"))
       ) {
         classRef(resolveClass(word), t.line);
         continue;
@@ -1795,7 +1820,7 @@ function readPhp(
           `${i.kind}|${i.specifier}|${i.bindings.map((b) => `${b.imported}>${b.local}`).join(",")}`,
       ),
     ),
-    dynamicUnresolved,
+    dynamicUnresolved: [...new Set(dynamicUnresolved)],
     ...(dynamicHints.length ? { dynamicHints } : {}),
     parseErrors: errors,
     analyzerVersion: PHP_ANALYZER_VERSION,

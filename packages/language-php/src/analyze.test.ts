@@ -283,6 +283,27 @@ class Dyn {
     expect(specs(a)).toContain("@bind-key/cache");
   });
 
+  it("a smarttest-loads comment replaces the uncertainty with the files it names", () => {
+    const a = analyzePhp(
+      "app/Owner.php",
+      `<?php
+namespace App;
+class Owner {
+    public function find(string $class, int $id) {
+        // smarttest-loads: app/Models/*.php
+        return $class::query()->find($id);
+    }
+    public function rest($x) { return [$x ? 1 : PHP_INT_MAX, $x | ENT_QUOTES]; }
+    public function gen() { yield from $this->items(); }
+}
+`,
+    );
+    expect(a.dynamicUnresolved).toEqual([]);
+    expect(a.dynamicHints?.map((h) => h.pattern)).toEqual(["@root/app/Models/*.php"]);
+    // Neither a ternary's constant, a bitwise or nor `yield from` is a class.
+    expect(specs(a).filter((s) => s.startsWith("@class/"))).toEqual([]);
+  });
+
   it("treats a class named by a string as a class, without uncertainty when it is no class", () => {
     const a = analyzePhp(
       "config/app.php",
