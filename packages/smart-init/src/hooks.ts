@@ -11,7 +11,7 @@ import { detectCopiedHooks, type ExistingTestCommand } from "@smarttest/project-
 import { exists, readJson, readText, SmartTestError } from "@smarttest/shared";
 import type { FilePlan } from "./index.js";
 
-export type HookManager = "husky" | "lefthook" | "simple-git-hooks" | "git";
+export type HookManager = "husky" | "lefthook" | "simple-git-hooks" | "git" | "captainhook";
 
 export type HookStage = "pre-commit" | "pre-push";
 
@@ -731,9 +731,10 @@ export async function planHookUninstall(
   stages: readonly HookStage[] = ["pre-commit", "pre-push"],
 ): Promise<FilePlan[]> {
   const out: FilePlan[] = [];
-  const managers: HookManager[] = manager
-    ? [manager]
-    : ["husky", "lefthook", "simple-git-hooks", "git"];
+  // CaptainHook's actions are removed by planCaptainHookUninstall (captainhook.ts).
+  const managers = (
+    manager ? [manager] : (["husky", "lefthook", "simple-git-hooks", "git"] as HookManager[])
+  ).filter((m) => m !== "captainhook");
   const targets: HookTarget[] = (
     await Promise.all(
       managers.map(async (m) => {

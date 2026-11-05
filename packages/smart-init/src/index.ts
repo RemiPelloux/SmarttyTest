@@ -19,8 +19,10 @@ import {
   writeFileAtomic,
   writeJson,
 } from "@smarttest/shared";
+import { planCaptainHookUninstall } from "./captainhook.js";
 import { detectHookTarget, planHookUninstall } from "./hooks.js";
 
+export * from "./captainhook.js";
 export * from "./hooks.js";
 export * from "./migrate.js";
 
@@ -113,7 +115,7 @@ export interface PlanInputs {
   globalConfigFiles: string[];
   overrides?: Partial<Pick<SmartTestConfig, "mode">> & {
     layout?: "mirror" | "colocated" | "domain" | "custom";
-    adapters?: ("vitest" | "jest" | "node" | "playwright" | "cypress" | "angular")[];
+    adapters?: ("vitest" | "jest" | "node" | "playwright" | "cypress" | "angular" | "phpunit")[];
   };
 }
 
@@ -390,6 +392,8 @@ export async function buildPlan(
     ...(exclude.length ? { exclude } : {}),
     ...(rules.length ? { rules } : {}),
     ...(hookRunners ? { hook: { runners: hookRunners } } : {}),
+    // PHP is a preview: the toggle is written down, so turning it off is one edit.
+    ...(profile.runners.some((r) => r.adapter === "phpunit") ? { php: { enabled: true } } : {}),
     reports: { formats: ["html", "json", "junit"] },
   };
 
@@ -400,6 +404,16 @@ export async function buildPlan(
       path: existingConfig.slice(root.length + 1),
       action: "skip",
       reason: "existing configuration preserved",
+      risk: "low",
+    });
+  } else if (!(await readText(join(root, "package.json")))) {
+    // No package.json (a PHP or Python project): SmartTest runs through npx, so its package is
+    // not installed beside the config; a JSON config loads without importing it.
+    files.push({
+      path: "smarttest.config.json",
+      action: "create",
+      reason: "SmartTest configuration (JSON: the project has no package.json)",
+      after: `${JSON.stringify(config, null, 2)}\n`,
       risk: "low",
     });
   } else {
@@ -475,7 +489,18 @@ export async function buildPlan(
   const lang = profile.layout.typescript ? "TypeScript" : "JavaScript";
   const pm =
     profile.packageManager.name === "unknown" ? "no lockfile" : profile.packageManager.name;
-  const summary = `${fw} + ${lang}${adapters.length ? ` + ${adapters.map((a) => ({ vitest: "Vitest", jest: "Jest", node: "node:test", playwright: "Playwright", cypress: "Cypress", angular: "ng test" })[a]).join(" + ")}` : ""} · ${pm}${profile.workspaces.length ? (profile.workspaces.every((w) => w.kind === "nested") ? ` · ${profile.workspaces.length} independent projects` : ` workspace (${profile.workspaces.length} packages)`) : ""} · ${profile.vcs.provider === "git" ? "Git" : "no VCS"}`;
+  const label: Record<string, string> = {
+    vitest: "Vitest",
+    jest: "Jest",
+    node: "node:test",
+    playwright: "Playwright",
+    cypress: "Cypress",
+    angular: "ng test",
+    pytest: "pytest",
+    unittest: "unittest",
+    phpunit: "PHPUnit",
+  };
+  const summary = `${[fw, lang].filter(Boolean).join(" + ")}${adapters.length ? ` + ${adapters.map((a) => label[a] ?? a).join(" + ")}` : ""} · ${pm}${profile.workspaces.length ? (profile.workspaces.every((w) => w.kind === "nested") ? ` · ${profile.workspaces.length} independent projects` : ` workspace (${profile.workspaces.length} packages)`) : ""} · ${profile.vcs.provider === "git" ? "Git" : "no VCS"}`;
   return { summary, recommendations: recs, warnings, files, config };
 }
 
@@ -736,6 +761,9 @@ export async function planUninstall(root: string, storeDir: string): Promise<Uni
       risk: "low",
     });
   }
+  // SmartTest's actions in CaptainHook's hooks, with the steps they replaced restored.
+  const captain = await planCaptainHookUninstall(root).catch(() => undefined);
+  if (captain) files.push(captain);
   // SmartTest's blocks in the commit and push hooks (between its markers; the rest of each hook
   // stays): left in place, the next commit would run SmartTest and recreate the store.
   for (const hook of await planHookUninstall(root).catch(() => [] as FilePlan[])) {
