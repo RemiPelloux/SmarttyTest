@@ -14,5 +14,6 @@ Small projects that the integration tests and the regression harness run against
 | `projects/yarn-workspaces-node` | Yarn workspaces, ESM       | `node:test`             | `yarn.lock`, workspaces, `node --test` with directory globs                               |
 | `projects/next-playwright`      | Next.js `app/` conventions | Playwright, `node:test` | URL visits mapped to pages, layouts and API routes (small file-router server, no browser) |
 | `projects/edges-vitest`         | env, assets, Wasp, Prisma  | Vitest                  | env keys, fs assets, translations, Wasp operations, Prisma models, snapshots, mocks       |
+| `projects/barrels-vitest`       | TypeScript barrels         | Vitest                  | multi-level `export *`, aliases, `export * as ns`; computed, load-time and CommonJS cases |
 
 Each fixture has an `expected.json` with detection results and, for the regression harness, seeded mutations: the tests each mutation must make fail. The harness checks that those tests are selected and that a full run finds no failure the selection missed.
