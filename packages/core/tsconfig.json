@@ -74,6 +74,9 @@
       "path": "../adapter-vitest"
     },
     {
+      "path": "../adapter-angular"
+    },
+    {
       "path": "../adapter-jest"
     },
     {
@@ -99,6 +102,12 @@
     },
     {
       "path": "../adapter-python"
+    },
+    {
+      "path": "../language-php"
+    },
+    {
+      "path": "../adapter-phpunit"
     }
   ]
 }

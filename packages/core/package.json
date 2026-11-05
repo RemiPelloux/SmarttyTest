@@ -54,7 +54,9 @@
     "@smarttest/test-generator": "workspace:*",
     "@smarttest/report-engine": "workspace:*",
     "@smarttest/language-python": "workspace:*",
-    "@smarttest/adapter-python": "workspace:*"
+    "@smarttest/adapter-python": "workspace:*",
+    "@smarttest/language-php": "workspace:*",
+    "@smarttest/adapter-phpunit": "workspace:*"
   },
   "smarttest": {
     "epic": "FND",

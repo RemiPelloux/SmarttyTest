@@ -47,6 +47,9 @@
       "path": "packages/language-python"
     },
     {
+      "path": "packages/language-php"
+    },
+    {
       "path": "packages/symbol-index"
     },
     {
@@ -75,6 +78,9 @@
     },
     {
       "path": "packages/adapter-python"
+    },
+    {
+      "path": "packages/adapter-phpunit"
     },
     {
       "path": "packages/adapter-jest"

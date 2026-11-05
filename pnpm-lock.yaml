@@ -406,6 +406,15 @@ importers:
         specifier: workspace:*
         version: link:../test-discovery
 
+  packages/adapter-phpunit:
+    dependencies:
+      '@smarttest/plugin-sdk':
+        specifier: workspace:*
+        version: link:../plugin-sdk
+      '@smarttest/shared':
+        specifier: workspace:*
+        version: link:../shared
+
   packages/adapter-playwright:
     dependencies:
       '@smarttest/plugin-sdk':
@@ -474,6 +483,9 @@ importers:
       '@smarttest/adapter-node':
         specifier: workspace:*
         version: link:../adapter-node
+      '@smarttest/adapter-phpunit':
+        specifier: workspace:*
+        version: link:../adapter-phpunit
       '@smarttest/adapter-playwright':
         specifier: workspace:*
         version: link:../adapter-playwright
@@ -498,6 +510,9 @@ importers:
       '@smarttest/language-javascript':
         specifier: workspace:*
         version: link:../language-javascript
+      '@smarttest/language-php':
+        specifier: workspace:*
+        version: link:../language-php
       '@smarttest/language-python':
         specifier: workspace:*
         version: link:../language-python
@@ -611,6 +626,18 @@ importers:
       '@smarttest/language-typescript':
         specifier: workspace:*
         version: link:../language-typescript
+      '@smarttest/plugin-sdk':
+        specifier: workspace:*
+        version: link:../plugin-sdk
+      '@smarttest/shared':
+        specifier: workspace:*
+        version: link:../shared
+      '@smarttest/source-parser':
+        specifier: workspace:*
+        version: link:../source-parser
+
+  packages/language-php:
+    dependencies:
       '@smarttest/plugin-sdk':
         specifier: workspace:*
         version: link:../plugin-sdk

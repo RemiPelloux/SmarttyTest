@@ -27,7 +27,8 @@ import { rangesOverlap, topLevelSymbols } from "@smarttest/source-parser";
 
 export const INDEX_SCHEMA_VERSION = 2;
 /** Source code (a graph node when indexed), as opposed to assets an import can also name. */
-const CODE = /\.(?:[cm]?[jt]sx?)$/;
+/** Analysed code: a resolution to such a file outside the indexed set is uncertainty. */
+const CODE = /\.(?:[cm]?[jt]sx?|php)$/;
 
 interface IndexFile {
   schemaVersion: number;
