@@ -32,6 +32,18 @@ Methods and accessors are units of their own. `this.tokens.verify()` is linked t
 
 Code that runs when a module is loaded affects every importer, in every mode: a change to it selects all the tests that import the file, directly or transitively, whatever names they use. That covers top-level statements, side-effect imports, and declarations whose evaluation can run code: an initializer that calls or constructs anything (`export const X = make()`, an IIFE, `await`), class decorators, static fields and static blocks, enums with computed members and namespaces with runtime code. Adding, changing or removing such a declaration counts, even when no test uses its name (a new `export const X = (() => { throw … })()` fails every importer at import). Only declarations that cannot run code at load stay member-level: functions, classes without decorators or static initializers, and initializers that are literals, arrow or function expressions, or object and array literals of those.
 
+### Barrels and re-exports
+
+An import from a barrel (`import { price } from "./shop"`, where `shop/index.ts` re-exports other modules) is linked to the symbol it names, through any depth of barrels: `export *`, `export { total as cartTotal } from`, `export { default as greet } from`, `export * as format from` and `import * as ns from "./x"; export { ns }`. A change to `price` selects the importers of `price`, not every importer of the barrel. A namespace read member by member (`format.money()`, `ns.price()`) is linked to those members.
+
+A barrel whose change only adds, removes, renames or repoints named re-exports (`export { a, b as c } from "./x"`), and that loads the same modules before and after, selects the importers of the names that changed. Everything else about a barrel stays conservative and selects every importer of the barrel, directly or through other barrels:
+
+- A module newly loaded or no longer loaded by the barrel (a new `export … from "./y"`, a removed one): loading a module runs its code.
+- A change to an `export *` list or to a namespace re-export: which names it carries is the graph's to say, not the diff's.
+- Code that runs when the barrel or a module behind it loads (a top-level loop over the re-exports, a registry): see above.
+- An importer the analysis cannot pin to a name: a member read by a computed name (`ns[name]`), a namespace that is passed on (`Object.keys(ns)`, `fn(ns)`), a side-effect import (`import "./shop"`), a name that resolves to no project module (an `export *` from a package). Any change behind the barrel selects these importers.
+- CommonJS barrels (`module.exports = { ...require("./a") }`, `module.exports = require("./a")`): the names they carry are not read, so every importer is selected.
+
 ### Resources and conventions
 
 Some changes are not code. SmartTest links them to the code that reads them:

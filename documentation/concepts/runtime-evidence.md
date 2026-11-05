@@ -32,6 +32,14 @@ The argument that skipping is safe: a changed function that a test never called 
 
 `explain` shows skipped tests with the trace date: "Reachable statically, but its trace (date) never ran the changed code".
 
+## Selection precision
+
+`smarttest benchmark --traces` traces every test file at each replayed commit's parent and reports, per commit and in total, the share of selected test files whose trace ran the changed code: "Precision: 62% of measured selected test files ran the changed code (41/66; 12 unmeasured)". Missed failures say a selection was large enough; precision says how much of it was needed.
+
+Only what a trace shows counts. A selected file is **unmeasured**, never counted as precise, when it has no fresh trace (it failed at the parent, or a file it loaded changed since), when the change is not code (configuration, environment keys, catalogs, assets, types, a barrel's file-level importers), when the changed unit is one V8 does not name (a value, a constructor, anonymous code, a function added by the commit), or when it was selected for a reason a trace cannot see (a mandatory trigger, a rule, the full-suite fallback). Without traces, precision is unmeasured, not 100%: the report says so.
+
+In FAST and BALANCED, fresh traces already remove the selected tests that never ran the change, so the precision of the static selection is what `--mode safe` measures. In `--json`, each commit and the totals carry `precision: { ran, notRan, unmeasured, pct }`, with `pct` null when nothing was measured.
+
 ## Unprotected changes
 
 `impact` lists changed units that no test reaches statically and no fresh trace ran. These are the places a change has no test coverage at all.

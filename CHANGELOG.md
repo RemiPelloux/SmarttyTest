@@ -2,6 +2,20 @@
 
 All notable changes are documented here. Releases are managed with [Changesets](https://github.com/changesets/changesets). The project follows [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Changed: barrel and re-export pruning
+
+- An importer of a namespace re-export (`export * as format from "./format"`, or `import * as ns from "./x"; export { ns }`) that reads its members (`format.money()`) is linked to those members. Before, it depended on the whole module, and any change to it selected the importer. `export *`, `export { a as b } from` and default re-exports were already followed to the symbol at any depth; they are now covered by a fixture (`barrels-vitest`) and the regression harness.
+- A barrel whose change only adds, removes, renames or repoints named re-exports (`export { total as cartTotal } from "./cart"`), loading the same modules before and after, selects the importers of the names that changed and the barrel's file-level importers. Before, any edit of a barrel selected every importer of it.
+- Still conservative, and selected for any change behind the barrel: members read by a computed name (`ns[name]`), namespaces passed on, side-effect imports, names that resolve to no project module, CommonJS barrels; and every importer when the barrel's loaded modules, `export *` lists or load-time code change. See [Barrels and re-exports](documentation/concepts/how-selection-works.md#barrels-and-re-exports).
+- The persisted graph's format changes (2 → 3): it is rebuilt once after the upgrade.
+
+### Added: selection precision in `smarttest benchmark`
+
+- With `--traces`, `benchmark` reports the share of selected test files whose trace ran the changed code, per commit and in total ("Precision: 50% of measured selected test files ran the changed code (1/2)"). A file without a fresh trace, or selected for something a trace cannot see (configuration, environment, types, a trigger, a rule), is unmeasured and never counted as precise; without traces, precision is reported as unmeasured, never 100%. See [Selection precision](documentation/concepts/runtime-evidence.md#selection-precision).
+- `benchmark --json` (experimental) gains `commits[].precision` and `totals.precision`: `{ ran, notRan, unmeasured, pct }`, with `pct` null when nothing was measured. Existing fields are unchanged.
+
 ## [1.1.1] — patch
 
 ### Fixed

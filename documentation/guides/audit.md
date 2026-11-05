@@ -43,4 +43,4 @@ The repository's nightly workflow runs all three checks on every fixture (`pnpm 
 - run: npx smarttest audit --mutate --mutants 20 --resolution
 ```
 
-`benchmark` complements it: it replays recent commits with their real changes, where `audit` injects synthetic ones.
+`benchmark` complements it: it replays recent commits with their real changes, where `audit` injects synthetic ones. Both measure safety. For precision, `benchmark --traces --mode safe` also reports how many selected test files actually ran the changed code ([Selection precision](../concepts/runtime-evidence.md#selection-precision)); without traces it says precision is unmeasured.
