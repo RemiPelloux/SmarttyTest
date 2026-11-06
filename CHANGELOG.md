@@ -4,6 +4,14 @@ All notable changes are documented here. Releases are managed with [Changesets](
 
 ## Unreleased
 
+### Added: Laravel routes (PHP preview)
+
+- Route files are read without running PHP: each route links to its controller action, the controller's constructor and the middleware it names (verbs, `match`, `resource`/`apiResource`, groups with prefix, name, middleware and controller, included route files). A feature test's requests (`$this->getJson('/api/posts/1')`, `json('POST', …)`, `route('posts.show')`, concatenated and interpolated urls, request helpers such as `authenticatedRequest($method, $uri)`) link it to the routes that serve them, and `$this->artisan('x:y')` to that command. A controller change now selects the tests that request its routes, not every test that boots the application; a request whose url is built at run time is uncertainty for that test only.
+- The application boot loads route files, migrations, translations, views, commands and the providers list without using what they name; a change to one of them, a provider, the configuration or global middleware still selects every booting test. Under `php artisan test` a change selects every test when it reaches the boot through the graph.
+- Read statically too: classes from `match` arms, from a config list read in a `foreach`, and from a private method's literal callers; a typed parameter reaches its class's constructor, a controller action's parameters their whole class.
+- Every language: a `parent::m()` / `super.m()` call no longer counts as a call through the base type, so a change to one subclass's method no longer reaches every other subclass calling the base one.
+- openpro-backend (on a clone with three `smarttest-loads` comments): `benchmark` on the last 10 commits, 0 missed failures and 47% less test time (1,670.5 s against 3,146.1 s).
+
 ### Added: CI annotations
 
 - On GitHub Actions, GitLab CI and Bitbucket Pipelines, `smarttest ci`, `run` and `impact` show the selection on the pull request: each selected test file with the reason `explain` gives, the files not run with their reasons, failing files, fallbacks, and a summary with the time saved (an estimate from recorded durations, or "not measured yet" on a runner without them; never shown as passed). Detected from `GITHUB_ACTIONS`, `GITLAB_CI` and `BITBUCKET_BUILD_NUMBER`.
