@@ -10,7 +10,7 @@ All notable changes are documented here. Releases are managed with [Changesets](
 - The application boot loads route files, migrations, translations, views, commands and the providers list without using what they name; a change to one of them, a provider, the configuration or global middleware still selects every booting test. Under `php artisan test` a change selects every test when it reaches the boot through the graph.
 - Read statically too: classes from `match` arms, from a config list read in a `foreach`, and from a private method's literal callers; a typed parameter reaches its class's constructor, a controller action's parameters their whole class.
 - Every language: a `parent::m()` / `super.m()` call no longer counts as a call through the base type, so a change to one subclass's method no longer reaches every other subclass calling the base one.
-- openpro-backend (on a clone with three `smarttest-loads` comments): `benchmark` on the last 10 commits, 0 missed failures and 47% less test time (1,670.5 s against 3,146.1 s).
+- openpro-backend (on a clone with three `smarttest-loads` comments): `benchmark` on the last 10 commits, 0 missed failures and 47% less test time (1,670.5 s against 3,146.1 s); `audit --mutate`, 5 faults, 0 missed.
 
 ### Added: CI annotations
 
