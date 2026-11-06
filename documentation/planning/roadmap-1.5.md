@@ -8,16 +8,16 @@ Planning is in story points; one sprint is about 40 points. A version ships when
 
 ## Overview
 
-| Version | Theme                                                                  | Sprints | Points | Gate in one line                                                                                                                              |
-| ------- | ---------------------------------------------------------------------- | ------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1.1.0   | Angular, reliability, Python preview, rollout (released)               | S28–S31 | 152    | Angular and Python selected at 0 misses; a fault-injection audit finds no missed test; `init` alone reproduces the OpenPro setups             |
-| 1.2.0   | PHP preview, rollout follow-ups, first precision stories, hooks and CI | S32–S34 | 104    | PHP selection on OpenPro's backend at 0 misses; a branch's first push runs only its changes; live specs never run by accident; CI annotations |
-| 1.3.0   | Precision                                                              | S35–S36 | 52     | Type-checker resolution; the 20% observed-execution target met on two benchmarks                                                              |
-| 1.4.0   | Browser and end-to-end                                                 | S37–S38 | 64     | Source-mapped browser coverage; route-level selection for single-page apps                                                                    |
-| 1.5.0   | Ecosystem                                                              | S39–S40 | 60     | Third-party adapters installable from npm; a shared result cache                                                                              |
-| 1.6.0   | Backend frameworks (preview)                                           | S41     | 28     | Laravel, Django and FastAPI edges; a migration selects the tests that touch its tables                                                        |
+| Version | Theme                                                                                  | Sprints | Points | Gate in one line                                                                                                                                                  |
+| ------- | -------------------------------------------------------------------------------------- | ------- | ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1.1.0   | Angular, reliability, Python preview, rollout (released)                               | S28–S31 | 152    | Angular and Python selected at 0 misses; a fault-injection audit finds no missed test; `init` alone reproduces the OpenPro setups                                 |
+| 1.2.0   | PHP preview, rollout follow-ups, first precision stories, hooks and CI, Laravel routes | S32–S35 | 119    | PHP selection on OpenPro's backend at 0 misses with less test time; a branch's first push runs only its changes; live specs never run by accident; CI annotations |
+| 1.3.0   | Precision                                                                              | S36–S37 | 52     | Type-checker resolution; the 20% observed-execution target met on two benchmarks                                                                                  |
+| 1.4.0   | Browser and end-to-end                                                                 | S38–S39 | 64     | Source-mapped browser coverage; route-level selection for single-page apps                                                                                        |
+| 1.5.0   | Ecosystem                                                                              | S40–S41 | 60     | Third-party adapters installable from npm; a shared result cache                                                                                                  |
+| 1.6.0   | Backend frameworks (preview)                                                           | S42     | 28     | Laravel, Django and FastAPI edges; a migration selects the tests that touch its tables                                                                            |
 
-Total: 460 points, fourteen sprints (S28–S41).
+Total: 475 points, fifteen sprints (S28–S42).
 
 ---
 
@@ -116,9 +116,9 @@ Every item comes from a problem met on OpenPro. Each was fixed by hand there; he
 - `init --yes` on the commit before SmartTest in each of OpenPro's four repositories writes the hand-tuned config verbatim and the hook in the same file and stage. Two fixes came from it: a related-tests step kept in pre-push is replaced there (openpro-front), and a hooks folder held in a variable is followed (openpro-admin's `setup-hooks`). The one remaining difference: in openpro-front's parallel pre-push, SmartTest runs before the other steps, not beside them.
 - Not done: the four repositories in the published benchmarks.
 
-## 1.2.0: PHP preview, rollout follow-ups, first precision stories, hooks and CI (104 pts)
+## 1.2.0: PHP preview, rollout follow-ups, first precision stories, hooks and CI, Laravel routes (119 pts)
 
-Three sprints. S32 brings PHP forward from 1.5.0 because OpenPro needs it now. S33 closes what the 1.1 rollout left open and takes the precision stories that need no type checker. S34 brings forward what OpenPro's hooks and CI need from 1.4.0 and 1.5.0.
+Four sprints. S32 brings PHP forward from 1.5.0 because OpenPro needs it now. S33 closes what the 1.1 rollout left open and takes the precision stories that need no type checker. S34 brings forward what OpenPro's hooks and CI need from 1.4.0 and 1.5.0. S35 brings Laravel routes forward from 1.6.0, because without them the PHP preview selects every booting test on openpro-backend.
 
 OpenPro's backend is Laravel 12 on PHPUnit 11: 2,001 test files, 4,669 PHP files under `app/`, and CaptainHook hooks that run a home-made `scripts/test-changed.sh` before each commit and push. PHP is the second language on the plugin path Python opened in S30, and ships the same way: an official plugin marked **preview**, which selects tests and never hides a failure.
 
@@ -169,6 +169,19 @@ SmartTest stays an npm package. It reads PHP source in TypeScript, without runni
 
 **S34 gate:** on openpro-front, the 78 Playwright specs that target the deployed environment are marked live and no hook, `run` or `benchmark` runs them without `--live`, while CI still can; a pull request on SmartTest's own repository shows the annotations and the summary; `sync` on each of the seven adopting repositories proposes the 1.2.0 changes as a diff and applies only what is accepted; openpro-backend's commits carry SmartTest's trailer instead of `test-trailer.sh`'s.
 
+### S35: Laravel routes (15 pts)
+
+S32 made PHP selection correct on openpro-backend but not faster: every feature test boots the application, the application loads every route, and every route reaches its controller, so any change under `app/` selects all 1,998 test files.
+
+| Story                                                                                                                                                                                                                                                                                                                                                                         | Pts |
+| ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --- |
+| **Routes as edges.** `routes/*.php` read statically (verbs, `resource`/`apiResource`, groups with prefix, middleware and controller, names, model binding): each route links to its controller action and the middleware, form requests and policies it names. A change to a route file, global middleware, a provider or the configuration still selects every booting test. | 5   |
+| **Requests as edges.** The URLs and route names a feature test requests (`get`, `postJson`, `route('name')`, `action([…])`) link the test to the matching routes, not to every route. A request whose URL cannot be read statically is uncertainty for that test only.                                                                                                        | 5   |
+| **Run-time class choices.** `$class::…`, `new $class` and `app($class)` where `$class` comes from a literal map, `match` or config array of `X::class` values link to those classes; the rest keeps `// smarttest-loads:`.                                                                                                                                                    | 3   |
+| **Fixture and openpro-backend.** A routes fixture where a controller change selects only its route's tests; openpro-backend replayed with `benchmark` and audited.                                                                                                                                                                                                            | 2   |
+
+**S35 gate:** on openpro-backend, `benchmark` shows 0 missed failures and less test time than the full suite, with a controller change selecting only the feature tests that request its routes; fault injection on the PHP fixtures finds 0 missed tests.
+
 ## 1.3.0: Precision (52 pts)
 
 Run fewer tests for the same safety. Two items have been carried since 0.3.0 and 0.8.0. Barrel pruning, the lazy index and the precision report moved to S33.
@@ -214,14 +227,14 @@ End-to-end specs are where test time goes, and where running the wrong one is co
 
 PHP moved to 1.2.0 (S32), as Python moved to 1.1.0 (S30). What is left is the framework knowledge for both languages, which turns the coarse edges of the previews (every test that boots the application) into precise ones.
 
-| Story                                                                                                                                                                                                                                                                               | Pts |
-| ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --- |
-| **Framework edges.** Laravel routes (a controller change selects the feature tests that call its routes), migrations and config keys (`config('x.y')`); Django and FastAPI routes and settings; a migration selects the tests that touch its tables instead of every database test. | 13  |
-| **Hooks and CI for mixed repositories.** pre-commit (the Python framework) installed like Husky and CaptainHook; `smarttest ci` runs PHP, Python and JavaScript selections side by side.                                                                                            | 5   |
-| **Benchmarks.** The framework edges replayed on openpro-backend and OpenProAuto and checked with the S29 audits; results published with the rest.                                                                                                                                   | 5   |
-| **Documentation.** The framework edges in the PHP and Python guides.                                                                                                                                                                                                                | 5   |
+| Story                                                                                                                                                                                                                               | Pts |
+| ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --- |
+| **Framework edges.** Laravel migrations and config keys (`config('x.y')`; Laravel routes moved to S35); Django and FastAPI routes and settings; a migration selects the tests that touch its tables instead of every database test. | 13  |
+| **Hooks and CI for mixed repositories.** pre-commit (the Python framework) installed like Husky and CaptainHook; `smarttest ci` runs PHP, Python and JavaScript selections side by side.                                            | 5   |
+| **Benchmarks.** The framework edges replayed on openpro-backend and OpenProAuto and checked with the S29 audits; results published with the rest.                                                                                   | 5   |
+| **Documentation.** The framework edges in the PHP and Python guides.                                                                                                                                                                | 5   |
 
-**Gate:** on openpro-backend, a controller change selects only the feature tests that reach it and a migration only the tests that touch its tables, at 0 missed failures; fault injection finds 0 missed tests.
+**Gate:** on openpro-backend, a migration selects only the tests that touch its tables, at 0 missed failures; fault injection finds 0 missed tests.
 
 ---
 
