@@ -153,14 +153,10 @@
       "projectGatedTests": 218,
       "smarttestMs": 3975.5518980000634,
       "analysisMs": 322.5382310000714,
-      "failingInFull": [
-        "src/components/miaDock/MiaDock.test.tsx"
-      ],
+      "failingInFull": ["src/components/miaDock/MiaDock.test.tsx"],
       "missed": [],
       "preexisting": [],
-      "loadFlaky": [
-        "src/components/miaDock/MiaDock.test.tsx"
-      ]
+      "loadFlaky": ["src/components/miaDock/MiaDock.test.tsx"]
     },
     {
       "sha": "7bcb23a2610fb1577287ca5fb9fb8ac2f4467bc8",

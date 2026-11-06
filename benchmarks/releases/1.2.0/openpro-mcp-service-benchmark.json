@@ -73,10 +73,7 @@
         "tests/jsonSchemaToZod.test.ts"
       ],
       "missed": [],
-      "preexisting": [
-        "tests/jobDraftApp.test.ts",
-        "tests/jsonSchemaToZod.test.ts"
-      ]
+      "preexisting": ["tests/jobDraftApp.test.ts", "tests/jsonSchemaToZod.test.ts"]
     },
     {
       "sha": "550025ab1298db13b6408a991d2ebf31467de73d",
@@ -189,9 +186,7 @@
         "tests/jobDraftApp.test.ts"
       ],
       "missed": [],
-      "preexisting": [
-        "tests/jobDraftApp.test.ts"
-      ]
+      "preexisting": ["tests/jobDraftApp.test.ts"]
     },
     {
       "sha": "deaf27c0f2517799c4431f822f1f6cd00d97191b",

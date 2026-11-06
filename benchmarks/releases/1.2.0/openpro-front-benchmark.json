@@ -17,9 +17,7 @@
       "projectGatedTests": 2323,
       "smarttestMs": 23228.965145000013,
       "analysisMs": 5653.187276000001,
-      "failingInFull": [
-        "src/pages/search/visitor/VisitorExplorerPage.test.tsx"
-      ],
+      "failingInFull": ["src/pages/search/visitor/VisitorExplorerPage.test.tsx"],
       "missed": [],
       "preexisting": []
     },
@@ -36,14 +34,10 @@
       "projectGatedTests": 2323,
       "smarttestMs": 19569.791535000026,
       "analysisMs": 1356.8767100000405,
-      "failingInFull": [
-        "src/components/home/stories/FriendsNetworkTile.test.tsx"
-      ],
+      "failingInFull": ["src/components/home/stories/FriendsNetworkTile.test.tsx"],
       "missed": [],
       "preexisting": [],
-      "loadFlaky": [
-        "src/components/home/stories/FriendsNetworkTile.test.tsx"
-      ]
+      "loadFlaky": ["src/components/home/stories/FriendsNetworkTile.test.tsx"]
     },
     {
       "sha": "13dd7f075f30807a3c86456f52808eaa74721145",
@@ -126,13 +120,9 @@
       "projectGatedTests": 2327,
       "smarttestMs": 92541.86973899999,
       "analysisMs": 8741.40427700011,
-      "failingInFull": [
-        "src/i18n/__tests__/noEnglishLeftovers.test.ts"
-      ],
+      "failingInFull": ["src/i18n/__tests__/noEnglishLeftovers.test.ts"],
       "missed": [],
-      "preexisting": [
-        "src/i18n/__tests__/noEnglishLeftovers.test.ts"
-      ]
+      "preexisting": ["src/i18n/__tests__/noEnglishLeftovers.test.ts"]
     },
     {
       "sha": "b13ecc2626f495d60107a55ed9d217bbc80057a7",
