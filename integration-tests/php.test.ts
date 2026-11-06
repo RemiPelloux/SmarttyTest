@@ -262,22 +262,75 @@ describe.skipIf(!ready("php-laravel"))("php-laravel", () => {
     expect([...graph.dependenciesOf("app/Contracts/NoteRepository.php")]).toContain(
       "app/Repositories/EloquentNoteRepository.php",
     );
-    // A test extending Laravel's test case boots the application: providers, config, routes,
-    // migrations.
+    // A test extending Laravel's test case boots the application (providers, configuration);
+    // route files, migrations and the providers list are loaded, not used. The controller is
+    // reached through the route the test requests (POST /api/notes), not through every route.
     const booted = [...graph.dependenciesOf("tests/Feature/NoteTest.php")];
     for (const f of [
       "bootstrap/app.php",
-      "bootstrap/providers.php",
       "app/Providers/AppServiceProvider.php",
       "config/app.php",
-      "routes/api.php",
       "app/Http/Controllers/NoteController.php",
-      "database/migrations/2024_01_01_000000_create_notes_table.php",
     ])
       expect(booted).toContain(f);
+    expect(booted).not.toContain("routes/api.php");
+    expect([...graph.dependenciesOf("tests/Feature/GreetingTest.php")]).not.toContain(
+      "app/Http/Controllers/NoteController.php",
+    );
     // A plain PHPUnit test does not.
     expect([...graph.dependenciesOf("tests/Unit/SlugTest.php")]).not.toContain("bootstrap/app.php");
   }, 120_000);
+
+  it("a controller change selects only the tests requesting its route", async () => {
+    // Both through php artisan test (the boot's route files are loaded, not used) and PHPUnit.
+    for (const setup of [[], [PHPUNIT]] as [string, string, string][][]) {
+      const note = await after(
+        "php-laravel",
+        [["app/Http/Controllers/NoteController.php", "], 201);", "], 201) ?? null;"]],
+        setup,
+      );
+      expect(selected(note.analysis)).toEqual(["tests/Feature/NoteTest.php"]);
+      const greeting = await after(
+        "php-laravel",
+        [
+          [
+            "app/Http/Controllers/GreetingController.php",
+            "Greeter::greet($name)",
+            "Greeter::greet(trim($name))",
+          ],
+        ],
+        setup,
+      );
+      expect(selected(greeting.analysis)).toEqual(["tests/Feature/GreetingTest.php"]);
+    }
+  }, 240_000);
+
+  it("a route file change, or a request SmartTest cannot read, still selects broadly", async () => {
+    const routes = await after(
+      "php-laravel",
+      [["routes/api.php", "Route::post('/notes',", "Route::post('/notes/',"]],
+      [PHPUNIT],
+    );
+    expect(selected(routes.analysis)).toEqual(FEATURE);
+    // A url built at run time: that test cannot be ruled out, the others still can.
+    const computed = await after(
+      "php-laravel",
+      [
+        [
+          "tests/Feature/GreetingTest.php",
+          "$this->getJson('/api/greet/Ada')",
+          "$this->getJson($this->url())",
+        ],
+        ["app/Http/Controllers/NoteController.php", "], 201);", "], 201) ?? null;"],
+      ],
+      [PHPUNIT],
+    );
+    expect(selected(computed.analysis)).toEqual(FEATURE);
+    expect(
+      computed.analysis.decision.selectedTests.find((t) => t.filePath.endsWith("GreetingTest.php"))
+        ?.reasons[0]?.kind,
+    ).not.toBe("transitive-dependency");
+  }, 240_000);
 
   it("a class only a unit test uses selects that test only", async () => {
     const { analysis } = await after("php-laravel", [

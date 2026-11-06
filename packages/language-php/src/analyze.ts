@@ -26,7 +26,7 @@ import type { FileAnalysis, ImportRecord, SymbolRecord } from "@smarttest/source
 import { PHP_FUNCTIONS } from "./builtins.js";
 import { bracketPairs, type Tok, tokenize } from "./tokenize.js";
 
-export const PHP_ANALYZER_VERSION = "php-1";
+export const PHP_ANALYZER_VERSION = "php-2";
 
 /** Whether a file is a test PHPUnit collects by default (`*Test.php`). */
 export const PHP_TEST_FILE = /(?:^|\/)[^/]*Test\.php$/;
@@ -183,6 +183,25 @@ const BINDING_METHODS = new Set([
   "scopedIf",
 ]);
 
+/** Laravel's test request methods and the HTTP method each sends ("?": the first argument). */
+const REQUEST_VERBS: Record<string, string> = {
+  get: "GET",
+  getJson: "GET",
+  post: "POST",
+  postJson: "POST",
+  put: "PUT",
+  putJson: "PUT",
+  patch: "PATCH",
+  patchJson: "PATCH",
+  delete: "DELETE",
+  deleteJson: "DELETE",
+  options: "OPTIONS",
+  optionsJson: "OPTIONS",
+  head: "HEAD",
+  json: "?",
+  call: "?",
+};
+
 const hash = (parts: readonly string[]) => sha256(parts.join("\n"));
 const lc = (s: string) => s.toLowerCase();
 
@@ -228,6 +247,8 @@ interface Collected {
   thisUses: Set<string>;
   superUses: Set<string>;
   thisEscapes: boolean;
+  /** Requests a test makes (`http-request:GET /api/x`) and routes a route file defines. */
+  resources: Set<string>;
 }
 
 const collected = (): Collected => ({
@@ -237,6 +258,7 @@ const collected = (): Collected => ({
   thisUses: new Set(),
   superUses: new Set(),
   thisEscapes: false,
+  resources: new Set(),
 });
 
 /** Reads one file. `path` is project-relative POSIX. */
@@ -609,12 +631,26 @@ function readPhp(
     "mergeConfigFrom",
     "loadJsonTranslationsFrom",
   ]);
+  /** A route file (`routes/…`): Laravel registers its routes; what they name runs per request. */
+  const routeTarget = (spec: string) =>
+    /(?:^|\/)routes\//.test(spec.startsWith("@composer/") ? spec.slice(10) : join(dir, spec));
+  const include = (spec: string, line: number) =>
+    routeTarget(spec)
+      ? addImport({
+          specifier: spec,
+          kind: "side-effect",
+          bindings: [],
+          typeOnly: false,
+          line,
+          load: true,
+        })
+      : sideEffect(spec, line);
   const pathTarget = (spec: string, line: number, expr: string) => {
     const file = /\.php$/i.test(spec);
     if (file) {
       const normalized =
         spec.startsWith("./") && dir ? `./${spec.slice(2)}` : spec === "./" ? "." : spec;
-      sideEffect(normalized, line);
+      include(normalized, line);
       return;
     }
     // A folder (`loadMigrationsFrom(__DIR__.'/../database/migrations')`): every PHP file in it.
@@ -640,7 +676,7 @@ function readPhp(
       } else if (v?.t === "str" && v.value !== undefined && /\.php$/i.test(v.value)) {
         // Relative to the including file's folder (PHP looks there after the include path).
         const rel = v.value;
-        sideEffect(rel.startsWith("/") ? rel : rel.startsWith(".") ? rel : `./${rel}`, t.line);
+        include(rel.startsWith("/") ? rel : rel.startsWith(".") ? rel : `./${rel}`, t.line);
       } else if (v?.t === "var" && pathVars.has(v.v)) {
         pathTarget(pathVars.get(v.v) as string, t.line, v.v);
       } else {
@@ -696,6 +732,25 @@ function readPhp(
           if (toks[v + 1]?.v === "=>") v += 2;
           const target = toks[v];
           if (target?.t === "var") out.set(target.v, [...(out.get(target.v) ?? []), ...list]);
+        }
+      }
+      // foreach (… config('prospection.connectors') … as $class): the classes that file names.
+      if (t.v === "foreach" && toks[k + 1]?.v === "(") {
+        const end = close(k + 1);
+        let keyName: string | undefined;
+        let as = -1;
+        for (let j = k + 2; j < end; j++) {
+          const x = toks[j] as Tok;
+          if (x.v === "config" && toks[j + 1]?.v === "(" && toks[j + 2]?.t === "str")
+            keyName = toks[j + 2]?.value;
+          if (x.v === "as" && x.t === "name") as = j;
+        }
+        if (keyName && as > 0) {
+          let v = as + 1;
+          if (toks[v + 1]?.v === "=>") v += 2;
+          const target = toks[v];
+          if (target?.t === "var")
+            out.set(target.v, [`@config:${keyName.split(".")[0] as string}`]);
         }
       }
       // foreach ([A::class, …] as $m) / foreach ([… => A::class] as $k => $m)
@@ -780,6 +835,141 @@ function readPhp(
       : recv.t === "var" && /^\$(?:app|container)$/i.test(recv.v);
   };
 
+  // ── HTTP requests in tests and routes in route files (Laravel, preview) ──
+  const testish = /(?:^|\/)tests?\//i.test(path) || PHP_TEST_FILE.test(path);
+  /** The arguments of the call whose `(` is at `open`: [from, to) ranges. */
+  const argRanges = (open: number): [number, number][] => {
+    const end = close(open);
+    const out: [number, number][] = [];
+    let start = open + 1;
+    for (let k = open + 1; k < end; k++) {
+      const v = toks[k]?.v;
+      if (v === "(" || v === "[" || v === "{" || v === "#[") k = close(k);
+      else if (v === ",") {
+        out.push([start, k]);
+        start = k + 1;
+      }
+    }
+    if (start < end) out.push([start, end]);
+    return out;
+  };
+  /** Literal url assignments (`$url = '/api/posts';`), by variable. */
+  const urlVars = new Map<string, string>();
+  for (let k = 0; k + 3 < toks.length; k++) {
+    const t = toks[k] as Tok;
+    if (
+      t.t === "var" &&
+      toks[k + 1]?.v === "=" &&
+      toks[k + 2]?.t === "str" &&
+      toks[k + 2]?.value !== undefined &&
+      toks[k + 3]?.v === ";"
+    )
+      urlVars.set(t.v, toks[k + 2]?.value as string);
+  }
+  /** What a url argument reads as: a path (`*` where computed), a route name, or nothing. */
+  const evalUrl = (a: number, b: number): { path?: string; name?: string } => {
+    let out = "";
+    let literal = false;
+    for (let k = a; k < b; k++) {
+      const t = toks[k] as Tok;
+      if (t.inString) continue;
+      if (t.t === "str") {
+        literal = true;
+        out +=
+          t.value ??
+          t.v
+            .replace(/^[bB]?["'`]|["'`]$/g, "")
+            .replace(/\{\$[^}]*\}|\$\{[^}]*\}|\$[A-Za-z_]\w*(?:(?:->|\?->)\w+|\[[^\]]*\])*/g, "*");
+        continue;
+      }
+      if (t.v === ".") continue;
+      const fn = t.t === "name" ? lc(t.v.replace(/^\\/, "")) : "";
+      if ((fn === "route" || fn === "to_route") && toks[k + 1]?.v === "(") {
+        const first = argRanges(k + 1)[0];
+        const n = first && first[1] - first[0] === 1 ? toks[first[0]] : undefined;
+        return n?.t === "str" && n.value !== undefined ? { name: n.value } : {};
+      }
+      if (fn === "url" && toks[k + 1]?.v === "(") {
+        const first = argRanges(k + 1)[0];
+        const inner = first ? evalUrl(first[0], first[1]) : {};
+        if (inner.path === undefined) return {};
+        out += inner.path;
+        literal = true;
+        k = close(k + 1);
+        continue;
+      }
+      if (fn === "sprintf" && toks[k + 1]?.v === "(" && toks[k + 2]?.t === "str") {
+        const f = toks[k + 2]?.value;
+        if (f === undefined) return {};
+        out += f.replace(/%[-+ 0#]*\d*(?:\.\d+)?[bcdeEfFgGosuxX]/g, "*");
+        literal = true;
+        k = close(k + 1);
+        continue;
+      }
+      const constName = selfConst(k);
+      if (constName !== undefined && constStrings.has(constName)) {
+        out += constStrings.get(constName);
+        literal = true;
+        k += 2;
+        continue;
+      }
+      if (t.t === "var" && urlVars.has(t.v) && toks[k + 1]?.v !== "->" && toks[k + 1]?.v !== "[") {
+        out += urlVars.get(t.v);
+        literal = true;
+        continue;
+      }
+      if (t.v === "(" || t.v === "[") k = close(k);
+      if (!out.endsWith("*")) out += "*";
+    }
+    if (!literal) return {};
+    const path = out.replace(/^https?:\/\/[^/]*/i, "").replace(/\*+/g, "*");
+    if (!path.replace(/[*/]/g, "")) return {};
+    return { path: path.startsWith("/") || path.startsWith("*") ? path : `/${path}` };
+  };
+  /** The variable a call chain starts from (`$this` in `$this->actingAs($u)->getJson(…)`). */
+  const chainRoot = (k: number): string | undefined => {
+    let j = k - 1; // the `->` before the method name
+    while (j > 0) {
+      const p = toks[j - 1] as Tok | undefined;
+      if (!p) return undefined;
+      if (p.t === "var") return p.v;
+      if (p.v === ")") {
+        const o = pairs[j - 1];
+        if (o === undefined || o < 1) return undefined;
+        j = o; // at the `(`: the method name is before it
+        const name = toks[j - 1];
+        if (name?.t !== "name") return undefined;
+        if (toks[j - 2]?.v !== "->" && toks[j - 2]?.v !== "?->") return undefined;
+        j -= 2;
+        continue;
+      }
+      if (p.t === "name" && (toks[j - 2]?.v === "->" || toks[j - 2]?.v === "?->")) {
+        j -= 2; // a property in the chain
+        continue;
+      }
+      return undefined;
+    }
+    return undefined;
+  };
+  const request = (k: number, c: Collected) => {
+    const t = toks[k] as Tok;
+    if (chainRoot(k) !== "$this") return;
+    const args = argRanges(k + 1);
+    let method = REQUEST_VERBS[t.v] as string;
+    let url = args[0];
+    if (method === "?") {
+      // json('GET', $uri, …) / call('POST', $uri, …)
+      const m = args[0] && args[0][1] - args[0][0] === 1 ? toks[args[0][0]] : undefined;
+      method = m?.t === "str" && m.value ? m.value.toUpperCase() : "*";
+      url = args[1];
+    }
+    if (!url) return;
+    const r = evalUrl(url[0], url[1]);
+    if (r.name !== undefined) c.resources.add(`http-request-name:${r.name}`);
+    else if (r.path !== undefined) c.resources.add(`http-request:${method} ${r.path}`);
+    else unreadable(`a request to a url built at run time (${t.v})`, t.line);
+  };
+
   /**
    * Reads tokens [from, to) into `c`. `self` is the class the code belongs to (its short name),
    * `props` the typed properties of that class.
@@ -794,11 +984,20 @@ function readPhp(
       params?: Map<string, string[]>;
       /** A parameter list: its variables are declared here, not used. */
       declaring?: boolean;
+      /** Parameters of a private method every caller passes `X::class` to: those classes. */
+      paramClasses?: Map<string, string[]>;
     },
   ) => {
     const to = Math.min(upTo, toks.length);
     const types = new Map<string, string[]>(ctx.params ?? []);
     const values = classValuesOf(from, to);
+    for (const [v, l] of ctx.paramClasses ?? []) if (!values.has(v)) values.set(v, l);
+    /** A class value: a class, or `@config:<file>` (the classes a config file names). */
+    const valueRef = (cls: string, line: number): string | undefined => {
+      if (!cls.startsWith("@config:")) return classRef(cls, line);
+      sideEffect(`@composer/config/${cls.slice(8)}.php`, line);
+      return undefined;
+    };
     const dynamic = unreadable;
     const useMember = (local: string, member: string) => {
       c.refs.add(local);
@@ -826,7 +1025,10 @@ function readPhp(
       if (a.t === "var" && single) {
         const known = values.get(a.v);
         if (known) {
-          for (const cls of known) c.escapes.add(classRef(cls, a.line));
+          for (const cls of known) {
+            const r = valueRef(cls, a.line);
+            if (r) c.escapes.add(r);
+          }
           return;
         }
       }
@@ -873,6 +1075,18 @@ function readPhp(
             }
             const member = memberAfter(k + 2);
             if (!member) continue;
+            // $this->getJson('/api/x'): a request of a test.
+            if (
+              testish &&
+              next?.v === "->" &&
+              n &&
+              n.v in REQUEST_VERBS &&
+              toks[k + 3]?.v === "("
+            ) {
+              request(k + 2, c);
+              k += 2;
+              continue;
+            }
             c.thisUses.add(member);
             // $this->repo->find(): the property's type is known.
             const propTypes = member.startsWith("$") ? ctx.props?.get(member) : undefined;
@@ -905,10 +1119,15 @@ function readPhp(
           if (n?.v === "class") continue; // $e::class: its name only
           const known = values.get(t.v) ?? types.get(t.v);
           if (known && n?.t === "name") {
-            const m = toks[k + 3]?.v === "(" ? n.v : n.v;
-            for (const cls of known) useMember(values.has(t.v) ? classRef(cls, t.line) : cls, m);
+            for (const cls of known) {
+              const r = values.has(t.v) ? valueRef(cls, t.line) : cls;
+              if (r) useMember(r, n.v);
+            }
           } else if (known && n?.t === "var") {
-            for (const cls of known) c.escapes.add(values.has(t.v) ? classRef(cls, t.line) : cls);
+            for (const cls of known) {
+              const r = values.has(t.v) ? valueRef(cls, t.line) : cls;
+              if (r) c.escapes.add(r);
+            }
           } else dynamic(`${t.v}::${n?.v ?? ""} (a class held in a variable)`, t.line);
           continue;
         }
@@ -975,6 +1194,11 @@ function readPhp(
       if (t.t !== "name") continue;
       const word = t.v;
       const lw = lc(word);
+      // $this->getJson('/api/posts/1'), $this->actingAs($u)->post(route('posts.store'), …)
+      if (testish && prev?.v === "->" && next?.v === "(" && t.v in REQUEST_VERBS) {
+        request(k, c);
+        continue;
+      }
       if (prev?.v === "->" || prev?.v === "?->") continue; // a member name
       if (prev?.v === "::") continue; // read with the class before it
       if (prev?.t === "name" && (lc(prev.v) === "function" || lc(prev.v) === "const")) continue;
@@ -1013,7 +1237,10 @@ function readPhp(
         } else if (n?.t === "var") {
           const known = values.get(n.v) ?? types.get(n.v);
           if (known)
-            for (const cls of known) c.escapes.add(values.has(n.v) ? classRef(cls, n.line) : cls);
+            for (const cls of known) {
+              const r = values.has(n.v) ? valueRef(cls, n.line) : cls;
+              if (r) c.escapes.add(r);
+            }
           else dynamic(`new ${n.v} (a class chosen at run time)`, n.line);
           k++;
         } else if (n?.v === "(") dynamic("new (…) (a class chosen at run time)", t.line);
@@ -1206,6 +1433,7 @@ function readPhp(
     });
   };
   const fromCollected = (c: Collected) => ({
+    ...(c.resources.size ? { resources: [...c.resources] } : {}),
     refs: [...c.refs],
     uses: [...c.uses],
     escapes: [...c.escapes],
@@ -1326,6 +1554,7 @@ function readPhp(
     if (kindWord === "interface" && impl.length) ext = impl.shift();
     // Members
     const members: MemberInfo[] = [];
+    const controller = /Controller$/.test(name) || /(?:^|\/)Http\/Controllers\//.test(path);
     const props = new Map<string, string[]>();
     let m = open + 1;
     let memberAttrs: [number, number][] = [];
@@ -1489,12 +1718,50 @@ function readPhp(
     // Member names declared here (case-insensitive for methods, as PHP)
     const declaredMethods = new Map<string, string>();
     for (const mi of members) if (mi.kind === "method") declaredMethods.set(lc(mi.name), mi.name);
+    const literalParams = (mi: MemberInfo): Map<string, string[]> | undefined => {
+      let paren = mi.from;
+      while (paren < mi.headerEnd && toks[paren]?.v !== "(") paren++;
+      if (toks[paren]?.v !== "(" || !/\bprivate\b/.test(textOf(mi.from, paren))) return undefined;
+      const names = argRanges(paren).map(([a, b]) => {
+        for (let q = a; q < b; q++) if (toks[q]?.t === "var") return (toks[q] as Tok).v;
+        return "";
+      });
+      const out = new Map<string, string[]>();
+      let calls = 0;
+      for (let q = open + 1; q < end; q++) {
+        const x = toks[q] as Tok;
+        const viaSelf =
+          (x.v === "self" || x.v === "static") &&
+          toks[q + 1]?.v === "::" &&
+          toks[q + 2]?.v === mi.name;
+        const viaThis = x.v === "$this" && toks[q + 1]?.v === "->" && toks[q + 2]?.v === mi.name;
+        if (!(viaSelf || viaThis) || toks[q + 3]?.v !== "(") continue;
+        calls++;
+        for (const [i, [a, b]] of argRanges(q + 3).entries()) {
+          const v = names[i];
+          if (!v) continue;
+          const cls =
+            b - a === 3 &&
+            toks[a]?.t === "name" &&
+            toks[a + 1]?.v === "::" &&
+            toks[a + 2]?.v === "class"
+              ? resolveClass((toks[a] as Tok).v)
+              : undefined;
+          if (cls) out.set(v, [...(out.get(v) ?? []), cls]);
+          else out.set(v, [...(out.get(v) ?? []), "\u0000"]);
+        }
+      }
+      if (!calls) return undefined;
+      for (const [v, l] of [...out]) if (l.includes("\u0000")) out.delete(v);
+      return out;
+    };
     const seen = new Set<string>();
     for (const mi of members) {
       if (seen.has(mi.name)) continue;
       seen.add(mi.name);
       const c = collected();
       const params = new Map<string, string[]>();
+      const paramClasses = mi.kind === "method" ? literalParams(mi) : undefined;
       if (mi.kind === "method") {
         // parameters, return type, body
         let paren = mi.from;
@@ -1502,12 +1769,27 @@ function readPhp(
         if (toks[paren]?.v === "(") {
           paramTypes(paren, params);
           const pEnd = close(paren);
+          // A typed parameter is built before the method runs (by its caller, or by Laravel's
+          // container): its constructor is a dependency. A controller action's parameters are
+          // resolved by the framework (form requests validate, models bind): used whole.
+          const action = controller && !/\bprivate\b|\bprotected\b/.test(textOf(mi.from, paren));
+          for (const ty of params.values())
+            for (const x of ty) {
+              c.refs.add(x);
+              c.uses.add(`${x}.constructor`);
+              if (action) c.escapes.add(x);
+            }
           // return type
           if (toks[pEnd + 1]?.v === ":") typeNames(pEnd + 2, mi.headerEnd);
           walk(paren + 1, pEnd, c, { self: name, props, params, declaring: true });
         }
         walk(mi.from, paren, c, { self: name, props, params });
-        walk(mi.headerEnd, mi.to + 1, c, { self: name, props, params });
+        walk(mi.headerEnd, mi.to + 1, c, {
+          self: name,
+          props,
+          params,
+          ...(paramClasses ? { paramClasses } : {}),
+        });
       } else if (mi.to > mi.from) {
         walk(mi.from, mi.to + 1, c, { self: name, props });
       }
@@ -1604,6 +1886,291 @@ function readPhp(
       if (n.v === "(" || n.v === "[") r = close(r);
     }
     return end;
+  };
+
+  // ── Route files (Laravel, preview): each route is a symbol, linked to its action ──
+  const isRouteFile = /(?:^|\/)routes\/.+\.php$/.test(path);
+  interface RouteCtx {
+    prefix: string;
+    names: string;
+    /** Token ranges every route of the group carries (middleware, `can`, `where`…). */
+    ranges: [number, number][];
+    controller?: string;
+    hash: string[];
+    open: boolean;
+  }
+  const rootRoutes: RouteCtx = {
+    prefix: /(?:^|\/)routes\/api\.php$/.test(path) ? "/api" : "",
+    names: "",
+    ranges: [],
+    hash: [],
+    // Another route file includes this one, maybe inside a group: its prefix is not known here.
+    open: !/(?:^|\/)routes\/(?:api|web)\.php$/.test(path),
+  };
+  const joinUri = (a: string, b: string) =>
+    `/${[a, b].join("/").split("/").filter(Boolean).join("/")}`;
+  const routeUnits = new Map<string, number>();
+  const isRouteStart = (k: number) =>
+    toks[k]?.t === "name" &&
+    /^\\?(?:Illuminate\\Support\\Facades\\)?Route$/.test((toks[k] as Tok).v) &&
+    toks[k + 1]?.v === "::";
+  const singleStr = (r: [number, number] | undefined) =>
+    r && r[1] - r[0] === 1 && toks[r[0]]?.t === "str" ? toks[r[0]]?.value : undefined;
+  const stringsIn = (r: [number, number] | undefined): string[] => {
+    const out: string[] = [];
+    for (let q = r?.[0] ?? 0; q < (r?.[1] ?? 0); q++) {
+      const x = toks[q] as Tok;
+      if (x.t === "str" && x.value !== undefined) out.push(x.value);
+    }
+    return out;
+  };
+  const classOf = (r: [number, number] | undefined): string | undefined =>
+    r &&
+    r[1] - r[0] === 3 &&
+    toks[r[0]]?.t === "name" &&
+    toks[r[0] + 1]?.v === "::" &&
+    toks[r[0] + 2]?.v === "class"
+      ? classRef(resolveClass((toks[r[0]] as Tok).v), (toks[r[0]] as Tok).line)
+      : undefined;
+  /** The end (inclusive) of the statement starting at `k`. */
+  const statementEnd = (k: number, to: number): number => {
+    let end = k;
+    while (end < to && toks[end]?.v !== ";") {
+      const v = toks[end]?.v;
+      if (v === "(" || v === "[" || v === "{" || v === "#[") {
+        const c2 = close(end);
+        if (
+          v === "{" &&
+          toks[c2 + 1]?.v !== ")" &&
+          toks[c2 + 1]?.v !== "," &&
+          toks[c2 + 1]?.v !== "->" &&
+          toks[c2 + 1]?.v !== ";"
+        ) {
+          end = c2;
+          break;
+        }
+        end = c2;
+      }
+      end++;
+    }
+    return Math.min(end, to - 1);
+  };
+  const addRoute = (
+    methods: string[],
+    uri: string | undefined,
+    ctx: RouteCtx,
+    name: string | undefined,
+    stmt: [number, number],
+    action: { range?: [number, number]; cls?: string; method?: string },
+  ) => {
+    const c = collected();
+    for (const [a, b] of ctx.ranges) walk(a, b, c, {});
+    if (action.range) walk(action.range[0], action.range[1], c, {});
+    if (action.cls) {
+      c.refs.add(action.cls);
+      c.uses.add(`${action.cls}.${action.method ?? "__invoke"}`);
+      c.uses.add(`${action.cls}.constructor`);
+    }
+    const full = uri === undefined ? "*" : joinUri(ctx.prefix, uri);
+    const tag = ctx.open ? "~" : "";
+    c.resources.add(`http-route${tag}:${methods.join("|")} ${full}`);
+    if (name) c.resources.add(`http-route-name${tag}:${name}`);
+    let unit = `${methods.join("|")} ${full}`.replace(/\./g, "·");
+    const n = (routeUnits.get(unit) ?? 0) + 1;
+    routeUnits.set(unit, n);
+    if (n > 1) unit = `${unit} #${n}`;
+    const startLine = (toks[stmt[0]] as Tok).line;
+    const endLine = (toks[stmt[1]] as Tok | undefined)?.line ?? startLine;
+    const tokens = [...ctx.hash, ...valuesOf(stmt[0], stmt[1] + 1)];
+    addSymbol({
+      name: unit,
+      qualifiedName: unit,
+      kind: "function",
+      exportNames: [],
+      range: range(startLine, endLine),
+      signature: textOf(stmt[0], Math.min(stmt[1], stmt[0] + 40)).slice(0, 200),
+      tokenHash: hash(tokens),
+      // Registering a route is code the route file runs: a changed route reaches every test
+      // that boots the application (its loaders), not only the tests requesting it.
+      evalHash: hash(tokens),
+      ...fromCollected(c),
+      raw: rawText(startLine, endLine),
+    });
+  };
+  /** Statements [from, to) of a route file or of a group's closure. */
+  const readRouteBody = (from: number, to: number, ctx: RouteCtx) => {
+    let k = from;
+    while (k < to) {
+      const stop = statementEnd(k, to);
+      if (isRouteStart(k)) readRoute(k, stop, ctx);
+      else {
+        moduleCode.push(...toks.slice(k, stop + 1));
+        walk(k, stop + 1, module, {});
+      }
+      k = stop + 1;
+    }
+  };
+  const VERBS: Record<string, string[]> = {
+    get: ["GET", "HEAD"],
+    post: ["POST"],
+    put: ["PUT"],
+    patch: ["PATCH"],
+    delete: ["DELETE"],
+    options: ["OPTIONS"],
+    any: ["*"],
+    view: ["GET", "HEAD"],
+    redirect: ["*"],
+    permanentRedirect: ["*"],
+    fallback: ["*"],
+    match: [],
+  };
+  /** `Route::…` from `from` to `to` (inclusive): routes, groups, resources. */
+  const readRoute = (from: number, to: number, ctx: RouteCtx) => {
+    const segs: { name: string; open: number }[] = [];
+    let j = from + 2;
+    while (j <= to) {
+      const n = toks[j];
+      if (n?.t !== "name" || toks[j + 1]?.v !== "(") break;
+      segs.push({ name: n.v, open: j + 1 });
+      j = close(j + 1) + 1;
+      if (toks[j]?.v === "->") j++;
+      else break;
+    }
+    const local: RouteCtx = {
+      ...ctx,
+      ranges: [...ctx.ranges],
+      hash: [...ctx.hash],
+    };
+    let ownName = "";
+    let verb: { name: string; open: number } | undefined;
+    let group: { name: string; open: number } | undefined;
+    let resource: { name: string; open: number; api: boolean } | undefined;
+    const only: string[] = [];
+    const except: string[] = [];
+    for (const sg of segs) {
+      const args = argRanges(sg.open);
+      if (sg.name === "prefix") local.prefix = joinUri(local.prefix, singleStr(args[0]) ?? "*");
+      else if (sg.name === "name" || sg.name === "as") ownName += singleStr(args[0]) ?? "";
+      else if (sg.name === "controller") {
+        const cls = classOf(args[0]);
+        if (cls) local.controller = cls;
+      } else if (sg.name === "group") group = sg;
+      else if (sg.name === "resource" || sg.name === "apiResource")
+        resource = { ...sg, api: sg.name === "apiResource" };
+      else if (sg.name === "only") only.push(...stringsIn(args[0]));
+      else if (sg.name === "except") except.push(...stringsIn(args[0]));
+      else if (sg.name in VERBS && !verb) verb = sg;
+      else local.ranges.push([sg.open + 1, close(sg.open)]);
+    }
+    const stmt: [number, number] = [from, to];
+    if (group) {
+      local.names += ownName;
+      local.hash.push(...valuesOf(from, group.open + 1));
+      for (const [a, b] of argRanges(group.open)) {
+        if (toks[a]?.v === "[") {
+          // Route::group(['prefix' => 'x', 'middleware' => [...], 'as' => 'x.'], function () {…})
+          for (const [ea, eb] of argRanges(a)) {
+            const keyName =
+              toks[ea]?.t === "str" && toks[ea + 1]?.v === "=>" ? toks[ea]?.value : undefined;
+            const value: [number, number] = [ea + 2, eb];
+            if (keyName === "prefix") local.prefix = joinUri(local.prefix, singleStr(value) ?? "*");
+            else if (keyName === "as") local.names += singleStr(value) ?? "";
+            else if (keyName === "controller") {
+              const cls = classOf(value);
+              if (cls) local.controller = cls;
+            } else local.ranges.push(value);
+          }
+          continue;
+        }
+        // The closure's body: its statements are routes of this group.
+        for (let q = a; q < b; q++) {
+          const w = toks[q]?.v;
+          if (w === "fn" || w === "function") {
+            let p = q + 1;
+            if (toks[p]?.v === "(") p = close(p) + 1;
+            if (toks[p]?.v === "use" && toks[p + 1]?.v === "(") p = close(p + 1) + 1;
+            if (toks[p]?.v === ":") while (p < b && toks[p]?.v !== "{" && toks[p]?.v !== "=>") p++;
+            if (toks[p]?.v === "{") readRouteBody(p + 1, close(p), local);
+            else if (toks[p]?.v === "=>") readRouteBody(p + 1, b, local);
+            break;
+          }
+        }
+      }
+      return;
+    }
+    const fullName = ownName ? `${ctx.names}${ownName}` : undefined;
+    if (resource) {
+      const args = argRanges(resource.open);
+      const res = singleStr(args[0]);
+      const cls = classOf(args[1]);
+      if (res === undefined || !cls) {
+        addRoute(["*"], undefined, local, undefined, stmt, {
+          range: [resource.open + 1, close(resource.open)],
+        });
+        return;
+      }
+      const parts = res.split(".");
+      const param = (p: string) => `{${p.replace(/s$/, "")}}`;
+      const base = parts.map((p, i) => (i < parts.length - 1 ? `${p}/${param(p)}` : p)).join("/");
+      const item = `${base}/${param(parts[parts.length - 1] as string)}`;
+      const actions: [string, string[], string][] = [
+        ["index", ["GET", "HEAD"], base],
+        ...(resource.api
+          ? []
+          : ([["create", ["GET", "HEAD"], `${base}/create`]] as [string, string[], string][])),
+        ["store", ["POST"], base],
+        ["show", ["GET", "HEAD"], item],
+        ...(resource.api
+          ? []
+          : ([["edit", ["GET", "HEAD"], `${item}/edit`]] as [string, string[], string][])),
+        ["update", ["PUT", "PATCH"], item],
+        ["destroy", ["DELETE"], item],
+      ];
+      for (const [act, methods, uri] of actions) {
+        if (only.length && !only.includes(act)) continue;
+        if (except.includes(act)) continue;
+        addRoute(methods, uri, local, `${ctx.names}${res}.${act}`, stmt, { cls, method: act });
+      }
+      return;
+    }
+    if (!verb) {
+      // Route::bind(), Route::pattern(), Route::model(): code every route depends on.
+      moduleCode.push(...toks.slice(from, to + 1));
+      walk(from, to + 1, module, {});
+      return;
+    }
+    const args = argRanges(verb.open);
+    let methods = VERBS[verb.name] as string[];
+    let uriArg = 0;
+    if (verb.name === "match") {
+      methods = stringsIn(args[0]).map((m) => m.toUpperCase());
+      if (!methods.length) methods = ["*"];
+      uriArg = 1;
+    }
+    const uri = verb.name === "fallback" ? undefined : singleStr(args[uriArg]);
+    const actionArg = verb.name === "fallback" ? args[0] : args[uriArg + 1];
+    const actionStr = singleStr(actionArg);
+    const action: { range?: [number, number]; cls?: string; method?: string } = {};
+    if (verb.name === "view" || verb.name.endsWith("edirect")) {
+      if (actionArg) action.range = actionArg;
+    } else if (actionStr !== undefined && actionStr.includes("@")) {
+      const [cls, m] = actionStr.split("@") as [string, string];
+      action.cls = classRef(
+        resolveClass(cls.includes("\\") ? `\\${cls.replace(/^\\/, "")}` : cls),
+        verb.open,
+      );
+      action.method = m;
+    } else if (actionStr !== undefined && local.controller) {
+      action.cls = local.controller;
+      action.method = actionStr;
+    } else if (actionArg) {
+      const cls = classOf(actionArg);
+      if (cls) {
+        action.cls = cls;
+        action.method = "__invoke";
+      } else action.range = actionArg;
+    }
+    addRoute(methods, uri, local, fullName, stmt, action);
   };
 
   /** Statements from `from` to `to`, at file level (namespace blocks and `if` blocks included). */
@@ -1728,6 +2295,14 @@ function readPhp(
         k = end + 1;
         continue;
       }
+      // A route of a route file: a symbol linked to its action (see readRoute).
+      if (isRouteFile && isRouteStart(k)) {
+        const stop = statementEnd(k, to);
+        readRoute(k, stop, rootRoutes);
+        attrs = [];
+        k = stop + 1;
+        continue;
+      }
       // Any other statement: code that runs when the file is included. A block that is not an
       // `if` (a closure, a loop, an anonymous class) is read whole.
       let end = k;
@@ -1773,16 +2348,24 @@ function readPhp(
     );
   if (boots) {
     const base = dir.includes("/") ? dir.slice(0, dir.lastIndexOf("/")) : "";
-    const at = (rel: string) => `@root/${base ? `${base}/` : ""}${rel}`;
+    const at = (rel: string, load = false) =>
+      `@root${load ? "-load" : ""}/${base ? `${base}/` : ""}${rel}`;
+    // Loaded (only a change to their own code reaches the boot): route files, whose routes reach
+    // the tests that request them; migrations, translations, views; the providers list, whose
+    // providers it names. Used: configuration (it names classes the framework builds) and the
+    // classes Laravel discovers.
     for (const rel of [
       "bootstrap/providers.php",
-      "config/**/*.php",
       "routes/**/*.php",
       "database/migrations/**/*.php",
-      "database/seeders/**/*.php",
       "lang/**/*.php",
       "resources/lang/**/*.php",
       "resources/views/**/*.php",
+    ])
+      dynamicHints.push({ pattern: at(rel, true), line: 1, expr: "the Laravel application boot" });
+    for (const rel of [
+      "config/**/*.php",
+      "database/seeders/**/*.php",
       "app/Providers/**/*.php",
       "app/Listeners/**/*.php",
       "app/Policies/**/*.php",
@@ -1813,6 +2396,7 @@ function readPhp(
     topLevelRefs: [...mod.refs],
     topLevelUses: [...mod.uses],
     topLevelEscapes: [...mod.escapes],
+    ...(mod.resources.size ? { topLevelResources: [...mod.resources] } : {}),
     topLevelHash: hash(moduleCode.map((t) => t.v)),
     importsHash: hash(
       imports.map(

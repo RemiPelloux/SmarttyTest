@@ -15,12 +15,22 @@
  */
 import type { Confidence, GraphEdge, GraphNode, Provenance } from "@smarttest/shared";
 import { matchGlob } from "@smarttest/shared";
+import {
+  matchRequest,
+  parseRouteResource,
+  REQUEST,
+  REQUEST_NAME,
+  ROUTE_DEF,
+  ROUTE_NAME,
+  type RouteDefinition,
+} from "./http-routes.js";
 import { type RouteDef, routeMatches, routeUnder } from "./routes.js";
 
+export { matchRequest, pathMatches, type RouteDefinition } from "./http-routes.js";
 export { nextRoutes, type RouteDef, routeMatches, routeUnder } from "./routes.js";
 
 import type { FileAnalysis, SymbolRecord } from "@smarttest/source-parser";
-import { topLevelSymbols } from "@smarttest/source-parser";
+import { namesUsedBy, topLevelSymbols } from "@smarttest/source-parser";
 
 export const WHOLE = "*";
 const ANY = "@any";
@@ -107,7 +117,7 @@ interface Dep {
 type LocalTarget = { file: string; unit: string } | { file: string; namespace: true };
 
 /** Version of `serialize()` output; bump on any change to it or to how the graph is built. */
-export const GRAPH_FORMAT = 3;
+export const GRAPH_FORMAT = 4;
 
 interface SerializedGraph {
   format: number;
@@ -182,6 +192,7 @@ export class DependencyGraph {
     }
     this.build();
     this.linkRoutes();
+    this.linkHttpRoutes();
     this.linkProvided();
   }
 
@@ -222,6 +233,105 @@ export class DependencyGraph {
    * serve it (and their layouts and middleware). A spec whose visits cannot all be matched is
    * uncertain, so it is never ruled out.
    */
+  /** Files that define server routes or make requests to them (see http-routes.ts). */
+  private httpFiles: Set<string> | undefined;
+
+  private httpResourcesOf(a: FileAnalysis): string[] {
+    return [...(a.topLevelResources ?? []), ...a.symbols.flatMap((s) => s.resources ?? [])].filter(
+      (r) => r.startsWith(ROUTE_DEF) || r.startsWith(REQUEST),
+    );
+  }
+
+  /**
+   * Server routes (Laravel, preview): a request a test makes reaches the route definitions that
+   * can serve it, and through them the controller action; the test's forward set gets the files
+   * the route names, so uncertainty behind that action reaches the test. A request no read route
+   * serves is uncertainty for that test.
+   */
+  private linkHttpRoutes(): void {
+    const defs: RouteDefinition[] = [];
+    const requests = new Map<string, Set<string>>();
+    this.httpFiles = new Set();
+    for (const [file, a] of this.files) {
+      const all = [
+        ...(a.topLevelResources ?? []).map((r) => ({ r, unit: WHOLE })),
+        ...a.symbols.flatMap((s) =>
+          (s.resources ?? []).map((r) => ({
+            r,
+            unit: s.parent ? `${s.parent}.${s.name}` : s.qualifiedName,
+          })),
+        ),
+      ];
+      const byUnit = new Map<string, RouteDefinition>();
+      for (const { r, unit } of all) {
+        if (r.startsWith(`${ROUTE_NAME}`)) {
+          const d = byUnit.get(unit);
+          const m = /^http-route-name(~?):(.+)$/.exec(r);
+          if (d && m) {
+            d.names.push(m[2] as string);
+            if (m[1]) d.namesOpen = true;
+          }
+          this.httpFiles.add(file);
+          continue;
+        }
+        if (r.startsWith(ROUTE_DEF)) {
+          const parsed = parseRouteResource(r);
+          if (!parsed) continue;
+          const d: RouteDefinition = { file, unit, ...parsed, names: [], namesOpen: false };
+          byUnit.set(unit, d);
+          defs.push(d);
+          this.httpFiles.add(file);
+        } else if (r.startsWith(REQUEST)) {
+          const set = requests.get(r) ?? new Set();
+          set.add(file);
+          requests.set(r, set);
+          this.httpFiles.add(file);
+        }
+      }
+    }
+    if (!defs.length && !requests.size) return;
+    const reached = new Map<RouteDefinition, Set<string>>();
+    const targetsOf = (d: RouteDefinition): Set<string> => {
+      let out = reached.get(d);
+      if (out) return out;
+      out = new Set();
+      const sym = this.files.get(d.file)?.symbols.find((s) => s.qualifiedName === d.unit);
+      for (const n of sym ? namesUsedBy(sym) : []) {
+        const t = this.localTarget(d.file, n);
+        if (t && t.file !== d.file) out.add(t.file);
+      }
+      reached.set(d, out);
+      return out;
+    };
+    for (const [r, files] of requests) {
+      const hits = matchRequest(r, defs);
+      if (!hits.length) {
+        const what = r.startsWith(REQUEST_NAME)
+          ? `requests the route named ${r.slice(REQUEST_NAME.length + 1)}`
+          : `requests ${r.slice(REQUEST.length + 1)}`;
+        for (const f of files)
+          this.uncertainty.set(f, [
+            ...(this.uncertainty.get(f) ?? []),
+            `${what}, which no route SmartTest read serves`,
+          ]);
+        continue;
+      }
+      this.resourceKeys.add(r);
+      for (const d of hits) {
+        this.addDep(key(d.file, d.unit), {
+          from: key(RESOURCE, r),
+          kind: "REFERENCES",
+          provenance: "static",
+          confidence: "medium",
+        });
+        for (const f of files) {
+          const fwd = this.forward.get(f);
+          if (fwd) for (const t of targetsOf(d)) fwd.add(t);
+        }
+      }
+    }
+  }
+
   private linkRoutes(): void {
     const routes = this.options.routes ?? [];
     const pages = routes.filter((r) => r.kind === "page" || r.kind === "api");
@@ -675,6 +785,13 @@ export class DependencyGraph {
         ...a.symbols.flatMap((s) => s.resources ?? []),
       ].some((r) => r.startsWith("route:"));
       if (routeFile || visits || /(^|\/)main\.wasp\.(ts|js|mts)$/.test(f)) return false;
+      // Server routes and the requests that reach them are linked over the whole graph.
+      if (this.httpResourcesOf(a).length) return false;
+      if (!this.httpFiles) {
+        this.httpFiles = new Set();
+        for (const [g, b] of this.files) if (this.httpResourcesOf(b).length) this.httpFiles.add(g);
+      }
+      if (this.httpFiles.has(f)) return false;
     }
     if (this.contributionsPending) {
       this.contributionsPending = false;
@@ -708,6 +825,7 @@ export class DependencyGraph {
       const loaded = new Set(this.forward.get(f) ?? []);
       for (const imp of this.files.get(f)?.imports ?? [])
         if (imp.resolved) loaded.add(imp.resolved);
+      for (const t of this.files.get(f)?.dynamicLoads ?? []) loaded.add(t);
       for (const target of loaded) {
         const list = this.moduleDependents.get(target);
         if (list)
@@ -785,6 +903,13 @@ export class DependencyGraph {
         continue;
       }
       if (!imp.resolved) continue;
+      // Loaded, not used (a route file): only a change to its module-level code reaches this file.
+      if (imp.load) {
+        const list = this.moduleDependents.get(imp.resolved);
+        if (list) list.push(key(file, WHOLE));
+        else this.moduleDependents.set(imp.resolved, [key(file, WHOLE)]);
+        continue;
+      }
       fwd.add(imp.resolved);
       if (imp.missing) this.deletedFiles.add(imp.resolved);
       if (!imp.typeOnly) {
@@ -805,6 +930,11 @@ export class DependencyGraph {
         provenance: "static",
         confidence: imp.kind === "dynamic" || imp.kind === "mock" ? "medium" : "high",
       });
+    }
+    for (const target of a.dynamicLoads ?? []) {
+      const list = this.moduleDependents.get(target);
+      if (list) list.push(key(file, WHOLE));
+      else this.moduleDependents.set(target, [key(file, WHOLE)]);
     }
     for (const d of a.dynamicUnmatched ?? [])
       unc.push(`dynamic import matched no project file (${d})`);
