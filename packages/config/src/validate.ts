@@ -53,7 +53,7 @@ const TOP_KEYS: Record<string, string[] | null> = {
   python: ["enabled", "interpreter"],
   php: ["enabled", "binary"],
   cache: null,
-  hook: ["checks", "budgetMs", "runners", "exclude"],
+  hook: ["checks", "budgetMs", "runners", "exclude", "trailer"],
   parallelGroups: null,
   plugins: null,
   projects: null,
@@ -254,6 +254,8 @@ export function validateConfig(raw: unknown): { errors: ConfigIssue[]; warnings:
       }
       if (h.exclude !== undefined && !isStrArr(h.exclude))
         err("hook.exclude", "must be an array of glob strings");
+      if (h.trailer !== undefined && typeof h.trailer !== "boolean")
+        err("hook.trailer", "must be true or false");
       if (h.checks !== undefined) {
         if (!Array.isArray(h.checks)) err("hook.checks", "must be an array");
         else

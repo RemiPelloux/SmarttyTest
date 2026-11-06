@@ -36,6 +36,13 @@ describe("validateConfig", () => {
       "hook.runners",
     ]);
   });
+
+  it("validates hook.trailer", () => {
+    expect(validateConfig({ hook: { trailer: true } }).errors).toEqual([]);
+    expect(validateConfig({ hook: { trailer: "yes" } }).errors.map((e) => e.path)).toEqual([
+      "hook.trailer",
+    ]);
+  });
 });
 
 describe("loadConfig", () => {

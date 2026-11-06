@@ -128,6 +128,7 @@ export function resolveConfig(config: SmartTestConfig = {}): ResolvedConfig {
       budgetMs: config.hook?.budgetMs ?? 60_000,
       ...(config.hook?.runners ? { runners: config.hook.runners } : {}),
       exclude: config.hook?.exclude ?? [],
+      trailer: config.hook?.trailer ?? false,
     },
     plugins: config.plugins ?? [],
     timeoutMs: config.timeoutMs ?? 10 * 60_000,

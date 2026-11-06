@@ -103,6 +103,12 @@ export interface HookConfig {
    * matches are reported as left to CI, never as passed. `run` and `ci` are not affected.
    */
   exclude?: string[];
+  /**
+   * Adds a `Tests:` trailer to each commit message with what the pre-commit run did (default
+   * false). `smarttest hook install` then adds a `commit-msg` step. A commit whose staged tree has
+   * no passing pre-commit record gets no trailer.
+   */
+  trailer?: boolean;
 }
 
 /** Conventions of one sub-project (a directory), overriding the top-level settings inside it. */
@@ -210,6 +216,7 @@ export interface ResolvedConfig {
     /** Undefined: the hook runs every runner. */
     runners?: AdapterId[];
     exclude: string[];
+    trailer: boolean;
   };
   plugins: string[];
   timeoutMs: number;
