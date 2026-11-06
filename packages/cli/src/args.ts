@@ -40,6 +40,7 @@ export const OPTIONS = {
   bail: { type: "boolean" },
   annotations: { type: "string" },
   "no-annotations": { type: "boolean" },
+  live: { type: "boolean" },
   total: { type: "string" },
   index: { type: "string" },
   "min-rate": { type: "string" },

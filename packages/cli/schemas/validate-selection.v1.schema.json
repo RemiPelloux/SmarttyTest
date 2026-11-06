@@ -45,6 +45,14 @@
         "required": ["test", "note"]
       }
     },
+    "live": {
+      "description": "Live Playwright specs (a deployed environment) the reference run did not run without --live: neither found nor missed, never passed.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["file", "projects", "baseURL"]
+      }
+    },
     "flakyInterference": {
       "type": "array",
       "items": {

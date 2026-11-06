@@ -8,7 +8,7 @@ import { CypressAdapter } from "@smarttest/adapter-cypress";
 import { JestAdapter } from "@smarttest/adapter-jest";
 import { NodeTestAdapter } from "@smarttest/adapter-node";
 import { PhpUnitAdapter } from "@smarttest/adapter-phpunit";
-import { PlaywrightAdapter } from "@smarttest/adapter-playwright";
+import { liveSpecs, PlaywrightAdapter } from "@smarttest/adapter-playwright";
 import { PytestAdapter, UnittestAdapter } from "@smarttest/adapter-python";
 import { VitestAdapter } from "@smarttest/adapter-vitest";
 import {
@@ -36,6 +36,7 @@ import { SnapshotStore } from "@smarttest/native-snapshots";
 import { detectProject, type ProjectProfile } from "@smarttest/project-detector";
 import {
   type FileExecution,
+  type LiveSpecReport,
   newRunId,
   overallStatus,
   type RunReport,
@@ -101,11 +102,14 @@ import {
   planHookInstall,
   planHookUninstall,
   planMigrate,
+  planTrailerInstall,
+  planTrailerUninstall,
   planUninstall,
   renderSetupReport,
   rollback,
   type SetupPlan,
   suggestHookRunners,
+  type TrailerPlan,
 } from "@smarttest/smart-init";
 import type { FileAnalysis, ModuleResolver } from "@smarttest/source-parser";
 import { LOCALE_PATH } from "@smarttest/source-parser";
@@ -141,6 +145,7 @@ import {
 import { decodeDecisionRecord, encodeDecisionRecord } from "./decision-store.js";
 import { FOREIGN_STATE, GraphStore, surfaceOf } from "./graph-store.js";
 import {
+  addCommitTrailer,
   assertPushIsHead,
   type CheckResult,
   commitsWithoutHook,
@@ -375,6 +380,11 @@ export interface RunOptions extends AnalyzeOptions {
    * and are reported as left to CI. Internal to `runHook`; `run` and `ci` never set it.
    */
   hookScope?: boolean;
+  /**
+   * Run live Playwright specs too (`--live`): specs whose projects only target a remote
+   * environment. Without it they stay selected and are reported as "live, not run".
+   */
+  live?: boolean;
   /** Reuse an analysis computed by the caller (benchmark) instead of analysing again. */
   analysis?: Analysis;
   /**
@@ -416,6 +426,8 @@ export interface DoctorFinding {
 }
 
 export interface SelectionValidation {
+  /** Live specs (remote baseURL) the reference run did not run: not found, not missed, not passed. */
+  live?: LiveSpecReport[];
   selected: number;
   skipped: number;
   failuresFound: string[];
@@ -2007,7 +2019,14 @@ export class SmartTest {
       outcome.exitCode === ExitCode.Success && checks.every((c) => c.status === "passed");
     const tree = await treeOf(this.root, stage);
     const left = outcome.report.leftToCi ?? [];
+    const live = outcome.report.live ?? [];
     const scope = describeScope(active.hook);
+    // What the commit trailer reports: files executed, files not executed (skipped by selection
+    // or reused from the cache) and their recorded test time.
+    const cached = outcome.report.executions
+      .filter((e) => e.status === "cached-pass")
+      .map((e) => e.file);
+    const notRun = [...outcome.report.decision.skippedTests.map((t) => t.filePath), ...cached];
     records.runs.push({
       at: new Date().toISOString(),
       stage,
@@ -2015,8 +2034,12 @@ export class SmartTest {
       selected: outcome.report.decision.selectedTests.length,
       passed,
       ...(left.length ? { leftToCi: left.length } : {}),
+      ...(live.length ? { live: live.length } : {}),
       ...(scope.length ? { scope } : {}),
       ...(tree ? { tree } : {}),
+      executed: outcome.report.executions.length - cached.length,
+      notRun: notRun.length,
+      savedMs: Math.round(notRun.reduce((a, f) => a + (durations[f] ?? 0), 0)),
     });
     await saveHookRecords(this.storeDir, records);
     return {
@@ -2036,6 +2059,16 @@ export class SmartTest {
         : {}),
       durationMs,
     };
+  }
+
+  /**
+   * `smarttest hook trailer <file>`, the `commit-msg` step: adds the `Tests:` trailer when
+   * `hook.trailer` is on and a passing pre-commit record matches the tree being committed.
+   * Returns the trailer written, if any. Never throws: a trailer never blocks a commit.
+   */
+  async commitTrailer(messageFile: string): Promise<string | undefined> {
+    if (!this.config.hook.trailer) return undefined;
+    return addCommitTrailer(this.root, this.storeDir, messageFile);
   }
 
   /** `smarttest hook status` details: recent hook durations, bypasses, commits made without it. */
@@ -2440,6 +2473,46 @@ export class SmartTest {
 
   // ── Run ─────────────────────────────────────────────────────────────────────────────────
 
+  /**
+   * The Playwright specs among `files` that only target a remote environment (live): every
+   * Playwright project that runs them has an `https://` baseURL that is not local, or depends on
+   * one that does. Read from each Playwright runner's resolved config. A config that cannot be
+   * read gives no live spec (they run, as before) and a warning: when unsure, the test runs.
+   */
+  async liveSpecs(
+    analysis: Pick<Analysis, "assignment">,
+    files: readonly string[],
+  ): Promise<{ live: LiveSpecReport[]; warnings: string[] }> {
+    const byRoot = new Map<string, { root: RunnerRoot; files: Set<string> }>();
+    for (const f of files) {
+      const root = analysis.assignment.get(f);
+      if (root?.adapter !== "playwright") continue;
+      const key = rootKey(root);
+      const entry = byRoot.get(key) ?? { root, files: new Set<string>() };
+      entry.files.add(f);
+      byRoot.set(key, entry);
+    }
+    const live: LiveSpecReport[] = [];
+    const warnings: string[] = [];
+    for (const { root, files: mine } of byRoot.values()) {
+      try {
+        const adapter = this.createAdapter({
+          adapter: "playwright",
+          dir: root.dir,
+          files: [],
+          ...(root.configFile ? { configFile: root.configFile } : {}),
+        } as Group) as PlaywrightAdapter;
+        for (const spec of liveSpecs(await adapter.projects()))
+          if (mine.has(spec.file)) live.push(spec);
+      } catch (error) {
+        warnings.push(
+          `Playwright (${root.dir || "."}): its projects could not be read, so no spec is treated as live and every selected spec runs: ${(error as Error).message.split("\n")[0]}`,
+        );
+      }
+    }
+    return { live: live.sort((a, b) => a.file.localeCompare(b.file)), warnings };
+  }
+
   /** Adapter for a runner group (used by the history benchmark). */
   createAdapterFor(
     group: Group & { configFile?: string; patterns?: string[]; project?: string },
@@ -2599,11 +2672,25 @@ export class SmartTest {
         )
       : [];
     const leftFiles = new Set(leftToCi.map((l) => l.file));
-    const toRun = analysis.decision.selectedTests.filter((t) => !leftFiles.has(t.filePath));
     if (leftToCi.length)
       warnings.push(
         `${leftToCi.length} selected test file(s) not run in the hook (left to CI) by ${[...new Set(leftToCi.map((l) => l.rule))].join(", ")} — \`smarttest run\` and \`smarttest ci\` run them`,
       );
+    // Live specs: selected Playwright specs whose projects only target a deployed environment.
+    // They stay selected and are reported as live, not run; never passed, never dropped.
+    const { live, warnings: liveWarnings } = options.live
+      ? { live: [] as LiveSpecReport[], warnings: [] as string[] }
+      : await this.liveSpecs(
+          analysis,
+          analysis.decision.selectedTests.map((t) => t.filePath).filter((f) => !leftFiles.has(f)),
+        );
+    warnings.push(...liveWarnings);
+    if (live.length)
+      warnings.push(
+        `${live.length} selected Playwright spec(s) target a deployed environment (${[...new Set(live.map((l) => l.baseURL))].join(", ")}) and were not run (live) — \`--live\` runs them`,
+      );
+    const notRunFiles = new Set([...leftFiles, ...live.map((l) => l.file)]);
+    const toRun = analysis.decision.selectedTests.filter((t) => !notRunFiles.has(t.filePath));
     // Validated result cache: a passing result is reused only while every input is unchanged.
     const history = await loadHistory(this.storeDir);
     const useCache = (options.cache ?? this.config.cache) && !options.all && !options.coverage;
@@ -2741,6 +2828,7 @@ export class SmartTest {
         options.all &&
         !options.shard &&
         !leftToCi.length &&
+        !live.length &&
         !uncollected.length &&
         summary.files.every((f) => f.status !== "cancelled" && f.status !== "infrastructure-error")
           ? "full"
@@ -2777,10 +2865,10 @@ export class SmartTest {
     ].sort((a, b) => a.file.localeCompare(b.file));
     // Record fresh passing results in the cache and every fresh result in the history. Per-test
     // state of files that no longer exist (deleted, renamed tests) is dropped: it only grows.
-    let live: Set<string> | undefined;
+    let existing: Set<string> | undefined;
     const liveFiles = () => {
-      live ??= new Set([...analysis.testFiles, ...analysis.index.entries().keys()]);
-      return live;
+      existing ??= new Set([...analysis.testFiles, ...analysis.index.entries().keys()]);
+      return existing;
     };
     if (resultCache) {
       for (const f of summary.files) {
@@ -2830,6 +2918,7 @@ export class SmartTest {
       analysis.testFiles.length > 0 &&
       !cachedExecutions.length &&
       !leftToCi.length &&
+      !live.length &&
       !uncollected.length &&
       !options.shard &&
       fullSuiteMeasured(summary, { bail: !!options.bail, aborted: !!options.signal?.aborted });
@@ -2860,8 +2949,9 @@ export class SmartTest {
       },
       decision: stripDetails(analysis.decision),
       executions,
-      summary: summarize(analysis.decision, executions, durationMs, leftToCi.length),
+      summary: summarize(analysis.decision, executions, durationMs, leftToCi.length, live.length),
       ...(leftToCi.length ? { leftToCi } : {}),
+      ...(live.length ? { live } : {}),
       ...(coverage
         ? {
             coverage: {
@@ -2902,6 +2992,7 @@ export class SmartTest {
       !analysis.scope &&
       !options.shard &&
       !leftToCi.length &&
+      !live.length &&
       (analysis.input.changeSet.provider === "native" ||
         (this.config.vcs.snapshots && !options.source))
     ) {
@@ -3379,10 +3470,23 @@ export class SmartTest {
     return plan;
   }
 
-  /** Plans `smarttest hook install`. */
+  /**
+   * Plans `smarttest hook install`. With `hook.trailer` on, the pre-commit plan also carries the
+   * `commit-msg` step that adds the trailer (`trailer`); when both go into one file
+   * (simple-git-hooks, lefthook), the pre-commit plan holds both changes.
+   */
   async hookInstallPlan(
     options: { manager?: HookManager; replace?: boolean; stage?: HookStage } = {},
-  ): Promise<HookPlan> {
+  ): Promise<HookPlan & { trailer?: TrailerPlan }> {
+    const plan = await this.testHookPlan(options);
+    return this.withTrailer(plan, options);
+  }
+
+  private async testHookPlan(options: {
+    manager?: HookManager;
+    replace?: boolean;
+    stage?: HookStage;
+  }): Promise<HookPlan> {
     // A repository whose hooks CaptainHook manages: SmartTest's action goes in captainhook.json.
     if (!options.manager || options.manager === "captainhook") {
       const stage = options.stage ?? "pre-commit";
@@ -3411,6 +3515,50 @@ export class SmartTest {
     return planHookInstall(this.root, { ...options, testCommands: profile.testCommands });
   }
 
+  /** Adds the commit trailer's commit-msg step to a pre-commit plan when `hook.trailer` is on. */
+  private async withTrailer(
+    plan: HookPlan,
+    options: { manager?: HookManager; stage?: HookStage },
+  ): Promise<HookPlan & { trailer?: TrailerPlan }> {
+    if (!this.config.hook.trailer || (options.stage ?? "pre-commit") !== "pre-commit") return plan;
+    const pending = new Map<string, string>();
+    if (plan.plan.action !== "skip" && plan.plan.after !== undefined)
+      pending.set(plan.plan.path, plan.plan.after);
+    const manager = plan.manager === "captainhook" ? "captainhook" : options.manager;
+    const trailer = await planTrailerInstall(this.root, {
+      ...(manager ? { manager } : {}),
+      pending,
+    });
+    if (trailer.plan.action === "skip" || trailer.plan.path !== plan.plan.path)
+      return { ...plan, trailer };
+    // One file for both steps: one write, holding both.
+    const before = plan.plan.action === "skip" ? trailer.plan.before : plan.plan.before;
+    const merged: FilePlan = {
+      ...plan.plan,
+      action: plan.plan.action === "skip" ? trailer.plan.action : plan.plan.action,
+      reason:
+        plan.plan.action === "skip"
+          ? trailer.plan.reason
+          : `${plan.plan.reason}; ${trailer.plan.reason}`,
+      after: trailer.plan.after as string,
+    };
+    if (before !== undefined) merged.before = before;
+    else delete merged.before;
+    return {
+      ...plan,
+      plan: merged,
+      trailer: {
+        ...trailer,
+        plan: {
+          path: trailer.plan.path,
+          action: "skip",
+          reason: `written with the pre-commit step in ${trailer.plan.path}`,
+          risk: "medium",
+        },
+      },
+    };
+  }
+
   /**
    * The hook scope to propose (`hook.runners`) when browser runners (Playwright, Cypress) sit next
    * to a unit runner and no scope is configured; undefined otherwise.
@@ -3428,7 +3576,26 @@ export class SmartTest {
     const plans = await planHookUninstall(this.root, manager, stages);
     if (!manager || manager === "captainhook") {
       const captain = await planCaptainHookUninstall(this.root);
-      if (captain) plans.push(captain);
+      if (captain) {
+        // The trailer's commit-msg action is in the same file: one plan removes both.
+        const both = plans.findIndex((p) => p.path === captain.path);
+        if (
+          both >= 0 &&
+          captain.after !== undefined &&
+          (!stages || stages.includes("pre-commit"))
+        ) {
+          const after = (
+            await planTrailerUninstall(
+              this.root,
+              "captainhook",
+              new Map([[captain.path, captain.after]]),
+            )
+          ).get(captain.path);
+          plans.splice(both, 1);
+          if (after !== undefined) captain.after = after;
+        }
+        plans.push(captain);
+      }
     }
     return plans;
   }
@@ -4147,13 +4314,20 @@ export class SmartTest {
   // ── Validate selection ──────────────────────────────────────────────────────────────────
 
   async validateSelection(
-    options: AnalyzeOptions & { signal?: AbortSignal; timeoutMs?: number } = {},
+    options: AnalyzeOptions & { signal?: AbortSignal; timeoutMs?: number; live?: boolean } = {},
   ): Promise<SelectionValidation> {
     const t0 = performance.now();
     const analysis = await this.analyze(options);
     const analysisOverheadMs = performance.now() - t0;
+    // Live specs (a deployed environment) are not run by the reference run either, unless asked:
+    // they are neither a failure found nor a failure missed, and are listed as not run.
+    const { live, warnings: liveWarnings } = options.live
+      ? { live: [] as LiveSpecReport[], warnings: [] as string[] }
+      : await this.liveSpecs(analysis, analysis.testFiles);
+    analysis.decision.warnings.push(...liveWarnings);
+    const liveFiles = new Set(live.map((l) => l.file));
     const plan = planExecution(
-      analysis.testFiles,
+      analysis.testFiles.filter((f) => !liveFiles.has(f)),
       analysis.runnerRoots,
       this.config.adapters,
       analysis.assignment,
@@ -4200,6 +4374,7 @@ export class SmartTest {
           )
         : 0,
       decision: analysis.decision,
+      ...(live.length ? { live } : {}),
     };
   }
 

@@ -1,0 +1,20 @@
+{
+  "runners": ["playwright"],
+  "vcs": "git",
+  "testFiles": 5,
+  "live": ["e2e/live/greeting.live.spec.js", "e2e/setup/live.setup.js"],
+  "mutations": [
+    {
+      "file": "lib/greeting.js",
+      "find": "`Hello, ${name}`",
+      "replace": "`Hi, ${name}`",
+      "expectFailing": ["e2e/local/greeting.spec.js"]
+    },
+    {
+      "file": "lib/status.js",
+      "find": "ok: true",
+      "replace": "ok: false",
+      "expectFailing": ["e2e/local/status.spec.js"]
+    }
+  ]
+}

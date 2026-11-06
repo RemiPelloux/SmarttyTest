@@ -81,6 +81,7 @@ export const COMMANDS: Record<string, CommandHelp> = {
       "--no-cache  run tests even when a validated cached pass exists",
       "--shard i/n  run shard i of n (balanced by recorded durations)",
       "--bail  stop starting runner groups after one fails",
+      "--live  also run live Playwright specs (projects whose baseURL is a deployed https:// environment); without it they are reported as live, not run",
       "--format f  report format, repeatable: html, json, junit, markdown (default from config)",
       "--open  open the HTML report afterwards",
       "-o, --output <dir>  write the reports to this directory",
@@ -102,10 +103,12 @@ export const COMMANDS: Record<string, CommandHelp> = {
   },
   "validate-selection": {
     summary: "Compare the selection against a full reference run",
-    usage: "smarttest validate-selection [--base <ref>] [--runner <name>] [--mode m] [--json]",
+    usage:
+      "smarttest validate-selection [--base <ref>] [--runner <name>] [--mode m] [--live] [--json]",
     flags: [
       "--mode fast|balanced|safe  safety mode of the selection being validated",
       "--runner <name>  compare only this runner's tests (repeatable), e.g. leave Playwright out",
+      "--live  the reference run also runs live Playwright specs (a deployed environment); without it they are listed as live, not run",
     ],
     changes: true,
   },
@@ -113,11 +116,12 @@ export const COMMANDS: Record<string, CommandHelp> = {
     summary:
       "Measure selection instead of trusting it: inject faults, check traces and import resolution",
     usage:
-      "smarttest audit [--mutate [--mutants n] [--seed n] [--budget ms] [--runner <name>]] [--traces [--sample n]] [--resolution] [--json] [-o file.md]",
+      "smarttest audit [--mutate [--mutants n] [--seed n] [--budget ms] [--runner <name>] [--live]] [--traces [--sample n]] [--resolution] [--json] [-o file.md]",
     flags: [
       "--mutate  break one function at a time (it throws) in a temporary checkout of HEAD, select, run the full suite: a failing test that was not selected is a missed test",
       "--mutants n  how many functions to break (default 10), sampled with --seed (default 1)",
       "--budget ms  stop starting new mutants after this time",
+      "--live  with --mutate: also run live Playwright specs (a deployed environment); left out by default",
       "--runner <name>  with --mutate or --traces: only this runner's tests (repeatable); default: the hook's runners (hook.runners) when set, `--runner all` for every runner",
       "--traces  every project file a test loaded at run time must reach that test in the graph (traces the tests first when none are stored)",
       "--sample n  with --traces and no stored traces: trace at most n test files",
@@ -129,7 +133,7 @@ export const COMMANDS: Record<string, CommandHelp> = {
     summary:
       "Replay recent commits: full run vs project-gated run vs SmartTest, with missed failures checked",
     usage:
-      "smarttest benchmark [--commits n | --since <ref>] [--sample n] [--resume] [--traces] [--runner <name>] [--mode m] [--json] [-o file.md]",
+      "smarttest benchmark [--commits n | --since <ref>] [--sample n] [--resume] [--traces] [--runner <name>] [--mode m] [--live] [--json] [-o file.md]",
     flags: [
       "--commits n  how many recent commits to replay (default 10)",
       "--since <ref>  replay every first-parent commit after <ref>",
@@ -139,6 +143,7 @@ export const COMMANDS: Record<string, CommandHelp> = {
       "--mode fast|balanced|safe  safety mode of the replayed selections",
       "--runner <name>  only this runner's tests (repeatable); default: the hook's runners (hook.runners) when set, `--runner all` for every runner",
       "--no-cache  never reuse cached passes while replaying",
+      "--live  also replay live Playwright specs (a deployed environment); left out of both runs by default",
       "-o, --output <file.md>  also write the Markdown report there",
     ],
   },
@@ -207,7 +212,7 @@ export const COMMANDS: Record<string, CommandHelp> = {
       "--base, --staged and --uncommitted are refused: ci picks the base itself (use `smarttest run` to choose one)",
       "--all  run the full suite",
       "--dry-run  print the provider and the base without running tests",
-      "the execution flags of `smarttest run` also apply (--coverage, --retries, --timeout, --workers, --shard, --bail, --no-cache, --format, -o)",
+      "the execution flags of `smarttest run` also apply (--coverage, --retries, --timeout, --workers, --shard, --bail, --no-cache, --live, --format, -o)",
       "GitHub Actions, GitLab CI and Bitbucket Pipelines: the selection is annotated on the pull request with each reason, with a summary and the time saved (--no-annotations turns it off, --annotations <provider> forces one)",
     ],
   },
@@ -217,6 +222,8 @@ export const COMMANDS: Record<string, CommandHelp> = {
     usage:
       "smarttest hook install | uninstall | status [--pre-push] [--replace] [--manager m] [--dry-run] [--yes]",
     flags: [
+      "install with `hook.trailer: true` also adds a commit-msg step (husky, lefthook, simple-git-hooks, CaptainHook or .git/hooks) that runs `smarttest hook trailer <file>`; uninstall removes it",
+      "hook trailer <file>  add the Tests: trailer to a commit message from the passing pre-commit run of the committed tree; nothing when there is none (never fails)",
       "--pre-push  install/status/uninstall the pre-push hook (default install: pre-commit)",
       "--replace  comment out existing related/full-suite test steps (uninstall restores them)",
       "--manager m  husky, lefthook, simple-git-hooks or git (default: detected)",

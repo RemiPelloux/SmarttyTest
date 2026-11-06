@@ -40,6 +40,8 @@ export interface CommitBenchmark {
   observedSkips?: number;
   /** Selected test files answered from the result cache. */
   cachedTests?: number;
+  /** Live specs (remote baseURL) that neither run replayed (`--live` runs them). */
+  live?: number;
   /** Cached passes that failed in the full run of the same commit (must be 0). */
   cacheViolations?: string[];
   /**
@@ -92,6 +94,11 @@ export interface BenchmarkOptions {
    * what the hook runs. `["all"]`: every runner.
    */
   runners?: readonly string[];
+  /**
+   * Run live Playwright specs (a remote baseURL) in the full and the selected runs (`--live`).
+   * Without it they are left out of both and counted as live, not run.
+   */
+  live?: boolean;
   configPath?: string;
   onProgress?: (message: string) => void;
 }
@@ -222,8 +229,14 @@ export async function benchmarkHistory(
       const analysisMs = Object.values(analysis.timings).reduce((a, b) => a + b, 0);
       const create = (g: Parameters<SmartTest["createAdapterFor"]>[0]) =>
         engine.createAdapterFor(g);
+      // Live specs target a deployed environment: neither run replays them unless asked.
+      const live = options.live
+        ? []
+        : (await engine.liveSpecs(analysis, analysis.testFiles)).live.map((l) => l.file);
+      if (live.length) progress(`  ${live.length} live spec(s) not run (--live runs them)`);
+      const liveSet = new Set(live);
       const fullPlan = planExecution(
-        analysis.testFiles,
+        analysis.testFiles.filter((f) => !liveSet.has(f)),
         analysis.runnerRoots,
         engine.config.adapters,
         analysis.assignment,
@@ -257,6 +270,7 @@ export async function benchmarkHistory(
           source: { kind: "base", ref: `${c.sha}^`, direct: true, target: c.sha },
           formats: [],
           ...(options.cache === false ? { cache: false } : {}),
+          ...(options.live ? { live: true } : {}),
         }),
       );
       const fullStatus = new Map(full.files.map((f) => [f.file, f.status]));
@@ -342,6 +356,7 @@ export async function benchmarkHistory(
           : {}),
         ...(cached.length ? { cachedTests: cached.length } : {}),
         ...(cacheViolations.length ? { cacheViolations } : {}),
+        ...(live.length ? { live: live.length } : {}),
         precision,
       });
       await options.onCommit?.(results);

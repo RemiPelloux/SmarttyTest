@@ -319,6 +319,12 @@ importers:
 
   fixtures/projects/node-test-esm: {}
 
+  fixtures/projects/playwright-live:
+    devDependencies:
+      '@playwright/test':
+        specifier: 1.56.1
+        version: 1.56.1
+
   fixtures/projects/plugin-edges-vitest:
     devDependencies:
       vitest:

@@ -199,6 +199,7 @@ async function cmdHookRun(ctx: Ctx): Promise<number> {
     const result = await st.runHook(stage, {
       ...(mode ? { mode } : {}),
       ...(flags["no-cache"] ? { cache: false } : {}),
+      ...(flags.live ? { live: true } : {}),
       ...(timeoutMs !== undefined ? { timeoutMs } : {}),
       ...(workers !== undefined ? { workers } : {}),
       signal: ac.signal,
@@ -263,13 +264,20 @@ async function cmdHookRun(ctx: Ctx): Promise<number> {
           for (const l of left.files.slice(0, 10)) ctx.out(`  ${l.file} (${l.adapter})`);
           if (left.files.length > 10) ctx.out(`  … ${left.files.length - 10} more`);
         }
+        const live = out.report.live ?? [];
+        if (live.length) {
+          ctx.out(`${live.length} selected, live, not run (they target a deployed environment):`);
+          for (const l of live.slice(0, 10)) ctx.out(`  ${l.file} (${l.baseURL})`);
+          if (live.length > 10) ctx.out(`  … ${live.length - 10} more`);
+        }
         const s = out.report.summary;
         ctx.out(
-          `${s.passed} passed · ${s.failed + s.timedOut} failed · ${s.cached ?? 0} cached (not run) · ${left ? `${left.count} left to CI (not run) · ` : ""}${s.skippedBySelection} skipped (not run) · ${formatDuration(result.durationMs)}`,
+          `${s.passed} passed · ${s.failed + s.timedOut} failed · ${s.cached ?? 0} cached (not run) · ${left ? `${left.count} left to CI (not run) · ` : ""}${live.length ? `${live.length} live (not run) · ` : ""}${s.skippedBySelection} skipped (not run) · ${formatDuration(result.durationMs)}`,
         );
-        // The left-to-CI list is printed above; its summary warning would repeat it.
+        // The left-to-CI and live lists are printed above; their summary warnings would repeat them.
         for (const w of out.report.warnings
           .filter((w) => !left || !w.includes("not run in the hook (left to CI)"))
+          .filter((w) => !live.length || !w.includes("were not run (live)"))
           .slice(0, 4))
           ctx.out(w);
         ctx.out("Why: smarttest explain <test>");
@@ -341,6 +349,7 @@ async function cmdRun(ctx: Ctx): Promise<number> {
       ...(flags["no-cache"] ? { cache: false } : {}),
       ...(shard ? { shard } : {}),
       ...(flags.bail ? { bail: true } : {}),
+      ...(flags.live ? { live: true } : {}),
       coverage: !!flags.coverage,
       ...(retries !== undefined ? { retries } : {}),
       ...(timeoutMs !== undefined ? { timeoutMs } : {}),
@@ -503,6 +512,10 @@ function printRun(ctx: Ctx, report: RunReport, written: Record<string, string>):
     }
   }
   const s = report.summary;
+  for (const l of report.live ?? [])
+    ctx.out(
+      `  ${t.yellow("◌")} ${pad(l.file, width)}${t.dim(`live, not run · ${l.projects.join(", ")} → ${l.baseURL}`)}`,
+    );
   if (s.skippedBySelection)
     ctx.out(
       `  ${t.skip("SKIPPED")}   ${s.skippedBySelection} test file${s.skippedBySelection === 1 ? "" : "s"} · not run · no static dependency on the change`,
@@ -515,6 +528,7 @@ function printRun(ctx: Ctx, report: RunReport, written: Record<string, string>):
     failed ? t.red(`${failed} failed`) : "0 failed",
     ...(s.flaky ? [t.yellow(`${s.flaky} flaky`)] : []),
     ...(s.cached ? [t.cyan(`${s.cached} cached (not run)`)] : []),
+    ...(s.live ? [t.yellow(`${s.live} live (not run)`)] : []),
     ...(s.infrastructureErrors ? [t.red(`${s.infrastructureErrors} infrastructure error(s)`)] : []),
     `${s.skippedBySelection} skipped (not run)`,
     formatDuration(s.durationMs),
@@ -787,6 +801,7 @@ async function cmdValidate(ctx: Ctx): Promise<number> {
       ...(source ? { source } : {}),
       ...(mode ? { mode } : {}),
       ...(flags.runner?.length ? { runners: flags.runner } : {}),
+      ...(flags.live ? { live: true } : {}),
     })
     .finally(() => spinner.stop());
   if (flags.json) ctx.json("validate-selection", v);
@@ -803,6 +818,10 @@ async function cmdValidate(ctx: Ctx): Promise<number> {
     for (const m of v.failuresMissed) ctx.out(`    ${t.red("✕")} ${m.test} ${t.dim(m.note)}`);
     if (v.flakyInterference.length)
       ctx.out(`  Flaky interference  ${t.yellow(v.flakyInterference.join(", "))}`);
+    if (v.live?.length)
+      ctx.out(
+        `  Live, not run       ${t.yellow(String(v.live.length))}  ${t.dim("(remote baseURL; --live runs them)")}`,
+      );
     ctx.out(`  Full suite          ${formatDuration(v.fullDurationMs)}`);
     ctx.out(
       `  Selected share      ${formatDuration(v.selectedDurationMs)} + analysis ${formatDuration(v.analysisOverheadMs)}`,
@@ -1297,8 +1316,41 @@ async function cmdCi(ctx: Ctx): Promise<number> {
   return cmdRun({ ...ctx, interactive: false });
 }
 
+/**
+ * `smarttest hook trailer <message file>`: the commit-msg step of `hook.trailer`. Adds the
+ * `Tests:` trailer when a passing pre-commit record matches the committed tree, else nothing. It
+ * never fails a commit: any error (no config, no Git, no record) leaves the message as it is.
+ */
+async function cmdHookTrailer(ctx: Ctx): Promise<number> {
+  const file = ctx.positionals[1];
+  if (!file)
+    throw new SmartTestError("hook trailer needs the commit message file", {
+      code: "ST_USAGE",
+      category: "usage",
+      hint: 'It is the commit-msg hook\'s first argument: smarttest hook trailer "$1"',
+    });
+  try {
+    const { existsSync } = await import("node:fs");
+    // Git passes the file relative to the top-level; a project in a subdirectory runs from there.
+    let path = resolve(ctx.root, file);
+    if (!existsSync(path) && !isAbsolute(file)) {
+      const { runProcess } = await import("@smarttest/shared");
+      const top = await runProcess("git", ["rev-parse", "--show-toplevel"], { cwd: ctx.root });
+      if (top.code === 0) path = resolve(top.stdout.trim(), file);
+    }
+    if (!existsSync(path)) return ExitCode.Success;
+    const st = await ctx.open();
+    const trailer = await st.commitTrailer(path);
+    if (trailer && !ctx.flags.quiet && !ctx.flags.json) ctx.err(ctx.t.dim(`smarttest: ${trailer}`));
+  } catch {
+    // A trailer never blocks a commit.
+  }
+  return ExitCode.Success;
+}
+
 async function cmdHook(ctx: Ctx): Promise<number> {
   const { t, flags } = ctx;
+  if (ctx.positionals[0] === "trailer") return cmdHookTrailer(ctx);
   const st = await ctx.open();
   const sub = ctx.positionals[0] ?? "status";
   const manager = flags.manager as
@@ -1357,6 +1409,10 @@ async function cmdHook(ctx: Ctx): Promise<number> {
           ctx.out(
             `  ${pad("Scope", 12)}every runner, including browser specs · to leave them to CI: hook: { runners: [${suggestedScope.map((a) => `"${a}"`).join(", ")}] }`,
           );
+        if (st.config.hook.trailer)
+          ctx.out(
+            `  ${pad("Trailer", 12)}${plan.trailer?.installed ? t.green("installed") : t.yellow("not installed")} · commit-msg in ${plan.trailer?.file ?? "?"}${plan.trailer?.installed ? "" : t.dim(" (smarttest hook install adds it)")}`,
+          );
         if ((plan.installed || other.installed) && !history.installedLocally)
           ctx.out("  SmartTest executable missing: install the project's dependencies.");
         for (const b of history.bypasses) ctx.out(`  Bypass ${b.at}: ${b.stage} ${b.reason}`);
@@ -1371,7 +1427,9 @@ async function cmdHook(ctx: Ctx): Promise<number> {
       }
       return ExitCode.Success;
     }
-    if (plan.installed && plan.plan.action === "skip") {
+    const trailerPlan =
+      plan.trailer && plan.trailer.plan.action !== "skip" ? plan.trailer.plan : undefined;
+    if (plan.installed && plan.plan.action === "skip" && !trailerPlan) {
       if (flags.json) ctx.json("hook", { plan, applied: [] });
       else ctx.out(`${t.green("✓")} SmartTest already runs in ${plan.file}.`);
       return ExitCode.Success;
@@ -1386,6 +1444,12 @@ async function cmdHook(ctx: Ctx): Promise<number> {
           `  ${t.yellow("▲")} line ${r.line} still runs a whole suite (use --replace): ${t.dim(r.command)}`,
         );
       for (const n of plan.notes) ctx.out(`  ${t.dim("•")} ${n}`);
+      if (trailerPlan) {
+        ctx.out(`${t.bold("Commit trailer")} · ${plan.trailer?.manager} · ${trailerPlan.path}`);
+        for (const l of previewDiff(trailerPlan)) ctx.out(`    ${diffColor(t, l)}`);
+      }
+      for (const n of plan.trailer?.notes ?? [])
+        if (!plan.notes.includes(n)) ctx.out(`  ${t.dim("•")} ${n}`);
       const suggestedScope = await st.hookScopeSuggestion();
       if (suggestedScope)
         ctx.out(
@@ -1404,10 +1468,19 @@ async function cmdHook(ctx: Ctx): Promise<number> {
           category: "configuration",
           hint: "Re-run with --yes, or --dry-run to preview.",
         });
-      if (!(await confirm(ctx.io, t, `Write ${plan.file}?`))) return ExitCode.Success;
+      if (
+        !(await confirm(
+          ctx.io,
+          t,
+          `Write ${[plan.file, ...(trailerPlan ? [trailerPlan.path] : [])].join(" and ")}?`,
+        ))
+      )
+        return ExitCode.Success;
     }
     // Not init's step: `init --rollback` leaves it, `hook uninstall` removes it.
-    const applied = await st.applyFiles([plan.plan], { journal: false });
+    const applied = await st.applyFiles([plan.plan, ...(trailerPlan ? [trailerPlan] : [])], {
+      journal: false,
+    });
     if (flags.json) ctx.json("hook", { plan, applied });
     else {
       for (const p of applied) ctx.out(`${t.green("✓")} wrote ${p}`);
@@ -1791,6 +1864,7 @@ async function cmdAudit(ctx: Ctx): Promise<number> {
             ...(seed !== undefined ? { seed } : {}),
             ...(budgetMs !== undefined ? { budgetMs } : {}),
             ...(flags.runner?.length ? { runners: flags.runner } : {}),
+            ...(flags.live ? { live: true } : {}),
           },
         }
       : {}),
@@ -1863,6 +1937,7 @@ async function cmdBenchmark(ctx: Ctx): Promise<number> {
     ...(flags.traces ? { traces: true } : {}),
     ...(flags["no-cache"] ? { cache: false } : {}),
     ...(flags.runner?.length ? { runners: flags.runner } : {}),
+    ...(flags.live ? { live: true } : {}),
     onCommit: async (results) => {
       await writeFileAtomic(
         jsonPath,
