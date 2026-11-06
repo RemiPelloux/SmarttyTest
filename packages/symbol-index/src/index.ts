@@ -641,6 +641,7 @@ export class SymbolIndex {
           analysis.imports,
           analysis.dynamicTargets,
           analysis.dynamicUnmatched,
+          analysis.dynamicLoads,
         ]);
         const copies = new Map(analysis.imports.map((i) => [i, { ...i }]));
         only = new Set(stale.map((i) => copies.get(i) as FileAnalysis["imports"][number]));
@@ -649,11 +650,20 @@ export class SymbolIndex {
       const old = targetsOf(replaced.get(analysis.path) ?? analysis);
       delete analysis.dynamicTargets;
       delete analysis.dynamicUnmatched;
+      delete analysis.dynamicLoads;
       if (analysis.dynamicHints?.length) {
         const dir = posix.dirname(analysis.path);
         const targets = new Set<string>();
+        const loads = new Set<string>();
         const unmatched: string[] = [];
         for (const h of analysis.dynamicHints) {
+          // `@root-load/…`: files a framework loads for this one (only their module code runs).
+          if (h.pattern.startsWith("@root-load/")) {
+            const glob = posix.normalize(h.pattern.slice("@root-load/".length));
+            for (const f of options.files)
+              if (f !== analysis.path && matchGlob(f, glob)) loads.add(f);
+            continue;
+          }
           // `@root/…`: a glob relative to the project root (a `smarttest-loads:` annotation).
           const rel = h.pattern.startsWith("@root/")
             ? posix.normalize(h.pattern.slice("@root/".length))
@@ -691,6 +701,7 @@ export class SymbolIndex {
           else unmatched.push(h.expr);
         }
         if (targets.size) analysis.dynamicTargets = [...targets].sort();
+        if (loads.size) analysis.dynamicLoads = [...loads].sort();
         if (unmatched.length) analysis.dynamicUnmatched = unmatched;
       }
       for (const imp of analysis.imports) {
@@ -727,7 +738,12 @@ export class SymbolIndex {
       if (
         before !== undefined &&
         before !==
-          JSON.stringify([analysis.imports, analysis.dynamicTargets, analysis.dynamicUnmatched])
+          JSON.stringify([
+            analysis.imports,
+            analysis.dynamicTargets,
+            analysis.dynamicUnmatched,
+            analysis.dynamicLoads,
+          ])
       ) {
         this.files.set(analysis.path, analysis);
         this.touch(analysis.path);

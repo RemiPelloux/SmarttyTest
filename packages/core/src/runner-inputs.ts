@@ -19,8 +19,11 @@ export interface RunnerInputs {
   label: string;
   /** The configuration files the runner reads (its config and the local modules it imports). */
   configs: { file: string; importedBy?: string }[];
-  /** Local files the runner loads for every test. */
-  loads: { file: string; key: string; source: string }[];
+  /**
+   * Local files the runner loads for every test. `reach`: what that file runs is read from the
+   * graph (a changed file hits when its change reaches this file), not from its import closure.
+   */
+  loads: { file: string; key: string; source: string; reach?: boolean }[];
   /** Local files a module mapping points to, and the specifiers it maps. */
   mappings: { file: string; key: string; find: string; regex: boolean; source: string }[];
   /** Keys whose value can't be read statically, with the file that sets them. */
@@ -164,7 +167,7 @@ export async function readRunnerInputs(
     if (phpRunnerKind(join(projectRoot, root.dir)) === "artisan") {
       const app = `${prefix}bootstrap/app.php`;
       if (await isFile(join(projectRoot, app)))
-        out.loads.push({ file: app, key: "artisan", source: "php artisan test" });
+        out.loads.push({ file: app, key: "artisan", source: "php artisan test", reach: true });
     }
     for (const name of [".env.testing", "tests/Pest.php"]) {
       const file = `${prefix}${name}`;
@@ -332,6 +335,8 @@ export interface RunnerHitContext {
   testsDependingOn: (file: string) => string[];
   /** Whether a change to the file reaches any test through the graph. */
   reachesAnyTest: (file: string) => boolean;
+  /** Whether a change to `from` reaches the file `to` through the graph. */
+  reaches?: (from: string, to: string) => boolean;
   isTest: (file: string) => boolean;
   changeSet: ChangeSet;
 }
@@ -365,11 +370,24 @@ export function runnerHits(ctx: RunnerHitContext): { hits: RunnerHit[]; warnings
           : `configuration of ${name}`,
         importedRole: `part of the configuration of ${name}`,
       })),
-      ...ri.loads.map((l) => {
-        const role = `${ROLES[l.key] ?? `${l.key} file`} of ${name} (${l.key} in ${l.source})`;
-        return { file: l.file, role, importedRole: role };
-      }),
+      ...ri.loads
+        .filter((l) => !l.reach)
+        .map((l) => {
+          const role = `${ROLES[l.key] ?? `${l.key} file`} of ${name} (${l.key} in ${l.source})`;
+          return { file: l.file, role, importedRole: role };
+        }),
     ];
+    // What the runner itself runs before every test (`php artisan test` boots the application):
+    // a changed file whose change reaches that file through the graph hits every test.
+    for (const l of ri.loads.filter((x) => x.reach))
+      for (const c of changed) {
+        if (c !== l.file && !(ctx.reaches ?? (() => true))(c, l.file)) continue;
+        add({
+          file: c,
+          tests,
+          message: `${c} changed — ${c === l.file ? "it is" : `it reaches ${l.file},`} the ${ROLES[l.key] ?? l.key} ${l.source} runs before every test of ${name}`,
+        });
+      }
     const done = new Set<string>();
     for (const st of starts) {
       if (done.has(st.file)) continue;

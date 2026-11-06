@@ -43,6 +43,11 @@ export interface ImportRecord {
   missing?: boolean;
   /** For `vi.mock` / `jest.mock` family calls. */
   mock?: "factory" | "auto" | "actual" | "unmock";
+  /**
+   * The import only loads the file (a framework registering routes): the importer runs the
+   * file's module-level code, not what that code names. Only a change to that code reaches it.
+   */
+  load?: boolean;
 }
 
 export interface SymbolRecord {
@@ -116,6 +121,8 @@ export interface FileAnalysis {
   catalogKeys?: Record<string, string>;
   /** Derived at resolution time: project files the hints point to. */
   dynamicTargets?: string[];
+  /** Derived at resolution time: files a framework loads for this file (hints `@root-load/…`). */
+  dynamicLoads?: string[];
   /** Derived at resolution time: hints that matched no project file (still uncertainty). */
   dynamicUnmatched?: string[];
   parseErrors: number;

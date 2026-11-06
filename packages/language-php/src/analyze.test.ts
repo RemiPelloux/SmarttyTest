@@ -187,27 +187,128 @@ enum Size: string implements Priced {
     expect(sym(a, "Size.price").thisUses?.sort()).toEqual(["Large", "Small"]);
   });
 
-  it("[X::class, 'method'] links the method and the constructor; X::class alone the class", () => {
+  it("reads each route as a symbol linked to its action, its middleware and its uri", () => {
     const a = analyzePhp(
       "routes/api.php",
       `<?php
 use App\\Http\\Controllers\\PostController;
+use App\\Http\\Middleware\\Audit;
 use Illuminate\\Support\\Facades\\Route;
 
-Route::get('/posts', [PostController::class, 'index']);
-Route::middleware('auth')->group(function () {
-    Route::apiResource('comments', App\\Http\\Controllers\\CommentController::class);
+Route::get('/posts', [PostController::class, 'index'])->name('posts.index');
+Route::middleware([Audit::class])->prefix('admin')->name('admin.')->group(function (): void {
+    Route::apiResource('comments', App\\Http\\Controllers\\CommentController::class)->only(['index', 'show']);
+    Route::controller(App\\Http\\Controllers\\TagController::class)->group(function () {
+        Route::post('/tags/{tag}', 'store')->whereNumber('tag');
+    });
+    require __DIR__.'/api/extra.php';
 });
+Route::match(['get', 'post'], '/search', App\\Http\\Controllers\\SearchController::class);
 `,
     );
-    expect(a.topLevelUses).toEqual(
+    const routes = a.symbols.filter((s) => s.resources?.some((r) => r.startsWith("http-route:")));
+    expect(routes.map((s) => s.resources?.join(" "))).toEqual([
+      "http-route:GET|HEAD /api/posts http-route-name:posts.index",
+      "http-route:GET|HEAD /api/admin/comments http-route-name:admin.comments.index",
+      "http-route:GET|HEAD /api/admin/comments/{comment} http-route-name:admin.comments.show",
+      "http-route:POST /api/admin/tags/{tag}",
+      "http-route:GET|POST /api/search",
+    ]);
+    const index = routes[0];
+    expect(index?.uses).toEqual(
       expect.arrayContaining([
         "$App$Http$Controllers$PostController.index",
         "$App$Http$Controllers$PostController.constructor",
-        "$Illuminate$Support$Facades$Route.get",
       ]),
     );
-    expect(a.topLevelEscapes).toEqual(["$App$Http$Controllers$CommentController"]);
+    // A group's middleware belongs to each of its routes.
+    expect(routes[3]?.uses).toContain("$App$Http$Controllers$TagController.store");
+    expect(routes[3]?.escapes).toContain("$App$Http$Middleware$Audit");
+    expect(routes[4]?.uses).toContain("$App$Http$Controllers$SearchController.__invoke");
+    // Registering routes is load-time code: an edit to one reaches the file's loaders.
+    expect(routes.every((s) => s.evalHash)).toBe(true);
+    // The route file's own code names no controller; an included route file is loaded only.
+    expect(a.topLevelEscapes).toEqual([]);
+    expect(a.imports.find((i) => i.specifier === "./api/extra.php")?.load).toBe(true);
+  });
+
+  it("a route file another one includes has an unknown prefix", () => {
+    const a = analyzePhp(
+      "routes/api/extra.php",
+      `<?php\nuse Illuminate\\Support\\Facades\\Route;\nRoute::delete('/notes/{note}', [App\\N::class, 'destroy']);\n`,
+    );
+    expect(a.symbols[0]?.resources).toEqual(["http-route~:DELETE /notes/{note}"]);
+  });
+
+  it("reads the requests a test makes; a computed url is uncertainty for that test", () => {
+    const a = analyzePhp(
+      "tests/Feature/PostTest.php",
+      `<?php
+namespace Tests\\Feature;
+use Tests\\TestCase;
+class PostTest extends TestCase {
+    private const URL = '/api/posts';
+    public function test_a(): void {
+        $this->getJson('/api/posts?page=2');
+        $this->actingAs($u)->postJson("/api/posts/{$post->id}/like", []);
+        $this->json('DELETE', '/api/posts/'.$id);
+        $this->get(route('posts.index'));
+        $this->getJson(self::URL);
+        $response->json('data');
+        collect([])->get('key');
+    }
+    public function test_b(): void { $this->get($this->path()); }
+    protected function send(string $method, string $uri) { return $this->json($method, $uri); }
+    public function test_c(): void { $this->send('PUT', '/api/posts/3'); $this->assertTrue(true); }
+}
+`,
+    );
+    const t = a.symbols.find((s) => s.qualifiedName === "PostTest.test_a");
+    expect(t?.resources?.sort()).toEqual(
+      [
+        "http-request:GET /api/posts?page=2",
+        "http-request:POST /api/posts/*/like",
+        "http-request:DELETE /api/posts/*",
+        "http-request-name:posts.index",
+        "http-request:GET /api/posts",
+      ].sort(),
+    );
+    expect(a.dynamicUnresolved).toEqual(["a request to a url built at run time (get) on line 15"]);
+    // A request helper: its callers' arguments are the requests.
+    expect(a.symbols.find((s) => s.qualifiedName === "PostTest.send")?.resources).toEqual([
+      "http-wrapper:send:1:@0",
+    ]);
+    expect(a.symbols.find((s) => s.qualifiedName === "PostTest.test_c")?.resources).toEqual([
+      "http-call:send|PUT|/api/posts/3",
+    ]);
+  });
+
+  it("reads classes from a config list and from a private method's literal callers", () => {
+    const a = analyzePhp(
+      "app/Harvester.php",
+      `<?php
+namespace App;
+final class Harvester {
+    public function all(): array {
+        foreach (Coerce::list(config('prospection.connectors')) as $class) { $out[] = app($class); }
+        return [self::flags('a', Size::class), self::flags('b', Color::class)];
+    }
+    private static function flags(string $s, string $enum): bool { return $enum::tryFrom($s) !== null; }
+    public function pick(string $kind): object {
+        $class = match ($kind) { 'a' => Alpha::class, 'b' => Beta::class, default => throw new \\LogicException() };
+        return new $class();
+    }
+}
+`,
+    );
+    expect(a.dynamicUnresolved).toEqual([]);
+    expect(a.symbols.find((s) => s.qualifiedName === "Harvester.pick")?.escapes).toEqual(
+      expect.arrayContaining(["$App$Alpha", "$App$Beta"]),
+    );
+    expect(a.imports.map((i) => i.specifier)).toContain("@composer/config/prospection.php");
+    expect(a.symbols.find((s) => s.qualifiedName === "Harvester.flags")?.uses).toEqual(
+      expect.arrayContaining(["$App$Size.tryFrom", "$App$Color.tryFrom"]),
+    );
   });
 
   it("finds functions declared inside if blocks (helpers) and literal includes", () => {
@@ -386,8 +487,9 @@ return Application::configure(basePath: dirname(__DIR__))
     expect(a.dynamicHints?.map((h) => h.pattern)).toEqual(
       expect.arrayContaining([
         "@root/backend/config/**/*.php",
-        "@root/backend/bootstrap/providers.php",
-        "@root/backend/database/migrations/**/*.php",
+        "@root-load/backend/bootstrap/providers.php",
+        "@root-load/backend/routes/**/*.php",
+        "@root-load/backend/database/migrations/**/*.php",
       ]),
     );
   });

@@ -1499,11 +1499,15 @@ export class SmartTest {
     // Resolved imports and the files a computed import or a framework boot loads (globs).
     const importsOf = (file: string): string[] => {
       const a = index.get(file);
+      // A route file runs its registrations, not the actions its routes name (those run per
+      // request): only the files it loads (other route files) are part of what loads it.
+      const routes = !!a?.symbols.some((s) => s.resources?.some((r) => r.startsWith("http-route")));
       return [
         ...(a?.imports ?? []).flatMap((i) =>
-          i.resolved && i.resolved !== file ? [i.resolved] : [],
+          i.resolved && i.resolved !== file && (!routes || i.load) ? [i.resolved] : [],
         ),
-        ...(a?.dynamicTargets ?? []).filter((t) => t !== file),
+        ...(routes ? [] : (a?.dynamicTargets ?? [])).filter((t) => t !== file),
+        ...(a?.dynamicLoads ?? []).filter((t) => t !== file),
       ];
     };
     return {
@@ -1521,6 +1525,20 @@ export class SmartTest {
         ...graph.dependentsOf([{ file, units: ["*"] }]).tests.keys(),
       ],
       reachesAnyTest: (file: string) => graph.reachesAnyTest([{ file, units: ["*"] }]),
+      // Every declaration of the file changed; its module-level code only when it has some (a
+      // class file's importers do not run it).
+      reaches: (from: string, to: string) => {
+        const a = index.get(from);
+        const top = a?.symbols.filter((s) => !s.parent).map((s) => s.qualifiedName) ?? [];
+        const moduleCode =
+          !a ||
+          !top.length ||
+          a.topLevelRefs.length > 0 ||
+          (a.topLevelEscapes?.length ?? 0) > 0 ||
+          (a.topLevelUses?.length ?? 0) > 0;
+        const units = moduleCode ? ["*"] : top;
+        return graph.dependentsOf([{ file: from, units }]).affectedFiles.has(to);
+      },
       isTest: (file: string) => graph.isTestFile(file),
     };
   }
