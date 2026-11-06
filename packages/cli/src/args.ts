@@ -38,6 +38,8 @@ export const OPTIONS = {
   "no-cache": { type: "boolean" },
   shard: { type: "string" },
   bail: { type: "boolean" },
+  annotations: { type: "string" },
+  "no-annotations": { type: "boolean" },
   total: { type: "string" },
   index: { type: "string" },
   "min-rate": { type: "string" },
@@ -84,6 +86,8 @@ export const OPTIONS = {
   replace: { type: "boolean" },
   hook: { type: "boolean" },
   "pre-push": { type: "boolean" },
+  // sync
+  apply: { type: "boolean" },
   manager: { type: "string" },
   // snapshot
   keep: { type: "string" },

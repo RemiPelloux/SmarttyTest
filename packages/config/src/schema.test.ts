@@ -198,7 +198,11 @@ const KITCHEN_SINK = {
   plugins: ["./tools/smarttest-plugin.mjs"],
   timeoutMs: 600_000,
   workers: 2,
-  reports: { formats: ["html", "json", "junit", "markdown"], outputDir: ".smarttest/reports" },
+  reports: {
+    formats: ["html", "json", "junit", "markdown"],
+    outputDir: ".smarttest/reports",
+    annotations: true,
+  },
   storeDir: ".smarttest",
 };
 

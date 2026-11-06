@@ -9,7 +9,17 @@ export type {
   LineCoverageReport,
 } from "@smarttest/coverage-engine";
 export type { ProjectProfile } from "@smarttest/project-detector";
-export type { FileExecution, RunReport, RunSummary } from "@smarttest/report-engine";
+export {
+  ANNOTATION_PROVIDERS,
+  type AnnotationInput,
+  type AnnotationProvider,
+  type CiAnnotations,
+  ciAnnotations,
+  type FileExecution,
+  type RunReport,
+  type RunSummary,
+  type SelectionEstimate,
+} from "@smarttest/report-engine";
 export { ExitCode, SmartTestError, toExitCode, VERSION } from "@smarttest/shared";
 export type { FilePlan, Recommendation, SetupPlan } from "@smarttest/smart-init";
 export type { GenerationItem, SyncReport } from "@smarttest/test-generator";

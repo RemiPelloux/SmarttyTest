@@ -154,7 +154,16 @@ export interface SmartTestConfig {
   plugins?: string[];
   timeoutMs?: number;
   workers?: number;
-  reports?: { formats?: ReportFormat[]; outputDir?: string };
+  reports?: {
+    formats?: ReportFormat[];
+    outputDir?: string;
+    /**
+     * CI annotations (GitHub Actions, GitLab CI, Bitbucket Pipelines): selected and skipped tests
+     * with their reason, and a summary with the time saved. Default true: written whenever the CI
+     * is detected; `--no-annotations` turns them off for one run.
+     */
+    annotations?: boolean;
+  };
   storeDir?: string;
 }
 
@@ -193,6 +202,6 @@ export interface ResolvedConfig {
   plugins: string[];
   timeoutMs: number;
   workers?: number;
-  reports: { formats: ReportFormat[]; outputDir: string };
+  reports: { formats: ReportFormat[]; outputDir: string; annotations: boolean };
   storeDir: string;
 }

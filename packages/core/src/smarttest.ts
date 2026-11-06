@@ -38,6 +38,7 @@ import {
   newRunId,
   overallStatus,
   type RunReport,
+  type SelectionEstimate,
   summarize,
   TOOL,
   validateReportIntegrity,
@@ -54,7 +55,7 @@ import {
   isPrismaSchema,
   type ResourceChange,
 } from "@smarttest/semantic-diff";
-import type { ChangeScope, TestAdapter } from "@smarttest/shared";
+import type { ChangeScope, ImpactDecision, TestAdapter } from "@smarttest/shared";
 import {
   angularTestTargets,
   assertConfinedWrite,
@@ -3631,6 +3632,28 @@ export class SmartTest {
         });
     }
     return plan;
+  }
+
+  /**
+   * Estimated test time of the files a selection does not run, from their last recorded
+   * durations (`impact`'s CI summary; `run` computes the same in its report). Undefined when no
+   * file that is not run has a recorded duration.
+   */
+  async selectionEstimate(
+    decision: Pick<ImpactDecision, "skippedTests">,
+  ): Promise<SelectionEstimate | undefined> {
+    const durations =
+      (await readJson<Record<string, number>>(join(this.storeDir, "state", "durations.json"))) ??
+      {};
+    const skipped = decision.skippedTests.map((t) => t.filePath);
+    const known = skipped.filter((f) => typeof durations[f] === "number");
+    return known.length
+      ? {
+          skippedTestTimeMs: known.reduce((a, f) => a + (durations[f] ?? 0), 0),
+          knownSkipped: known.length,
+          totalSkipped: skipped.length,
+        }
+      : undefined;
   }
 
   /** `smarttest sync`: configuration drift against the project as it is now, and the patch. */

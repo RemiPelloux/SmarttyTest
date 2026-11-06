@@ -14,6 +14,7 @@ import {
   VERSION,
   writeFileAtomic,
 } from "@smarttest/shared";
+import { annotationProvider, emitAnnotations } from "./annotate.js";
 import { type Flags, intFlag, parse } from "./args.js";
 import { COMMANDS, commandHelp, LATER, rootHelp } from "./help.js";
 import {
@@ -418,6 +419,24 @@ async function cmdRun(ctx: Ctx): Promise<number> {
         await readFile(outcome.written.markdown, "utf8"),
       );
     }
+    const annotate = annotationProvider(flags, st.config.reports.annotations);
+    if (annotate) {
+      const r = outcome.report;
+      // The step summary is the run's own summary.md, appended above.
+      await emitAnnotations({
+        st,
+        provider: annotate,
+        input: {
+          command: "run",
+          decision: r.decision,
+          description: r.change.description,
+          executions: r.executions,
+          ...(r.estimate ? { estimate: r.estimate } : {}),
+        },
+        write: flags.json ? (l) => ctx.err(l) : (l) => ctx.out(l),
+        summary: !outcome.written.markdown,
+      });
+    }
     if (outcome.integrityIssues.length) {
       ctx.err(
         t.red(
@@ -526,6 +545,22 @@ async function cmdImpact(ctx: Ctx): Promise<number> {
     ...(only ? { only } : {}),
     ...(flags.runner?.length ? { runners: flags.runner } : {}),
   });
+  const annotate = annotationProvider(flags, st.config.reports.annotations);
+  if (annotate) {
+    const estimate = await st.selectionEstimate(a.decision);
+    await emitAnnotations({
+      st,
+      provider: annotate,
+      input: {
+        command: "impact",
+        decision: a.decision,
+        description: a.input.description,
+        ...(estimate ? { estimate } : {}),
+      },
+      write: flags.json ? (l) => ctx.err(l) : (l) => ctx.out(l),
+      summary: true,
+    });
+  }
   if (flags.json) {
     ctx.json("impact", {
       description: a.input.description,

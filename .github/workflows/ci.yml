@@ -140,3 +140,27 @@ jobs:
       - name: Real VS Code host test
         if: runner.os != 'Linux'
         run: pnpm --filter smarttest-vscode test:host
+
+  selection:
+    # SmartTest on its own pull requests: the tests the change can affect, annotated on the pull
+    # request with the reason for each, and a step summary (S34). Selection only: `verify` runs
+    # every test. Nothing here calls GitHub's API: the annotations are workflow commands.
+    name: selection (annotations)
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - name: SmartTest selection for this pull request
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: node packages/cli/dist/bin.js impact --base "origin/$BASE_REF"

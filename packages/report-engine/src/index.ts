@@ -12,6 +12,9 @@ import type {
   TestStatus,
 } from "@smarttest/shared";
 import { formatDuration, VERSION, writeFileAtomic, writeJson } from "@smarttest/shared";
+import { skippedReasons, timeSavedText } from "./annotations.js";
+
+export * from "./annotations.js";
 
 export const REPORT_SCHEMA_VERSION = 1;
 
@@ -318,11 +321,17 @@ export function toMarkdown(report: RunReport, htmlLink?: string): string {
       "",
       `Coverage (${report.coverage.scope === "full" ? "full suite" : "selected tests only — not project coverage"}): lines ${report.coverage.lines}% · branches ${report.coverage.branches}%`,
     );
-  if (report.estimate?.knownSkipped)
+  if (report.decision.skippedTests.length) {
     out.push(
       "",
-      `≈ ${formatDuration(report.estimate.skippedTestTimeMs)} of test time not run (estimate from previous runs of ${report.estimate.knownSkipped}/${report.estimate.totalSkipped} skipped files)`,
+      `<details><summary>Not run (skipped by selection): ${report.decision.skippedTests.length}</summary>`,
+      "",
     );
+    for (const g of skippedReasons(report.decision).slice(0, 20))
+      out.push(`- ${g.count} — ${mdText(g.reason)}`);
+    out.push("", "</details>");
+  }
+  out.push("", `**Time saved:** ${mdText(timeSavedText(report.decision, report.estimate))}`);
   if (htmlLink) out.push("", `[Full HTML report](${htmlLink})`);
   let md = `${out.join("\n")}\n`;
   if (md.length > 65_000) md = `${md.slice(0, 64_000)}\n\n… truncated\n`;

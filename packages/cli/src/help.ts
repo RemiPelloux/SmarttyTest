@@ -58,6 +58,8 @@ export const COMMANDS: Record<string, CommandHelp> = {
       "--only <path>  only the changes in this file or directory (repeatable); the dependency analysis still covers the project",
       "--runner <name>  only the tests of this runner (repeatable): an adapter id such as vitest, an Angular project or a runner directory; other runners' tests are left out",
       "--mode fast|balanced|safe  safety mode (default from config, else balanced)",
+      "--annotations github|gitlab|bitbucket  annotate the CI job with the selection and its reasons (automatic when the CI is detected; see the CI guide)",
+      "--no-annotations  no CI annotations for this run (or `reports.annotations: false`)",
     ],
     changes: true,
   },
@@ -82,6 +84,8 @@ export const COMMANDS: Record<string, CommandHelp> = {
       "--format f  report format, repeatable: html, json, junit, markdown (default from config)",
       "--open  open the HTML report afterwards",
       "-o, --output <dir>  write the reports to this directory",
+      "--annotations github|gitlab|bitbucket  annotate the CI job with the selection and its reasons (automatic when the CI is detected; see the CI guide)",
+      "--no-annotations  no CI annotations for this run (or `reports.annotations: false`)",
     ],
     changes: true,
   },
@@ -182,12 +186,15 @@ export const COMMANDS: Record<string, CommandHelp> = {
     ],
   },
   sync: {
-    summary: "Update the configuration after the project changed (new runners, packages, Git)",
-    usage: "smarttest sync [--check] [--dry-run] [--yes] [--json]",
+    summary:
+      "Update the configuration after the project changed, and propose what a SmartTest upgrade adds",
+    usage: "smarttest sync [--check] [--dry-run] [--apply | --yes] [--json]",
     flags: [
-      "--check  exit 3 when the configuration is out of date (for CI)",
-      "--dry-run  show the patch, write nothing",
-      "-y, --yes  write the patch without prompting",
+      "shows each change as a diff: configuration drift (new runners, packages, Git) and upgrade proposals (lockfile triggers, languages left out of `include`, browser specs in the hook, stale hook blocks, commit trailer)",
+      "--check  exit 3 when the configuration is out of date (for CI); upgrade proposals never fail it",
+      "--dry-run  show every change, write nothing",
+      "--apply  write every proposed change without prompting (same as --yes); without it, a terminal asks for each change",
+      "-y, --yes  write every proposed change without prompting",
     ],
   },
   ci: {
@@ -201,6 +208,7 @@ export const COMMANDS: Record<string, CommandHelp> = {
       "--all  run the full suite",
       "--dry-run  print the provider and the base without running tests",
       "the execution flags of `smarttest run` also apply (--coverage, --retries, --timeout, --workers, --shard, --bail, --no-cache, --format, -o)",
+      "GitHub Actions, GitLab CI and Bitbucket Pipelines: the selection is annotated on the pull request with each reason, with a summary and the time saved (--no-annotations turns it off, --annotations <provider> forces one)",
     ],
   },
   hook: {
