@@ -1,0 +1,296 @@
+{
+  "schemaVersion": 1,
+  "command": "benchmark",
+  "project": "openpro-mcp-service",
+  "mode": "balanced",
+  "commits": [
+    {
+      "sha": "dbccebb7d4916410ee2c418790172b5abcd01713",
+      "subject": "fix(auth): parse the bearer header as strictly as the SDK does",
+      "changedFiles": 4,
+      "totalTests": 19,
+      "selectedTests": 2,
+      "fallback": false,
+      "analysisStatus": "complete",
+      "fullMs": 568.173732,
+      "projectGatedMs": 567.760101,
+      "projectGatedTests": 19,
+      "smarttestMs": 623.3379880000001,
+      "analysisMs": 145.1727119999999,
+      "failingInFull": [
+        "tests/createServer.inputValidation.test.ts",
+        "tests/createServer.offerUi.test.ts",
+        "tests/jobDraftApp.test.ts",
+        "tests/jsonSchemaToZod.test.ts"
+      ],
+      "missed": [],
+      "preexisting": [
+        "tests/createServer.inputValidation.test.ts",
+        "tests/createServer.offerUi.test.ts",
+        "tests/jobDraftApp.test.ts",
+        "tests/jsonSchemaToZod.test.ts"
+      ]
+    },
+    {
+      "sha": "cfda3a575cd0d7665e443b639d83490414799e68",
+      "subject": "test(upload): cover the widget upload relay route and add a coverage floor",
+      "changedFiles": 4,
+      "totalTests": 20,
+      "selectedTests": 20,
+      "fallback": true,
+      "analysisStatus": "fallback",
+      "fullMs": 6596.429336,
+      "projectGatedMs": 6596.390517,
+      "projectGatedTests": 20,
+      "smarttestMs": 6670.365068000001,
+      "analysisMs": 88.61529999999993,
+      "failingInFull": [
+        "tests/createServer.inputValidation.test.ts",
+        "tests/createServer.offerUi.test.ts",
+        "tests/jobDraftApp.test.ts",
+        "tests/jsonSchemaToZod.test.ts"
+      ],
+      "missed": [],
+      "preexisting": []
+    },
+    {
+      "sha": "56fd8ac6fe3f49e08e7fc213c35d641537e08294",
+      "subject": "refactor(apps): remove the orphaned offer-step tool and resource registration",
+      "changedFiles": 8,
+      "totalTests": 20,
+      "selectedTests": 10,
+      "fallback": false,
+      "analysisStatus": "complete",
+      "fullMs": 6577.890072,
+      "projectGatedMs": 6577.84986,
+      "projectGatedTests": 20,
+      "smarttestMs": 6619.083244000001,
+      "analysisMs": 74.87296499999866,
+      "failingInFull": [
+        "tests/createServer.inputValidation.test.ts",
+        "tests/createServer.offerUi.test.ts",
+        "tests/jobDraftApp.test.ts",
+        "tests/jsonSchemaToZod.test.ts"
+      ],
+      "missed": [],
+      "preexisting": [
+        "tests/jobDraftApp.test.ts",
+        "tests/jsonSchemaToZod.test.ts"
+      ]
+    },
+    {
+      "sha": "550025ab1298db13b6408a991d2ebf31467de73d",
+      "subject": "refactor(apps): remove the unused offer-step widget and its build step",
+      "changedFiles": 16,
+      "totalTests": 16,
+      "selectedTests": 16,
+      "fallback": true,
+      "analysisStatus": "fallback",
+      "fullMs": 6577.104163000004,
+      "projectGatedMs": 6577.064485000003,
+      "projectGatedTests": 16,
+      "smarttestMs": 6645.249,
+      "analysisMs": 67.64314000000377,
+      "failingInFull": [
+        "tests/createServer.inputValidation.test.ts",
+        "tests/createServer.offerUi.test.ts",
+        "tests/jobDraftApp.test.ts",
+        "tests/jsonSchemaToZod.test.ts"
+      ],
+      "missed": [],
+      "preexisting": []
+    },
+    {
+      "sha": "d5a893d06167b2b10c2507a969a6fe562642fdfd",
+      "subject": "fix(deps): patch ip-address, vite and vitest advisories",
+      "changedFiles": 2,
+      "totalTests": 16,
+      "selectedTests": 16,
+      "fallback": true,
+      "analysisStatus": "fallback",
+      "fullMs": 6550.250868000003,
+      "projectGatedMs": 6550.2242750000005,
+      "projectGatedTests": 16,
+      "smarttestMs": 6680.762202999991,
+      "analysisMs": 76.10895199999504,
+      "failingInFull": [
+        "tests/createServer.inputValidation.test.ts",
+        "tests/createServer.offerUi.test.ts",
+        "tests/jobDraftApp.test.ts",
+        "tests/jsonSchemaToZod.test.ts"
+      ],
+      "missed": [],
+      "preexisting": []
+    },
+    {
+      "sha": "4d64aa491298dd85229a3150822110abf3ca42d6",
+      "subject": "build(docker): pin node 22.23.4 for the image",
+      "changedFiles": 1,
+      "totalTests": 16,
+      "selectedTests": 0,
+      "fallback": false,
+      "analysisStatus": "complete",
+      "fullMs": 6568.674134000001,
+      "projectGatedMs": 6568.650994999996,
+      "projectGatedTests": 16,
+      "smarttestMs": 45.731596999998146,
+      "analysisMs": 43.32735400000092,
+      "failingInFull": [
+        "tests/createServer.inputValidation.test.ts",
+        "tests/createServer.offerUi.test.ts",
+        "tests/jobDraftApp.test.ts",
+        "tests/jsonSchemaToZod.test.ts"
+      ],
+      "missed": [],
+      "preexisting": [
+        "tests/createServer.inputValidation.test.ts",
+        "tests/createServer.offerUi.test.ts",
+        "tests/jobDraftApp.test.ts",
+        "tests/jsonSchemaToZod.test.ts"
+      ]
+    },
+    {
+      "sha": "bb5650fd0fab9545b44b527d6d284bfb7a99277a",
+      "subject": "fix(deps): move to zod 4.6.7 and patch body-parser and fast-uri",
+      "changedFiles": 3,
+      "totalTests": 16,
+      "selectedTests": 10,
+      "fallback": false,
+      "analysisStatus": "complete",
+      "fullMs": 6540.171842999996,
+      "projectGatedMs": 6540.151255999997,
+      "projectGatedTests": 16,
+      "smarttestMs": 6612.781720999992,
+      "analysisMs": 66.09266999999818,
+      "failingInFull": [
+        "tests/createServer.inputValidation.test.ts",
+        "tests/createServer.offerUi.test.ts",
+        "tests/jobDraftApp.test.ts"
+      ],
+      "missed": [],
+      "preexisting": []
+    },
+    {
+      "sha": "57f7da3211c6c348eb27cdfbc4509581255a140f",
+      "subject": "fix(bridge): give admin company tools up to 115 s",
+      "changedFiles": 2,
+      "totalTests": 16,
+      "selectedTests": 4,
+      "fallback": false,
+      "analysisStatus": "complete",
+      "fullMs": 6581.238731000005,
+      "projectGatedMs": 6581.218313000005,
+      "projectGatedTests": 16,
+      "smarttestMs": 468.55142600000545,
+      "analysisMs": 61.74684300000081,
+      "failingInFull": [
+        "tests/createServer.inputValidation.test.ts",
+        "tests/createServer.offerUi.test.ts",
+        "tests/jobDraftApp.test.ts"
+      ],
+      "missed": [],
+      "preexisting": [
+        "tests/jobDraftApp.test.ts"
+      ]
+    },
+    {
+      "sha": "deaf27c0f2517799c4431f822f1f6cd00d97191b",
+      "subject": "test(smarttest): run only the tests a change can affect",
+      "changedFiles": 4,
+      "totalTests": 16,
+      "selectedTests": 16,
+      "fallback": true,
+      "analysisStatus": "fallback",
+      "fullMs": 6559.360505000004,
+      "projectGatedMs": 6559.339848999996,
+      "projectGatedTests": 16,
+      "smarttestMs": 6611.235216000001,
+      "analysisMs": 69.78160200000275,
+      "failingInFull": [
+        "tests/createServer.inputValidation.test.ts",
+        "tests/createServer.offerUi.test.ts",
+        "tests/jobDraftApp.test.ts"
+      ],
+      "missed": [],
+      "preexisting": []
+    },
+    {
+      "sha": "a299d42f6c3455f4f59416897b3054d6fee78220",
+      "subject": "test(http): cover oauth discovery and the bearer guard on mcp routes",
+      "changedFiles": 4,
+      "totalTests": 17,
+      "selectedTests": 17,
+      "fallback": false,
+      "analysisStatus": "complete",
+      "fullMs": 6580.422006000008,
+      "projectGatedMs": 6580.398509000006,
+      "projectGatedTests": 17,
+      "smarttestMs": 6643.227948999978,
+      "analysisMs": 75.5147169999691,
+      "failingInFull": [
+        "tests/createServer.inputValidation.test.ts",
+        "tests/createServer.offerUi.test.ts",
+        "tests/jobDraftApp.test.ts"
+      ],
+      "missed": [],
+      "preexisting": []
+    },
+    {
+      "sha": "4ac49ded8bf9920848d61d4982d386424f9a0280",
+      "subject": "test(smarttest): SmartTest 1.0.2 (audit fixes: no false passes; setup files and config imports select tests)",
+      "changedFiles": 2,
+      "totalTests": 17,
+      "selectedTests": 17,
+      "fallback": true,
+      "analysisStatus": "fallback",
+      "fullMs": 6576.56936899999,
+      "projectGatedMs": 6576.549047000008,
+      "projectGatedTests": 17,
+      "smarttestMs": 6648.660268000007,
+      "analysisMs": 67.5089239999943,
+      "failingInFull": [
+        "tests/createServer.inputValidation.test.ts",
+        "tests/createServer.offerUi.test.ts",
+        "tests/jobDraftApp.test.ts"
+      ],
+      "missed": [],
+      "preexisting": []
+    },
+    {
+      "sha": "5a223320dc43c0dd5848df79879fe02903a7bf83",
+      "subject": "chore(deps): SmartTest 1.1.0 (audit, lockfile selection by package, fail-safe runs, hook fixes)",
+      "changedFiles": 2,
+      "totalTests": 17,
+      "selectedTests": 17,
+      "fallback": true,
+      "analysisStatus": "fallback",
+      "fullMs": 6563.877542999995,
+      "projectGatedMs": 6563.856297999999,
+      "projectGatedTests": 17,
+      "smarttestMs": 6629.889014000015,
+      "analysisMs": 59.31372000000556,
+      "failingInFull": [
+        "tests/createServer.inputValidation.test.ts",
+        "tests/createServer.offerUi.test.ts",
+        "tests/jobDraftApp.test.ts"
+      ],
+      "missed": [],
+      "preexisting": []
+    }
+  ],
+  "totals": {
+    "commits": 12,
+    "fullMs": 72840.162302,
+    "projectGatedMs": 72839.45350500001,
+    "smarttestMs": 60898.87469399999,
+    "savedVsFullPct": 16,
+    "savedVsGatedPct": 16,
+    "selectedTests": 145,
+    "totalTests": 206,
+    "missed": 0,
+    "preexisting": 11,
+    "loadFlaky": 0,
+    "cachedTests": 0,
+    "cacheViolations": 0
+  }
+}

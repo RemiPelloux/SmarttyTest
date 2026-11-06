@@ -1,0 +1,170 @@
+{
+  "schemaVersion": 1,
+  "command": "benchmark",
+  "project": "openpro-front",
+  "mode": "balanced",
+  "commits": [
+    {
+      "sha": "d667ee6ef80efc78f14b83c8b2524db0922e28e2",
+      "subject": "feat(work): the head above the Missions rail's Mia, like the app",
+      "changedFiles": 8,
+      "totalTests": 2323,
+      "selectedTests": 124,
+      "fallback": false,
+      "analysisStatus": "partial",
+      "fullMs": 166195.36714299998,
+      "projectGatedMs": 166194.35255399998,
+      "projectGatedTests": 2323,
+      "smarttestMs": 23228.965145000013,
+      "analysisMs": 5653.187276000001,
+      "failingInFull": [
+        "src/pages/search/visitor/VisitorExplorerPage.test.tsx"
+      ],
+      "missed": [],
+      "preexisting": []
+    },
+    {
+      "sha": "cc83efc72e1553916823325580c97956d649d3fc",
+      "subject": "feat(explorer): the Explorer tile keeps its author's handle and side",
+      "changedFiles": 2,
+      "totalTests": 2323,
+      "selectedTests": 130,
+      "fallback": false,
+      "analysisStatus": "partial",
+      "fullMs": 144229.118859,
+      "projectGatedMs": 144228.61629799998,
+      "projectGatedTests": 2323,
+      "smarttestMs": 19569.791535000026,
+      "analysisMs": 1356.8767100000405,
+      "failingInFull": [
+        "src/components/home/stories/FriendsNetworkTile.test.tsx"
+      ],
+      "missed": [],
+      "preexisting": [],
+      "loadFlaky": [
+        "src/components/home/stories/FriendsNetworkTile.test.tsx"
+      ]
+    },
+    {
+      "sha": "13dd7f075f30807a3c86456f52808eaa74721145",
+      "subject": "fix(reels): the reels take the keyboard while they are open",
+      "changedFiles": 2,
+      "totalTests": 2323,
+      "selectedTests": 125,
+      "fallback": false,
+      "analysisStatus": "partial",
+      "fullMs": 151727.429213,
+      "projectGatedMs": 151726.82981199998,
+      "projectGatedTests": 2323,
+      "smarttestMs": 19245.869860999985,
+      "analysisMs": 1142.0455269999802,
+      "failingInFull": [],
+      "missed": [],
+      "preexisting": []
+    },
+    {
+      "sha": "3cee7049592a674f647c589fe9114d572fdbb22c",
+      "subject": "feat(reels): the author's name opens their profile, as in Actus",
+      "changedFiles": 4,
+      "totalTests": 2324,
+      "selectedTests": 126,
+      "fallback": false,
+      "analysisStatus": "partial",
+      "fullMs": 150298.51071499998,
+      "projectGatedMs": 150297.88463600003,
+      "projectGatedTests": 2324,
+      "smarttestMs": 20367.363794000004,
+      "analysisMs": 1514.2051569999894,
+      "failingInFull": [],
+      "missed": [],
+      "preexisting": []
+    },
+    {
+      "sha": "11b9c779f8add07f5cf71f40a71efc1cccbd45ef",
+      "subject": "feat(reels): a full post read as the reel its tile would be",
+      "changedFiles": 2,
+      "totalTests": 2324,
+      "selectedTests": 126,
+      "fallback": false,
+      "analysisStatus": "partial",
+      "fullMs": 154255.22615400003,
+      "projectGatedMs": 154254.7183559999,
+      "projectGatedTests": 2324,
+      "smarttestMs": 20210.91270799993,
+      "analysisMs": 1204.2744569999631,
+      "failingInFull": [],
+      "missed": [],
+      "preexisting": []
+    },
+    {
+      "sha": "eb98da68f615b8c3cf0253411477abd7d6c7d6ae",
+      "subject": "fix(reels): ?reel= reopens its own post when the grid has not got it",
+      "changedFiles": 3,
+      "totalTests": 2325,
+      "selectedTests": 127,
+      "fallback": false,
+      "analysisStatus": "partial",
+      "fullMs": 154894.13066499995,
+      "projectGatedMs": 154893.40369299997,
+      "projectGatedTests": 2325,
+      "smarttestMs": 20982.085954000126,
+      "analysisMs": 1952.743935000035,
+      "failingInFull": [],
+      "missed": [],
+      "preexisting": []
+    },
+    {
+      "sha": "595ca29c9e954a7e0bc0550a8c72ea3adaaab5e2",
+      "subject": "fix(i18n): the « Candidatures par SMS » keys in the source locales",
+      "changedFiles": 60,
+      "totalTests": 2327,
+      "selectedTests": 800,
+      "fallback": false,
+      "analysisStatus": "partial",
+      "fullMs": 149378.768225,
+      "projectGatedMs": 149377.8918639999,
+      "projectGatedTests": 2327,
+      "smarttestMs": 92541.86973899999,
+      "analysisMs": 8741.40427700011,
+      "failingInFull": [
+        "src/i18n/__tests__/noEnglishLeftovers.test.ts"
+      ],
+      "missed": [],
+      "preexisting": [
+        "src/i18n/__tests__/noEnglishLeftovers.test.ts"
+      ]
+    },
+    {
+      "sha": "b13ecc2626f495d60107a55ed9d217bbc80057a7",
+      "subject": "fix(i18n): translate « Candidatures par SMS » into every locale",
+      "changedFiles": 116,
+      "totalTests": 2284,
+      "selectedTests": 795,
+      "fallback": false,
+      "analysisStatus": "partial",
+      "fullMs": 157947.93921500002,
+      "projectGatedMs": 157947.41867100005,
+      "projectGatedTests": 2284,
+      "smarttestMs": 88941.73143299972,
+      "analysisMs": 8817.921896999935,
+      "failingInFull": [],
+      "missed": [],
+      "preexisting": []
+    }
+  ],
+  "totals": {
+    "commits": 8,
+    "fullMs": 1228926.4901889998,
+    "projectGatedMs": 1228921.1158839997,
+    "smarttestMs": 305088.5901689998,
+    "savedVsFullPct": 75,
+    "savedVsGatedPct": 75,
+    "selectedTests": 2353,
+    "totalTests": 18553,
+    "missed": 0,
+    "preexisting": 1,
+    "loadFlaky": 1,
+    "cachedTests": 0,
+    "cacheViolations": 0
+  }
+}
