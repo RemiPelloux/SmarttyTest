@@ -6,6 +6,7 @@
  */
 import { readFile, stat } from "node:fs/promises";
 import { dirname, isAbsolute, join, posix, relative } from "node:path";
+import { phpRunnerKind } from "@smarttest/adapter-phpunit";
 import type { RunnerHit } from "@smarttest/impact-engine";
 import type { ConfigPath, RunnerConfigFacts } from "@smarttest/language-typescript";
 import { angularTestTargets, type ChangeSet } from "@smarttest/shared";
@@ -55,6 +56,7 @@ const ROLES: Record<string, string> = {
   "--loader": "module loader (--loader)",
   "--experimental-loader": "module loader (--experimental-loader)",
   bootstrap: "bootstrap file",
+  artisan: "application boot",
   env: "test environment file",
   pest: "Pest configuration",
 };
@@ -156,6 +158,13 @@ export async function readRunnerInputs(
         if (await isFile(join(projectRoot, file)))
           out.loads.push({ file, key: "bootstrap", source: config });
       }
+    }
+    // `php artisan test` boots the application before PHPUnit starts: its providers, configuration
+    // and routes run for every test, a plain PHPUnit test case included.
+    if (phpRunnerKind(join(projectRoot, root.dir)) === "artisan") {
+      const app = `${prefix}bootstrap/app.php`;
+      if (await isFile(join(projectRoot, app)))
+        out.loads.push({ file: app, key: "artisan", source: "php artisan test" });
     }
     for (const name of [".env.testing", "tests/Pest.php"]) {
       const file = `${prefix}${name}`;

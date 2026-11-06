@@ -1479,10 +1479,16 @@ export class SmartTest {
   ) {
     const testsByRoot = new Map<RunnerRoot, string[]>();
     for (const [t, r] of assignment) testsByRoot.set(r, [...(testsByRoot.get(r) ?? []), t]);
-    const importsOf = (file: string): string[] =>
-      (index.get(file)?.imports ?? []).flatMap((i) =>
-        i.resolved && i.resolved !== file ? [i.resolved] : [],
-      );
+    // Resolved imports and the files a computed import or a framework boot loads (globs).
+    const importsOf = (file: string): string[] => {
+      const a = index.get(file);
+      return [
+        ...(a?.imports ?? []).flatMap((i) =>
+          i.resolved && i.resolved !== file ? [i.resolved] : [],
+        ),
+        ...(a?.dynamicTargets ?? []).filter((t) => t !== file),
+      ];
+    };
     return {
       testsOf: (r: RunnerRoot) => (testsByRoot.get(r) ?? []).sort(),
       importsOf,

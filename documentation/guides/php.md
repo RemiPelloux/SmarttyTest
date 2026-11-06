@@ -52,6 +52,7 @@ A fatal error, a selected file PHPUnit runs no test from, and "No tests executed
 | A trait                                                                                      | Every test that reaches a class using it                                              |
 | A class a test or a factory builds (`new X`, `return new self`)                              | Every test that builds or receives it: any of its members can be called on the object |
 | A route, a config file, a provider, a migration, a translation, a view, `tests/TestCase.php` | Every test that boots the application                                                 |
+| What the application boot reaches, when the tests run through `php artisan test`             | Every test: Artisan boots the application before PHPUnit starts, plain test cases too |
 | `phpunit.xml`, its `bootstrap` file, `.env.testing`, `tests/Pest.php`                        | Every test of that PHPUnit configuration                                              |
 | `composer.json`, `composer.lock`                                                             | Every test in that folder and below                                                   |
 | A test file                                                                                  | That test                                                                             |

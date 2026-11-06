@@ -64,8 +64,17 @@ async function materializePhp(name: string): Promise<string> {
 const selected = (a: { decision: { selectedTests: { filePath: string }[] } }) =>
   a.decision.selectedTests.map((t) => t.filePath).sort();
 
-async function after(fixture: string, changes: [string, string, string][]) {
+async function after(
+  fixture: string,
+  changes: [string, string, string][],
+  /** Committed before the changes under test. */
+  setup: [string, string, string][] = [],
+) {
   const dir = await materializePhp(fixture);
+  if (setup.length) {
+    for (const [file, find, replace] of setup) await edit(dir, file, find, replace);
+    git(dir, "commit", "-qam", "setup");
+  }
   for (const [file, find, replace] of changes) await edit(dir, file, find, replace);
   const st = await SmartTest.open({ root: dir });
   return { dir, st, analysis: await st.analyze({ mode: "balanced" }) };
@@ -277,11 +286,36 @@ describe.skipIf(!ready("php-laravel"))("php-laravel", () => {
     expect(selected(analysis)).toEqual(["tests/Unit/SlugTest.php"]);
   }, 120_000);
 
+  // Run with vendor/bin/phpunit (no `php artisan test` script): only the tests extending
+  // Laravel's test case boot the application.
+  const PHPUNIT: [string, string, string] = [
+    "composer.json",
+    '"test": [\n            "@php artisan test"\n        ]',
+    '"test": [\n            "@php vendor/bin/phpunit"\n        ]',
+  ];
+
   it("a service behind a facade selects its unit test and the tests booting the application", async () => {
-    const { analysis } = await after("php-laravel", [
-      ["app/Services/Greeter.php", "', '.$name.'!'", "', '.$name.'!'.''"],
-    ]);
+    const { analysis } = await after(
+      "php-laravel",
+      [["app/Services/Greeter.php", "', '.$name.'!'", "', '.$name.'!'.''"]],
+      [PHPUNIT],
+    );
     expect(selected(analysis)).toEqual([...FEATURE, "tests/Unit/GreeterTest.php"].sort());
+  }, 120_000);
+
+  it("under php artisan test, what the boot runs selects every test, plain unit tests included", async () => {
+    // Artisan boots the application before PHPUnit starts: a broken provider fails every test
+    // (found by `audit --mutate` on this fixture).
+    const { analysis } = await after("php-laravel", [
+      [
+        "app/Providers/AppServiceProvider.php",
+        "    public function boot(): void\n    {\n        //",
+        "    public function boot(): void\n    {\n        $x = 1;",
+      ],
+    ]);
+    expect(selected(analysis)).toEqual(
+      [...FEATURE, "tests/Unit/GreeterTest.php", "tests/Unit/SlugTest.php"].sort(),
+    );
   }, 120_000);
 
   it("a migration, the test case or the bound implementation selects the booting tests only", async () => {
@@ -294,7 +328,7 @@ describe.skipIf(!ready("php-laravel"))("php-laravel", () => {
       ["tests/TestCase.php", "    //\n", "    protected bool $seed = false;\n"],
       ["app/Repositories/EloquentNoteRepository.php", "trim($body)", "trim($body, ' ')"],
     ] as [string, string, string][]) {
-      const { analysis } = await after("php-laravel", [change]);
+      const { analysis } = await after("php-laravel", [change], [PHPUNIT]);
       expect(selected(analysis), change[0]).toEqual(FEATURE);
     }
   }, 240_000);
