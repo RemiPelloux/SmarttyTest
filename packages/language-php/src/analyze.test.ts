@@ -294,10 +294,17 @@ final class Harvester {
         return [self::flags('a', Size::class), self::flags('b', Color::class)];
     }
     private static function flags(string $s, string $enum): bool { return $enum::tryFrom($s) !== null; }
+    public function pick(string $kind): object {
+        $class = match ($kind) { 'a' => Alpha::class, 'b' => Beta::class, default => throw new \\LogicException() };
+        return new $class();
+    }
 }
 `,
     );
     expect(a.dynamicUnresolved).toEqual([]);
+    expect(a.symbols.find((s) => s.qualifiedName === "Harvester.pick")?.escapes).toEqual(
+      expect.arrayContaining(["$App$Alpha", "$App$Beta"]),
+    );
     expect(a.imports.map((i) => i.specifier)).toContain("@composer/config/prospection.php");
     expect(a.symbols.find((s) => s.qualifiedName === "Harvester.flags")?.uses).toEqual(
       expect.arrayContaining(["$App$Size.tryFrom", "$App$Color.tryFrom"]),

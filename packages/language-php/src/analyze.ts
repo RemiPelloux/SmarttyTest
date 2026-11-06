@@ -723,6 +723,34 @@ function readPhp(
         toks[k + 5]?.v === ";"
       )
         out.set(t.v, [...(out.get(t.v) ?? []), resolveClass((toks[k + 2] as Tok).v)]);
+      // $class = match ($kind) { 'a' => A::class, 'b' => B::class, default => throw … };
+      if (
+        t.t === "var" &&
+        toks[k + 1]?.v === "=" &&
+        toks[k + 2]?.v === "match" &&
+        toks[k + 3]?.v === "(" &&
+        toks[close(k + 3) + 1]?.v === "{"
+      ) {
+        const open = close(k + 3) + 1;
+        const found: string[] = [];
+        let ok = true;
+        for (const [a, b] of argRanges(open)) {
+          let arrow = a;
+          while (arrow < b && toks[arrow]?.v !== "=>") arrow++;
+          const value: [number, number] = [arrow + 1, b];
+          const v = toks[value[0]];
+          if (v?.v === "throw") continue;
+          if (
+            value[1] - value[0] === 3 &&
+            v?.t === "name" &&
+            toks[value[0] + 1]?.v === "::" &&
+            toks[value[0] + 2]?.v === "class"
+          )
+            found.push(resolveClass(v.v));
+          else ok = false;
+        }
+        if (ok && found.length) out.set(t.v, [...(out.get(t.v) ?? []), ...found]);
+      }
       // foreach (self::HANDLERS as $h): a constant list of classes
       if (t.v === "foreach" && toks[k + 1]?.v === "(" && selfConst(k + 2) !== undefined) {
         const list = constClasses.get(selfConst(k + 2) as string);

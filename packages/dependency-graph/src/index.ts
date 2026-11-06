@@ -848,7 +848,10 @@ export class DependencyGraph {
       if (this.httpResourcesOf(a).length) return false;
       if (!this.httpFiles) {
         this.httpFiles = new Set();
-        for (const [g, b] of this.files) if (this.httpResourcesOf(b).length) this.httpFiles.add(g);
+        // Only a graph with server routes or requests reads every analysis (lazily loaded).
+        if ([...this.resourceKeys].some((r) => r.startsWith("http-")))
+          for (const [g, b] of this.files)
+            if (this.httpResourcesOf(b).length) this.httpFiles.add(g);
       }
       if (this.httpFiles.has(f)) return false;
     }
