@@ -1,6 +1,6 @@
 # Documentation
 
-SmartTest reads a change, follows it through your code to the tests that can detect a regression, and runs only those, through Jest, Vitest, `node --test`, Playwright, Cypress, Angular, pytest or unittest. When it cannot rule a test out, it runs it.
+SmartTest reads a change, follows it through your code to the tests that can detect a regression, and runs only those, through Jest, Vitest, `node --test`, Playwright, Cypress, Angular, pytest, unittest, PHPUnit or Pest. When it cannot rule a test out, it runs it.
 
 Start in three steps: [install and run `smarttest init`](guides/getting-started.md), [gate commits and pushes](guides/commit-hooks.md), [run it in CI](guides/ci.md).
 
@@ -18,6 +18,7 @@ New in 1.1: [`smarttest audit`](guides/audit.md) measures missed tests on your p
 - [Auditing selection](guides/audit.md): inject faults, record traces and compare imports to measure missed tests.
 - [Angular](guides/angular.md): templates and styles as edges, `angular.json` per project, `ng test`.
 - [Python (preview)](guides/python.md): pytest and unittest, analysed without running Python.
+- [PHP (preview)](guides/php.md): PHPUnit, Pest and Laravel, analysed without running PHP.
 - [Studio](guides/studio.md): a local browser view of the analysis: impact, tests and evidence.
 - [VS Code](guides/vscode.md) ([extension README](../extensions/vscode/README.md)): which tests protect a function, on hover; run what a change affects.
 - [Plugins](guides/plugins.md): the frozen Plugin SDK: edges, rules, reporters and adapters.
