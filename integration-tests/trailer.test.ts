@@ -119,6 +119,26 @@ describe("commit trailer", () => {
     expect((await cli(dir, "hook", "trailer", "missing-file")).code).toBe(0);
   }, 60_000);
 
+  it("CaptainHook: one write for both actions, one removal for both", async () => {
+    const dir = await setup(true);
+    git(dir, "config", "--unset", "core.hooksPath");
+    await writeFile(
+      join(dir, "captainhook.json"),
+      `${JSON.stringify({ "pre-commit": { enabled: true, actions: [] } }, null, 4)}\n`,
+    );
+    const applied = await cli(dir, "hook", "install", "--yes", "--json");
+    expect(JSON.parse(applied.out).applied).toEqual(["captainhook.json"]);
+    const config = JSON.parse(await readFile(join(dir, "captainhook.json"), "utf8"));
+    expect(config["pre-commit"].actions[0].action).toMatch(/smarttest(@\S+)? run --staged --hook/);
+    expect(config["commit-msg"].actions[0].action).toMatch(
+      /smarttest(@\S+)? hook trailer \{\$FILE\}/,
+    );
+    const removed = await cli(dir, "hook", "uninstall", "--yes", "--json");
+    expect(JSON.parse(removed.out).removed).toEqual(["captainhook.json"]);
+    const after = JSON.parse(await readFile(join(dir, "captainhook.json"), "utf8"));
+    expect(JSON.stringify(after)).not.toContain("smarttest");
+  }, 60_000);
+
   it("hook install plans the commit-msg step when hook.trailer is on", async () => {
     const dir = await setup(true);
     git(dir, "config", "--unset", "core.hooksPath");
