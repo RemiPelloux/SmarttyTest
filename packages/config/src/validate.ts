@@ -59,7 +59,7 @@ const TOP_KEYS: Record<string, string[] | null> = {
   projects: null,
   timeoutMs: null,
   workers: null,
-  reports: ["formats", "outputDir"],
+  reports: ["formats", "outputDir", "annotations"],
   storeDir: null,
 };
 
@@ -391,6 +391,8 @@ export function validateConfig(raw: unknown): { errors: ConfigIssue[]; warnings:
             : "must be a string";
         if (why) err("reports.outputDir", why);
       }
+      if (c.reports.annotations !== undefined && typeof c.reports.annotations !== "boolean")
+        err("reports.annotations", "must be a boolean");
     }
   }
   if (c.snapshots !== undefined) {

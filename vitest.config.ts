@@ -17,6 +17,20 @@ for (const name of [
   delete process.env[name];
 }
 
+// Run in a CI job, the CLI under test would annotate that job (and append to its step summary):
+// the tests that check annotations set these variables themselves.
+for (const name of [
+  "GITHUB_ACTIONS",
+  "GITHUB_STEP_SUMMARY",
+  "GITHUB_WORKSPACE",
+  "GITLAB_CI",
+  "CI_PROJECT_DIR",
+  "BITBUCKET_BUILD_NUMBER",
+  "BITBUCKET_CLONE_DIR",
+]) {
+  delete process.env[name];
+}
+
 // One temporary directory per run, removed at the end (scripts/test-tmp.mjs). Workers and the
 // processes the tests start inherit it.
 if (!process.env.SMARTTEST_TEST_TMP) {

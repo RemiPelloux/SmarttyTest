@@ -32,6 +32,66 @@ npx smarttest shadow --non-interactive
 
 Reports are written to `.smarttest/reports/` (`junit.xml`, `report.html`, `report.json`, `summary.md`). Publish them with your CI's artifact mechanism.
 
+## Annotations on the pull request
+
+On GitHub Actions, GitLab CI and Bitbucket Pipelines, `smarttest ci`, `run` and `impact` show the selection where the change is reviewed. SmartTest detects the CI from `GITHUB_ACTIONS`, `GITLAB_CI` or `BITBUCKET_BUILD_NUMBER`; nothing to configure. Annotations are output formats: SmartTest makes no call to the CI's API.
+
+| CI        | What appears                                                                                                                                                                                                                                                       |
+| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| GitHub    | A notice on each selected test file with its reason (the closest reasons first), one notice for the files not run with their reasons and the time saved, an error per failing file, a warning for each fallback. The step summary lists every file and its reason. |
+| GitLab    | A Code Quality report, `.smarttest/reports/gl-code-quality.json` (selected files as `info`, failing files as `major`), shown in the merge request widget, and a collapsible "SmartTest selection" section in the job log.                                          |
+| Bitbucket | A Code Insights report, `.smarttest/reports/bitbucket-insights.json`: `report` (counts, time saved) and `annotations`. Post it from the pipeline (below).                                                                                                          |
+
+GitHub shows at most 10 annotations of each level per step and drops the rest silently, so SmartTest keeps each level within 10: the last notice says how many more files were selected, and the step summary has them all. GitLab and Bitbucket reports keep 100 entries.
+
+Skipped tests are never shown as passed: they are "not run (skipped by selection)", with the reason. Time saved is an estimate from the durations SmartTest recorded on earlier runs (`.smarttest/state/durations.json`); on a fresh runner there are none and the summary says the time saved is not measured yet. Cache `.smarttest/state/` between pipelines to measure it.
+
+Turn annotations off with `--no-annotations`, or for the project with `reports: { annotations: false }`. `--annotations github|gitlab|bitbucket` forces a provider. With `--json`, stdout stays one JSON document and the annotation lines go to stderr, which GitHub reads too.
+
+GitHub Actions, selection only (nothing runs; useful next to an existing test job):
+
+```yaml
+- uses: actions/checkout@v5
+  with:
+    fetch-depth: 0
+- run: npm ci
+- run: npx smarttest impact --base "origin/${{ github.base_ref }}"
+```
+
+GitLab CI, with the Code Quality report:
+
+```yaml
+test:
+  script:
+    - npm ci
+    - npx smarttest ci
+  artifacts:
+    when: always
+    reports:
+      junit: .smarttest/reports/junit.xml
+      codequality: .smarttest/reports/gl-code-quality.json
+```
+
+Bitbucket Pipelines, posting the Code Insights report through the pipeline's authenticated proxy:
+
+```yaml
+- step:
+    script:
+      - npm ci
+      - npx smarttest ci || STATUS=$?
+      - >-
+        curl --proxy http://localhost:29418 -s -X PUT
+        "http://api.bitbucket.org/2.0/repositories/$BITBUCKET_REPO_FULL_NAME/commit/$BITBUCKET_COMMIT/reports/smarttest"
+        -H "Content-Type: application/json" -d "$(node -p 'JSON.stringify(require(\"./.smarttest/reports/bitbucket-insights.json\").report)')"
+      - >-
+        curl --proxy http://localhost:29418 -s -X POST
+        "http://api.bitbucket.org/2.0/repositories/$BITBUCKET_REPO_FULL_NAME/commit/$BITBUCKET_COMMIT/reports/smarttest/annotations"
+        -H "Content-Type: application/json" -d "$(node -p 'JSON.stringify(require(\"./.smarttest/reports/bitbucket-insights.json\").annotations)')"
+      - exit ${STATUS:-0}
+```
+
+SmartTest's own pull requests run `smarttest impact` this way (the `selection` job of [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml)).
+
 ## Exit codes
 
 | Code | Meaning                                                                          | Usual CI handling      |
@@ -56,6 +116,7 @@ test:
     when: always
     reports:
       junit: .smarttest/reports/junit.xml
+      codequality: .smarttest/reports/gl-code-quality.json
 ```
 
 ## Example: any shell-based CI (Jenkins, Buildkite, Drone…)

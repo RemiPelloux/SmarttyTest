@@ -300,6 +300,10 @@
         "outputDir": {
           "description": "Report directory (default .smarttest/reports).",
           "type": "string"
+        },
+        "annotations": {
+          "description": "CI annotations on GitHub Actions, GitLab CI and Bitbucket Pipelines: selected and skipped tests with their reason, and a summary with the time saved (default true; --no-annotations turns them off for one run).",
+          "type": "boolean"
         }
       }
     },

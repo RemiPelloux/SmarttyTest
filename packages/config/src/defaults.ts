@@ -135,6 +135,7 @@ export function resolveConfig(config: SmartTestConfig = {}): ResolvedConfig {
     reports: {
       formats: config.reports?.formats ?? ["html", "json"],
       outputDir: config.reports?.outputDir ?? ".smarttest/reports",
+      annotations: config.reports?.annotations ?? true,
     },
     storeDir: config.storeDir ?? ".smarttest",
   };
