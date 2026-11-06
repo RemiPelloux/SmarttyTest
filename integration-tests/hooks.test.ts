@@ -111,7 +111,8 @@ describe("commit hooks run the staged content", () => {
     type Stored = { baseId?: string; stats: Record<string, [number, number] | null> };
     const state = (f: string) =>
       readFile(join(dir, ".smarttest", "state", f), "utf8").then(
-        (t) => JSON.parse(t) as Stored,
+        // The full index is a header line followed by the lazily read fields: the header.
+        (t) => JSON.parse(t.split("\n")[0] as string) as Stored,
         () => undefined,
       );
     const base = (await state("index.json")) as Stored;

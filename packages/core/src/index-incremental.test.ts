@@ -29,8 +29,15 @@ describe("incremental resolution with the TypeScript resolver", () => {
         i.resolved ?? (i.external ? "external" : "unresolved"),
       ]),
     );
+  // Keys sorted too: an analysis loaded from the stored index lists its lazily read fields last.
   const sorted = (idx: SymbolIndex) =>
-    JSON.stringify([...idx.entries()].sort(([a], [b]) => a.localeCompare(b)));
+    JSON.stringify(
+      [...idx.entries()].sort(([a], [b]) => a.localeCompare(b)),
+      (_k, x: unknown) =>
+        x && typeof x === "object" && !Array.isArray(x)
+          ? Object.fromEntries(Object.entries(x).sort(([a], [b]) => a.localeCompare(b)))
+          : x,
+    );
 
   it("finds a new file that shadows a resolution: a sibling module, an earlier paths target", async () => {
     const root = await mkdtemp(join(tmpdir(), "st-incr-ts-"));
