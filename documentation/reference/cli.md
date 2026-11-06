@@ -15,7 +15,7 @@
 | `smarttest benchmark`                                           | Replay recent commits: full run vs project-gated run vs SmartTest, with missed failures re-checked on the parent commit |
 | `smarttest hook install \| uninstall \| status`                 | Put `smarttest run --staged` in the pre-commit hook (husky, lefthook, simple-git-hooks or `.git/hooks`)                 |
 | `smarttest ci`                                                  | Run affected tests in any CI: detects the provider, picks the base, deepens shallow clones, writes JUnit and Markdown   |
-| `smarttest sync [--check]`                                      | Update the configuration after the project changed (runners, packages, Git); `--check` fails when it is out of date     |
+| `smarttest sync [--check] [--apply]`                            | Update the configuration after the project changed, and propose what an upgrade adds; `--check` fails on drift only     |
 | `smarttest watch`                                               | Rerun the tests affected by each save                                                                                   |
 | `smarttest migrate --to vitest`                                 | Move Jest projects to Vitest, keeping SmartTest rules and history                                                       |
 | `smarttest shard --total n --index i`                           | Print one CI shard of the selection, balanced by recorded durations                                                     |
@@ -86,19 +86,21 @@ Reserved for a later release: `ai …` and `autopilot`. They exit with `ST_NOT_A
 
 ## `run`
 
-| Flag             | Meaning                                                                       |
-| ---------------- | ----------------------------------------------------------------------------- |
-| `--affected`     | Analyse changes and run affected tests (default)                              |
-| `--all`          | Full suite through the same pipeline                                          |
-| `--coverage`     | Collect coverage through the runner's provider. Labelled `selected` or `full` |
-| `--retries <n>`  | Retry failing files. A pass after a retry is reported as **flaky**            |
-| `--timeout <ms>` | Per-runner timeout. Unfinished files become `timed-out`                       |
-| `--workers <n>`  | Passed to the runner as `--maxWorkers`                                        |
-| `--format <f>`   | Repeatable: `html`, `json`, `junit`, `markdown` (default from config)         |
-| `--open`         | Open the HTML report                                                          |
-| `--no-cache`     | Run tests even when a validated cached pass exists                            |
-| `--shard <i/n>`  | Run shard i of n, balanced by recorded durations                              |
-| `--bail`         | Stop starting runner groups after one has a failure                           |
+| Flag                       | Meaning                                                                                    |
+| -------------------------- | ------------------------------------------------------------------------------------------ |
+| `--affected`               | Analyse changes and run affected tests (default)                                           |
+| `--all`                    | Full suite through the same pipeline                                                       |
+| `--coverage`               | Collect coverage through the runner's provider. Labelled `selected` or `full`              |
+| `--retries <n>`            | Retry failing files. A pass after a retry is reported as **flaky**                         |
+| `--timeout <ms>`           | Per-runner timeout. Unfinished files become `timed-out`                                    |
+| `--workers <n>`            | Passed to the runner as `--maxWorkers`                                                     |
+| `--format <f>`             | Repeatable: `html`, `json`, `junit`, `markdown` (default from config)                      |
+| `--open`                   | Open the HTML report                                                                       |
+| `--no-cache`               | Run tests even when a validated cached pass exists                                         |
+| `--shard <i/n>`            | Run shard i of n, balanced by recorded durations                                           |
+| `--bail`                   | Stop starting runner groups after one has a failure                                        |
+| `--annotations <provider>` | Annotate the CI job: `github`, `gitlab` or `bitbucket` (automatic when the CI is detected) |
+| `--no-annotations`         | No CI annotations for this run                                                             |
 
 `--hook` enables the commit-hook profile with affected-project checks, fail-fast execution, compact output and duration records. It accepts `--staged` or `--push` and rejects sharding. See [commit and push hooks](../guides/commit-hooks.md).
 
@@ -144,6 +146,8 @@ When sub-projects lay out their tests differently (LeadsIt has colocated `*.serv
 
 Reports default to the configured formats plus JUnit and Markdown; on GitHub the Markdown summary is added to the job summary. `--all` runs everything, `--dry-run` prints the provider and the base without running tests.
 
+On GitHub Actions, GitLab CI and Bitbucket Pipelines, `ci`, `run` and `impact` also annotate the job: each selected test file with the reason `explain` gives, the files not run with their reasons, failing files, and a summary with the time saved. GitHub gets workflow commands (at most 10 per level, the last one summarising the rest) and the step summary; GitLab a Code Quality report (`.smarttest/reports/gl-code-quality.json`) and a collapsible log section; Bitbucket a Code Insights report file (`.smarttest/reports/bitbucket-insights.json`) for the pipeline to post. `--no-annotations` or `reports.annotations: false` turns them off; `--annotations <provider>` forces one. With `--json`, the log lines go to stderr. See [CI annotations](../guides/ci.md#annotations-on-the-pull-request).
+
 ## `generate`
 
 | Flag                                          | Meaning                                                                 |
@@ -159,7 +163,19 @@ Reports default to the configured formats plus JUnit and Markdown; on GitHub the
 
 ## `sync`
 
-Compares the configuration with the project as it is now and patches only the keys that changed: `adapters` (a runner was added or replaced), `vcs.provider` (the project adopted Git, or left it), `projects` (new sub-projects with their own conventions). Declared `runners` that no longer exist are reported for a manual fix. `--dry-run` previews, `--yes` writes, `--check` exits 3 when anything is out of date. `run` and `doctor` warn when the configuration is out of date. `doctor --fix` applies the same patch and also adds `.smarttest/` to `.gitignore` and removes unreadable local state files.
+Compares the configuration with the project as it is now and patches only the keys that changed: `adapters` (a runner was added or replaced), `vcs.provider` (the project adopted Git, or left it), `projects` (new sub-projects with their own conventions). Declared `runners` that no longer exist are reported for a manual fix. `run` and `doctor` warn when the configuration is out of date. `doctor --fix` applies the same patch and also adds `.smarttest/` to `.gitignore` and removes unreadable local state files.
+
+After an upgrade, `sync` also proposes what the new version offers, each proposal as a diff:
+
+| Proposal             | When                                                                                                                           |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `redundant-triggers` | `triggers` lists built-in triggers (lockfiles, `package.json`…): lockfile changes select by package, the entry changes nothing |
+| `language-include`   | a hand-written `include` leaves out Python (or PHP) files the project has                                                      |
+| `hook-scope`         | Playwright or Cypress specs sit next to a unit runner and the hook runs them all: `hook.runners` leaves them to CI             |
+| `hook-trailer`       | the project adds its own test trailer to commit messages (`scripts/test-trailer.sh`), and this version knows `hook.trailer`    |
+| `hook-block:<stage>` | the SmartTest block in an installed hook was written by an older version (including a parallel pre-push it can run in again)   |
+
+Nothing is written silently. `--dry-run` prints every diff and writes nothing. In a terminal, `sync` asks for each change; `--apply` (or `--yes`) writes all of them. Without a terminal and without `--apply`, nothing is written and the command exits 3 (`ST_INIT_CONFIRMATION_REQUIRED`). Each file is written once, atomically, and only if it is still the text the proposal was computed from. `--check` exits 3 on drift only; an upgrade proposal never fails it. `--json` adds `upgrades` (and `applied`, `skipped` after a write) to the `sync` document.
 
 ## `watch`
 

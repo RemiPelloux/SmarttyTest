@@ -4,6 +4,20 @@ All notable changes are documented here. Releases are managed with [Changesets](
 
 ## Unreleased
 
+### Added: CI annotations
+
+- On GitHub Actions, GitLab CI and Bitbucket Pipelines, `smarttest ci`, `run` and `impact` show the selection on the pull request: each selected test file with the reason `explain` gives, the files not run with their reasons, failing files, fallbacks, and a summary with the time saved (an estimate from recorded durations, or "not measured yet" on a runner without them; never shown as passed). Detected from `GITHUB_ACTIONS`, `GITLAB_CI` and `BITBUCKET_BUILD_NUMBER`.
+- GitHub: workflow commands kept within GitHub's 10 annotations per level and step (the last one summarises the rest) and the step summary. GitLab: a Code Quality report (`.smarttest/reports/gl-code-quality.json`) and a collapsible job-log section. Bitbucket: a Code Insights report file (`.smarttest/reports/bitbucket-insights.json`) for the pipeline to post. Output formats only: no call to any CI API.
+- `--no-annotations` and `reports.annotations: false` (new, optional config key) turn them off; `--annotations github|gitlab|bitbucket` forces one. With `--json`, stdout stays one document and the annotation lines go to stderr.
+- The Markdown summary (`summary.md`, the GitHub step summary of `run`) now always states the time saved and lists why the files not run were not selected.
+- SmartTest's own pull requests run their selection with annotations (`selection` job in CI). See [CI annotations](documentation/guides/ci.md#annotations-on-the-pull-request).
+
+### Added: `smarttest sync` proposes upgrades
+
+- After an upgrade, `sync` proposes what the new version offers, each as a diff, written only when accepted: built-in triggers listed by hand (lockfiles select by package), Python or PHP files a hand-written `include` leaves out, `hook.runners` when browser specs would run in the commit hook, `hook.trailer` when the project writes its own test trailer (once this version knows the key), and installed hook blocks written by an older SmartTest, including a parallel pre-push it can run in again.
+- `--dry-run` writes nothing; in a terminal `sync` asks for each change; `--apply` (new, same as `--yes`) writes all of them. Without a terminal and without `--apply`, nothing is written and `sync` exits 3, as before. Each file is written once, atomically, and only while it is still the text the proposal was computed from. `--check` still fails on drift only.
+- `sync --json` gains `upgrades`, and `applied` and `skipped` after a write. Existing fields are unchanged.
+
 ### Changed: hooks
 
 - A push that creates a branch compares with the last commit a pre-push hook passed on, not with the whole history. On openpro-front a new branch meant 14,377 changed files and a 27-minute hook. A commit pushed with the hook bypassed has no passed record, so a new branch carrying it still checks it; with no passed record at all, the whole history is still compared.
