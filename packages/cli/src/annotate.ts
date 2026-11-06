@@ -3,6 +3,7 @@
  * Pipelines is detected (or forced with `--annotations <provider>`), off with `--no-annotations`
  * or `reports.annotations: false`. Output formats only, never a CI API call (ADR-0004).
  */
+import { realpathSync } from "node:fs";
 import { isAbsolute, join, relative } from "node:path";
 import type {
   AnnotationInput,
@@ -52,7 +53,15 @@ export function pathPrefix(
 ): string {
   const ws = env[WORKSPACE[provider]];
   if (!ws) return "";
-  const rel = relative(ws, root).split("\\").join("/");
+  // Both sides canonical: the project root is (macOS /var → /private/var, Windows short names).
+  const real = (p: string) => {
+    try {
+      return realpathSync.native(p);
+    } catch {
+      return p;
+    }
+  };
+  const rel = relative(real(ws), real(root)).split("\\").join("/");
   return !rel || rel.startsWith("..") || isAbsolute(rel) ? "" : `${rel}/`;
 }
 

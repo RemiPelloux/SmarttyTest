@@ -2,7 +2,7 @@
  * CI annotations through the CLI: detected from the environment, bounded, printed beside a
  * `--json` document without breaking it, and turned off by a flag or the config.
  */
-import { readFile, writeFile } from "node:fs/promises";
+import { readFile, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { main } from "smarttest";
 import { afterEach, describe, expect, it } from "vitest";
@@ -46,7 +46,10 @@ describe("CI annotations", () => {
     await writeFile(summary, "");
     process.env.GITHUB_ACTIONS = "true";
     process.env.GITHUB_STEP_SUMMARY = summary;
-    process.env.GITHUB_WORKSPACE = join(dir, "..");
+    // Through a link, as macOS /var → /private/var: paths are compared canonically.
+    const link = join(dir, "..", `ws-${Date.now()}`);
+    await symlink(join(dir, ".."), link, "junction");
+    process.env.GITHUB_WORKSPACE = link;
     const r = await cli(dir, "impact");
     expect(r.code).toBe(0);
     const notices = r.out.split("\n").filter((l) => l.startsWith("::notice"));
