@@ -80,7 +80,8 @@ export interface RunnerInfo {
     | "cypress"
     | "angular"
     | "pytest"
-    | "unittest";
+    | "unittest"
+    | "phpunit";
   dir: string;
   configFile?: string;
   /** Test file patterns given on the command line (node --test). */
@@ -434,6 +435,61 @@ async function detectPythonRunners(root: string, files: readonly string[]): Prom
             ],
           },
     );
+  }
+  return out;
+}
+
+/** PHPUnit's configuration file names, in the order PHPUnit looks for them. */
+export const PHPUNIT_CONFIGS = ["phpunit.xml", "phpunit.xml.dist", "phpunit.dist.xml"];
+
+/**
+ * PHP projects (preview): every folder with a `composer.json` (outside `vendor/`) whose PHPUnit
+ * configuration or `*Test.php` files show tests. One `phpunit` runner per project; the adapter
+ * runs it through `php artisan test` or Pest when the project does.
+ */
+async function detectPhpRunners(root: string, files: readonly string[]): Promise<RunnerInfo[]> {
+  const php = files.filter((f) => f.endsWith(".php") && !/(?:^|\/)vendor\//.test(f));
+  if (!php.length) return [];
+  const dirOf = (f: string) => (f.includes("/") ? f.slice(0, f.lastIndexOf("/")) : "");
+  const projects = files
+    .filter(
+      (f) =>
+        /(?:^|\/)composer\.json$/.test(f) &&
+        f.split("/").length <= 4 &&
+        !/(?:^|\/)(?:vendor|node_modules)\//.test(f),
+    )
+    .map(dirOf)
+    .sort();
+  const out: RunnerInfo[] = [];
+  const inside = (f: string, d: string) => d === "" || f.startsWith(`${d}/`);
+  for (const dir of projects) {
+    // The deepest Composer project owns its files (a package inside an application).
+    const owned = php.filter(
+      (f) =>
+        inside(f, dir) &&
+        !projects.some((d) => d !== dir && d.startsWith(dir ? `${dir}/` : "") && inside(f, d)),
+    );
+    const prefix = dir ? `${dir}/` : "";
+    let configFile: string | undefined;
+    for (const c of PHPUNIT_CONFIGS)
+      if (files.includes(`${prefix}${c}`) || (await exists(join(root, prefix, c)))) {
+        configFile = `${prefix}${c}`;
+        break;
+      }
+    const tests = owned.filter((f) => /(?:^|\/)[^/]*Test\.php$/.test(f));
+    if (!configFile && !tests.length) continue;
+    // A package inside the application (`packages/sdk`, installed into the application's vendor/
+    // as a path repository) runs its own tests only once installed itself; until then its tests
+    // are reported as collected by no runner.
+    if (dir && !(await exists(join(root, prefix, "vendor", "autoload.php")))) continue;
+    const composer = (await readText(join(root, prefix, "composer.json"))) ?? "";
+    const evidence: string[] = [];
+    if (configFile) evidence.push(configFile);
+    if (/"phpunit\/phpunit"/.test(composer)) evidence.push("phpunit/phpunit in composer.json");
+    if (/"pestphp\/pest"/.test(composer)) evidence.push("pestphp/pest in composer.json");
+    if (!evidence.length)
+      evidence.push(`${tests.length} *Test.php file(s) (${tests.slice(0, 2).join(", ")})`);
+    out.push({ adapter: "phpunit", dir, ...(configFile ? { configFile } : {}), evidence });
   }
   return out;
 }
@@ -900,9 +956,12 @@ export async function detectProject(
   const runners = [
     ...(await detectRunners(root, manifests)),
     ...(await detectPythonRunners(root, files)),
+    ...(await detectPhpRunners(root, files)),
   ];
-  const python = runners.some((r) => r.adapter === "pytest" || r.adapter === "unittest");
-  if (!manifest && !workspaces.length && !python)
+  const other = runners.some(
+    (r) => r.adapter === "pytest" || r.adapter === "unittest" || r.adapter === "phpunit",
+  );
+  if (!manifest && !workspaces.length && !other)
     warnings.push("No package.json found in this project");
   if (!runners.length)
     warnings.push("No Jest or Vitest setup detected — install one to run tests through SmartTest");

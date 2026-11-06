@@ -107,6 +107,40 @@ jobs:
         env:
           SMARTTEST_PYTHON: python
 
+  php:
+    # The PHP preview against real PHPUnit and Laravel (fixtures/projects/php-*), on Linux and
+    # Windows. Without PHP and the fixtures' Composer dependencies these tests are skipped elsewhere.
+    name: php (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - run: git config --global core.autocrlf false
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.3"
+          extensions: mbstring, pdo_sqlite, sqlite3, fileinfo
+          tools: composer
+          coverage: none
+      - run: composer install --no-interaction --no-progress
+        working-directory: fixtures/projects/php-phpunit
+      - run: composer install --no-interaction --no-progress
+        working-directory: fixtures/projects/php-laravel
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - run: pnpm vitest run integration-tests/php.test.ts packages/language-php packages/adapter-phpunit
+        env:
+          SMARTTEST_PHP: php
+
   extension:
     name: extension (${{ matrix.os }})
     strategy:

@@ -25,6 +25,7 @@ Thumbs.db
 !.env.example
 # Fixture inputs, not secrets.
 !fixtures/projects/**/.env.test
+!fixtures/projects/**/.env.testing
 
 # Editors
 .idea/
@@ -39,3 +40,9 @@ site/dist/
 # Python fixtures run natively
 __pycache__/
 .pytest_cache/
+
+# PHP fixtures: Composer installs their dependencies (composer install in each fixture)
+fixtures/projects/php-*/vendor/
+fixtures/projects/php-*/bootstrap/cache/*.php
+.phpunit.cache/
+.phpunit.result.cache

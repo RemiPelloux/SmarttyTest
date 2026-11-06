@@ -7,6 +7,7 @@ import { AngularAdapter } from "@smarttest/adapter-angular";
 import { CypressAdapter } from "@smarttest/adapter-cypress";
 import { JestAdapter } from "@smarttest/adapter-jest";
 import { NodeTestAdapter } from "@smarttest/adapter-node";
+import { PhpUnitAdapter } from "@smarttest/adapter-phpunit";
 import { PlaywrightAdapter } from "@smarttest/adapter-playwright";
 import { PytestAdapter, UnittestAdapter } from "@smarttest/adapter-python";
 import { VitestAdapter } from "@smarttest/adapter-vitest";
@@ -94,6 +95,8 @@ import {
   type HookPlan,
   type HookStage,
   type MigratePlan,
+  planCaptainHook,
+  planCaptainHookUninstall,
   planHookInstall,
   planHookUninstall,
   planMigrate,
@@ -721,13 +724,18 @@ export class SmartTest {
       exclude: [...this.config.exclude, ...generatedExcludes],
       ...(gitFiles ? { gitFiles } : {}),
     });
-    // Python (preview) can be turned off per project; a virtual environment is not the project.
-    return files.filter(
-      (f) =>
-        !f.endsWith(".py") ||
-        (this.config.python.enabled &&
-          !/(?:^|\/)(?:\.?venv|env|site-packages|__pycache__)\//.test(f)),
-    );
+    // Python and PHP (previews) can be turned off per project; a virtual environment, Composer's
+    // `vendor/` and Laravel's generated caches are not the project.
+    return files.filter((f) => {
+      if (f.endsWith(".py"))
+        return (
+          this.config.python.enabled &&
+          !/(?:^|\/)(?:\.?venv|env|site-packages|__pycache__)\//.test(f)
+        );
+      if (f.endsWith(".php"))
+        return this.config.php.enabled && !/(?:^|\/)(?:vendor|storage|bootstrap\/cache)\//.test(f);
+      return true;
+    });
   }
 
   async allFiles(): Promise<string[]> {
@@ -758,6 +766,8 @@ export class SmartTest {
     // Python is a preview: `python: { enabled: false }` leaves its runners out too.
     if (!this.config.python.enabled)
       roots = roots.filter((r) => r.adapter !== "pytest" && r.adapter !== "unittest");
+    // So is PHP: `php: { enabled: false }`.
+    if (!this.config.php.enabled) roots = roots.filter((r) => r.adapter !== "phpunit");
     // A dependency without config still runs from the package dir; prefer roots with config at equal depth.
     return roots;
   }
@@ -915,7 +925,7 @@ export class SmartTest {
     // Cold start (no index, or one from another analyzer version) of a large project: parser
     // threads start before files are read, so their start-up overlaps with reading.
     const sample = index.entries().values().next().value as FileAnalysis | undefined;
-    const { ts: typescript, py: python, analyzers: ANALYZERS } = await lang;
+    const { ts: typescript, py: python, php, analyzers: ANALYZERS } = await lang;
     const cold =
       index.size === 0 ||
       (sample !== undefined && !ANALYZERS.some((a) => a.version === sample.analyzerVersion));
@@ -927,15 +937,20 @@ export class SmartTest {
     );
     // Python files resolve their imports the Python way (preview).
     const pyResolver = new python.PythonResolver(this.root);
+    const files = await this.sourceFiles(gitFiles);
+    // PHP files resolve their names the Composer and Laravel way (preview).
+    const phpResolver = new php.PhpResolver(this.root, () => files);
     const resolver = {
       resolve: (from: string, specifier: string) =>
         from.endsWith(".py")
           ? pyResolver.resolve(from, specifier)
-          : tsResolver.resolve(from, specifier),
-      resolvePattern: (from: string, pattern: string) => tsResolver.resolvePattern(from, pattern),
+          : from.endsWith(".php")
+            ? phpResolver.resolve(from, specifier)
+            : tsResolver.resolve(from, specifier),
+      resolvePattern: (from: string, pattern: string) =>
+        from.endsWith(".php") ? undefined : tsResolver.resolvePattern(from, pattern),
       inputsFor: (files: readonly string[]) => tsResolver.inputsFor(files),
     };
-    const files = await this.sourceFiles(gitFiles);
     // Every file the resolver reads to resolve these files (tsconfig/jsconfig and what they
     // extend or reference, package.json files) keys the stored resolutions.
     const contextFiles = [
@@ -945,11 +960,12 @@ export class SmartTest {
         ...profile.workspaces.map((w) => `${w.dir}/package.json`),
         ...resolver.inputsFor(files),
         ...(files.some((f) => f.endsWith(".py")) ? pyResolver.inputs() : []),
+        ...(files.some((f) => f.endsWith(".php")) ? phpResolver.inputs(files) : []),
       ]),
     ];
     const { readFile } = await import("node:fs/promises");
     // RESOLVER_VERSION: a SmartTest upgrade that resolves differently re-resolves every import.
-    const contextKey = `${typescript.RESOLVER_VERSION}+${python.PYTHON_RESOLVER_VERSION}\n${(
+    const contextKey = `${typescript.RESOLVER_VERSION}+${python.PYTHON_RESOLVER_VERSION}+${php.PHP_RESOLVER_VERSION}\n${(
       await Promise.all(
         contextFiles.map(
           async (f) =>
@@ -1463,10 +1479,16 @@ export class SmartTest {
   ) {
     const testsByRoot = new Map<RunnerRoot, string[]>();
     for (const [t, r] of assignment) testsByRoot.set(r, [...(testsByRoot.get(r) ?? []), t]);
-    const importsOf = (file: string): string[] =>
-      (index.get(file)?.imports ?? []).flatMap((i) =>
-        i.resolved && i.resolved !== file ? [i.resolved] : [],
-      );
+    // Resolved imports and the files a computed import or a framework boot loads (globs).
+    const importsOf = (file: string): string[] => {
+      const a = index.get(file);
+      return [
+        ...(a?.imports ?? []).flatMap((i) =>
+          i.resolved && i.resolved !== file ? [i.resolved] : [],
+        ),
+        ...(a?.dynamicTargets ?? []).filter((t) => t !== file),
+      ];
+    };
     return {
       testsOf: (r: RunnerRoot) => (testsByRoot.get(r) ?? []).sort(),
       importsOf,
@@ -2449,6 +2471,13 @@ export class SmartTest {
       };
       return group.adapter === "pytest" ? new PytestAdapter(py) : new UnittestAdapter(py);
     }
+    if (group.adapter === "phpunit")
+      return new PhpUnitAdapter({
+        projectRoot: this.root,
+        cwd,
+        ...(g.configFile ? { configFile: g.configFile } : {}),
+        ...(this.config.php.binary ? { binary: this.config.php.binary } : {}),
+      });
     if (group.adapter === "node")
       return new NodeTestAdapter({
         projectRoot: this.root,
@@ -3282,8 +3311,31 @@ export class SmartTest {
       globalConfigFiles,
       overrides,
     });
+    // CaptainHook (PHP): SmartTest's action replaces the one that runs tests, in each hook.
+    const captain =
+      profile.vcs.provider === "git"
+        ? await planCaptainHook(this.root, { replace: true })
+        : undefined;
+    if (captain) {
+      if (captain.plan.action !== "skip") plan.files.push(captain.plan);
+      const replaced = captain.stages.filter((s) => s.replaced.length);
+      plan.recommendations.push({
+        key: "Git hook",
+        value: captain.stages
+          .map((s) => `smarttest run ${s.stage === "pre-push" ? "--push" : "--staged"}`)
+          .join(", "),
+        reason: replaced.length
+          ? `captainhook.json runs tests in ${replaced.map((s) => s.stage).join(" and ")} (${replaced.flatMap((s) => s.replaced).join(", ")}); SmartTest's action replaces it in place`
+          : "captainhook.json manages this repository's Git hooks",
+        evidence: ["captainhook.json"],
+      });
+      if (replaced.length)
+        plan.warnings.push(
+          `captainhook.json: ${replaced.flatMap((s) => s.replaced.map((r) => `\`${r}\` (${s.stage})`)).join(", ")} would be replaced by SmartTest's action; \`smarttest hook uninstall\` restores them`,
+        );
+    }
     // Offer the Git hook, replacing the full-suite test steps the hook runs today.
-    if (profile.vcs.provider === "git") {
+    if (profile.vcs.provider === "git" && !captain) {
       // A hook SmartTest must not edit (shared, owned by a dependency, not a shell script) leaves
       // the rest of the setup intact: init reports it and goes on without the hook.
       // The hook where the repository already runs its tests: a related-tests step kept in
@@ -3326,6 +3378,30 @@ export class SmartTest {
   async hookInstallPlan(
     options: { manager?: HookManager; replace?: boolean; stage?: HookStage } = {},
   ): Promise<HookPlan> {
+    // A repository whose hooks CaptainHook manages: SmartTest's action goes in captainhook.json.
+    if (!options.manager || options.manager === "captainhook") {
+      const stage = options.stage ?? "pre-commit";
+      const captain = await planCaptainHook(this.root, {
+        stages: [stage],
+        ...(options.replace ? { replace: true } : {}),
+      });
+      if (captain) {
+        const s = captain.stages[0];
+        return {
+          manager: "captainhook",
+          file: captain.file,
+          evidence: "captainhook.json",
+          stage,
+          installed: !!s?.installed,
+          plan: captain.plan,
+          replaced: (s?.replaced ?? []).map((command) => ({ line: 0, command })),
+          remaining: [],
+          notes: [
+            "CaptainHook installs the hooks from captainhook.json (`vendor/bin/captainhook install`)",
+          ],
+        };
+      }
+    }
     const profile = await this.profile();
     return planHookInstall(this.root, { ...options, testCommands: profile.testCommands });
   }
@@ -3344,7 +3420,12 @@ export class SmartTest {
     manager?: HookManager,
     stages?: readonly HookStage[],
   ): Promise<FilePlan[]> {
-    return planHookUninstall(this.root, manager, stages);
+    const plans = await planHookUninstall(this.root, manager, stages);
+    if (!manager || manager === "captainhook") {
+      const captain = await planCaptainHookUninstall(this.root);
+      if (captain) plans.push(captain);
+    }
+    return plans;
   }
 
   /**

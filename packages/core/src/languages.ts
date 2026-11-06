@@ -7,23 +7,31 @@ import type { Analyzer } from "@smarttest/source-parser";
 
 type TypeScriptLanguage = typeof import("@smarttest/language-typescript");
 type PythonLanguage = typeof import("@smarttest/language-python");
+type PhpLanguage = typeof import("@smarttest/language-php");
 
-let loading:
-  | Promise<{ ts: TypeScriptLanguage; py: PythonLanguage; analyzers: Analyzer[] }>
-  | undefined;
-
-export function languages(): Promise<{
+interface Languages {
   ts: TypeScriptLanguage;
   py: PythonLanguage;
+  php: PhpLanguage;
   analyzers: Analyzer[];
-}> {
+}
+
+let loading: Promise<Languages> | undefined;
+
+export function languages(): Promise<Languages> {
   loading ??= (async () => {
-    const [ts, js, py] = await Promise.all([
+    const [ts, js, py, php] = await Promise.all([
       import("@smarttest/language-typescript"),
       import("@smarttest/language-javascript"),
       import("@smarttest/language-python"),
+      import("@smarttest/language-php"),
     ]);
-    return { ts, py, analyzers: [ts.typescriptAnalyzer, js.javascriptAnalyzer, py.pythonAnalyzer] };
+    return {
+      ts,
+      py,
+      php,
+      analyzers: [ts.typescriptAnalyzer, js.javascriptAnalyzer, py.pythonAnalyzer, php.phpAnalyzer],
+    };
   })();
   return loading;
 }

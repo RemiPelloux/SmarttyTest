@@ -1219,7 +1219,13 @@ async function cmdHook(ctx: Ctx): Promise<number> {
   const { t, flags } = ctx;
   const st = await ctx.open();
   const sub = ctx.positionals[0] ?? "status";
-  const manager = flags.manager as "husky" | "lefthook" | "simple-git-hooks" | "git" | undefined;
+  const manager = flags.manager as
+    | "husky"
+    | "lefthook"
+    | "simple-git-hooks"
+    | "git"
+    | "captainhook"
+    | undefined;
   if (manager && !["husky", "lefthook", "simple-git-hooks", "git"].includes(manager))
     throw new SmartTestError("--manager must be husky, lefthook, simple-git-hooks or git", {
       code: "ST_USAGE",

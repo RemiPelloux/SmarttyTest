@@ -85,6 +85,11 @@ const NAV = [
         "pytest and unittest, analysed without running Python.",
       ],
       [
+        "PHP (preview)",
+        "docs/guides/php.html",
+        "PHPUnit, Pest and Laravel, analysed without running PHP.",
+      ],
+      [
         "Studio",
         "docs/guides/studio.html",
         "A local browser view of the analysis: impact, tests and evidence.",
@@ -336,7 +341,7 @@ for (const [srcFile, sitePath] of pages) {
     return `<h2 id="${id}">${group}<a class="anchor" href="#${id}" aria-label="Link to this section">#</a></h2><ul class="cards">${cards}</ul>`;
   }).join("\n");
   const html = `<h1 id="smarttest-documentation">SmartTest documentation</h1>
-<p class="lead">SmartTest reads a change, follows it through your code to the tests that can detect a regression, and runs only those, through Jest, Vitest, <code>node --test</code>, Playwright, Cypress, Angular, pytest or unittest. When it cannot rule a test out, it runs it.</p>
+<p class="lead">SmartTest reads a change, follows it through your code to the tests that can detect a regression, and runs only those, through Jest, Vitest, <code>node --test</code>, Playwright, Cypress, Angular, pytest, unittest, PHPUnit or Pest. When it cannot rule a test out, it runs it.</p>
 <ol class="start-path">
   <li><a href="guides/getting-started.html"><span class="step">1</span><span class="step-title">Install and look</span><code>smarttest init</code><span class="step-desc">Install <code>@tkmremi/smarttest</code> as a dev dependency; <code>init</code> detects the runners and explains the config before writing it.</span></a></li>
   <li><a href="guides/commit-hooks.html"><span class="step">2</span><span class="step-title">Gate commits and pushes</span><code>smarttest hook install</code><span class="step-desc">Runs the affected tests on exactly what is committed or pushed.</span></a></li>

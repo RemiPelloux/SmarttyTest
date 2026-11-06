@@ -6,6 +6,7 @@
  */
 import { readFile, stat } from "node:fs/promises";
 import { dirname, isAbsolute, join, posix, relative } from "node:path";
+import { phpRunnerKind } from "@smarttest/adapter-phpunit";
 import type { RunnerHit } from "@smarttest/impact-engine";
 import type { ConfigPath, RunnerConfigFacts } from "@smarttest/language-typescript";
 import { angularTestTargets, type ChangeSet } from "@smarttest/shared";
@@ -54,6 +55,10 @@ const ROLES: Record<string, string> = {
   "-r": "preloaded module (-r)",
   "--loader": "module loader (--loader)",
   "--experimental-loader": "module loader (--experimental-loader)",
+  bootstrap: "bootstrap file",
+  artisan: "application boot",
+  env: "test environment file",
+  pest: "Pest configuration",
 };
 
 async function isFile(abs: string): Promise<boolean> {
@@ -126,6 +131,49 @@ export async function readRunnerInputs(
     for (const name of ["pytest.ini", "pyproject.toml", "setup.cfg", "tox.ini"]) {
       const file = root.dir ? `${root.dir}/${name}` : name;
       if (await isFile(join(projectRoot, file))) out.configs.push({ file });
+    }
+    return out;
+  }
+
+  // PHPUnit and Pest (preview): the configuration, its bootstrap, the test environment and Pest's
+  // `Pest.php` run for every test. `tests/TestCase.php`, the application's bootstrap and its
+  // migrations reach the tests that boot the application through the graph (language-php), so
+  // a test that does not boot it is not selected by them.
+  if (root.adapter === "phpunit") {
+    const prefix = root.dir ? `${root.dir}/` : "";
+    let config = root.configFile;
+    if (!config)
+      for (const name of ["phpunit.xml", "phpunit.xml.dist", "phpunit.dist.xml"])
+        if (await isFile(join(projectRoot, `${prefix}${name}`))) {
+          config = `${prefix}${name}`;
+          break;
+        }
+    if (config) {
+      out.configs.push({ file: config });
+      const text = (await read(join(projectRoot, config))) ?? "";
+      const bootstrap = /<phpunit\b[^>]*\sbootstrap="([^"]+)"/.exec(text)?.[1];
+      if (bootstrap) {
+        const base = posix.dirname(config);
+        const file = posix.normalize(base === "." ? bootstrap : `${base}/${bootstrap}`);
+        if (await isFile(join(projectRoot, file)))
+          out.loads.push({ file, key: "bootstrap", source: config });
+      }
+    }
+    // `php artisan test` boots the application before PHPUnit starts: its providers, configuration
+    // and routes run for every test, a plain PHPUnit test case included.
+    if (phpRunnerKind(join(projectRoot, root.dir)) === "artisan") {
+      const app = `${prefix}bootstrap/app.php`;
+      if (await isFile(join(projectRoot, app)))
+        out.loads.push({ file: app, key: "artisan", source: "php artisan test" });
+    }
+    for (const name of [".env.testing", "tests/Pest.php"]) {
+      const file = `${prefix}${name}`;
+      if (await isFile(join(projectRoot, file)))
+        out.loads.push({
+          file,
+          key: name === ".env.testing" ? "env" : "pest",
+          source: config ?? "PHPUnit",
+        });
     }
     return out;
   }

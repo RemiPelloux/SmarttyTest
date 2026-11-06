@@ -25,7 +25,7 @@ import { fileURLToPath } from "node:url";
 const repo = join(dirname(fileURLToPath(import.meta.url)), "..");
 const fixtures = join(repo, "fixtures", "projects");
 const cli = join(repo, "packages", "cli", "dist", "bin.js");
-const NO_BROWSER = new Set(["vitest", "jest", "node", "pytest", "unittest"]);
+const NO_BROWSER = new Set(["vitest", "jest", "node", "pytest", "unittest", "phpunit"]);
 const mutants = process.env.AUDIT_MUTANTS ?? "20";
 const seed = process.env.AUDIT_SEED ?? "1";
 
@@ -43,7 +43,11 @@ function materialize(name) {
   const dir = mkdtempSync(join(tmpdir(), `st-audit-${name}-`));
   cpSync(join(fixtures, name), dir, {
     recursive: true,
-    filter: (p) => !p.includes("node_modules") && !p.includes(".smarttest"),
+    // Laravel's generated caches name the packages installed when they were written.
+    filter: (p) =>
+      !p.includes("node_modules") &&
+      !p.includes(".smarttest") &&
+      !/[\\/]bootstrap[\\/]cache[\\/][^\\/]+\.php$/.test(p),
   });
   const link = (src, dest) => {
     if (existsSync(src) && !existsSync(dest)) symlinkSync(src, dest, "junction");
@@ -54,7 +58,8 @@ function materialize(name) {
     if (existsSync(join(fixtures, name, sub)))
       for (const p of readdirSync(join(fixtures, name, sub)))
         link(join(fixtures, name, sub, p, "node_modules"), join(dir, sub, p, "node_modules"));
-  writeFileSync(join(dir, ".gitignore"), "node_modules\n.smarttest/\n");
+  // A PHP fixture's Composer packages (vendor/) are installed, not part of the project.
+  writeFileSync(join(dir, ".gitignore"), "node_modules\n.smarttest/\n/vendor/\n");
   const git = (...args) =>
     execFileSync(
       "git",

@@ -99,6 +99,12 @@
       "description": "Python language analyzer and module resolver (preview): modules, classes, functions, imports, conftest.py."
     },
     {
+      "name": "language-php",
+      "epic": "SRC",
+      "deps": ["shared", "plugin-sdk", "source-parser"],
+      "description": "PHP language analyzer and class resolver (preview): namespaces, use, classes, Composer autoload, Laravel container edges."
+    },
+    {
       "name": "symbol-index",
       "epic": "SRC",
       "deps": ["shared", "source-parser"],
@@ -167,6 +173,12 @@
       "epic": "EXE",
       "deps": ["shared", "plugin-sdk"],
       "description": "pytest and unittest runner adapters (preview)."
+    },
+    {
+      "name": "adapter-phpunit",
+      "epic": "EXE",
+      "deps": ["shared", "plugin-sdk"],
+      "description": "PHPUnit and Pest runner adapter (preview), including php artisan test."
     },
     {
       "name": "adapter-jest",
@@ -253,7 +265,9 @@
         "test-generator",
         "report-engine",
         "language-python",
-        "adapter-python"
+        "adapter-python",
+        "language-php",
+        "adapter-phpunit"
       ],
       "description": "Application core: orchestrates engines behind a stable API used by the CLI and (later) Studio."
     },

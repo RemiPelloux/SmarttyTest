@@ -5,12 +5,13 @@
 import module from "node:module";
 import { parentPort } from "node:worker_threads";
 import { javascriptAnalyzer } from "@smarttest/language-javascript";
+import { phpAnalyzer } from "@smarttest/language-php";
 import { pythonAnalyzer } from "@smarttest/language-python";
 import { typescriptAnalyzer } from "@smarttest/language-typescript";
 import type { FileAnalysis } from "@smarttest/source-parser";
 
 (module as { enableCompileCache?: () => unknown }).enableCompileCache?.();
-const analyzers = [typescriptAnalyzer, javascriptAnalyzer, pythonAnalyzer];
+const analyzers = [typescriptAnalyzer, javascriptAnalyzer, pythonAnalyzer, phpAnalyzer];
 
 parentPort?.on("message", (msg: { id: number; jobs: { path: string; content: string }[] }) => {
   const out: (FileAnalysis | null)[] = msg.jobs.map((j) => {

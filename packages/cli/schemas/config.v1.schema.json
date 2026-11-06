@@ -175,6 +175,19 @@
         }
       }
     },
+    "php": {
+      "description": "PHP projects (preview): analyse .php files and run PHPUnit or Pest.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean", "description": "Default true." },
+        "binary": {
+          "type": "string",
+          "minLength": 1,
+          "description": "PHP binary that runs the tests (a command on PATH or a path in the project)."
+        }
+      }
+    },
     "projects": {
       "description": "Per-project conventions, keyed by directory (\"backend\", \"apps/web\").",
       "type": "object",
@@ -306,7 +319,17 @@
       "enum": ["fast", "balanced", "safe"]
     },
     "adapter": {
-      "enum": ["vitest", "jest", "node", "playwright", "cypress", "angular", "pytest", "unittest"]
+      "enum": [
+        "vitest",
+        "jest",
+        "node",
+        "playwright",
+        "cypress",
+        "angular",
+        "pytest",
+        "unittest",
+        "phpunit"
+      ]
     },
     "layout": {
       "enum": ["mirror", "colocated", "domain", "custom"]

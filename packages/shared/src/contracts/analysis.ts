@@ -93,8 +93,8 @@ export interface SymbolRecord {
 export interface FileAnalysis {
   path: string;
   hash: string;
-  /** "python" since 1.1.0 (preview plugin). */
-  language: "typescript" | "javascript" | "python";
+  /** "python" since 1.1.0, "php" since 1.2.0 (preview plugins). */
+  language: "typescript" | "javascript" | "python" | "php";
   moduleKind: "esm" | "cjs" | "unknown";
   imports: ImportRecord[];
   symbols: SymbolRecord[];

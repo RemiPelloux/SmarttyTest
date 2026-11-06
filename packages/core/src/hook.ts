@@ -5,6 +5,7 @@
 import { existsSync } from "node:fs";
 import {
   copyFile,
+  cp,
   lstat,
   mkdir,
   mkdtemp,
@@ -453,6 +454,29 @@ export async function prepareCheckout(options: {
     }
   }
 
+  // PHP (preview): Composer's packages. `vendor/` cannot simply be linked: Composer's autoloader
+  // finds the project's classes from its own folder, so a linked one would load the working tree's
+  // code instead of the checkout's. Its autoloader (and PHPUnit and Pest, which find it from their
+  // own folder) are copied; the packages are linked. The untracked `.env` the tests read is linked.
+  for (const d of options.nodeModulesDirs) {
+    const src = join(options.projectRoot, d, "vendor");
+    const dest = join(root, d, "vendor");
+    if (!existsSync(join(src, "autoload.php")) || !existsSync(join(root, d))) continue;
+    if (await lstat(dest).catch(() => undefined)) continue;
+    if (await escapesCheckout(wt, join(root, d))) continue;
+    await mirrorComposerVendor(src, dest).catch((error: unknown) =>
+      warnings.push(
+        `Isolation: ${d || "."}/vendor could not be mirrored (${(error as Error).message}); PHP tests may not run`,
+      ),
+    );
+    for (const env of [".env", ".env.testing"]) {
+      const from = join(options.projectRoot, d, env);
+      const to = join(root, d, env);
+      if (existsSync(from) && !(await lstat(to).catch(() => undefined)))
+        await copyFile(from, to).catch(() => undefined);
+    }
+  }
+
   // The project's own untracked build output (`ui/dist/job-draft.html` a test reads, built by
   // `npm run build:ui`) is not in the checkout either: without it the tests fail there and
   // nowhere else. Link it from the working tree, and say it may not match the source.
@@ -478,6 +502,22 @@ export async function prepareCheckout(options: {
     );
 
   return warnings;
+}
+
+/**
+ * Composer's `vendor/` in a temporary checkout: the autoloader (`autoload.php`, `composer/`), the
+ * `bin/` proxies, PHPUnit and Pest are copied, so they load the checkout's classes; every other
+ * package is linked.
+ */
+async function mirrorComposerVendor(src: string, dest: string): Promise<void> {
+  await mkdir(dest, { recursive: true });
+  for (const e of await readdir(src, { withFileTypes: true })) {
+    const from = join(src, e.name);
+    const to = join(dest, e.name);
+    if (!e.isDirectory() || ["composer", "bin", "phpunit", "pestphp"].includes(e.name))
+      await cp(from, to, { recursive: true, verbatimSymlinks: true });
+    else await symlink(from, to, process.platform === "win32" ? "junction" : "dir");
+  }
 }
 
 /** Folders a build writes that tests may read: linked into a temporary checkout when untracked. */

@@ -31,9 +31,20 @@ jobs:
         with:
           python-version: "3.13"
       - run: python -m pip install pytest
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.3"
+          extensions: mbstring, pdo_sqlite, sqlite3, fileinfo
+          tools: composer
+          coverage: none
+      - run: composer install --no-interaction --no-progress
+        working-directory: fixtures/projects/php-phpunit
+      - run: composer install --no-interaction --no-progress
+        working-directory: fixtures/projects/php-laravel
       - run: pnpm install --frozen-lockfile
       - run: pnpm build
       - run: pnpm audit:fixtures
         env:
           AUDIT_MUTANTS: ${{ inputs.mutants || '20' }}
           SMARTTEST_PYTHON: python
+          SMARTTEST_PHP: php
