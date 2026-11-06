@@ -6,7 +6,12 @@
  */
 
 import { posix } from "node:path";
-import { type DependencyGraph, RESOURCE, type Seed } from "@smarttest/dependency-graph";
+import {
+  type DependencyGraph,
+  FILE_DEPENDENTS,
+  RESOURCE,
+  type Seed,
+} from "@smarttest/dependency-graph";
 import { type RulesEngine, strictestMode } from "@smarttest/rules-engine";
 import type { FileSemanticDiff, ResourceChange } from "@smarttest/semantic-diff";
 import type {
@@ -492,8 +497,15 @@ export function decideImpact(input: ImpactInput): ImpactResult {
         ...(signature ? { signature } : {}),
         ...(rc ? { referencesOnly: true } : {}),
       };
+      // A barrel whose named re-exports changed: the importers of those names (through any depth
+      // of barrels) and the barrel's file-level dependents, not every importer of the barrel.
+      if (diff.reexports?.length)
+        for (const s of graph.reexportSeeds(path, diff.reexports))
+          details.seeds.push(s.file === path ? { ...s, ...flags } : s);
       if (diff.units.length) details.seeds.push({ file: path, units: diff.units, ...flags });
-      else if (!diff.trivialOnly) details.seeds.push({ file: path, units: ["*"], ...flags });
+      else if (diff.reexports?.length) {
+        // seeded above
+      } else if (!diff.trivialOnly) details.seeds.push({ file: path, units: ["*"], ...flags });
       else
         details.seeds.push({
           file: path,
@@ -622,7 +634,14 @@ export function decideImpact(input: ImpactInput): ImpactResult {
   const typeSeeds: typeof details.seeds = [];
   const nonCodeSeeds: typeof details.seeds = [];
   for (const s of details.seeds) {
-    if (s.file === RESOURCE || !input.files.has(s.file) || s.referencesOnly) {
+    // A barrel's file-level dependents (`reexportSeeds`): loading the barrel says nothing about
+    // whether a re-exported name was read, so traces neither add nor rule out these tests.
+    if (
+      s.file === RESOURCE ||
+      !input.files.has(s.file) ||
+      s.referencesOnly ||
+      s.units.includes(FILE_DEPENDENTS)
+    ) {
       nonCodeSeeds.push(s);
       continue;
     }

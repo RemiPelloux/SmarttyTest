@@ -29,6 +29,7 @@ const fixtures = [
   "plugin-edges-vitest",
   "runner-inputs-vitest",
   "angular-vitest",
+  "barrels-vitest",
 ];
 
 for (const fixture of fixtures) {

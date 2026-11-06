@@ -55,7 +55,29 @@ describe("history benchmark", () => {
     expect(b.commits[1]?.selectedTests).toBe(4);
     expect(b.totals.missed).toBe(0);
     expect(b.totals.smarttestMs).toBeGreaterThan(0);
+    // Without traces, precision is unmeasured: never reported as 100%.
+    expect(b.totals.precision).toEqual({ ran: 0, notRan: 0, unmeasured: 5, pct: null });
+    expect(benchmarkMarkdown(b)).toContain("**Precision: unmeasured");
   }, 180_000);
+
+  // 1.2.0 precision report: the share of selected test files whose trace ran the changed code.
+  it("measures precision from the traces recorded at each parent commit", async () => {
+    const dir = await materialize("barrels-vitest", { git: true });
+    await edit(dir, "src/shop/pricing.ts", "(1 - pct / 100)", "(1 - pct / 10)");
+    git(dir, "commit", "-qam", "pricing: discount");
+    const st = await SmartTest.open({ root: dir });
+    const b = await benchmarkHistory(st, { commits: 1, traces: true, mode: "safe" });
+    const [c] = b.commits;
+    // discount.test.ts ran discount; lookup.test.ts reads the barrel by a computed name, so it
+    // is selected, and its trace shows it never ran discount.
+    expect(c?.selectedTests).toBe(2);
+    expect(c?.precision).toEqual({ ran: 1, notRan: 1, unmeasured: 0, pct: 50 });
+    expect(b.totals.precision?.pct).toBe(50);
+    expect(benchmarkMarkdown(b)).toContain(
+      "**Precision: 50% of measured selected test files ran the changed code (1/2)**",
+    );
+    expect(b.totals.missed).toBe(0);
+  }, 240_000);
 
   // 1.0.2: MiaDock.test.tsx and tournament-pool.test.ts failed only under full-suite load and were
   // counted as misses. A test failing only next to another is load-flaky, never a miss or a pass.

@@ -139,3 +139,38 @@ export class Plain { static label = "p"; m() { return 1; } }
     expect(r.units).toEqual(["*"]);
   });
 });
+
+describe("barrels: changed re-exports", () => {
+  const barrel =
+    'export * from "./pricing";\nexport { total as cartTotal, count } from "./cart";\n';
+  const of = (after: string, before = barrel) =>
+    diffFile({
+      path: "index.ts",
+      before: analyzeSource("index.ts", before),
+      after: analyzeSource("index.ts", after),
+    });
+
+  it("names the re-exports that changed when the same modules are loaded", () => {
+    const d = of(barrel.replace("count }", "count, total as sum }"));
+    expect(d.units).toEqual([]);
+    expect(d.reexports).toEqual(["sum"]);
+    expect(of(barrel.replace("total as cartTotal", "count as cartTotal")).reexports).toEqual([
+      "cartTotal",
+    ]);
+    expect(of(barrel.replace("total as cartTotal, ", "")).reexports).toEqual(["cartTotal"]);
+  });
+
+  it("seeds the whole barrel when what it loads, or what `export *` lists, changes", () => {
+    for (const after of [
+      `${barrel}export { fmt } from "./format";\n`, // a module newly loaded
+      barrel.replace('export * from "./pricing";\n', ""), // a module no longer loaded
+      barrel.replace('export * from "./pricing"', 'export { price } from "./pricing"'),
+      `${barrel}export * as cart from "./cart";\n`, // a namespace re-export
+      `${barrel}register();\n`, // load-time code
+    ]) {
+      const d = of(after);
+      expect(d.units).toEqual(["*"]);
+      expect(d.reexports).toBeUndefined();
+    }
+  });
+});

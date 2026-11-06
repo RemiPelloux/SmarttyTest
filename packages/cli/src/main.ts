@@ -1752,7 +1752,7 @@ async function cmdAudit(ctx: Ctx): Promise<number> {
 async function cmdBenchmark(ctx: Ctx): Promise<number> {
   const { t, flags } = ctx;
   const st = await ctx.open();
-  const { benchmarkHistory, benchmarkMarkdown } = await import("@smarttest/core");
+  const { benchmarkHistory, benchmarkMarkdown, precisionText } = await import("@smarttest/core");
   const mode = modeOf(flags);
   const commits = intFlag(flags.commits, "commits") ?? 10;
   const sample = intFlag(flags.sample, "sample");
@@ -1811,6 +1811,9 @@ async function cmdBenchmark(ctx: Ctx): Promise<number> {
     );
     ctx.out(
       `  ${pad("Missed failures", 16)}${tt.missed ? t.red(String(tt.missed)) : t.green("0")}${tt.preexisting ? t.dim(` · ${tt.preexisting} already failing in the parent commit`) : ""}`,
+    );
+    ctx.out(
+      `  ${pad("Precision", 16)}${tt.precision?.pct != null ? precisionText(tt.precision) : t.dim(precisionText(tt.precision))}`,
     );
     if (tt.cachedTests)
       ctx.out(

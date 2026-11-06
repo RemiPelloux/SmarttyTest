@@ -330,3 +330,116 @@ describe("test files as traversals see them", () => {
     expect(kinds.get("lib/__tests__/fixture.test.js")).toBe("file");
   });
 });
+
+describe("barrels and re-exports", () => {
+  // Two levels of barrels: `export *`, `export { x as y } from`, a default re-export and a
+  // namespace re-export, with importers that can and cannot be pinned to a symbol.
+  const g = graph(
+    {
+      "lib/a.ts": "export function a() { return 1; }\nexport const a2 = 2;\n",
+      "lib/b.ts": "export function b() { return 2; }\n",
+      "lib/c.ts": "export default function c() { return 3; }\n",
+      "lib/inner/index.ts":
+        'export * from "../a";\nexport { b as bee } from "../b";\nexport { default as cee } from "../c";\n',
+      "lib/index.ts":
+        'export * from "./inner";\nexport * as ns from "./inner";\nimport * as inner from "./inner";\nexport { inner };\n',
+      "useA.test.ts": 'import { a } from "./lib";\nit("x", () => a());\n',
+      "useB.test.ts": 'import { bee } from "./lib";\nit("x", () => bee());\n',
+      "useC.test.ts": 'import { cee } from "./lib";\nit("x", () => cee());\n',
+      "nsA.test.ts": 'import * as lib from "./lib";\nit("x", () => lib.a());\n',
+      "nsB.test.ts": 'import { ns } from "./lib";\nit("x", () => ns.bee());\n',
+      "localNsB.test.ts": 'import { inner } from "./lib";\nit("x", () => inner.bee());\n',
+      "nsDynamic.test.ts":
+        'import * as lib from "./lib";\nconst k = "a";\nit("x", () => (lib as any)[k]());\n',
+      "nsEscapes.test.ts": 'import { ns } from "./lib";\nit("x", () => Object.keys(ns));\n',
+      "sideEffect.test.ts": 'import "./lib";\nit("x", () => 1);\n',
+    },
+    {
+      "lib/inner/index.ts:../a": "lib/a.ts",
+      "lib/inner/index.ts:../b": "lib/b.ts",
+      "lib/inner/index.ts:../c": "lib/c.ts",
+      "lib/index.ts:./inner": "lib/inner/index.ts",
+      ...Object.fromEntries(
+        [
+          "useA",
+          "useB",
+          "useC",
+          "nsA",
+          "nsB",
+          "localNsB",
+          "nsDynamic",
+          "nsEscapes",
+          "sideEffect",
+        ].map((t) => [`${t}.test.ts:./lib`, "lib/index.ts"]),
+      ),
+    },
+  );
+  const tests = (file: string, unit: string) =>
+    [...g.dependentsOf([{ file, units: [unit] }]).tests.keys()].sort();
+  // Importers the analysis cannot pin to a symbol: selected for any change behind the barrel.
+  const conservative = ["nsDynamic.test.ts", "nsEscapes.test.ts", "sideEffect.test.ts"];
+
+  it("a symbol change selects only that symbol's importers, through every level", () => {
+    expect(tests("lib/a.ts", "a")).toEqual(["nsA.test.ts", "useA.test.ts", ...conservative].sort());
+    expect(tests("lib/a.ts", "a2")).toEqual(conservative);
+    expect(tests("lib/c.ts", "c")).toEqual(["useC.test.ts", ...conservative].sort());
+  });
+
+  it("follows aliases and namespace re-exports to the member read", () => {
+    expect(tests("lib/b.ts", "b")).toEqual(
+      ["localNsB.test.ts", "nsB.test.ts", "useB.test.ts", ...conservative].sort(),
+    );
+  });
+
+  it("a change to code run at load reaches every importer of the barrels", () => {
+    expect(tests("lib/a.ts", "*")).toHaveLength(9);
+  });
+
+  it("seeds a barrel's changed re-exports by what each name resolves to", () => {
+    const seeds = g.reexportSeeds("lib/inner/index.ts", ["bee", "gone"]);
+    expect(seeds).toEqual([
+      { file: "lib/inner/index.ts", units: ["@any"] },
+      { file: "lib/b.ts", units: ["b"] },
+    ]);
+    expect([...g.dependentsOf(seeds).tests.keys()].sort()).toEqual(tests("lib/b.ts", "b"));
+  });
+
+  it("keeps a name that resolves nowhere on the barrel itself", () => {
+    const g2 = graph(
+      {
+        "lib/index.ts": 'export * from "./a";\nexport * from "external";\n',
+        "lib/a.ts": "export function a() { return 1; }\n",
+        "useX.test.ts": 'import { fromExternal } from "./lib";\nit("x", () => fromExternal());\n',
+      },
+      { "lib/index.ts:./a": "lib/a.ts", "useX.test.ts:./lib": "lib/index.ts" },
+    );
+    expect([...g2.dependentsOf([{ file: "lib/a.ts", units: ["a"] }]).tests.keys()]).toEqual([
+      "useX.test.ts",
+    ]);
+  });
+
+  it("keeps CommonJS re-exports conservative", () => {
+    for (const barrel of [
+      'module.exports = { ...require("./a.cjs"), ...require("./b.cjs") };\n',
+      'module.exports = require("./b.cjs");\n',
+      'Object.assign(module.exports, require("./a.cjs"), require("./b.cjs"));\n',
+    ]) {
+      const g3 = graph(
+        {
+          "a.cjs": "function a() { return 1; }\nmodule.exports = { a };\n",
+          "b.cjs": "function b() { return 2; }\nmodule.exports = { b };\n",
+          "index.cjs": barrel,
+          "useA.test.cjs": 'const { a } = require("./index.cjs");\nit("x", () => a());\n',
+        },
+        {
+          "index.cjs:./a.cjs": "a.cjs",
+          "index.cjs:./b.cjs": "b.cjs",
+          "useA.test.cjs:./index.cjs": "index.cjs",
+        },
+      );
+      expect([...g3.dependentsOf([{ file: "b.cjs", units: ["b"] }]).tests.keys()]).toEqual([
+        "useA.test.cjs",
+      ]);
+    }
+  });
+});
