@@ -1,4 +1,5 @@
 import { execFileSync } from "node:child_process";
+import { writeFileSync } from "node:fs";
 import { chmod, mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
@@ -101,10 +102,9 @@ describe("0.9 hook installation", () => {
     await mkdir(bin, { recursive: true });
     const run = (code: number) => {
       // The fake SmartTest records the refs it received and exits with `code`.
-      execFileSync("sh", [
-        "-c",
-        `printf '#!/bin/sh\\ncat > "$OUT.refs"\\nexit ${code}\\n' > ${bin}/npx; chmod +x ${bin}/npx`,
-      ]);
+      writeFileSync(join(bin, "npx"), `#!/bin/sh\ncat > "$OUT.refs"\nexit ${code}\n`, {
+        mode: 0o755,
+      });
       return execFileSync("sh", [p.file], {
         cwd: root,
         input: "refs/heads/x abc refs/heads/x 000\n",
