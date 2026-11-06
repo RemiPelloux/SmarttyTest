@@ -15,6 +15,7 @@
  * A file whose content changed while its surface did not is patched into the restored graph
  * (the same incremental patch watch mode uses); anything else means a full rebuild.
  */
+import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { DependencyGraph, GRAPH_FORMAT, type GraphOptions } from "@smarttest/dependency-graph";
@@ -64,19 +65,20 @@ const contentKey = (a: FileAnalysis) => `${a.hash}:${a.analyzerVersion}`;
 
 /** Hash of everything module resolution contributed to the analyses, in path order. */
 function resolutionHash(files: ReadonlyMap<string, FileAnalysis>): string {
-  const parts: string[] = [];
+  // Lines joined by "\n", hashed one file at a time (computed on every warm run).
+  const hash = createHash("sha256");
+  let first = true;
   for (const path of [...files.keys()].sort()) {
     const a = files.get(path) as FileAnalysis;
-    parts.push(path);
+    let text = first ? path : `\n${path}`;
+    first = false;
     for (const i of a.imports)
-      parts.push(
-        `${i.kind}\u0001${i.specifier}\u0001${i.resolved ?? ""}\u0001${i.external ? 1 : 0}\u0001${i.missing ? 1 : 0}\u0001${i.unresolved ?? ""}`,
-      );
-    if (a.dynamicTargets?.length) parts.push(`>${a.dynamicTargets.join("\u0001")}`);
-    if (a.dynamicUnmatched?.length) parts.push(`?${a.dynamicUnmatched.join("\u0001")}`);
-    parts.push("\u0000");
+      text += `\n${i.kind}\u0001${i.specifier}\u0001${i.resolved ?? ""}\u0001${i.external ? 1 : 0}\u0001${i.missing ? 1 : 0}\u0001${i.unresolved ?? ""}`;
+    if (a.dynamicTargets?.length) text += `\n>${a.dynamicTargets.join("\u0001")}`;
+    if (a.dynamicUnmatched?.length) text += `\n?${a.dynamicUnmatched.join("\u0001")}`;
+    hash.update(`${text}\n\u0000`);
   }
-  return sha256(parts.join("\n"));
+  return hash.digest("hex");
 }
 
 export class GraphStore {

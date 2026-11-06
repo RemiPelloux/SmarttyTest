@@ -47,6 +47,11 @@ All notable changes are documented here. Releases are managed with [Changesets](
 - Config: `php.enabled` (default true) and `php.binary`; `SMARTTEST_PHP` overrides. Hooks, `benchmark` and `audit --mutate` copy Composer's autoloader into their temporary checkout, so the checkout's classes are tested. Guide: [PHP](documentation/guides/php.md).
 - OpenPro's backend (Laravel 12, PHPUnit 11, 1,998 collected test files, on a local clone): the full suite through SmartTest gives `php artisan test`'s results test for test (12,440 tests, the same 31 local failures; 272 s against 276 s). `init --yes` replaces `scripts/test-changed.sh` in both CaptainHook hooks. `benchmark` on the last 5 commits: 0 missed failures, but only 2% less test time: every test that boots the application reaches a class chosen at run time (`$class::query()`, `new $form`, `app($class)` from config) through the routes, so 1,830 of 1,998 files are selected for any change. Matching the URLs feature tests request to their routes (1.6.0) is what narrows this.
 
+### Performance
+
+- The index is loaded lazily: each file's symbols and top-level uses stay in the stored index until something reads them, so a change parses only the files it reaches. The in-process analysis at 10,000 modules (§31.3, target < 500 ms) takes about 470 ms (median; about 660 ms before, measured back to back on the same machine; 654 ms at 1.0.0). Selections are unchanged: a test compares, for a range of changes on five fixtures and a generated project, the selection through the stored index with a cold one. An index written by an earlier version is read and rewritten in the new layout on the next run.
+- Writing the last decision (`runs/last-decision.json`) for thousands of selected tests is about 15 times faster, and grouping tests by runner no longer grows quadratically with the number of tests.
+
 ## [1.1.1] — patch
 
 ### Fixed
@@ -185,6 +190,7 @@ An audit of 1.0.1 (two soundness oracles on the six adopting projects, four repr
 - Change set: a deleted or renamed data file selects the code that reads it; untracked files are kept when the project is a subfolder of the repository; personal git settings (`diff.mnemonicPrefix`, `noprefix`, external diff, colour…) no longer change what SmartTest reads; changes outside the project select the project files that import them; a submodule bump becomes the files changed inside it, or selects every test using it.
 - Traces: a trace records the environment variables its code read and is stale when one differs; a computed `process.env[x]` read means it never rules a test out. `.env.*` variants select the tests under their folder.
 
+
 ### Performance
 
 - Previous file versions come from one `git cat-file --batch` process (400 changed files: 410 git processes to 9, 1.18 s to 0.51 s); the file listing is read once per command.
@@ -230,6 +236,7 @@ The first projects on 1.0.0 (Galdia, LeadsIt, four OpenPro repositories) showed 
 - SmartTest refuses a `.smarttest/` store that Git tracks (`ST_STORE_TRACKED`), so a pull request cannot commit a fake result cache or index. It refuses symbolic links below the project root on its write paths (`ST_UNSAFE_PATH`) and revisions that look like options (`ST_UNSAFE_REVISION`).
 - `init --json` and `migrate --json` without `--yes` print one JSON document instead of two.
 - Vitest writes coverage even when a test fails, as Jest already did.
+
 
 ### Performance
 
@@ -284,6 +291,7 @@ The first projects on 1.0.0 (Galdia, LeadsIt, four OpenPro repositories) showed 
 - `smarttest studio [--port n] [--open]`: local overview, impact paths, test explorer, live runs, source annotations and trust evidence. The server binds to loopback and requires a session token; mutation routes require same-origin JSON POST requests.
 - Local VS Code extension with CodeLens, hover explanations, impact and run commands, results tree and status bar. Workspace Trust disables execution in Restricted Mode. `pnpm extension:pack` builds its VSIX.
 - `smarttest explain <file> --units A,B.method`: the tests protecting each named unit, from one analysis. The `explain` JSON schema gains an optional `units` array.
+
 
 ### Performance
 

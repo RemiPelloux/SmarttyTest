@@ -1479,7 +1479,11 @@ export class SmartTest {
     assignment: ReadonlyMap<string, RunnerRoot>,
   ) {
     const testsByRoot = new Map<RunnerRoot, string[]>();
-    for (const [t, r] of assignment) testsByRoot.set(r, [...(testsByRoot.get(r) ?? []), t]);
+    for (const [t, r] of assignment) {
+      const tests = testsByRoot.get(r);
+      if (tests) tests.push(t);
+      else testsByRoot.set(r, [t]);
+    }
     // Resolved imports and the files a computed import or a framework boot loads (globs).
     const importsOf = (file: string): string[] => {
       const a = index.get(file);

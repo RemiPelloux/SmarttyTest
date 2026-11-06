@@ -25,24 +25,40 @@ export function encodeDecisionRecord(record: Record<string, unknown>): string {
   const strings: string[] = [];
   const stringIds = new Map<string, number>();
   const nodes: number[] = [];
-  const nodeIds = new Map<string, number>();
+  // The children of each node (index: node + 1, so the root is 0), by string: thousands of paths
+  // of hundreds of elements each make this the hot loop of a large selection.
+  const children: (Map<string, number> | undefined)[] = [];
+  // The previous path and its nodes: consecutive paths mostly share a long beginning.
+  let previous: readonly string[] = [];
+  const previousIds: number[] = [];
   const node = (path: readonly string[]): number => {
-    let parent = -1;
-    for (const s of path) {
-      let sid = stringIds.get(s);
-      if (sid === undefined) {
-        sid = strings.length;
-        strings.push(s);
-        stringIds.set(s, sid);
+    const max = Math.min(path.length, previous.length);
+    let k = 0;
+    while (k < max && path[k] === previous[k]) k++;
+    previous = path;
+    previousIds.length = k;
+    let parent = k ? (previousIds[k - 1] as number) : -1;
+    for (let i = k; i < path.length; i++) {
+      const s = path[i] as string;
+      let next = children[parent + 1];
+      if (!next) {
+        next = new Map();
+        children[parent + 1] = next;
       }
-      const key = `${parent}:${sid}`;
-      let id = nodeIds.get(key);
+      let id = next.get(s);
       if (id === undefined) {
+        let sid = stringIds.get(s);
+        if (sid === undefined) {
+          sid = strings.length;
+          strings.push(s);
+          stringIds.set(s, sid);
+        }
         id = nodes.length / 2;
         nodes.push(parent, sid);
-        nodeIds.set(key, id);
+        next.set(s, id);
       }
       parent = id;
+      previousIds.push(id);
     }
     return parent;
   };

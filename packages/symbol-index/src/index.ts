@@ -12,9 +12,11 @@ import type { SourceRange } from "@smarttest/shared";
 import {
   exists,
   matchGlob,
+  readStateFile,
   readStateJson,
   removeStateFile,
   sha256,
+  writeStateChunks,
   writeStateFile,
 } from "@smarttest/shared";
 import type {
@@ -25,7 +27,13 @@ import type {
 } from "@smarttest/source-parser";
 import { rangesOverlap, topLevelSymbols } from "@smarttest/source-parser";
 
-export const INDEX_SCHEMA_VERSION = 2;
+/**
+ * 3: the full index is a header line (the analyses without their lazily read fields, see
+ * `LAZY_FIELDS`) followed by those fields, one JSON object per file at offsets the header records.
+ * 2: one JSON document; still read, and written in the current layout by the next save.
+ */
+export const INDEX_SCHEMA_VERSION = 3;
+const LEGACY_SCHEMA_VERSION = 2;
 /** Source code (a graph node when indexed), as opposed to assets an import can also name. */
 /** Analysed code: a resolution to such a file outside the indexed set is uncertainty. */
 const CODE = /\.(?:[cm]?[jt]sx?|php)$/;
@@ -42,6 +50,184 @@ interface IndexFile {
    */
   others?: string[];
   files: Record<string, FileAnalysis>;
+}
+
+/** Header line of a full index (schema 3). */
+interface IndexHeader extends Omit<IndexFile, "files"> {
+  /** Each analysis without its lazy fields (`LAZY_FIELDS`). */
+  files: Record<string, Record<string, unknown>>;
+  /**
+   * path → [start, end, fields]: where its lazy fields' JSON object is in the text after the
+   * header line ([start, end)), and which lazy fields it has (bit i: `LAZY_FIELDS[i]`).
+   */
+  parts: Record<string, [number, number, number]>;
+}
+
+/**
+ * Fields of an analysis that few readers need on a typical run (the symbols of the files a change
+ * reaches, the top-level uses of a changed file): stored apart from the header and parsed for a
+ * file the first time one of them is read. Together they are most of the index. The order is part
+ * of the stored format (the field bits of `IndexHeader.parts`).
+ */
+const LAZY_FIELDS = [
+  "symbols",
+  "topLevelRefs",
+  "topLevelUses",
+  "topLevelEscapes",
+  "topLevelResources",
+  "assetReads",
+  "catalogKeys",
+] as const;
+const LAZY = new Set<string>(LAZY_FIELDS);
+const ALL_FIELDS = (1 << LAZY_FIELDS.length) - 1;
+
+/** Where the lazy fields of a loaded analysis are, until one of them is first read. */
+interface LazyPart {
+  text: string;
+  start: number;
+  end: number;
+  /** The fields given accessors (bits of `LAZY_FIELDS`). */
+  fields: number;
+}
+const lazyParts = new WeakMap<object, LazyPart>();
+
+/** Replaces the accessors of `a` by the values its stored part holds. */
+function materialize(a: object): void {
+  const part = lazyParts.get(a);
+  if (!part) throw new Error("symbol index: a lazy field without its stored part");
+  lazyParts.delete(a);
+  const values = JSON.parse(part.text.slice(part.start, part.end)) as Record<string, unknown>;
+  LAZY_FIELDS.forEach((field, bit) => {
+    if (part.fields & (1 << bit))
+      Object.defineProperty(a, field, {
+        value: values[field],
+        writable: true,
+        enumerable: true,
+        configurable: true,
+      });
+  });
+}
+
+/** One accessor per lazy field, shared by every analysis (no closure per file). */
+const LAZY_ACCESSORS: PropertyDescriptor[] = LAZY_FIELDS.map((field) => ({
+  get(this: Record<string, unknown>) {
+    materialize(this);
+    return this[field];
+  },
+  set(this: Record<string, unknown>, value: unknown) {
+    materialize(this);
+    this[field] = value;
+  },
+  enumerable: true,
+  configurable: true,
+}));
+
+/** Whether `p` can be the part of a file in `text`, whose body starts at `base`. */
+const isPart = (text: string, base: number, p: unknown): p is [number, number, number] =>
+  Array.isArray(p) &&
+  p.length === 3 &&
+  Number.isInteger(p[0]) &&
+  Number.isInteger(p[1]) &&
+  Number.isInteger(p[2]) &&
+  p[0] >= 0 &&
+  p[1] > p[0] &&
+  p[2] >= 0 &&
+  p[2] <= ALL_FIELDS &&
+  base + p[1] <= text.length &&
+  text.charCodeAt(base + p[0]) === 123 && // {
+  text.charCodeAt(base + p[1] - 1) === 125; // }
+
+/**
+ * The analyses of a schema-3 index, their lazy fields left in `text` until read; undefined when
+ * the text is not a complete index of that layout. A loaded analysis has the keys it was saved
+ * with; its lazy ones come last.
+ */
+function readLazyIndex(
+  text: string,
+): { header: IndexHeader; files: Map<string, FileAnalysis> } | undefined {
+  const nl = text.indexOf("\n");
+  if (nl < 0) return undefined;
+  let header: IndexHeader;
+  try {
+    header = JSON.parse(text.slice(0, nl)) as IndexHeader;
+  } catch {
+    return undefined;
+  }
+  if (
+    !header ||
+    header.schemaVersion !== INDEX_SCHEMA_VERSION ||
+    !header.files ||
+    typeof header.files !== "object" ||
+    !header.parts ||
+    typeof header.parts !== "object"
+  )
+    return undefined;
+  const base = nl + 1;
+  const files = new Map<string, FileAnalysis>();
+  for (const path in header.files) {
+    const a = header.files[path];
+    const p = header.parts[path];
+    if (!a || typeof a !== "object" || !isPart(text, base, p)) return undefined;
+    // New accessor properties: far cheaper than turning existing data properties into accessors.
+    const fields = p[2];
+    if (fields) {
+      for (let bit = 0; bit < LAZY_FIELDS.length; bit++)
+        if (fields & (1 << bit))
+          Object.defineProperty(a, LAZY_FIELDS[bit] as string, LAZY_ACCESSORS[bit] as object);
+      lazyParts.set(a, { text, start: base + p[0], end: base + p[1], fields });
+    }
+    files.set(path, a as unknown as FileAnalysis);
+  }
+  return { header, files };
+}
+
+/**
+ * The pieces of a schema-3 full index: the header line, then each file's lazy fields. A file whose
+ * lazy fields were never read is written back from the text it was read from, unparsed.
+ */
+function lazyIndexChunks(data: IndexFile): string[] {
+  const body: string[] = [];
+  const files: Record<string, Record<string, unknown>> = {};
+  const parts: Record<string, [number, number, number]> = {};
+  let offset = 0;
+  for (const [path, a] of Object.entries(data.files)) {
+    const stored = lazyParts.get(a);
+    const record = a as unknown as Record<string, unknown>;
+    const skeleton: Record<string, unknown> = {};
+    const values: Record<string, unknown> = {};
+    let fields = 0;
+    for (const key of Object.keys(a)) {
+      if (!LAZY.has(key)) skeleton[key] = record[key];
+      else if (!stored && record[key] !== undefined) {
+        values[key] = record[key];
+        fields |= 1 << LAZY_FIELDS.indexOf(key as (typeof LAZY_FIELDS)[number]);
+      }
+    }
+    if (stored) fields = stored.fields;
+    const part = stored ? stored.text.slice(stored.start, stored.end) : JSON.stringify(values);
+    files[path] = skeleton;
+    parts[path] = [offset, offset + part.length, fields];
+    offset += part.length;
+    body.push(part);
+  }
+  const header: IndexHeader = { ...data, files, parts };
+  return [`${JSON.stringify(header)}\n`, ...body];
+}
+
+/** Joins many small pieces into fewer large ones for writing. */
+function* batched(pieces: readonly string[], size = 1 << 20): Generator<string> {
+  let batch: string[] = [];
+  let length = 0;
+  for (const p of pieces) {
+    batch.push(p);
+    length += p.length;
+    if (length >= size) {
+      yield batch.join("");
+      batch = [];
+      length = 0;
+    }
+  }
+  if (batch.length) yield batch.join("");
 }
 
 /**
@@ -175,20 +361,43 @@ export class SymbolIndex {
     return new SymbolIndex(undefined);
   }
 
-  /** Loads a persisted index; corrupt or incompatible stores are rebuilt with a warning (ADR-0003). */
+  /**
+   * Loads a persisted index; corrupt or incompatible stores are rebuilt with a warning (ADR-0003).
+   * The lazy fields of each analysis (`LAZY_FIELDS`) are parsed the first time one is read.
+   */
   static async load(storeDir: string): Promise<SymbolIndex> {
     const path = join(storeDir, "state", "index.json");
     const idx = new SymbolIndex(path);
     if (await exists(path)) {
       // Authenticated (state.ts): a planted or foreign index reads as corrupt and is rebuilt.
-      const data = await readStateJson<IndexFile>(path);
-      if (data && data.schemaVersion === INDEX_SCHEMA_VERSION && data.files) {
-        for (const [k, v] of Object.entries(data.files)) idx.files.set(k, v);
+      const text = await readStateFile(path);
+      const lazy = text === undefined ? undefined : readLazyIndex(text);
+      let data: Omit<IndexFile, "files"> | undefined;
+      if (lazy) {
+        idx.files = lazy.files;
+        data = lazy.header;
+      } else if (text?.startsWith(`{"schemaVersion":${LEGACY_SCHEMA_VERSION},`)) {
+        // Schema 2 (one JSON document): read whole, and rewritten in the current layout by the
+        // next save.
+        let legacy: IndexFile | undefined;
+        try {
+          legacy = JSON.parse(text) as IndexFile;
+        } catch {
+          legacy = undefined;
+        }
+        if (legacy?.files && typeof legacy.files === "object") {
+          data = legacy;
+          for (const [k, v] of Object.entries(legacy.files)) idx.files.set(k, v);
+          idx.dirty = true;
+          idx.fullyDirty = true;
+        }
+      }
+      if (data) {
         for (const [k, v] of Object.entries(data.stats ?? {})) idx.fileStats.set(k, v);
         idx.contextKey = data.contextKey;
         idx.baseId = data.baseId;
         if (Array.isArray(data.others)) idx.others = data.others;
-        if (data.baseId) await idx.applyDelta(data.baseId);
+        if (data.baseId) await idx.applyDelta(data.baseId, data.schemaVersion);
       } else {
         idx.warnings.push(
           "Local index was corrupt or from an incompatible version — rebuilt from scratch",
@@ -199,12 +408,12 @@ export class SymbolIndex {
   }
 
   /** Applies the delta written against this base, if any (a delta for another base is ignored). */
-  private async applyDelta(baseId: string): Promise<void> {
+  private async applyDelta(baseId: string, schemaVersion: number): Promise<void> {
     const path = this.deltaPath;
     const delta = path ? await readStateJson<IndexDelta>(path) : undefined;
     if (
       !delta ||
-      delta.schemaVersion !== INDEX_SCHEMA_VERSION ||
+      delta.schemaVersion !== schemaVersion ||
       delta.baseId !== baseId ||
       typeof delta.files !== "object" ||
       typeof delta.stats !== "object"
@@ -268,7 +477,7 @@ export class SymbolIndex {
       files: Object.fromEntries([...this.files].sort(([a], [b]) => a.localeCompare(b))),
     };
     // Compact JSON: the index is a cache, not a document meant for humans.
-    await writeStateFile(this.storePath, JSON.stringify(data));
+    await writeStateChunks(this.storePath, batched(lazyIndexChunks(data)));
     // The new base makes any delta stale (it names the old base); remove it.
     await removeStateFile(deltaPath);
     this.baseId = baseId;
