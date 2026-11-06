@@ -257,7 +257,9 @@ class PostTest extends TestCase {
         $response->json('data');
         collect([])->get('key');
     }
-    public function test_b(string $url): void { $this->get($url); }
+    public function test_b(): void { $this->get($this->path()); }
+    protected function send(string $method, string $uri) { return $this->json($method, $uri); }
+    public function test_c(): void { $this->send('PUT', '/api/posts/3'); $this->assertTrue(true); }
 }
 `,
     );
@@ -272,6 +274,13 @@ class PostTest extends TestCase {
       ].sort(),
     );
     expect(a.dynamicUnresolved).toEqual(["a request to a url built at run time (get) on line 15"]);
+    // A request helper: its callers' arguments are the requests.
+    expect(a.symbols.find((s) => s.qualifiedName === "PostTest.send")?.resources).toEqual([
+      "http-wrapper:send:1:@0",
+    ]);
+    expect(a.symbols.find((s) => s.qualifiedName === "PostTest.test_c")?.resources).toEqual([
+      "http-call:send|PUT|/api/posts/3",
+    ]);
   });
 
   it("reads classes from a config list and from a private method's literal callers", () => {

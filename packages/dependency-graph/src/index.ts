@@ -238,7 +238,11 @@ export class DependencyGraph {
 
   private httpResourcesOf(a: FileAnalysis): string[] {
     return [...(a.topLevelResources ?? []), ...a.symbols.flatMap((s) => s.resources ?? [])].filter(
-      (r) => r.startsWith(ROUTE_DEF) || r.startsWith(REQUEST),
+      (r) =>
+        r.startsWith(ROUTE_DEF) ||
+        r.startsWith(REQUEST) ||
+        r.startsWith("http-wrapper:") ||
+        r.startsWith("http-call:"),
     );
   }
 
@@ -287,6 +291,61 @@ export class DependencyGraph {
           requests.set(r, set);
           this.httpFiles.add(file);
         }
+      }
+    }
+    // Request helpers (`authenticatedRequest($method, $uri)`) and the calls that use them: each
+    // call is a request; one whose url is computed is uncertainty for that caller.
+    const wrappers = new Map<string, { url: number; method: string }[]>();
+    const calls = new Map<string, Set<string>>();
+    for (const [file, a] of this.files)
+      for (const r of [
+        ...(a.topLevelResources ?? []),
+        ...a.symbols.flatMap((s) => s.resources ?? []),
+      ]) {
+        const w = /^http-wrapper:([^:]+):(\d+):(.+)$/.exec(r);
+        if (w) {
+          const list = wrappers.get(w[1] as string) ?? [];
+          list.push({ url: Number(w[2]), method: w[3] as string });
+          wrappers.set(w[1] as string, list);
+          this.httpFiles.add(file);
+        } else if (r.startsWith("http-call:")) {
+          const set = calls.get(r) ?? new Set();
+          set.add(file);
+          calls.set(r, set);
+        }
+      }
+    for (const [r, files] of calls) {
+      const [name, ...args] = r.slice("http-call:".length).split("|");
+      const specs = wrappers.get(name as string);
+      if (!specs) continue;
+      for (const f of files) this.httpFiles.add(f);
+      for (const spec of specs) {
+        const url = args[spec.url];
+        const method = spec.method.startsWith("@")
+          ? (args[Number(spec.method.slice(1))] ?? "?")
+          : spec.method;
+        const req = url?.startsWith("/")
+          ? `http-request:${method === "?" ? "*" : method} ${url}`
+          : url?.startsWith("name:")
+            ? `http-request-name:${url.slice(5)}`
+            : undefined;
+        if (!req) {
+          for (const f of files)
+            this.uncertainty.set(f, [
+              ...(this.uncertainty.get(f) ?? []),
+              `calls the request helper ${name} with a url built at run time`,
+            ]);
+          continue;
+        }
+        const set = requests.get(req) ?? new Set();
+        for (const f of files) set.add(f);
+        requests.set(req, set);
+        this.addDep(key(RESOURCE, req), {
+          from: key(RESOURCE, r),
+          kind: "REFERENCES",
+          provenance: "static",
+          confidence: "medium",
+        });
       }
     }
     if (!defs.length && !requests.size) return;
@@ -992,9 +1051,11 @@ export class DependencyGraph {
             t && !("namespace" in t) && t.unit !== WHOLE
               ? this.memberKey(t.file, t.unit, m)
               : undefined;
+          // `super.m()` / `parent::m()` calls the base implementation itself, never an override:
+          // marked EXTENDS so the override rule (traverse) does not follow it.
           this.addDep(mk ?? key(file, s.parent), {
             from,
-            kind: "REFERENCES",
+            kind: "EXTENDS",
             provenance: "static",
             confidence: mk ? "high" : "medium",
           });
@@ -1615,7 +1676,8 @@ export class DependencyGraph {
         // interface (`repo: Repo`, `const s: Base = …`) may run this member.
         if (sym && member !== INIT && (sym.kind === "class" || sym.kind === "interface"))
           for (const sup of this.supertypes(file, sym))
-            pushDeps(key(sup.file, `${sup.unit}.${member}`), k);
+            for (const d of this.deps.get(key(sup.file, `${sup.unit}.${member}`)) ?? [])
+              if (d.kind !== "EXTENDS") push(d.from, k, d.confidence);
       } else {
         const sym = a ? this.topSymbol(file, unit) : undefined;
         if (sym?.kind === "class" && a) {

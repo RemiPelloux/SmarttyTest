@@ -923,7 +923,8 @@ function readPhp(
     }
     if (!literal) return {};
     const path = out.replace(/^https?:\/\/[^/]*/i, "").replace(/\*+/g, "*");
-    if (!path.replace(/[*/]/g, "")) return {};
+    // Nothing but computed parts (`$url`, `"/{$x}"`); the root `/` itself is a path.
+    if (path.includes("*") && !path.replace(/[*/]/g, "")) return {};
     return { path: path.startsWith("/") || path.startsWith("*") ? path : `/${path}` };
   };
   /** The variable a call chain starts from (`$this` in `$this->actingAs($u)->getJson(…)`). */
@@ -951,19 +952,54 @@ function readPhp(
     }
     return undefined;
   };
-  const request = (k: number, c: Collected) => {
+  /** The command named by the first argument of the call whose `(` is at `open`. */
+  const command = (open: number, c: Collected, line: number) => {
+    const first = argRanges(open)[0];
+    if (!first) return;
+    const n = first[1] - first[0] === 1 ? toks[first[0]] : undefined;
+    const name = n?.t === "str" ? /^\s*(\S+)/.exec(n.value ?? "")?.[1] : undefined;
+    const cls = classOf3(first);
+    if (cls) c.escapes.add(cls);
+    else if (name) c.resources.add(`http-request:ARTISAN /${name}`);
+    else unreadable("a command named at run time", line);
+  };
+  const classOf3 = (r: [number, number]): string | undefined =>
+    r[1] - r[0] === 3 &&
+    toks[r[0]]?.t === "name" &&
+    toks[r[0] + 1]?.v === "::" &&
+    toks[r[0] + 2]?.v === "class"
+      ? classRef(resolveClass((toks[r[0]] as Tok).v), (toks[r[0]] as Tok).line)
+      : undefined;
+  const request = (
+    k: number,
+    c: Collected,
+    owner?: { name: string; params: readonly string[] },
+  ) => {
     const t = toks[k] as Tok;
     if (chainRoot(k) !== "$this") return;
     const args = argRanges(k + 1);
     let method = REQUEST_VERBS[t.v] as string;
     let url = args[0];
+    let methodVar: string | undefined;
     if (method === "?") {
       // json('GET', $uri, …) / call('POST', $uri, …)
       const m = args[0] && args[0][1] - args[0][0] === 1 ? toks[args[0][0]] : undefined;
       method = m?.t === "str" && m.value ? m.value.toUpperCase() : "*";
+      if (m?.t === "var") methodVar = m.v;
       url = args[1];
     }
     if (!url) return;
+    // A request helper (`authenticatedRequest($method, $uri)`): the url is its parameter, so its
+    // callers say which: each call is a request (see http-call), not this method.
+    const urlTok = url[1] - url[0] === 1 ? toks[url[0]] : undefined;
+    if (owner && urlTok?.t === "var" && owner.params.includes(urlTok.v)) {
+      const m =
+        methodVar && owner.params.includes(methodVar)
+          ? `@${owner.params.indexOf(methodVar)}`
+          : method;
+      c.resources.add(`http-wrapper:${owner.name}:${owner.params.indexOf(urlTok.v)}:${m}`);
+      return;
+    }
     const r = evalUrl(url[0], url[1]);
     if (r.name !== undefined) c.resources.add(`http-request-name:${r.name}`);
     else if (r.path !== undefined) c.resources.add(`http-request:${method} ${r.path}`);
@@ -986,6 +1022,8 @@ function readPhp(
       declaring?: boolean;
       /** Parameters of a private method every caller passes `X::class` to: those classes. */
       paramClasses?: Map<string, string[]>;
+      /** The method the code belongs to, and its parameter names in order. */
+      owner?: { name: string; params: readonly string[] };
     },
   ) => {
     const to = Math.min(upTo, toks.length);
@@ -1075,6 +1113,39 @@ function readPhp(
             }
             const member = memberAfter(k + 2);
             if (!member) continue;
+            // $this->artisan('prospection:enrich --dry'): a command a test runs.
+            if (testish && next?.v === "->" && n?.v === "artisan" && toks[k + 3]?.v === "(") {
+              command(k + 3, c, n.line);
+              k += 2;
+              continue;
+            }
+            // $this->authenticatedRequest('GET', '/api/x'): maybe a request helper's call. Each
+            // argument is recorded as a url, an HTTP method or `?`; the graph keeps the calls of
+            // methods that are request helpers (http-wrapper).
+            if (
+              testish &&
+              next?.v === "->" &&
+              n?.t === "name" &&
+              toks[k + 3]?.v === "(" &&
+              !(n.v in REQUEST_VERBS) &&
+              !/^(?:assert|expect|actingAs$|be$|with|without|from$|following|travel|freeze|mock|partialMock|spy$|seed|instance$|swap$)/.test(
+                n.v,
+              )
+            ) {
+              const args = argRanges(k + 3);
+              if (args.length)
+                c.resources.add(
+                  `http-call:${n.v}|${args
+                    .map(([a, b]) => {
+                      const one = b - a === 1 ? toks[a] : undefined;
+                      if (one?.t === "str" && one.value && /^[A-Za-z]+$/.test(one.value))
+                        return one.value.toUpperCase();
+                      const r = evalUrl(a, b);
+                      return r.path?.startsWith("/") ? r.path : r.name ? `name:${r.name}` : "?";
+                    })
+                    .join("|")}`,
+                );
+            }
             // $this->getJson('/api/x'): a request of a test.
             if (
               testish &&
@@ -1083,7 +1154,7 @@ function readPhp(
               n.v in REQUEST_VERBS &&
               toks[k + 3]?.v === "("
             ) {
-              request(k + 2, c);
+              request(k + 2, c, ctx.owner);
               k += 2;
               continue;
             }
@@ -1196,7 +1267,7 @@ function readPhp(
       const lw = lc(word);
       // $this->getJson('/api/posts/1'), $this->actingAs($u)->post(route('posts.store'), …)
       if (testish && prev?.v === "->" && next?.v === "(" && t.v in REQUEST_VERBS) {
-        request(k, c);
+        request(k, c, ctx.owner);
         continue;
       }
       if (prev?.v === "->" || prev?.v === "?->") continue; // a member name
@@ -1276,6 +1347,14 @@ function readPhp(
           k += 2;
           continue;
         }
+        // Artisan::call('x:y') in a test: the command it runs.
+        if (
+          testish &&
+          lc(resolveClass(word)) === "illuminate\\support\\facades\\artisan" &&
+          (member?.v === "call" || member?.v === "queue") &&
+          toks[k + 3]?.v === "("
+        )
+          command(k + 3, c, t.line);
         const local = classRef(resolveClass(word), t.line);
         if (member?.t === "name" && lc(member.v) === "class") {
           // [X::class, 'method']: a callable — the method and the constructor.
@@ -1698,6 +1777,20 @@ function readPhp(
       if (CLASS_STRING.test(fk.value))
         shell.escapes.add(classRef(fk.value.replace(/^\\/, ""), fk.line));
       else sideEffect(`@bind-key/${fk.value}`, fk.line);
+    // An Artisan command: the tests that run it by name (`$this->artisan('x:y')`) reach it.
+    for (let q = open + 1; q < end; q++) {
+      const x = toks[q] as Tok;
+      if (
+        x.t === "var" &&
+        (x.v === "$signature" || x.v === "$name") &&
+        toks[q + 1]?.v === "=" &&
+        toks[q + 2]?.t === "str"
+      ) {
+        const command = /^\s*([^\s{]+)/.exec(toks[q + 2]?.value ?? "")?.[1];
+        if (command) shell.resources.add(`http-route:ARTISAN /${command}`);
+        break;
+      }
+    }
     // What the container binds this class to (an interface bound in a service provider).
     sideEffect(`@bound/${asPath(fqcn)}`, (toks[k] as Tok).line);
     const startLine = (toks[startTok] as Tok).line;
@@ -1784,11 +1877,19 @@ function readPhp(
           walk(paren + 1, pEnd, c, { self: name, props, params, declaring: true });
         }
         walk(mi.from, paren, c, { self: name, props, params });
+        const paramNames =
+          toks[paren]?.v === "("
+            ? argRanges(paren).map(([a, b]) => {
+                for (let q = a; q < b; q++) if (toks[q]?.t === "var") return (toks[q] as Tok).v;
+                return "";
+              })
+            : [];
         walk(mi.headerEnd, mi.to + 1, c, {
           self: name,
           props,
           params,
           ...(paramClasses ? { paramClasses } : {}),
+          owner: { name: mi.name, params: paramNames },
         });
       } else if (mi.to > mi.from) {
         walk(mi.from, mi.to + 1, c, { self: name, props });
@@ -2153,7 +2254,7 @@ function readPhp(
     const action: { range?: [number, number]; cls?: string; method?: string } = {};
     if (verb.name === "view" || verb.name.endsWith("edirect")) {
       if (actionArg) action.range = actionArg;
-    } else if (actionStr !== undefined && actionStr.includes("@")) {
+    } else if (actionStr?.includes("@")) {
       const [cls, m] = actionStr.split("@") as [string, string];
       action.cls = classRef(
         resolveClass(cls.includes("\\") ? `\\${cls.replace(/^\\/, "")}` : cls),
@@ -2361,6 +2462,7 @@ function readPhp(
       "lang/**/*.php",
       "resources/lang/**/*.php",
       "resources/views/**/*.php",
+      "app/Console/**/*.php",
     ])
       dynamicHints.push({ pattern: at(rel, true), line: 1, expr: "the Laravel application boot" });
     for (const rel of [
@@ -2369,7 +2471,6 @@ function readPhp(
       "app/Providers/**/*.php",
       "app/Listeners/**/*.php",
       "app/Policies/**/*.php",
-      "app/Console/**/*.php",
     ])
       dynamicHints.push({ pattern: at(rel), line: 1, expr: "the Laravel application boot" });
   }

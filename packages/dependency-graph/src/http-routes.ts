@@ -29,11 +29,7 @@ export const ROUTE_NAME = "http-route-name";
 export const REQUEST = "http-request";
 export const REQUEST_NAME = "http-request-name";
 
-const segmentsOf = (path: string) =>
-  path
-    .replace(/[?#].*$/, "")
-    .split("/")
-    .filter(Boolean);
+const segmentsOf = (path: string) => path.split("/").filter(Boolean);
 
 /** Reads a definition resource (`http-route:GET|HEAD /api/x`, `http-route~:POST /x`). */
 export function parseRouteResource(
@@ -52,8 +48,16 @@ const isParam = (s: string) => /^\{[^}]+\}$/.test(s);
 const optional = (s: string) => /^\{[^}]+\?\}$/.test(s);
 
 /** Whether a definition's segment can be the request's literal segment. */
-const segmentMatches = (def: string, req: string) =>
-  isParam(def) || def.toLowerCase() === req.toLowerCase();
+const segmentMatches = (def: string, req: string) => {
+  if (isParam(def)) return true;
+  if (!def.includes("{")) return def.toLowerCase() === req.toLowerCase();
+  // `{code}.jpg`: a parameter inside a segment.
+  const re = def
+    .split(/\{[^}]+\}/)
+    .map((p) => p.replace(/[.*+?^$()|[\]\\]/g, "\\$&"))
+    .join("[^/]+");
+  return new RegExp(`^${re}$`, "i").test(req);
+};
 
 /**
  * Whether a request path (`*` = any text) can be served by a definition. A `*` in a request
@@ -101,7 +105,9 @@ export function matchRequest(r: string, defs: readonly RouteDefinition[]): Route
   const m = /^http-request:(\S+) (.*)$/.exec(r);
   if (!m) return [];
   const method = (m[1] as string).toUpperCase();
-  const path = segmentsOf((m[2] as string).replace(/^https?:\/\/[^/]*/i, "").replace(/\?.*$/, ""));
+  const path = segmentsOf(
+    (m[2] as string).replace(/^https?:\/\/[^/]*/i, "").replace(/[?#].*$/, ""),
+  );
   return defs.filter(
     (d) =>
       (d.methods.includes("*") ||

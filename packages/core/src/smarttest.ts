@@ -1525,6 +1525,20 @@ export class SmartTest {
         ...graph.dependentsOf([{ file, units: ["*"] }]).tests.keys(),
       ],
       reachesAnyTest: (file: string) => graph.reachesAnyTest([{ file, units: ["*"] }]),
+      // Every declaration of the file changed; its module-level code only when it has some (a
+      // class file's importers do not run it).
+      reaches: (from: string, to: string) => {
+        const a = index.get(from);
+        const top = a?.symbols.filter((s) => !s.parent).map((s) => s.qualifiedName) ?? [];
+        const moduleCode =
+          !a ||
+          !top.length ||
+          a.topLevelRefs.length > 0 ||
+          (a.topLevelEscapes?.length ?? 0) > 0 ||
+          (a.topLevelUses?.length ?? 0) > 0;
+        const units = moduleCode ? ["*"] : top;
+        return graph.dependentsOf([{ file: from, units }]).affectedFiles.has(to);
+      },
       isTest: (file: string) => graph.isTestFile(file),
     };
   }
