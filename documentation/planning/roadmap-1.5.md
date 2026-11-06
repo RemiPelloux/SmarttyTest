@@ -8,16 +8,16 @@ Planning is in story points; one sprint is about 40 points. A version ships when
 
 ## Overview
 
-| Version | Theme                                                    | Sprints | Points | Gate in one line                                                                                                                  |
-| ------- | -------------------------------------------------------- | ------- | ------ | --------------------------------------------------------------------------------------------------------------------------------- |
-| 1.1.0   | Angular, reliability, Python preview, rollout (released) | S28–S31 | 152    | Angular and Python selected at 0 misses; a fault-injection audit finds no missed test; `init` alone reproduces the OpenPro setups |
-| 1.2.0   | PHP preview, rollout follow-ups, first precision stories | S32–S33 | 77     | PHP selection on OpenPro's backend at 0 misses; a branch's first push runs only its changes; Windows CI green                     |
-| 1.3.0   | Precision                                                | S34–S35 | 52     | Type-checker resolution; the 20% observed-execution target met on two benchmarks                                                  |
-| 1.4.0   | Browser and end-to-end                                   | S36–S37 | 72     | Source-mapped browser coverage; live-environment specs never run by accident                                                      |
-| 1.5.0   | Ecosystem                                                | S38–S39 | 74     | Third-party adapters installable from npm; CI annotations; a shared result cache                                                  |
-| 1.6.0   | Backend frameworks (preview)                             | S40     | 28     | Laravel, Django and FastAPI edges; a migration selects the tests that touch its tables                                            |
+| Version | Theme                                                                  | Sprints | Points | Gate in one line                                                                                                                              |
+| ------- | ---------------------------------------------------------------------- | ------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1.1.0   | Angular, reliability, Python preview, rollout (released)               | S28–S31 | 152    | Angular and Python selected at 0 misses; a fault-injection audit finds no missed test; `init` alone reproduces the OpenPro setups             |
+| 1.2.0   | PHP preview, rollout follow-ups, first precision stories, hooks and CI | S32–S34 | 104    | PHP selection on OpenPro's backend at 0 misses; a branch's first push runs only its changes; live specs never run by accident; CI annotations |
+| 1.3.0   | Precision                                                              | S35–S36 | 52     | Type-checker resolution; the 20% observed-execution target met on two benchmarks                                                              |
+| 1.4.0   | Browser and end-to-end                                                 | S37–S38 | 64     | Source-mapped browser coverage; route-level selection for single-page apps                                                                    |
+| 1.5.0   | Ecosystem                                                              | S39–S40 | 60     | Third-party adapters installable from npm; a shared result cache                                                                              |
+| 1.6.0   | Backend frameworks (preview)                                           | S41     | 28     | Laravel, Django and FastAPI edges; a migration selects the tests that touch its tables                                                        |
 
-Total: 455 points, thirteen sprints (S28–S40).
+Total: 460 points, fourteen sprints (S28–S41).
 
 ---
 
@@ -116,9 +116,9 @@ Every item comes from a problem met on OpenPro. Each was fixed by hand there; he
 - `init --yes` on the commit before SmartTest in each of OpenPro's four repositories writes the hand-tuned config verbatim and the hook in the same file and stage. Two fixes came from it: a related-tests step kept in pre-push is replaced there (openpro-front), and a hooks folder held in a variable is followed (openpro-admin's `setup-hooks`). The one remaining difference: in openpro-front's parallel pre-push, SmartTest runs before the other steps, not beside them.
 - Not done: the four repositories in the published benchmarks.
 
-## 1.2.0: PHP preview, rollout follow-ups, first precision stories (77 pts)
+## 1.2.0: PHP preview, rollout follow-ups, first precision stories, hooks and CI (104 pts)
 
-Two sprints. S32 brings PHP forward from 1.5.0 because OpenPro needs it now. S33 closes what the 1.1 rollout left open and takes the precision stories that need no type checker.
+Three sprints. S32 brings PHP forward from 1.5.0 because OpenPro needs it now. S33 closes what the 1.1 rollout left open and takes the precision stories that need no type checker. S34 brings forward what OpenPro's hooks and CI need from 1.4.0 and 1.5.0.
 
 OpenPro's backend is Laravel 12 on PHPUnit 11: 2,001 test files, 4,669 PHP files under `app/`, and CaptainHook hooks that run a home-made `scripts/test-changed.sh` before each commit and push. PHP is the second language on the plugin path Python opened in S30, and ships the same way: an official plugin marked **preview**, which selects tests and never hides a failure.
 
@@ -151,6 +151,17 @@ SmartTest stays an npm package. It reads PHP source in TypeScript, without runni
 
 **S33 gate:** a push creating a branch from `main` on openpro-front selects what the branch changed, not the whole history; `pnpm verify` green on Linux, macOS and Windows; the four OpenPro repositories published with 0 missed failures; barrel pruning at 0 misses on the published benchmarks, with the precision report showing the change; analysis at 10,000 modules under 500 ms in process.
 
+### S34: Hooks and CI (27 pts)
+
+| Story                                                                                                                                                                                                                                                                                                                                                                                                                                                                      | Pts |
+| -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --- |
+| **Commit trailer.** A commit hook can add a trailer to the commit message with what the pre-commit run did (`Tests: 12 run, 2,340 not run · 4 min saved`), opt-in with `hook.trailer`; `hook install` adds the `commit-msg` step for Husky, lefthook, simple-git-hooks, CaptainHook and plain hooks. Replaces openpro-backend's `scripts/test-trailer.sh`. A commit whose tests were not run (bypassed, no record for the staged tree) gets no trailer, never a false one. | 5   |
+| **Playwright projects understood; live specs.** Moved from 1.4.0. Each project's `baseURL`, dependencies (`setup` projects) and `testMatch` read from the config; a spec that only targets a remote `baseURL` (`https://…`, not `localhost`) is marked **live** and never run by `run`, `benchmark` or a hook unless asked (`--live`).                                                                                                                                     | 8   |
+| **CI annotations.** Moved from 1.5.0. GitHub Actions, GitLab CI and Bitbucket: selected and skipped tests as annotations on the pull request, with the `explain` reason; a step summary with time saved.                                                                                                                                                                                                                                                                   | 8   |
+| **Upgrade assistant.** Moved from 1.5.0. `smarttest sync` proposes config changes for new 1.x features (lockfile selection, live specs, type-checker), shown as a diff, never applied silently.                                                                                                                                                                                                                                                                            | 6   |
+
+**S34 gate:** on openpro-front, the 78 Playwright specs that target the deployed environment are marked live and no hook, `run` or `benchmark` runs them without `--live`, while CI still can; a pull request on SmartTest's own repository shows the annotations and the summary; `sync` on each of the seven adopting repositories proposes the 1.2.0 changes as a diff and applies only what is accepted; openpro-backend's commits carry SmartTest's trailer instead of `test-trailer.sh`'s.
+
 ## 1.3.0: Precision (52 pts)
 
 Run fewer tests for the same safety. Two items have been carried since 0.3.0 and 0.8.0. Barrel pruning, the lazy index and the precision report moved to S33.
@@ -164,36 +175,33 @@ Run fewer tests for the same safety. Two items have been carried since 0.3.0 and
 
 **Gate:** type-checker resolution on at least two benchmark repositories with 0 misses; the 20% observed-execution reduction met on at least two of them.
 
-## 1.4.0: Browser and end-to-end (72 pts)
+## 1.4.0: Browser and end-to-end (64 pts)
 
 End-to-end specs are where test time goes, and where running the wrong one is costly: on OpenPro, the Playwright suite targets a live environment.
 
-| Story                                                                                                                                                                                                                                                                                                    | Pts |
-| -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --- |
-| **Browser coverage through source maps.** Bundled and transpiled scripts mapped back to their sources, so a spec is linked to the components it actually rendered; Chromium first, then Firefox and WebKit where Playwright exposes coverage.                                                            | 13  |
-| **Pages beyond the `page` fixture.** New pages, popups and `context.newPage()` traced and mapped to their routes.                                                                                                                                                                                        | 5   |
-| **Playwright projects understood.** Each project's `baseURL`, dependencies (`setup` projects) and `testMatch` read from the config; a spec that only targets a remote `baseURL` (`https://…`, not `localhost`) is marked **live** and never run by `run`, `benchmark` or a hook unless asked (`--live`). | 8   |
-| **Route-level selection for single-page apps.** React Router, TanStack Router and Vue Router routes mapped to the specs that visit them, as Next.js routes are today.                                                                                                                                    | 13  |
-| **Cypress component tests** selected like unit tests, with coverage.                                                                                                                                                                                                                                     | 8   |
-| **End-to-end sharding by recorded duration** across CI machines, with setup projects run once per shard.                                                                                                                                                                                                 | 8   |
-| **Studio sign-off carried from 0.9.0.** Full-screen design review in both themes, forced colours, text spacing, VoiceOver live regions.                                                                                                                                                                  | 8   |
-| **Visual and snapshot specs.** Screenshot baselines (`toHaveScreenshot`) linked to the components and styles they cover; a style change selects them.                                                                                                                                                    | 9   |
+| Story                                                                                                                                                                                                                                         | Pts |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --- |
+| **Browser coverage through source maps.** Bundled and transpiled scripts mapped back to their sources, so a spec is linked to the components it actually rendered; Chromium first, then Firefox and WebKit where Playwright exposes coverage. | 13  |
+| **Pages beyond the `page` fixture.** New pages, popups and `context.newPage()` traced and mapped to their routes.                                                                                                                             | 5   |
+| **Route-level selection for single-page apps.** React Router, TanStack Router and Vue Router routes mapped to the specs that visit them, as Next.js routes are today.                                                                         | 13  |
+| **Cypress component tests** selected like unit tests, with coverage.                                                                                                                                                                          | 8   |
+| **End-to-end sharding by recorded duration** across CI machines, with setup projects run once per shard.                                                                                                                                      | 8   |
+| **Studio sign-off carried from 0.9.0.** Full-screen design review in both themes, forced colours, text spacing, VoiceOver live regions.                                                                                                       | 8   |
+| **Visual and snapshot specs.** Screenshot baselines (`toHaveScreenshot`) linked to the components and styles they cover; a style change selects them.                                                                                         | 9   |
 
-**Gate:** on OpenPro's front, a component change selects the Playwright specs that render it, from source-mapped coverage; no live-environment spec runs in `run`, `benchmark` or a hook without `--live`; 0 missed failures across the end-to-end benchmarks.
+**Gate:** on OpenPro's front, a component change selects the Playwright specs that render it, from source-mapped coverage; 0 missed failures across the end-to-end benchmarks.
 
-## 1.5.0: Ecosystem (74 pts)
+## 1.5.0: Ecosystem (60 pts)
 
 | Story                                                                                                                                                                                                                                                          | Pts |
 | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --- |
 | **Third-party adapters from npm.** The Plugin SDK's runner, VCS and language contracts (frozen in 1.0.0) become installable: `plugins` in the config loads them, `doctor` runs the conformance kit on each. Example plugins: a Mocha runner and an AVA runner. | 13  |
-| **CI annotations.** GitHub Actions, GitLab CI and Bitbucket: selected and skipped tests as annotations on the pull request, with the `explain` reason; a step summary with time saved.                                                                         | 8   |
 | **A shared result cache for CI.** Validated, signed results reused across CI runs of the same commit range (a cache directory or an S3-compatible bucket); never trusted without the HMAC signature 1.0.0 introduced.                                          | 13  |
 | **Monorepo orchestration.** Nx, Turborepo and pnpm workspace task graphs read, so `smarttest ci` runs each affected package's tests with its own runner in the task graph's order. Includes Nx Angular projects (`project.json`, `nx test`), moved from S28.   | 13  |
 | **Bun and Deno test runners.** `bun test` and `deno test` as built-in adapters.                                                                                                                                                                                | 8   |
 | **VS Code and JetBrains.** The VS Code extension gains the impact map; a JetBrains plugin with "Run Affected Tests" and `explain` on hover.                                                                                                                    | 13  |
-| **Upgrade assistant.** `smarttest sync` proposes config changes for new 1.x features (lockfile selection, live specs, type-checker), shown as a diff, never applied silently.                                                                                  | 6   |
 
-**Gate:** a third-party adapter published to npm passes the conformance kit and runs in a benchmark repository; CI annotations on GitHub and GitLab; a shared cache hit verified across two CI runs, with a forged entry rejected.
+**Gate:** a third-party adapter published to npm passes the conformance kit and runs in a benchmark repository; a shared cache hit verified across two CI runs, with a forged entry rejected.
 
 ## 1.6.0: Backend frameworks, preview (28 pts)
 
