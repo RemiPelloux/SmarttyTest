@@ -55,7 +55,19 @@ export interface RunSummary {
    * `hook.exclude`): left to CI, never passed. Absent outside hook runs.
    */
   leftToCi?: number;
+  /**
+   * Selected Playwright specs that target a remote environment (live) and were not run because
+   * `--live` was not given: never passed. Absent when there are none.
+   */
+  live?: number;
   durationMs: number;
+}
+
+/** A selected spec that targets a remote environment and was not run (`--live` runs it). */
+export interface LiveSpecReport {
+  file: string;
+  projects: string[];
+  baseURL: string;
 }
 
 export interface RunReport {
@@ -83,6 +95,12 @@ export interface RunReport {
    */
   leftToCi?: { file: string; adapter: string; rule: string }[];
   /**
+   * Selected Playwright specs that only target a remote `baseURL` (live), not run without
+   * `--live`: the projects that would run each one and the environment they target. They stay in
+   * `decision.selectedTests`.
+   */
+  live?: LiveSpecReport[];
+  /**
    * Estimated test time of the files that were NOT run, from their last recorded durations.
    * Always an estimate: runner start-up and transforms are not included.
    */
@@ -103,6 +121,7 @@ export function summarize(
   executions: readonly FileExecution[],
   durationMs: number,
   leftToCi = 0,
+  live = 0,
 ): RunSummary {
   const tests = executions.flatMap((e) => e.tests);
   // A file whose runner never started (missing runner, cancelled before its group) has no test
@@ -124,6 +143,7 @@ export function summarize(
     skippedByTests: count("skipped") + count("pending"),
     cached: count("cached-pass"),
     ...(leftToCi ? { leftToCi } : {}),
+    ...(live ? { live } : {}),
     durationMs,
   };
 }
@@ -172,6 +192,14 @@ export function validateReportIntegrity(report: RunReport): string[] {
     if (!selected.has(l.file)) issues.push(`${l.file} is left to CI but was not selected`);
     if (executed.has(l.file)) issues.push(`${l.file} is left to CI but has an execution record`);
   }
+  const live = report.live ?? [];
+  if ((s.live ?? 0) !== live.length)
+    issues.push("summary.live does not match the live specs not run");
+  for (const l of live) {
+    if (!selected.has(l.file)) issues.push(`${l.file} is live but was not selected`);
+    if (executed.has(l.file))
+      issues.push(`${l.file} is live, not run, but has an execution record`);
+  }
   if (s.skippedBySelection !== report.decision.skippedTests.length)
     issues.push("summary.skippedBySelection does not match the decision");
   if (report.decision.fallbackApplied && report.decision.analysisStatus !== "fallback")
@@ -182,9 +210,9 @@ export function validateReportIntegrity(report: RunReport): string[] {
     const notRun = report.executions.filter(
       (e) => e.status === "cancelled" || e.status === "infrastructure-error",
     ).length;
-    if (notRun || left.length)
+    if (notRun || left.length || live.length)
       issues.push(
-        `coverage labelled 'full' but ${notRun + left.length} selected test file(s) did not run`,
+        `coverage labelled 'full' but ${notRun + left.length + live.length} selected test file(s) did not run`,
       );
   }
   return issues;
@@ -265,6 +293,17 @@ export function toJUnit(report: RunReport, includeSkipped = false): string {
     }
     lines.push("  </testsuite>");
   }
+  if (report.live?.length) {
+    // Selected, not run: a skipped test case, never a pass.
+    lines.push(
+      `  <testsuite name="smarttest: live, not run" tests="${report.live.length}" skipped="${report.live.length}" failures="0" errors="0">`,
+    );
+    for (const l of report.live)
+      lines.push(
+        `    <testcase classname="${xmlEsc(l.file)}" name="(live, not run)"><skipped message="${xmlEsc(`live, not run — targets ${l.baseURL}; run with --live`)}"/></testcase>`,
+      );
+    lines.push("  </testsuite>");
+  }
   if (includeSkipped && report.decision.skippedTests.length) {
     lines.push(
       `  <testsuite name="smarttest: skipped by selection (not run)" tests="${report.decision.skippedTests.length}" skipped="${report.decision.skippedTests.length}" failures="0" errors="0">`,
@@ -286,7 +325,7 @@ export function toMarkdown(report: RunReport, htmlLink?: string): string {
   const icon = status === "passed" ? "✅" : status === "failed" ? "❌" : "⚠️";
   const out: string[] = [];
   out.push(
-    `### ${icon} SmartTest — ${s.passed} passed · ${s.failed} failed${s.flaky ? ` · ${s.flaky} flaky` : ""}${s.cached ? ` · ${s.cached} cached (not run)` : ""}${s.leftToCi ? ` · ${s.leftToCi} left to CI (not run)` : ""} · ${s.skippedBySelection} skipped (not run) · ${formatDuration(s.durationMs)}`,
+    `### ${icon} SmartTest — ${s.passed} passed · ${s.failed} failed${s.flaky ? ` · ${s.flaky} flaky` : ""}${s.cached ? ` · ${s.cached} cached (not run)` : ""}${s.leftToCi ? ` · ${s.leftToCi} left to CI (not run)` : ""}${s.live ? ` · ${s.live} live (not run)` : ""} · ${s.skippedBySelection} skipped (not run) · ${formatDuration(s.durationMs)}`,
   );
   out.push("");
   out.push(
@@ -309,6 +348,16 @@ export function toMarkdown(report: RunReport, htmlLink?: string): string {
     for (const l of report.leftToCi.slice(0, 50))
       out.push(`- ${mdCode(l.file)} — ${mdText(l.adapter)} · ${mdText(l.rule)}`);
     if (report.leftToCi.length > 50) out.push(`- … ${report.leftToCi.length - 50} more`);
+  }
+  if (report.live?.length) {
+    out.push(
+      "",
+      `**Selected, live, not run: ${report.live.length}** (they target a deployed environment; \`--live\` runs them)`,
+      "",
+    );
+    for (const l of report.live.slice(0, 50))
+      out.push(`- ${mdCode(l.file)} — ${mdText(l.projects.join(", "))} · ${mdText(l.baseURL)}`);
+    if (report.live.length > 50) out.push(`- … ${report.live.length - 50} more`);
   }
   out.push("", "<details><summary>Why these tests?</summary>", "");
   for (const t of report.decision.selectedTests.slice(0, 50))
@@ -445,7 +494,7 @@ table{border-collapse:collapse;width:100%}td{padding:6px 8px;border-bottom:1px s
 <header><div class="logo" aria-hidden="true">✓</div><div><h1>SmartTest report</h1><div class="meta">${esc(report.project)} · ${esc(report.command)} · ${esc(report.startedAt)}</div></div><span class="status ${status}" style="margin-left:auto">${esc(statusLabel)}</span></header>
 <section aria-label="Summary" class="grid">
 <div class="card"><b>${s.selected}<span> / ${s.totalTests}</span></b><span>test files selected</span></div>
-<div class="card pass"><b>${s.passed}</b><span>passed</span></div>${s.cached ? `<div class="card"><b>${s.cached}</b><span>cached results — not run</span></div>` : ""}${s.leftToCi ? `<div class="card warn"><b>${s.leftToCi}</b><span>selected, not run in the hook (left to CI)</span></div>` : ""}
+<div class="card pass"><b>${s.passed}</b><span>passed</span></div>${s.cached ? `<div class="card"><b>${s.cached}</b><span>cached results — not run</span></div>` : ""}${s.leftToCi ? `<div class="card warn"><b>${s.leftToCi}</b><span>selected, not run in the hook (left to CI)</span></div>` : ""}${s.live ? `<div class="card warn"><b>${s.live}</b><span>selected, live — not run</span></div>` : ""}
 <div class="card fail"><b>${s.failed + s.timedOut}</b><span>failed / timed out</span></div>
 <div class="card warn"><b>${s.flaky}</b><span>flaky (passed on retry)</span></div>
 <div class="card skip"><b>${s.skippedBySelection}</b><span>skipped by selection — not run</span></div>
@@ -465,6 +514,7 @@ ${
 ${warn ? `<h2>Warnings</h2><ul>${warn}</ul>` : ""}
 <h2>Executions</h2>${execRows || '<p class="muted">No tests were executed.</p>'}
 ${report.leftToCi?.length ? `<h2>Selected, not run in the hook (left to CI)</h2><ul>${report.leftToCi.map((l) => `<li><code>${esc(l.file)}</code> <span class="muted">${esc(l.adapter)} · ${esc(l.rule)}</span></li>`).join("")}</ul>` : ""}
+${report.live?.length ? `<h2>Selected, live — not run (targets a deployed environment; --live runs them)</h2><ul>${report.live.map((l) => `<li><code>${esc(l.file)}</code> <span class="muted">${esc(l.projects.join(", "))} · ${esc(l.baseURL)}</span></li>`).join("")}</ul>` : ""}
 <h2>Why these tests</h2>${selRows || '<p class="muted">No tests selected.</p>'}
 <h2>Skipped by selection (not run)</h2>${skipRows || '<p class="muted">Nothing skipped.</p>'}
 <h2>Change analysis</h2><ul>${changes || "<li class=muted>No changes</li>"}</ul>

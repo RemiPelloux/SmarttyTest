@@ -18,6 +18,19 @@ All notable changes are documented here. Releases are managed with [Changesets](
 - `--dry-run` writes nothing; in a terminal `sync` asks for each change; `--apply` (new, same as `--yes`) writes all of them. Without a terminal and without `--apply`, nothing is written and `sync` exits 3, as before. Each file is written once, atomically, and only while it is still the text the proposal was computed from. `--check` still fails on drift only.
 - `sync --json` gains `upgrades`, and `applied` and `skipped` after a write. Existing fields are unchanged.
 
+### Added: live Playwright specs
+
+- A Playwright spec is **live** when every project that runs it targets a deployed environment: a resolved `baseURL` on `https://` that is not `localhost`, `127.x`, `::1` or a `webServer` the config starts, or a dependency (setup project) that does. `run`, `ci`, `run --hook`, `validate-selection`, `benchmark` and `audit --mutate` keep it selected but run it only with the new `--live` flag; otherwise it is reported as "live, not run" with its projects and URL, never as passed. CI runs them with `smarttest ci --live`.
+- The projects are read from Playwright itself (`playwright test --list` with a SmartTest reporter): `baseURL`, `dependencies`, `testDir`, `testMatch`, `testIgnore` and the `webServer` URLs, environment variables applied. A config Playwright cannot list gives no live spec and a warning, so every selected spec runs. Setup projects a selected project depends on run once per run.
+- Reports: `report.live` (`file`, `projects`, `baseURL`) and `summary.live` in `run --json`, `live` in `validate-selection --json`, `commits[].live` in `benchmark --json`, a "live, not run" section in the HTML and Markdown reports and skipped test cases in JUnit. All additive. A run that leaves live specs out never advances the snapshot baseline or counts as a full-suite run.
+- New fixture `playwright-live` (a local project with a setup project and a `webServer`, a live project with its own setup project), in the regression harness: 0 missed failures. On openpro-front, all 78 Playwright files (25 projects defaulting to `https://dev.openpro.ai`) are classified live; with `E2E_BASE_URL=http://127.0.0.1:5310`, none are.
+
+### Added: commit trailer
+
+- `hook.trailer: true` (configuration, additive) adds a Git trailer to each commit message with what the pre-commit run of the committed tree did: `Tests: 12 run, 2,340 not run · ~4 min saved` (test files; selected files the hook did not run are named apart: `3 left to CI`, `2 live, not run`). It replaces openpro-backend's `scripts/test-trailer.sh`.
+- `smarttest hook install` adds the `commit-msg` step for husky, lefthook, simple-git-hooks, CaptainHook (`captainhook.json`, when SmartTest runs from it) and plain `.git/hooks`; `hook uninstall` and `smarttest uninstall` remove it. The step runs the new `smarttest hook trailer <file>`, which always exits 0.
+- No trailer without a passing pre-commit record for exactly the committed tree (`git write-tree` on the hook's index): a bypassed commit (`SMARTTEST_SKIP=1`, `--no-verify`), a failed run or content changed after the hook never gets one. Hook records in `.smarttest/state/hooks.json` gain `executed`, `notRun`, `savedMs` and `live`.
+
 ### Changed: hooks
 
 - A push that creates a branch compares with the last commit a pre-push hook passed on, not with the whole history. On openpro-front a new branch meant 14,377 changed files and a 27-minute hook. A commit pushed with the hook bypassed has no passed record, so a new branch carrying it still checks it; with no passed record at all, the whole history is still compared.

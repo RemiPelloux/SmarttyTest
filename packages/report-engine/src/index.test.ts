@@ -147,6 +147,38 @@ describe("report engine", () => {
     );
   });
 
+  it("reports live specs as selected and not run, never passed", () => {
+    const r = report();
+    r.decision.selectedTests.push({
+      testId: "e2e/live.spec.ts",
+      filePath: "e2e/live.spec.ts",
+      reasons: [{ kind: "direct-dependency" as const, message: "imports the change" }],
+    });
+    r.live = [{ file: "e2e/live.spec.ts", projects: ["remote"], baseURL: "https://dev.example" }];
+    r.summary = summarize(r.decision, r.executions, 5, 0, 1);
+    expect(r.summary.live).toBe(1);
+    expect(r.summary.passed).toBe(1);
+    expect(validateReportIntegrity(r)).toEqual([]);
+    expect(toMarkdown(r)).toContain("1 live (not run)");
+    expect(toHtml(r)).toContain("Selected, live — not run");
+    expect(toJUnit(r, false)).toContain('name="(live, not run)"><skipped message="live, not run');
+    r.executions.push({
+      file: "e2e/live.spec.ts",
+      adapter: "playwright",
+      status: "passed",
+      durationMs: 1,
+      tests: [],
+    });
+    expect(validateReportIntegrity(r)).toContain(
+      "e2e/live.spec.ts is live, not run, but has an execution record",
+    );
+    r.executions.pop();
+    r.summary.live = 0;
+    expect(validateReportIntegrity(r)).toContain(
+      "summary.live does not match the live specs not run",
+    );
+  });
+
   it("never counts skipped-by-selection tests as passed", () => {
     const r = report();
     expect(r.summary.passed).toBe(1);

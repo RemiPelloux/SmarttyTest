@@ -3,7 +3,7 @@
  * Discovery uses `playwright test --list`; execution passes the selected spec files as filters
  * and reads the JSON reporter. Traces, screenshots and videos are attached to the results.
  */
-import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { isAbsolute, join, relative } from "node:path";
 import { resolvePackageBin } from "@smarttest/plugin-sdk";
@@ -22,6 +22,7 @@ import {
   type TestStatus,
 } from "@smarttest/shared";
 import { BROWSER_COVERAGE_ENV } from "./coverage.js";
+import { type PlaywrightProjects, PROJECTS_OUTPUT_ENV, PROJECTS_REPORTER } from "./projects.js";
 
 export {
   BROWSER_COVERAGE_ENV,
@@ -29,6 +30,14 @@ export {
   type ExtendableTest,
   withBrowserCoverage,
 } from "./coverage.js";
+export {
+  isRemoteBaseURL,
+  type LiveSpec,
+  liveProjects,
+  liveSpecs,
+  type PlaywrightProject,
+  type PlaywrightProjects,
+} from "./projects.js";
 
 export interface PlaywrightAdapterOptions {
   projectRoot: string;
@@ -274,6 +283,52 @@ export class PlaywrightAdapter implements TestAdapter {
       ),
     ];
     return files.map((f) => ({ id: f, filePath: f, suitePath: [], name: f, tags: ["e2e"] }));
+  }
+
+  /**
+   * The config's projects as Playwright resolves them, and the projects of each spec file
+   * (`playwright test --list` with SmartTest's projects reporter). Throws when the listing fails:
+   * nothing can be said about the projects then.
+   */
+  async projects(): Promise<PlaywrightProjects> {
+    const tmp = await mkdtemp(join(tmpdir(), "smarttest-playwright-projects-"));
+    const reporter = join(tmp, "projects-reporter.cjs");
+    const out = join(tmp, "projects.json");
+    try {
+      await writeFile(reporter, PROJECTS_REPORTER);
+      const res = await runProcess(
+        process.execPath,
+        [this.bin(), "test", "--list", `--reporter=${reporter}`, ...this.configArgs()],
+        {
+          cwd: this.options.cwd,
+          env: { ...process.env, FORCE_COLOR: "0", NO_COLOR: "1", [PROJECTS_OUTPUT_ENV]: out },
+          timeoutMs: 120_000,
+        },
+      );
+      let raw: PlaywrightProjects | undefined;
+      try {
+        raw = JSON.parse(await readFile(out, "utf8")) as PlaywrightProjects;
+      } catch {
+        raw = undefined;
+      }
+      if (!raw || res.code !== 0)
+        throw new SmartTestError(
+          `playwright projects could not be read: ${(res.stderr || res.stdout).trim().slice(0, 500)}`,
+          {
+            code: "ST_DISCOVERY_FAILED",
+            category: "infrastructure",
+            hint: "Run `npx playwright test --list` and fix the error it reports.",
+          },
+        );
+      const files: Record<string, string[]> = {};
+      for (const [abs, projects] of Object.entries(raw.files ?? {})) {
+        const file = relPosixReported(this.options.projectRoot, abs);
+        if (file) files[file] = projects;
+      }
+      return { projects: raw.projects ?? [], webServers: raw.webServers ?? [], files };
+    } finally {
+      await rm(tmp, { recursive: true, force: true });
+    }
   }
 
   /**

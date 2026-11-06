@@ -841,8 +841,16 @@ export interface HookRecord {
   nothingPushed?: boolean;
   /** Selected test files the hook scope left to CI (not run, not passed). */
   leftToCi?: number;
+  /** Selected Playwright specs that target a remote environment and were not run (live). */
+  live?: number;
   /** The scope rules in force, when any. */
   scope?: string[];
+  /** Test files the hook executed (a cached result is not an execution). */
+  executed?: number;
+  /** Test files of the suite the hook did not execute: skipped by selection or a cached pass. */
+  notRun?: number;
+  /** Recorded test time of the files not executed (skipped and cached): an estimate. */
+  savedMs?: number;
 }
 
 export interface HookRecords {
@@ -926,6 +934,82 @@ export async function lastVerifiedCommit(
     if (sha && tree && trees.has(tree)) return sha;
   }
   return undefined;
+}
+
+// ── Commit trailer ─────────────────────────────────────────────────────────────────────────
+
+/** The trailer key SmartTest writes (`Tests: 12 run, 2,340 not run · ~4 min saved`). */
+export const TRAILER_KEY = "Tests";
+
+const count = (n: number) => n.toLocaleString("en-US");
+
+/** Rounded saved time for the trailer: nothing under a second, seconds, minutes, then hours. */
+export function savedText(ms: number): string | undefined {
+  if (!(ms >= 1_000)) return undefined;
+  if (ms < 59_500) return `~${Math.round(ms / 1_000)} s saved`;
+  const min = Math.round(ms / 60_000);
+  if (min < 60) return `~${min} min saved`;
+  const h = Math.floor(min / 60);
+  const rest = min % 60;
+  return `~${h} h${rest ? ` ${rest} min` : ""} saved`;
+}
+
+/** The trailer value for a pre-commit record, or undefined when the record cannot back one. */
+export function trailerValue(r: HookRecord): string | undefined {
+  if (r.stage !== "pre-commit" || !r.passed || r.executed === undefined || r.notRun === undefined)
+    return undefined;
+  const parts = [`${count(r.executed)} run`, `${count(r.notRun)} not run`];
+  if (r.leftToCi) parts.push(`${count(r.leftToCi)} left to CI`);
+  if (r.live) parts.push(`${count(r.live)} live, not run`);
+  const saved = savedText(r.savedMs ?? 0);
+  return `${parts.join(", ")}${saved ? ` · ${saved}` : ""}`;
+}
+
+/**
+ * The pre-commit record that tested exactly `tree`, if it can back a trailer: the latest run on
+ * that tree, when it passed and no bypass was recorded after it. Anything else gives no record,
+ * so a commit never carries a trailer for tests that did not run on its content.
+ */
+export function recordForTree(records: HookRecords, tree: string): HookRecord | undefined {
+  const last = [...records.runs].reverse().find((r) => r.stage === "pre-commit" && r.tree === tree);
+  if (!last?.passed) return undefined;
+  const at = Date.parse(last.at);
+  const bypassed = records.bypasses.some(
+    (b) => b.stage === "pre-commit" && (!Number.isFinite(at) || Date.parse(b.at) >= at),
+  );
+  return bypassed ? undefined : last;
+}
+
+/**
+ * Adds SmartTest's trailer to a commit message file (the `commit-msg` hook's argument) with
+ * `git interpret-trailers`. The tree is the one being committed (`git write-tree` on the hook's
+ * index). Returns the trailer written, or undefined when there is none to write. Never throws.
+ */
+export async function addCommitTrailer(
+  cwd: string,
+  storeDir: string,
+  messageFile: string,
+): Promise<string | undefined> {
+  try {
+    const tree = await treeOf(cwd, "pre-commit");
+    if (!tree) return undefined;
+    const record = recordForTree(await loadHookRecords(storeDir), tree);
+    const value = record ? trailerValue(record) : undefined;
+    if (!value) return undefined;
+    const trailer = `${TRAILER_KEY}: ${value}`;
+    const r = await git(cwd, [
+      "interpret-trailers",
+      "--in-place",
+      "--if-exists",
+      "replace",
+      "--trailer",
+      trailer,
+      messageFile,
+    ]);
+    return r.code === 0 ? trailer : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 export const median = (xs: readonly number[]) =>

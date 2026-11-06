@@ -38,6 +38,8 @@ export interface AuditOptions {
      * against a live environment is never started. `["all"]`: every runner.
      */
     runners?: readonly string[];
+    /** Run live Playwright specs (a remote baseURL) too (`--live`); default: left out. */
+    live?: boolean;
   };
   /** Trace the tests first when no traces are stored (`sample`: at most that many files). */
   traces?: { sample?: number; runners?: readonly string[] };
@@ -147,7 +149,16 @@ async function mutate(
     const runners =
       options.runners?.[0] === "all" ? undefined : (options.runners ?? engine.config.hook.runners);
     const scope = runners?.length ? { runners } : {};
-    const clean = await engine.analyze({ source: { kind: "uncommitted" }, ...scope });
+    const analysed = await engine.analyze({ source: { kind: "uncommitted" }, ...scope });
+    // Live specs target a deployed environment: faults injected here never reach it, and running
+    // them for every fault would load that environment. Left out unless asked (`--live`).
+    const live = options.live
+      ? []
+      : (await engine.liveSpecs(analysed, analysed.testFiles)).live.map((l) => l.file);
+    if (live.length) notes.push(`${live.length} live spec(s) not run (--live runs them)`);
+    const clean = live.length
+      ? { ...analysed, testFiles: analysed.testFiles.filter((f) => !live.includes(f)) }
+      : analysed;
     const create = (g: Parameters<SmartTest["createAdapterFor"]>[0]) => engine.createAdapterFor(g);
     const plan = planExecution(
       clean.testFiles,
@@ -163,7 +174,7 @@ async function mutate(
       notes.push(
         `${baselineFailing.length} test file(s) fail without any fault (${baselineFailing.slice(0, 3).join(", ")}); they are left out of every comparison`,
       );
-    const tests = new Set(clean.testFiles);
+    const tests = new Set(analysed.testFiles);
     // SmartTest loads these itself (its configuration, local plugins): breaking one breaks the
     // analysis, not the code under test.
     const own = new Set(

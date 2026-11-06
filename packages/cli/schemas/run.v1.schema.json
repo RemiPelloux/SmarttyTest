@@ -151,6 +151,28 @@
             "type": "object",
             "required": ["file", "adapter", "rule"]
           }
+        },
+        "live": {
+          "description": "Selected Playwright specs whose projects only target a deployed environment (an https:// baseURL that is not local), not run because --live was not given. Never passed; summary.live counts them.",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["file", "projects", "baseURL"],
+            "properties": {
+              "file": {
+                "type": "string"
+              },
+              "projects": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "baseURL": {
+                "type": "string"
+              }
+            }
+          }
         }
       }
     },

@@ -10,10 +10,13 @@ import { basename, dirname, isAbsolute, join, relative, resolve } from "node:pat
 import { detectCopiedHooks, type ExistingTestCommand } from "@smarttest/project-detector";
 import { exists, readJson, readText, SmartTestError } from "@smarttest/shared";
 import type { FilePlan } from "./index.js";
+import { planTrailerUninstall } from "./trailer.js";
 
 export type HookManager = "husky" | "lefthook" | "simple-git-hooks" | "git" | "captainhook";
 
 export type HookStage = "pre-commit" | "pre-push";
+/** A Git hook SmartTest writes a step into: the test stages, and `commit-msg` for the trailer. */
+export type HookName = HookStage | "commit-msg";
 
 /** What the SmartTest block runs in each hook. `--hook` implies --non-interactive and --bail. */
 export const HOOK_COMMANDS: Record<HookStage, string> = {
@@ -31,12 +34,12 @@ const REPLACED_BG = "true & # smarttest-replaced: ";
 const MARK = "# smarttest-replaced: ";
 const LEFTHOOK_MARK = "# smarttest";
 
-export interface HookTarget {
+export interface HookTarget<S extends HookName = HookStage> {
   manager: HookManager;
   /** Project-relative file that holds the hook (`../.git/hooks/…` for a project in a subdirectory). */
   file: string;
   evidence: string;
-  stage: HookStage;
+  stage: S;
   /** A `core.hooksPath` outside the repository: SmartTest refuses to write there. */
   outside?: string;
   /**
@@ -113,8 +116,8 @@ const inside = (parent: string, child: string) => {
  * relative to the top-level, and a linked worktree shares the main repository's hooks. Husky's
  * own `core.hooksPath` is left to the husky target.
  */
-function gitHookTarget(root: string, stage: HookStage): HookTarget {
-  const fallback: HookTarget = {
+export function gitHookTarget<S extends HookName>(root: string, stage: S): HookTarget<S> {
+  const fallback: HookTarget<S> = {
     manager: "git",
     file: `.git/hooks/${stage}`,
     evidence: "Git hooks directory .git/hooks",
@@ -147,18 +150,19 @@ function gitHookTarget(root: string, stage: HookStage): HookTarget {
 }
 
 /** The project directory relative to the top-level of the worktree ("" at the top-level). */
-const projectPrefix = (root: string) =>
+export const projectPrefix = (root: string) =>
   (gitOut(root, ["rev-parse", "--show-prefix"]) ?? "").replace(/\/$/, "");
 
 /** Shells the SmartTest block can be inserted into (`#!/bin/sh`, `#!/usr/bin/env bash -e`, …). */
-const SHELL_SHEBANG = /^#!\s*(?:\S*\/)?(?:env\s+(?:-\S+\s+)*)?(?:\S*\/)?(?:ba|da|z|k|mk|a)?sh\b/;
+export const SHELL_SHEBANG =
+  /^#!\s*(?:\S*\/)?(?:env\s+(?:-\S+\s+)*)?(?:\S*\/)?(?:ba|da|z|k|mk|a)?sh\b/;
 
 /** Finds which hook manager the project uses (or plain Git hooks). */
-export async function detectHookTarget(
+export async function detectHookTarget<S extends HookName = HookStage>(
   root: string,
   prefer?: HookManager,
-  stage: HookStage = "pre-commit",
-): Promise<HookTarget> {
+  stage: S = "pre-commit" as S,
+): Promise<HookTarget<S>> {
   const pkg = await readJson<{
     devDependencies?: Record<string, string>;
     dependencies?: Record<string, string>;
@@ -166,7 +170,7 @@ export async function detectHookTarget(
   }>(join(root, "package.json"));
   const deps = { ...pkg?.dependencies, ...pkg?.devDependencies };
   const lefthook = ["lefthook.yml", ".lefthook.yml", "lefthook.yaml", ".lefthook.yaml"];
-  const candidates: HookTarget[] = [];
+  const candidates: HookTarget<S>[] = [];
   if ((await exists(join(root, ".husky"))) || deps.husky)
     candidates.push({
       manager: "husky",
@@ -205,10 +209,10 @@ export async function detectHookTarget(
         }
       : gitHookTarget(root, stage),
   );
-  return candidates.find((c) => c.manager === prefer) ?? (candidates[0] as HookTarget);
+  return candidates.find((c) => c.manager === prefer) ?? (candidates[0] as HookTarget<S>);
 }
 
-const shellQuote = (s: string) => `'${s.replace(/'/g, "'\\''")}'`;
+export const shellQuote = (s: string) => `'${s.replace(/'/g, "'\\''")}'`;
 
 /** Pre-push refs read once by the block, then given back to the rest of the user's script. */
 const REFS = "smarttest_refs";
@@ -506,7 +510,7 @@ function uninstallLefthook(text: string, stage: HookStage): string {
   return lines.join("\n");
 }
 
-const indentOf = (l: string) => l.match(/^\s*/)?.[0].length ?? 0;
+export const indentOf = (l: string) => l.match(/^\s*/)?.[0].length ?? 0;
 
 /** Number of lines nested under the lefthook entry at `at` (`run:`, `use_stdin:` …). */
 function lefthookChildren(lines: string[], at: number): number {
@@ -767,6 +771,10 @@ export async function planHookUninstall(
     } else if (text.includes(START)) after = uninstallScript(text);
     if (after !== text) edited.set(t.file, after);
   }
+  // The commit trailer's commit-msg step goes with the pre-commit hook it reports on.
+  if (stages.includes("pre-commit"))
+    for (const [file, after] of await planTrailerUninstall(root, manager, edited))
+      edited.set(file, after);
   for (const [path, after] of edited) {
     const before = (await readText(join(root, path))) as string;
     if (after !== before)

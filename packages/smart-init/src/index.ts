@@ -25,6 +25,7 @@ import { detectHookTarget, planHookUninstall } from "./hooks.js";
 export * from "./captainhook.js";
 export * from "./hooks.js";
 export * from "./migrate.js";
+export * from "./trailer.js";
 
 export interface Recommendation {
   key: string;
@@ -672,7 +673,7 @@ async function journalTargetAllowed(root: string, path: string): Promise<boolean
     }
   }
   const real = await realpath(root).catch(() => root);
-  for (const stage of ["pre-commit", "pre-push"] as const) {
+  for (const stage of ["pre-commit", "pre-push", "commit-msg"] as const) {
     const hook = (await detectHookTarget(root, "git", stage)).file;
     if (resolve(root, hook) === abs || resolve(real, hook) === resolve(real, path)) return true;
   }

@@ -63,6 +63,8 @@ export default defineConfig({
 
 `hook.checks` is an array of `{ name, run, projects?, files?, stage? }`. Commands run in affected project directories; `{files}` becomes quoted changed paths. `stage` is `pre-commit` (default), `pre-push` or `both`. `hook.budgetMs` defaults to `60000`; exceeding the estimate warns and still runs the full selection. `hook.runners` (an allow-list of `vitest`, `jest`, `node`, `playwright`, `cypress`, `angular`, `pytest`, `unittest`; default every runner) and `hook.exclude` (project-relative test-file globs; default none) set the hook scope: selected tests outside it are not run by `run --staged --hook` / `run --push --hook` and are reported as "selected, not run in the hook (left to CI)" with the rule that removed them, never as passed. `run`, `ci`, `impact` and every other command ignore the scope. An empty `hook.runners` or an unknown runner name fails with `ST_CONFIG_INVALID`. See [commit and push hooks](../guides/commit-hooks.md#hook-scope-browser-specs-in-ci).
 
+`hook.trailer` (`boolean`, default `false`) adds a `Tests:` trailer to each commit message with what the pre-commit run of the committed tree did (`Tests: 12 run, 2,340 not run · ~4 min saved`). `smarttest hook install` then also writes a `commit-msg` step; a commit whose tree has no passing pre-commit record gets no trailer. See [the commit trailer](../guides/commit-hooks.md#commit-trailer).
+
 `plugins` is an array of plugin modules: paths relative to the root (`./tools/sql-edges.mjs`) or package names. A plugin adds dependency edges that static analysis cannot see; see [Plugins](../guides/plugins.md). A change to a plugin file inside the project selects the full suite.
 
 Unknown keys produce warnings instead of being silently accepted.

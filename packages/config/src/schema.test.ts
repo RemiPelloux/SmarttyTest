@@ -195,6 +195,7 @@ const KITCHEN_SINK = {
     budgetMs: 30_000,
     runners: ["vitest"],
     exclude: ["e2e/**"],
+    trailer: true,
   },
   plugins: ["./tools/smarttest-plugin.mjs"],
   timeoutMs: 600_000,

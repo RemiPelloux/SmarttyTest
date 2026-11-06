@@ -26,6 +26,7 @@ const fixtures = [
   "react-vitest",
   "yarn-workspaces-node",
   "next-playwright",
+  "playwright-live",
   "plugin-edges-vitest",
   "runner-inputs-vitest",
   "angular-vitest",

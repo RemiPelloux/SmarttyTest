@@ -92,6 +92,17 @@ Bitbucket Pipelines, posting the Code Insights report through the pipeline's aut
 
 SmartTest's own pull requests run `smarttest impact` this way (the `selection` job of [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml)).
 
+## Live end-to-end specs
+
+A Playwright project whose `baseURL` is a deployed environment (`https://` on a host that is not `localhost`, `127.x`, `::1` or a `webServer` the config starts), or that depends on a setup project that is, runs against shared infrastructure. Its specs are **live**: `run`, `ci`, the commit hooks, `validate-selection`, `benchmark` and `audit --mutate` select them but run them only with `--live`. Until then each is reported as "live, not run", with its projects and the URL it targets, never as passed.
+
+```bash
+# CI, where the deployed environment is reachable: run the live specs too
+npx smarttest ci --live
+```
+
+SmartTest reads the projects through Playwright (`playwright test --list`), so the values are the ones your config computes from the environment. With `E2E_BASE_URL=http://127.0.0.1:5173` and a matching `webServer`, the same specs are local and run everywhere. A spec in both a live and a local project is not live. On openpro-front, whose 25 projects default to `https://dev.openpro.ai`, all 78 Playwright files (specs and setup files) are live.
+
 ## Exit codes
 
 | Code | Meaning                                                                          | Usual CI handling      |

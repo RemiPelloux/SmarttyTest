@@ -2,6 +2,7 @@ import { mkdir, mkdtemp, rm, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import type { HookRecord, HookRecords } from "./hook.js";
 import {
   cleanGitEnv,
   describeScope,
@@ -11,7 +12,10 @@ import {
   onlyDeletions,
   outsideHookScope,
   planChecks,
+  recordForTree,
+  savedText,
   scopeIsEmpty,
+  trailerValue,
   unknownCheckProjects,
 } from "./hook.js";
 
@@ -149,5 +153,67 @@ describe("estimateRunMs", () => {
     expect(estimateRunMs(cy, 16)).toBe(30_000);
     expect(estimateRunMs(vitest, 16, 2)).toBe(75_000);
     expect(estimateRunMs([], 16)).toBe(0);
+  });
+});
+
+describe("commit trailer", () => {
+  const run = (over: Partial<HookRecord> = {}): HookRecord => ({
+    at: "2026-11-06T10:00:00.000Z",
+    stage: "pre-commit",
+    durationMs: 1000,
+    selected: 12,
+    passed: true,
+    tree: "t1",
+    executed: 12,
+    notRun: 2340,
+    savedMs: 4 * 60_000,
+    ...over,
+  });
+  const records = (runs: HookRecord[], bypasses: HookRecords["bypasses"] = []): HookRecords => ({
+    version: 1,
+    runs,
+    bypasses,
+  });
+
+  it("formats what the pre-commit run did", () => {
+    expect(trailerValue(run())).toBe("12 run, 2,340 not run · ~4 min saved");
+    expect(trailerValue(run({ leftToCi: 3, live: 2, savedMs: 400 }))).toBe(
+      "12 run, 2,340 not run, 3 left to CI, 2 live, not run",
+    );
+    expect(savedText(999)).toBeUndefined();
+    expect(savedText(12_400)).toBe("~12 s saved");
+    expect(savedText(59_600)).toBe("~1 min saved");
+    expect(savedText(125 * 60_000)).toBe("~2 h 5 min saved");
+  });
+
+  it("never backs a trailer with a failed, pre-push or older record", () => {
+    expect(trailerValue(run({ passed: false }))).toBeUndefined();
+    expect(trailerValue(run({ stage: "pre-push" }))).toBeUndefined();
+    // A record written before the trailer existed has no counts: no trailer rather than a guess.
+    const { executed: _executed, ...old } = run();
+    expect(trailerValue(old)).toBeUndefined();
+  });
+
+  it("uses the latest pre-commit run on exactly the committed tree", () => {
+    const ok = run();
+    expect(recordForTree(records([ok]), "t1")).toBe(ok);
+    expect(recordForTree(records([ok]), "t2")).toBeUndefined();
+    // The latest run on that tree failed: no trailer, even though an earlier one passed.
+    expect(
+      recordForTree(records([ok, run({ passed: false, at: "2026-11-06T10:05:00.000Z" })]), "t1"),
+    ).toBeUndefined();
+    // A pre-push record on the same tree does not describe a commit.
+    expect(recordForTree(records([run({ stage: "pre-push" })]), "t1")).toBeUndefined();
+  });
+
+  it("gives no trailer when the hook was bypassed after the matching run", () => {
+    const bypass = {
+      at: "2026-11-06T10:01:00.000Z",
+      stage: "pre-commit",
+      reason: "SMARTTEST_SKIP=1",
+    };
+    expect(recordForTree(records([run()], [bypass]), "t1")).toBeUndefined();
+    const older = { ...bypass, at: "2026-11-06T09:00:00.000Z" };
+    expect(recordForTree(records([run()], [older]), "t1")).toBeDefined();
   });
 });

@@ -265,6 +265,10 @@
         "exclude": {
           "description": "Test-file globs the hook never runs; selected matches are reported as left to CI, never as passed.",
           "$ref": "#/$defs/globs"
+        },
+        "trailer": {
+          "description": "Add a Tests: trailer to each commit message with what the pre-commit run did (default false). A commit whose staged tree has no passing pre-commit record gets none.",
+          "type": "boolean"
         }
       }
     },
