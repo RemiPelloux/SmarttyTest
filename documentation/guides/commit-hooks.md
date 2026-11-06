@@ -39,7 +39,7 @@ The pre-commit command is `smarttest run --staged --hook`; pre-push uses `smartt
 
 Pre-push compares HEAD with the upstream merge-base. With no upstream, it tries the remote's default branch and the conventional `origin/main` and `origin/master` refs. A missing comparison base must broaden selection; it cannot justify ignoring older commits. Push mode checks the current HEAD. A push that only deletes remote branches sends no content: it runs no tests or checks, exits 0 and is recorded as nothing pushed. A push that also sends another commit or ref is refused, because SmartTest will not report a pass for content it did not test; push the checked-out commit (for example `git push origin HEAD`) or check out the ref first.
 
-Browser end-to-end specs are selected like any other test. A spec whose imports cannot be resolved cannot be ruled out, so it is selected on every change. To keep them out of the hook without removing them from `run` and `ci`, set a [hook scope](#hook-scope-browser-specs-in-ci). The top-level `exclude` is not the tool for this: excluded files are not analysed or run by any command.
+Browser end-to-end specs are selected like any other test. A spec whose imports cannot be resolved cannot be ruled out, so it is selected on every change. A Playwright spec whose projects target a deployed environment (an `https://` `baseURL` that is not local) is [live](ci.md#live-end-to-end-specs): the hook never runs it unless given `--live`, and reports it as "live, not run". To keep them out of the hook without removing them from `run` and `ci`, set a [hook scope](#hook-scope-browser-specs-in-ci). The top-level `exclude` is not the tool for this: excluded files are not analysed or run by any command.
 
 The compact output shows the changed-file count, selected tests, failing files and their first errors, check results and elapsed time. `smarttest explain <test>` gives the full selection reason.
 
@@ -92,6 +92,33 @@ export default defineConfig({
 `projects` contains project directories relative to the SmartTest root; `""` means the root project. Configured projects, workspace packages and runner directories count, and `./packages/app/` is the same as `packages/app`. A check naming a directory that is none of these is reported as a warning with the hook result, since it would never run. Omitting `projects` allows every affected project. The deepest detected project owns a changed file. `files` filters project-relative paths. `{files}` is replaced with the changed paths, quoted and prefixed with `./` so a file named like an option (`-rf`) is never read as one. Commands default to pre-commit; `stage` also accepts `pre-push` and `both`.
 
 Use checks that inspect content. A command that rewrites or stages files runs inside the temporary checkout when isolation is necessary; those edits do not update the user's index. Locale generation, formatting with writes, and other commit preparation should happen before SmartTest.
+
+## Commit trailer
+
+With `hook.trailer: true`, each commit message gets a [Git trailer](https://git-scm.com/docs/git-interpret-trailers) with what the pre-commit run did:
+
+```ts
+export default defineConfig({
+  hook: { trailer: true },
+});
+```
+
+```text
+feat(cart): round totals per line
+
+Tests: 12 run, 2,340 not run · ~4 min saved
+```
+
+`smarttest hook install` adds a `commit-msg` step next to the pre-commit one (husky, lefthook, simple-git-hooks, CaptainHook or `.git/hooks`); `smarttest hook uninstall` removes it. The step runs `smarttest hook trailer "$1"`, which:
+
+- computes the tree being committed (`git write-tree` on the hook's index) and looks for the latest pre-commit record on exactly that tree in `.smarttest/state/hooks.json`;
+- writes the trailer only when that run passed and no bypass (`SMARTTEST_SKIP=1`) was recorded after it. A bypassed commit, a commit made with `--no-verify`, or one whose content changed after the hook ran gets no trailer: never one for tests that did not run on its content;
+- counts test files: `run` were executed, `not run` were skipped by selection or answered by a cached pass; selected files the hook did not run are named apart (`3 left to CI`, `2 live, not run`). The saved time is the recorded duration of the files not run, an estimate (omitted under a second);
+- replaces an existing `Tests:` trailer (an amended commit), and never fails the commit: SmartTest missing, an error or no record leaves the message as it is.
+
+```bash
+smarttest hook install --dry-run
+```
 
 ## Budget and bypasses
 
