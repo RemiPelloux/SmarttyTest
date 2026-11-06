@@ -51,4 +51,6 @@ export type { SelectionPrecision } from "./precision.js";
 export * from "./smarttest.js";
 export { type FlakyEntry, flakyReport, parseShard, shardFiles } from "./speed.js";
 export { type Drift, detectDrift, patchConfig, type SyncResult } from "./sync.js";
+export { applyUpgrades, planUpgrades, type UpgradePlan } from "./sync-upgrades.js";
+export type { UpgradeId, UpgradeProposal } from "./upgrade.js";
 export { type WatchCycle, type Watcher, watchProject } from "./watch.js";

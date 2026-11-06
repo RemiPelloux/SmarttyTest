@@ -1000,46 +1000,93 @@ async function cmdSync(ctx: Ctx): Promise<number> {
   const { t, flags } = ctx;
   const st = await ctx.open();
   const r = await st.syncPlan();
-  if (flags.json) ctx.json("sync", { drift: r.drift, manual: r.manual, changes: !!r.after });
-  else if (!r.drift.length) ctx.out(`${t.green("✓")} Configuration matches the project.`);
-  else {
-    ctx.out(t.bold("Configuration drift"));
-    for (const d of r.drift)
-      ctx.out(
-        `  ${t.yellow("~")} ${pad(d.key, 16)}${d.current} → ${t.bold(d.proposed)}  ${t.dim(d.reason)}`,
-      );
-    const { previewDiff } = await import("@smarttest/smart-init");
-    if (r.after && r.path)
-      for (const l of previewDiff({
-        path: r.path,
-        action: "modify",
-        reason: "",
-        before: r.before ?? "",
-        after: r.after,
-        risk: "medium",
-      }))
-        ctx.out(`    ${diffColor(t, l)}`);
-    for (const m of r.manual) ctx.out(`  ${t.yellow("▲")} by hand: ${m}`);
+  const { applyUpgrades, planUpgrades } = await import("@smarttest/core");
+  const { previewDiff } = await import("@smarttest/smart-init");
+  const up = await planUpgrades(st);
+  const writable = up.proposals.filter((p) => p.plan);
+  const changes = [...(r.after ? ["drift"] : []), ...writable.map((p) => p.key)];
+  const doc = (extra: Record<string, unknown> = {}) => ({
+    drift: r.drift,
+    manual: r.manual,
+    changes: !!r.after,
+    upgrades: up.proposals.map((p) => ({
+      id: p.id,
+      key: p.key,
+      title: p.title,
+      reason: p.reason,
+      ...(p.plan ? { file: p.plan.path, diff: previewDiff(p.plan) } : {}),
+      ...(p.manual ? { manual: p.manual } : {}),
+    })),
+    ...extra,
+  });
+  if (!flags.json) {
+    if (!r.drift.length && !up.proposals.length)
+      ctx.out(`${t.green("✓")} Configuration matches the project; nothing to upgrade.`);
+    if (r.drift.length) {
+      ctx.out(t.bold("Configuration drift"));
+      for (const d of r.drift)
+        ctx.out(
+          `  ${t.yellow("~")} ${pad(d.key, 16)}${d.current} → ${t.bold(d.proposed)}  ${t.dim(d.reason)}`,
+        );
+      if (r.after && r.path)
+        for (const l of previewDiff({
+          path: r.path,
+          action: "modify",
+          reason: "",
+          before: r.before ?? "",
+          after: r.after,
+          risk: "medium",
+        }))
+          ctx.out(`    ${diffColor(t, l)}`);
+      for (const m of r.manual) ctx.out(`  ${t.yellow("▲")} by hand: ${m}`);
+    }
+    if (up.proposals.length) {
+      if (r.drift.length) ctx.out();
+      ctx.out(t.bold("Upgrade proposals"));
+      for (const p of up.proposals) {
+        ctx.out(`  ${t.cyan("+")} ${p.title}  ${t.dim(`[${p.key}]`)}`);
+        ctx.out(`    ${t.dim(p.reason)}`);
+        if (p.plan) for (const l of previewDiff(p.plan)) ctx.out(`    ${diffColor(t, l)}`);
+        if (p.manual) ctx.out(`    ${t.yellow("▲")} by hand: ${p.manual}`);
+      }
+    }
   }
-  if (!r.drift.length) return ExitCode.Success;
-  if (flags.check) return ExitCode.ConfigurationFailure;
-  if (flags["dry-run"] || !r.after) return ExitCode.Success;
-  if (!flags.yes) {
-    if (!ctx.interactive)
+  // `--check` is about drift only: an upgrade proposal is optional and never fails it.
+  if (flags.check) {
+    if (flags.json) ctx.json("sync", doc());
+    return r.drift.length ? ExitCode.ConfigurationFailure : ExitCode.Success;
+  }
+  if (flags["dry-run"] || !changes.length) {
+    if (flags.json) ctx.json("sync", doc());
+    else if (changes.length) ctx.out(t.dim("Dry run — nothing was written."));
+    return ExitCode.Success;
+  }
+  let accepted: Set<string>;
+  if (flags.yes || flags.apply) accepted = new Set(changes);
+  else {
+    if (!ctx.interactive || flags.json)
       throw new SmartTestError("sync needs confirmation", {
         code: "ST_INIT_CONFIRMATION_REQUIRED",
         category: "configuration",
-        hint: "Re-run with --yes, --dry-run to preview, or --check in CI.",
+        hint: "Re-run with --apply (or --yes) to write every change, --dry-run to preview, or --check in CI.",
       });
-    if (!(await confirm(ctx.io, t, "Update the configuration?"))) return ExitCode.Success;
+    // One question per change: nothing is written that was not accepted.
+    accepted = new Set();
+    if (r.after && (await confirm(ctx.io, t, "Apply the configuration drift fix?", false)))
+      accepted.add("drift");
+    for (const p of writable)
+      if (await confirm(ctx.io, t, `${p.title}?`, false)) accepted.add(p.key);
+    if (!accepted.size) {
+      ctx.out(t.dim("Nothing accepted — nothing was written."));
+      return ExitCode.Success;
+    }
   }
-  const ok = await st.applySync(r);
-  if (!flags.json)
-    ctx.out(
-      ok
-        ? `${t.green("✓")} updated ${rel(ctx, r.path ?? "")}`
-        : t.yellow("▲ the config changed meanwhile; nothing written"),
-    );
+  const res = await applyUpgrades(st, r, up, accepted);
+  if (flags.json) ctx.json("sync", doc({ applied: res.applied, skipped: res.skipped }));
+  else {
+    for (const p of res.applied) ctx.out(`${t.green("✓")} updated ${p}`);
+    for (const s of res.skipped) ctx.out(t.yellow(`▲ ${s.key}: ${s.why}`));
+  }
   return ExitCode.Success;
 }
 
