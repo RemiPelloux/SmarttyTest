@@ -124,7 +124,7 @@ Measured with `node benchmarks/run.mjs` on generated layered TypeScript reposito
 | Cold index (parse every file)          | 78 ms      | 306 ms      | 486 ms        | 1.18 s         |              |
 | HTML report                            | under 1 ms | 1 ms        | 5 ms          | 17 ms          | under 2 s    |
 
-A change in the middle layer reaches about half the tests (975 of 2,000 at 2,000 modules). The 1.2.0 work loads the index lazily, so a change parses only the files it reaches; its effect on the in-process target at 10,000 modules is tracked in the [1.x roadmap](documentation/planning/roadmap-1.5.md) (S33).
+A change in the middle layer reaches about half the tests (975 of 2,000 at 2,000 modules). Since 1.2.0 the index loads lazily, so a change parses only the files it reaches; the in-process analysis at 10,000 modules still takes 547–564 ms against the 500 ms target ([1.x roadmap](documentation/planning/roadmap-1.5.md), S33).
 
 ## Documentation
 
