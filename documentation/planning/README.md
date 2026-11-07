@@ -23,7 +23,7 @@
 | 1.0.0   | Stable                                                           | S27     | 52 plus carried items   | Released, gate met                             |
 | 1.1.0   | Angular, reliability, Python preview, rollout                    | S28–S31 | 152                     | Released; S30 time target not met              |
 | 1.2.0   | PHP preview, follow-ups, precision, hooks and CI, Laravel routes | S32–S35 | 119                     | Released                                       |
-| 1.3.0   | Precision                                                        | S36–S37 | 52                      | Planned                                        |
+| 1.3.0   | Precision, install without Node                                  | S36–S37 | 65                      | Planned                                        |
 | 1.4.0   | Browser and end-to-end                                           | S38–S39 | 64                      | Planned                                        |
 | 1.5.0   | Ecosystem                                                        | S40–S41 | 60                      | Planned                                        |
 | 1.6.0   | Backend frameworks (preview)                                     | S42     | 28                      | Planned                                        |
