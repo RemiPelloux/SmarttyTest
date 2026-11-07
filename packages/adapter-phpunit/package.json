@@ -1,6 +1,6 @@
 {
   "name": "@smarttest/adapter-phpunit",
-  "version": "1.1.1",
+  "version": "1.2.0",
   "description": "PHPUnit and Pest runner adapter (preview), including php artisan test.",
   "license": "Apache-2.0",
   "type": "module",

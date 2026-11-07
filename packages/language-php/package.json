@@ -1,6 +1,6 @@
 {
   "name": "@smarttest/language-php",
-  "version": "1.1.1",
+  "version": "1.2.0",
   "description": "PHP language analyzer and class resolver (preview): namespaces, use, classes, Composer autoload, Laravel container edges.",
   "license": "Apache-2.0",
   "type": "module",

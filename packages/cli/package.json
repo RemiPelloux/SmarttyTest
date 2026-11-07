@@ -1,6 +1,6 @@
 {
   "name": "smarttest",
-  "version": "1.1.1",
+  "version": "1.2.0",
   "description": "Test impact analysis: run only the tests a change can affect, with the reason for each. TypeScript & JavaScript (Jest, Vitest, node:test, Playwright, Cypress, Angular), plus Python and PHP previews.",
   "license": "Apache-2.0",
   "homepage": "https://remipelloux.github.io/SmarttyTest/",

@@ -2,7 +2,10 @@
 
 All notable changes are documented here. Releases are managed with [Changesets](https://github.com/changesets/changesets). The project follows [Semantic Versioning](https://semver.org/).
 
-## Unreleased
+## [1.2.0] — minor
+
+A PHP and Laravel preview; live Playwright specs; CI annotations; `smarttest sync` as an upgrade assistant; an opt-in commit trailer; barrel pruning, a selection precision report and a lazily loaded index; and hook fixes from OpenPro's rollout. Additive under the [semver policy](documentation/reference/contracts.md#semver-policy): new adapters (`phpunit`, with Pest and `php artisan test`), `"php"` as an analysis language, new config keys with defaults (`php`, `hook.trailer`, `reports.annotations`), new flags (`--live`, `--annotations`, `--no-annotations`, `sync --apply`), a new command (`hook trailer`) and new optional `--json` fields; nothing frozen changes. Some selections shrink (barrels, a branch's first push, Laravel routes), and Playwright specs that only target a remote `https://` `baseURL` are no longer run unless `--live` is given. The persisted index and graph change format and are rebuilt once after the upgrade. Run `smarttest sync` to see what the upgrade proposes for your setup, and `smarttest hook install` again to update an installed hook.
+
 
 ### Added: Laravel routes (PHP preview)
 

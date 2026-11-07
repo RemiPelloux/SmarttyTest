@@ -1,6 +1,6 @@
 {
   "name": "@smarttest/language-python",
-  "version": "1.1.1",
+  "version": "1.2.0",
   "description": "Python language analyzer and module resolver (preview): modules, classes, functions, imports, conftest.py.",
   "license": "Apache-2.0",
   "type": "module",
