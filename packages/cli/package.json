@@ -1,7 +1,7 @@
 {
   "name": "smarttest",
   "version": "1.1.1",
-  "description": "Semantic test-impact analysis for TypeScript & JavaScript — run only the tests that matter, through Jest, Vitest, node:test, Playwright or Cypress.",
+  "description": "Test impact analysis: run only the tests a change can affect, with the reason for each. TypeScript & JavaScript (Jest, Vitest, node:test, Playwright, Cypress, Angular), plus Python and PHP previews.",
   "license": "Apache-2.0",
   "homepage": "https://remipelloux.github.io/SmarttyTest/",
   "bugs": {
@@ -30,7 +30,17 @@
     "javascript",
     "pre-commit",
     "ci",
-    "monorepo"
+    "monorepo",
+    "angular",
+    "pytest",
+    "python",
+    "phpunit",
+    "pest",
+    "php",
+    "laravel",
+    "git-hooks",
+    "regression-testing",
+    "dependency-graph"
   ],
   "type": "module",
   "private": false,

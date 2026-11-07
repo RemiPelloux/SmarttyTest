@@ -13,7 +13,7 @@ Planning is in story points. One sprint is about 40 points. Each version has an 
 - Graph: files, top-level symbols and class members; imports, re-exports, barrels, workspace packages, CommonJS, inheritance; environment keys, Prisma models, translation keys, assets, snapshots, manual mocks, Wasp operations, Next.js routes and the URLs end-to-end specs visit; edges from plugins; runtime traces as observed evidence. Unresolved relationships are uncertainty and select the test. The graph is persisted between runs.
 - Runners: Jest, Vitest, `node --test`, Playwright, Cypress (checked against a real install). Version control: Git, Subversion, Mercurial, native snapshots. CI on Linux, Windows and macOS.
 - Real-world checks: [six repositories](../case-studies/benchmarks-1.0.md), LeadsIt and OpenPro's front end included, 0 missed failures.
-- Not reached at 1.0.0: the 0.5.0 (20% fewer tests from traces) and 0.8.0 (30% faster) targets, and the §31.3 in-process analysis target at 10,000 modules (reached on `main` with the lazily loaded index, S33). See "After 1.0.0" in the delivery log.
+- Not reached at 1.0.0: the 0.5.0 (20% fewer tests from traces) and 0.8.0 (30% faster) targets, and the §31.3 in-process analysis target at 10,000 modules (466 ms with the lazily loaded index when it merged in S33; not yet confirmed on the final `main`). See "After 1.0.0" in the delivery log.
 
 ## When is it usable
 

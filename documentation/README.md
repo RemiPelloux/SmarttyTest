@@ -6,6 +6,8 @@ Start in three steps: [install and run `smarttest init`](guides/getting-started.
 
 New in 1.1: [`smarttest audit`](guides/audit.md) measures missed tests on your project, [Angular](guides/angular.md) workspaces, a [Python preview](guides/python.md), lockfile changes selected by package, and a [rollout guide](guides/rollout.md). See the [changelog](../CHANGELOG.md).
 
+On `main`, for 1.2 (not yet released): a [PHP preview](guides/php.md) with Laravel routes, [CI annotations](guides/ci.md#annotations-on-the-pull-request) on pull requests, live Playwright specs left to `--live`, an opt-in [commit trailer](guides/commit-hooks.md#commit-trailer), `smarttest sync` upgrade proposals, and barrel pruning.
+
 ## Start
 
 - [Getting started](guides/getting-started.md): install, run `smarttest init`, read the first selection.
@@ -44,6 +46,7 @@ New in 1.1: [`smarttest audit`](guides/audit.md) measures missed tests on your p
 
 - [Case study: LeadsIt](case-studies/leadsit.md): the first real migration: six projects, no root package.
 - [Benchmarks for 1.0.0](case-studies/benchmarks-1.0.md): real repositories replayed at 0 missed failures.
+- [Benchmarks for 1.2.0](case-studies/benchmarks-1.2.md): OpenPro's four JavaScript repositories, 0 missed failures, 16–75% less test time.
 - [External repositories](case-studies/external-repositories.md): the 0.6.0 adoption check on repositories never seen before.
 
 ## Project

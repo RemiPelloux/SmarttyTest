@@ -1,35 +1,38 @@
 # CLI reference
 
+Every `smarttest` command and flag, with the change sources, JSON output and exit codes. `smarttest <command> --help` prints the same usage in the terminal.
+
 ## Commands
 
-| Command                                                         | Purpose                                                                                                                 |
-| --------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| `smarttest`                                                     | Interactive menu in a terminal. Prints help otherwise                                                                   |
-| `smarttest init`                                                | Detect, plan, preview and apply setup. Idempotent and reversible                                                        |
-| `smarttest doctor`                                              | Diagnose runtime, config, rules, VCS, index and runners                                                                 |
-| `smarttest scan`                                                | Show what SmartTest understands about the project (read-only)                                                           |
-| `smarttest impact`                                              | Compute the decision without running tests                                                                              |
-| `smarttest run`                                                 | Run affected tests (default) or the full suite (`--all`)                                                                |
-| `smarttest explain <target> [--units A,B]`                      | Why a test was selected or skipped, or which tests protect a file or symbol; `--units` adds a per-unit breakdown        |
-| `smarttest validate-selection`                                  | Compare the selection against a full reference run                                                                      |
-| `smarttest benchmark`                                           | Replay recent commits: full run vs project-gated run vs SmartTest, with missed failures re-checked on the parent commit |
-| `smarttest hook install \| uninstall \| status`                 | Put `smarttest run --staged` in the pre-commit hook (husky, lefthook, simple-git-hooks or `.git/hooks`)                 |
-| `smarttest ci`                                                  | Run affected tests in any CI: detects the provider, picks the base, deepens shallow clones, writes JUnit and Markdown   |
-| `smarttest sync [--check] [--apply]`                            | Update the configuration after the project changed, and propose what an upgrade adds; `--check` fails on drift only     |
-| `smarttest watch`                                               | Rerun the tests affected by each save                                                                                   |
-| `smarttest migrate --to vitest`                                 | Move Jest projects to Vitest, keeping SmartTest rules and history                                                       |
-| `smarttest shard --total n --index i`                           | Print one CI shard of the selection, balanced by recorded durations                                                     |
-| `smarttest flaky`                                               | Tests that flip between pass and fail in the recorded runs                                                              |
-| `smarttest trace`                                               | Record which code each test file runs (V8 coverage, one run per test file)                                              |
-| `smarttest shadow`                                              | Run the full suite next to the selection and record drift; `--report` summarises all runs                               |
-| `smarttest graph`                                               | Query or export the dependency graph                                                                                    |
-| `smarttest generate`                                            | Generate or sync the test architecture. Never overwrites                                                                |
-| `smarttest rules list \| validate \| explain <path>`            | Inspect rules                                                                                                           |
-| `smarttest snapshot create \| list \| inspect \| diff \| prune` | Native snapshots                                                                                                        |
-| `smarttest vcs detect \| status \| connect <git\|native>`       | Version-control state                                                                                                   |
-| `smarttest coverage`                                            | Latest ingested coverage, with its scope (full or selected)                                                             |
-| `smarttest report`                                              | Re-render reports from the last run                                                                                     |
-| `smarttest uninstall`                                           | Remove SmartTest config, scripts and local state. Tests are kept                                                        |
+| Command                                                         | Purpose                                                                                                                                                   |
+| --------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `smarttest`                                                     | Interactive menu in a terminal. Prints help otherwise                                                                                                     |
+| `smarttest init`                                                | Detect, plan, preview and apply setup. Idempotent and reversible                                                                                          |
+| `smarttest doctor`                                              | Diagnose runtime, config, rules, VCS, index and runners                                                                                                   |
+| `smarttest scan`                                                | Show what SmartTest understands about the project (read-only)                                                                                             |
+| `smarttest impact`                                              | Compute the decision without running tests                                                                                                                |
+| `smarttest run`                                                 | Run affected tests (default) or the full suite (`--all`)                                                                                                  |
+| `smarttest explain <target> [--units A,B]`                      | Why a test was selected or skipped, or which tests protect a file or symbol; `--units` adds a per-unit breakdown                                          |
+| `smarttest validate-selection`                                  | Compare the selection against a full reference run                                                                                                        |
+| `smarttest benchmark`                                           | Replay recent commits: full run vs project-gated run vs SmartTest, with missed failures re-checked on the parent commit                                   |
+| `smarttest audit [--mutate] [--traces] [--resolution]`          | Measure selection instead of trusting it: inject faults, check traces against the graph, compare import resolution with the compiler. Exit 1 on any miss  |
+| `smarttest hook install \| uninstall \| status \| trailer`      | Put `smarttest run --staged` in the pre-commit hook (husky, lefthook, simple-git-hooks, CaptainHook or `.git/hooks`); `trailer` writes the commit trailer |
+| `smarttest ci`                                                  | Run affected tests in any CI: detects the provider, picks the base, deepens shallow clones, writes JUnit and Markdown                                     |
+| `smarttest sync [--check] [--apply]`                            | Update the configuration after the project changed, and propose what an upgrade adds; `--check` fails on drift only                                       |
+| `smarttest watch`                                               | Rerun the tests affected by each save                                                                                                                     |
+| `smarttest migrate --to vitest`                                 | Move Jest projects to Vitest, keeping SmartTest rules and history                                                                                         |
+| `smarttest shard --total n --index i`                           | Print one CI shard of the selection, balanced by recorded durations                                                                                       |
+| `smarttest flaky`                                               | Tests that flip between pass and fail in the recorded runs                                                                                                |
+| `smarttest trace`                                               | Record which code each test file runs (V8 coverage, one run per test file)                                                                                |
+| `smarttest shadow`                                              | Run the full suite next to the selection and record drift; `--report` summarises all runs                                                                 |
+| `smarttest graph`                                               | Query or export the dependency graph                                                                                                                      |
+| `smarttest generate`                                            | Generate or sync the test architecture. Never overwrites                                                                                                  |
+| `smarttest rules list \| validate \| explain <path>`            | Inspect rules                                                                                                                                             |
+| `smarttest snapshot create \| list \| inspect \| diff \| prune` | Native snapshots                                                                                                                                          |
+| `smarttest vcs detect \| status \| connect <git\|native>`       | Version-control state                                                                                                                                     |
+| `smarttest coverage`                                            | Latest ingested coverage, with its scope (full or selected)                                                                                               |
+| `smarttest report`                                              | Re-render reports from the last run                                                                                                                       |
+| `smarttest uninstall`                                           | Remove SmartTest config, scripts and local state. Tests are kept                                                                                          |
 
 `smarttest studio [--port n] [--open]` starts the local Studio interface. `smarttest open` is an alias. The server binds to loopback and prints a session URL; Ctrl-C stops it. See [Studio](../guides/studio.md).
 
@@ -161,6 +164,10 @@ On GitHub Actions, GitLab CI and Bitbucket Pipelines, `ci`, `run` and `impact` a
 | `--type unit\|integration\|e2e`               | Category, used in mirror/domain paths                                   |
 | `--dry-run`                                   | List files (and contents with `--verbose`) without writing              |
 | `--sync`                                      | Report missing tests, orphaned tests and renamed sources. Proposes only |
+
+## `audit`
+
+`smarttest audit` measures missed tests on the project instead of assuming there are none. `--mutate` breaks one function at a time (it throws) in a temporary checkout of `HEAD`, selects, and runs the full suite: a failing test that was not selected is a missed test (`--mutants n`, default 10, sampled with `--seed`; `--budget ms`; `--runner <name>`; `--live` to include live Playwright specs). `--traces` checks that every project file a test loaded at run time reaches that test in the graph (`--sample n` traces at most n files when none are stored). `--resolution` checks that every import resolves as the TypeScript compiler resolves it. Exit code 1 when any check finds a miss; reports go to `.smarttest/reports/audit.{json,md}`. See [auditing selection](../guides/audit.md).
 
 ## `benchmark`
 

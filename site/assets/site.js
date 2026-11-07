@@ -123,18 +123,16 @@
 
   // ── Setup dialog ──
   const cmd = $("[data-cmd]");
-  const version = cmd?.textContent.match(/smarttest-([\d.]+)\.tgz/)?.[1] ?? "";
   let pm = "npm";
   const writeCmd = () => {
     const project = ($("#project")?.value || "~/code/my-app").trim();
     const add = { npm: "npm install -D", pnpm: "pnpm add -D", yarn: "yarn add -D" }[pm];
     const run = { npm: "npx", pnpm: "pnpm exec", yarn: "yarn" }[pm];
     cmd.textContent = [
-      "git clone https://github.com/RemiPelloux/SmarttyTest ~/SmarttyTest",
-      "cd ~/SmarttyTest && corepack enable && pnpm install && pnpm release:pack",
       `cd ${project}`,
-      `${add} ~/SmarttyTest/packages/cli/.publish/smarttest-${version}.tgz`,
+      `${add} @tkmremi/smarttest`,
       `${run} smarttest init --dry-run`,
+      `${run} smarttest init --yes`,
     ].join("\n");
   };
   $$("[data-pm]").forEach((b) =>

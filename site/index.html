@@ -4,9 +4,20 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>SmartTest · run only the tests a change reaches</title>
-<meta name="description" content="SmartTest walks a dependency graph of your TypeScript or JavaScript repository and runs only the tests a change can affect, through Jest, Vitest or node --test.">
+<meta name="description" content="SmartTest follows each change through a dependency graph of your repository and runs only the tests it can affect, through Jest, Vitest, node --test, Playwright, Cypress or Angular, with Python and PHP previews. Every skipped test comes with a reason.">
+<link rel="canonical" href="https://remipelloux.github.io/SmarttyTest/">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="SmartTest">
+<meta property="og:url" content="https://remipelloux.github.io/SmarttyTest/">
 <meta property="og:title" content="SmartTest · run only the tests a change reaches">
-<meta property="og:description" content="Semantic test impact analysis for TypeScript and JavaScript. Every selected or skipped test comes with the reason.">
+<meta property="og:description" content="Test impact analysis for TypeScript and JavaScript, with Python and PHP previews. Every selected or skipped test comes with the reason.">
+<meta property="og:image" content="https://remipelloux.github.io/SmarttyTest/assets/social.png">
+<meta property="og:image:width" content="1280">
+<meta property="og:image:height" content="640">
+<meta property="og:image:alt" content="SmartTest: a code change propagates through the dependency graph to the tests that cover it.">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="theme-color" content="#0E1530">
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"SoftwareApplication","name":"SmartTest","applicationCategory":"DeveloperApplication","operatingSystem":"Linux, macOS, Windows","softwareVersion":"{{VERSION}}","description":"SmartTest follows each change through a dependency graph of your repository and runs only the tests it can affect, through Jest, Vitest, node --test, Playwright, Cypress or Angular, with Python and PHP previews. Every skipped test comes with a reason.","url":"https://remipelloux.github.io/SmarttyTest/","downloadUrl":"https://www.npmjs.com/package/@tkmremi/smarttest","codeRepository":"https://github.com/RemiPelloux/SmarttyTest","license":"https://www.apache.org/licenses/LICENSE-2.0","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"}}</script>
 <link rel="icon" href="assets/logo.svg" type="image/svg+xml">
 <link rel="stylesheet" href="assets/site.css">
 <script>document.documentElement.classList.add("js")</script>
@@ -35,7 +46,7 @@
       <button class="chip c3" type="button" data-edit="isEmail" aria-pressed="false"><span class="chip-label">Edit function</span><code class="chip-name">isEmail</code><span class="switch" aria-hidden="true"></span></button>
       <button class="chip c4" type="button" data-edit="total" aria-pressed="false"><span class="chip-label">Edit method</span><code class="chip-name">CatalogService.total</code><span class="switch" aria-hidden="true"></span></button>
     </div>
-    <p class="lead after-headline">SmartTest follows each change through a dependency graph of your TypeScript or JavaScript repository, down to the method, and runs only the tests it reaches with Jest, Vitest or <code>node --test</code>.</p>
+    <p class="lead after-headline">SmartTest follows each change through a dependency graph of your TypeScript or JavaScript repository, down to the method, and runs only the tests it reaches with Jest, Vitest, <code>node --test</code>, Playwright, Cypress or Angular. Python and PHP are in preview.</p>
     <div class="hero-actions after-headline">
       <a class="button" href="docs/guides/getting-started.html">Install SmartTest</a>
       <a class="text-link" href="docs/concepts/how-selection-works.html">How it decides</a>
@@ -103,7 +114,7 @@
       <div data-ui class="term evidence reveal" style="--i:1"><samp><span class="pill skp">SKIPPED (not run)</span> tests/price.test.ts<br><span class="t-dim">  •</span> Reachable statically, but its trace (2026-10-29) never ran the changed code</samp></div>
     </li>
     <li>
-      <p class="reveal"><strong>Last, your runner.</strong> The selected tests run through the project's own Jest, Vitest or <code>node --test</code> configuration. The report lists every skipped test as not run, never as passed.</p>
+      <p class="reveal"><strong>Last, your runner.</strong> The selected tests run through the project's own runner and its configuration: Jest, Vitest, <code>node --test</code>, Playwright, Cypress, Angular, pytest or PHPUnit. The report lists every skipped test as not run, never as passed.</p>
       <figure class="reveal" style="--i:1">
         <img src="assets/img/report-edg-0.webp" alt="SmartTest HTML report: 1 of 15 test files selected, the translation test failed on the changed key, 14 test files skipped by selection and not run." width="1100" height="880" loading="lazy">
         <figcaption>The HTML report after a translation key changed in the <code>edges-vitest</code> fixture: one test selected, its failure caught, fourteen not run.</figcaption>
@@ -118,6 +129,10 @@
     <div class="tile reveal" style="--i:1">Jest<small>with your jest.config</small></div>
     <div class="tile reveal" style="--i:2">Vitest<small>custom config names too</small></div>
     <div class="tile reveal" style="--i:3">node --test<small>directories and globs</small></div>
+    <div class="tile reveal" style="--i:1">Playwright<small>projects, setup and live specs</small></div>
+    <div class="tile reveal" style="--i:2">Cypress<small>specs mapped to pages</small></div>
+    <div class="tile reveal" style="--i:3">Angular<small>templates, styles, ng test</small></div>
+    <div class="tile reveal" style="--i:4">pytest, PHPUnit<small>Python and PHP, in preview</small></div>
     <div class="tile reveal" style="--i:1">Git<small>or local snapshots</small></div>
     <div class="tile reveal" style="--i:2">TypeScript<small>path aliases, project references</small></div>
     <div class="tile reveal" style="--i:3">CommonJS<small>module.exports per symbol</small></div>
@@ -132,7 +147,7 @@
   <div class="ledger">
     <div class="ledger-head">
       <h2 id="results-title" class="reveal"><span class="soft">Measured on</span><span>a real repository</span></h2>
-      <p class="reveal" style="--i:1">LeadsIt has six projects, no root manifest and three runners. It replaced its pre-commit test steps with <code>smarttest run --staged</code>. These are its numbers with SmartTest {{VERSION}}.</p>
+      <p class="reveal" style="--i:1">LeadsIt has six projects, no root manifest and three runners. It replaced its pre-commit test steps with <code>smarttest run --staged</code>. These are its numbers with SmartTest 0.5.0.</p>
       <figure class="reveal" style="--i:2">
         <img src="assets/img/report-leadsit-0.webp" alt="SmartTest HTML report for LeadsIt: 100 of 100 test files selected after a lockfile change, 706 tests passed, 0 failed, 7.7 seconds." width="1100" height="880" loading="lazy" data-drift>
         <figcaption>A lockfile change runs everything by design: 706 passed in 7.7 s.</figcaption>
@@ -168,7 +183,7 @@
   </div>
   <div data-ui class="dialog reveal" style="--i:2">
     <h3>Set up SmartTest</h3>
-    <p class="sub">Node.js 22.12 or newer · Jest, Vitest or node --test</p>
+    <p class="sub">Node.js 22.12 or newer · Jest, Vitest, node --test, Playwright, Cypress, Angular · Python and PHP in preview</p>
     <label id="pm-label">Package manager</label>
     <div class="seg" role="radiogroup" aria-labelledby="pm-label">
       <button type="button" role="radio" aria-checked="true" data-pm="npm">npm</button>
@@ -177,18 +192,17 @@
     </div>
     <label for="project">Your project</label>
     <input id="project" value="~/code/my-app" spellcheck="false">
-    <pre data-cmd>git clone https://github.com/RemiPelloux/SmarttyTest ~/SmarttyTest
-cd ~/SmarttyTest && corepack enable && pnpm install && pnpm release:pack
-cd ~/code/my-app
-npm install -D ~/SmarttyTest/packages/cli/.publish/smarttest-{{VERSION}}.tgz
-npx smarttest init --dry-run</pre>
+    <pre data-cmd>cd ~/code/my-app
+npm install -D @tkmremi/smarttest
+npx smarttest init --dry-run
+npx smarttest init --yes</pre>
     <button class="button" type="button" data-copy>Copy commands</button>
   </div>
 </section>
 </main>
 
 <footer class="foot">
-  <div class="f-statement"><p>SmartTest runs only the tests a change reaches, and says why for every test it skips.</p><small>Alpha. Licence to be confirmed before the first npm release.</small></div>
+  <div class="f-statement"><p>SmartTest runs only the tests a change reaches, and says why for every test it skips.</p><small>Stable since 1.0.0. Apache-2.0. On npm as <code>@tkmremi/smarttest</code>.</small></div>
   <div class="f-nav"><ul>
     <li><a href="docs/guides/getting-started.html">Getting started</a></li>
     <li><a href="docs/reference/cli.html">CLI reference</a></li>

@@ -14,6 +14,7 @@ const ROOT = resolve(import.meta.dirname, "../..");
 const SITE = join(ROOT, "site");
 const DIST = join(SITE, "dist");
 const REPO = "https://github.com/RemiPelloux/SmarttyTest";
+const SITE_URL = "https://remipelloux.github.io/SmarttyTest/";
 // The published package's version (the manifest's own version field is not bumped by releases).
 const VERSION = JSON.parse(await readFile(join(ROOT, "packages/cli/package.json"), "utf8")).version;
 
@@ -262,8 +263,28 @@ function navHtml(sitePath) {
   ).join("");
 }
 
+/** A page's search-result summary: its first paragraph as plain text, at most about 160 characters. */
+function describe(html, title) {
+  const first = html.match(/<p(?: [^>]*)?>([\s\S]*?)<\/p>/)?.[1] ?? "";
+  const text = first
+    .replace(/<[^>]+>/g, "")
+    .replace(
+      /&(amp|lt|gt|quot|#39);/g,
+      (_, e) => ({ amp: "&", lt: "<", gt: ">", quot: '"', "#39": "'" })[e],
+    )
+    .replace(/\s+/g, " ")
+    .trim();
+  if (text.length < 40)
+    return `SmartTest documentation: ${title}. Run only the tests a change can affect.`;
+  if (text.length <= 160) return text;
+  const cut = text.slice(0, 157);
+  return `${cut.slice(0, Math.max(cut.lastIndexOf(" "), 120))}…`;
+}
+
 function docPage({ sitePath, srcFile, title, html, headings, hasMermaid }) {
   const up = (p) => rel(sitePath, p);
+  const description = escHtml(describe(html, title));
+  const url = `${SITE_URL}${sitePath.replace(/(^|\/)index\.html$/, "$1")}`;
   const toc = headings.filter((h) => h.level === 2);
   return `<!doctype html>
 <html lang="en">
@@ -271,7 +292,15 @@ function docPage({ sitePath, srcFile, title, html, headings, hasMermaid }) {
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${escHtml(title)} · SmartTest</title>
-<meta name="description" content="SmartTest documentation: ${escHtml(title)}">
+<meta name="description" content="${description}">
+<link rel="canonical" href="${url}">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="SmartTest">
+<meta property="og:url" content="${url}">
+<meta property="og:title" content="${escHtml(title)} · SmartTest">
+<meta property="og:description" content="${description}">
+<meta property="og:image" content="${SITE_URL}assets/social.png">
+<meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="${up("assets/logo.svg")}" type="image/svg+xml">
 <link rel="stylesheet" href="${up("assets/site.css")}">
 <link rel="stylesheet" href="${up("assets/docs.css")}">
@@ -401,6 +430,18 @@ const landing = (await readFile(join(SITE, "index.html"), "utf8"))
   .replaceAll("{{VERSION}}", VERSION);
 await writeFile(join(DIST, "index.html"), landing);
 await writeFile(join(DIST, ".nojekyll"), "");
+// Search engines: every page once, at its canonical URL. (A robots.txt would only count at the
+// domain root, which a GitHub project page does not own; submit the sitemap instead.)
+await writeFile(
+  join(DIST, "sitemap.xml"),
+  `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+${["index.html", ...pages.values()]
+  .map((p) => `  <url><loc>${SITE_URL}${p.replace(/(^|\/)index\.html$/, "$1")}</loc></url>`)
+  .join("\n")}
+</urlset>
+`,
+);
 await writeFile(
   join(DIST, "404.html"),
   docPage({
