@@ -158,13 +158,13 @@ SmartTest stays an npm package. It reads PHP source in TypeScript, without runni
 
 **S33 gate:** a push creating a branch from `main` on openpro-front selects what the branch changed, not the whole history; `pnpm verify` green on Linux, macOS and Windows; the four OpenPro repositories published with 0 missed failures; barrel pruning at 0 misses on the published benchmarks, with the precision report showing the change; analysis at 10,000 modules under 500 ms in process.
 
-**S33 status (7 November 2026): delivered; gate met except the 500 ms target, not yet confirmed on the final `main`.**
+**S33 status (7 November 2026): delivered; gate met except the 500 ms target, which the released `main` misses (547–564 ms).**
 
 - First push of a branch: compares with the last commit a pre-push hook passed on; with no passed record, the whole history, as before. A commit pushed with the hook bypassed is still checked. `init` keeps openpro-front's parallel pre-push parallel (SmartTest starts as the background job the script waits for).
 - Windows CI: `pnpm verify` passes on `windows-latest` (PR #8) and the job is required on `main`, beside Linux and macOS.
 - OpenPro in the published benchmarks: openpro-front, openpro-admin, openpro-mcp-service and OpenProMonitor replayed on 5 November, 0 missed failures, 16–75% less test time ([benchmarks for 1.2.0](../case-studies/benchmarks-1.2.md)).
 - Barrel pruning: namespace re-exports read member by member; a barrel edit that only changes named re-exports selects the importers of those names. Six commits on the `barrels-vitest` history select 12 test files instead of 19, 0 missed; unjs/ufo's window is unchanged (107 of 168, its changes were already followed to the symbol); fault injection 0 missed on every fixture.
-- Lazy index: the in-process analysis at 10,000 modules took 466 ms (median of 10 runs at load about 1.2; 657 ms before on the same machine, 654 ms at 1.0.0), measured before the barrel-pruning and PHP merges. On the final `main` it measured 584–614 ms at load 12–15; a run on a quiet machine is still needed to confirm the target.
+- Lazy index: the in-process analysis at 10,000 modules took 466 ms (median of 10 runs at load about 1.2; 657 ms before on the same machine, 654 ms at 1.0.0), measured before the barrel-pruning and PHP merges. On the final `main` it measured 584–614 ms at load 12–15, then 547 ms and 564 ms in two runs on a quiet machine (load under 2): the later merges cost about 90 ms, and the target is still missed.
 - Precision report: `benchmark --traces` reports the share of measured selected files that ran the changed code: 55% on `barrels-vitest`, 100% on ufo's window (8 of 8 measured).
 
 ### S34: Hooks and CI (27 pts)

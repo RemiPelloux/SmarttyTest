@@ -73,7 +73,7 @@ A PHP and Laravel preview; live Playwright specs; CI annotations; `smarttest syn
 
 ### Performance
 
-- The index is loaded lazily: each file's symbols and top-level uses stay in the stored index until something reads them, so a change parses only the files it reaches. The in-process analysis at 10,000 modules (§31.3, target < 500 ms) takes about 470 ms (median; about 660 ms before, measured back to back on the same machine; 654 ms at 1.0.0). Selections are unchanged: a test compares, for a range of changes on five fixtures and a generated project, the selection through the stored index with a cold one. An index written by an earlier version is read and rewritten in the new layout on the next run.
+- The index is loaded lazily: each file's symbols and top-level uses stay in the stored index until something reads them, so a change parses only the files it reaches. The in-process analysis at 10,000 modules (§31.3, target < 500 ms) took 466 ms when merged (about 660 ms before, measured back to back on the same machine; 654 ms at 1.0.0), but 547–564 ms on the released `main` on a quiet machine, so the target is still missed. Selections are unchanged: a test compares, for a range of changes on five fixtures and a generated project, the selection through the stored index with a cold one. An index written by an earlier version is read and rewritten in the new layout on the next run.
 - Writing the last decision (`runs/last-decision.json`) for thousands of selected tests is about 15 times faster, and grouping tests by runner no longer grows quadratically with the number of tests.
 
 ## [1.1.1] — patch
