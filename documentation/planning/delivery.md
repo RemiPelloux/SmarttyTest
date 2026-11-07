@@ -228,7 +228,7 @@ An audit of 1.0.1 before more projects adopt it, so the fixes ship in one releas
 - Checked after the fixes: the trace oracle finds no file a test loaded that selection cannot reach (Galdia's ops scripts and LeadsIt's MCP server are now linked); resolution agrees with the compiler on 19,233 imports. Replaying 10 commits with full suites on each of the five projects gives 0 selection misses; the two failures the replay flagged (`MiaDock.test.tsx` in openpro-admin, `tournament-pool.test.ts` in Galdia) are tests that fail only under full-suite load, with no dependency on the change.
 - Faster: 400 changed files 1.18 s to 0.51 s (one `git cat-file --batch`), path rules no longer quadratic, `explain` from the last decision 86 ms, `traces.json` about 18 times smaller.
 
-## 1.2.0 · minor (delivered on `main`, not yet released)
+## 1.2.0 · minor (7 November 2026)
 
 Sprints S32–S35 of the [1.x roadmap](roadmap-1.5.md) (119 points). Per-sprint status: the status blocks there.
 
@@ -236,6 +236,17 @@ Sprints S32–S35 of the [1.x roadmap](roadmap-1.5.md) (119 points). Per-sprint 
 - S33 Rollout follow-ups and precision: a branch's first push compares with the last commit a pre-push hook passed on; Windows CI green and required; OpenPro's four JavaScript repositories published at 0 missed failures, 16–75% less test time ([benchmarks for 1.2.0](../case-studies/benchmarks-1.2.md)); barrel and namespace re-export pruning; a lazily loaded index (466 ms at 10,000 modules when merged; 584–614 ms on the final `main`, so the §31.3 target is not confirmed); selection precision in `benchmark --traces`.
 - S34 Hooks and CI: live Playwright specs reported as "live, not run" unless `--live`; CI annotations and step summaries on GitHub Actions, GitLab CI and Bitbucket; `sync` proposes upgrades as diffs; an opt-in commit trailer (`hook.trailer`). Not done: openpro-backend still writes its own trailer, pending its upgrade.
 - S35 Laravel routes: routes, requests, Artisan commands and run-time class choices as edges; `parent::` calls no longer reach every subclass, in every language. openpro-backend (10 commits, on a clone with three `smarttest-loads` comments): 0 missed failures, 47% less test time; `audit --resolution --mutate`: 5 faults, 0 missed.
+- Before the release: `pnpm audit:fixtures` 18 of 18 fixtures, 0 missed, 0 import mismatches (PHP fixtures included). `smarttest audit --resolution --mutate` (seed 1, built from `8feb0dd`) on fresh clones of the seven adopting repositories: 24,550 of 24,551 imports agree with the compiler (1 unresolved in LeadsIt, counted as uncertainty), 55 faults injected, 22 caught, 38 survived, **0 missed**. Survivors are in code no test reaches: vendored minified assets in openpro-backend, `ui/` scripts in openpro-mcp-service. Not compared: tests failing before any fault (openpro-mcp-service: 3, which need the `vite build` its `pretest` runs; openpro-backend: 22, a service without installed dependencies and 5 PHP tests that need the network). One load-flaky test in Galdia (`tournament-pool.test.ts`, as in 1.0.2).
+
+| Repository          | Imports agree     | Injected | Caught | Survived | Missed |
+| ------------------- | ----------------- | -------- | ------ | -------- | ------ |
+| openpro-front       | 13,232 / 13,232   | 5        | 4      | 1        | 0      |
+| openpro-admin       | 712 / 712         | 10       | 7      | 3        | 0      |
+| openpro-mcp-service | 55 / 55           | 10       | 3      | 7        | 0      |
+| OpenProMonitor      | 461 / 461         | 10       | 2      | 8        | 0      |
+| openpro-backend     | 116 / 116 (JS/TS) | 5        | 3      | 2        | 0      |
+| LeadsIt             | 4,907 / 4,908     | 10       | 1      | 9        | 0      |
+| Galdia              | 5,067 / 5,067     | 10       | 2      | 8        | 0      |
 
 ## 1.1.1 · patch (3 November 2026)
 
