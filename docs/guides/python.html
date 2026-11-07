@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Python (preview) · SmartTest</title>
+<meta name="description" content="SmartTest selects and runs the tests of Python projects that use pytest or unittest. Python is a preview: it never hides a failure, but its precision is…">
+<link rel="canonical" href="https://remipelloux.github.io/SmarttyTest/docs/guides/python.html">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="SmartTest">
+<meta property="og:url" content="https://remipelloux.github.io/SmarttyTest/docs/guides/python.html">
+<meta property="og:title" content="Python (preview) · SmartTest">
+<meta property="og:description" content="SmartTest selects and runs the tests of Python projects that use pytest or unittest. Python is a preview: it never hides a failure, but its precision is…">
+<meta property="og:image" content="https://remipelloux.github.io/SmarttyTest/assets/social.png">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="../../assets/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../../assets/site.css">
+<link rel="stylesheet" href="../../assets/docs.css">
+</head>
+<body class="docs">
+<a class="skip" href="#content">Skip to content</a>
+<header class="bar">
+  <a class="wordmark" href="../../index.html"><img src="../../assets/logo.svg" alt="" width="22" height="22"> SmartTest</a>
+  <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="sidebar">Menu</button>
+  <nav class="bar-links" aria-label="Site">
+    <a href="../index.html">Docs</a>
+    <a href="../reference/cli.html">CLI</a>
+    <a href="../planning/roadmap.html">Roadmap</a>
+    <a href="https://github.com/RemiPelloux/SmarttyTest" rel="noopener">GitHub</a>
+    <a href="https://github.com/sponsors/RemiPelloux" rel="noopener">Sponsor</a>
+  </nav>
+  <label class="search"><span class="sr">Search the docs</span><input type="search" placeholder="Search" data-search data-base="../.." autocomplete="off"><span class="search-results" data-results hidden></span></label>
+</header>
+<div class="layout">
+  <aside id="sidebar" class="sidebar"><div class="nav-group"><p class="nav-title">Start</p><ul><li><a href="../index.html">Overview</a></li><li><a href="getting-started.html">Getting started</a></li><li><a href="commit-hooks.html">Commit and push hooks</a></li><li><a href="ci.html">Running in CI</a></li><li><a href="rollout.html">Rolling out to a repository</a></li></ul></div><div class="nav-group"><p class="nav-title">Guides</p><ul><li><a href="audit.html">Auditing selection</a></li><li><a href="angular.html">Angular</a></li><li><a href="python.html" aria-current="page">Python (preview)</a></li><li><a href="php.html">PHP (preview)</a></li><li><a href="studio.html">Studio</a></li><li><a href="vscode.html">VS Code</a></li><li><a href="plugins.html">Plugins</a></li></ul></div><div class="nav-group"><p class="nav-title">Concepts</p><ul><li><a href="../concepts/how-selection-works.html">How selection works</a></li><li><a href="../concepts/safety-model.html">Safety model</a></li><li><a href="../concepts/runtime-evidence.html">Runtime evidence</a></li><li><a href="../concepts/speed.html">Running less, faster</a></li><li><a href="../concepts/change-tracking.html">Change tracking</a></li><li><a href="../concepts/rules.html">Rules</a></li></ul></div><div class="nav-group"><p class="nav-title">Reference</p><ul><li><a href="../reference/cli.html">CLI</a></li><li><a href="../reference/configuration.html">Configuration</a></li><li><a href="../reference/contracts.html">Public contracts</a></li><li><a href="../benchmarks.html">Benchmarks</a></li><li><a href="../changelog.html">Changelog</a></li></ul></div><div class="nav-group"><p class="nav-title">Results</p><ul><li><a href="../case-studies/leadsit.html">Case study: LeadsIt</a></li><li><a href="../case-studies/benchmarks-1.0.html">Benchmarks for 1.0.0</a></li><li><a href="../case-studies/benchmarks-1.2.html">Benchmarks for 1.2.0</a></li><li><a href="../case-studies/external-repositories.html">External repositories</a></li></ul></div><div class="nav-group"><p class="nav-title">Project</p><ul><li><a href="../planning/roadmap.html">Roadmap</a></li><li><a href="../planning/roadmap-1.5.html">Roadmap 1.x</a></li><li><a href="../planning/delivery.html">Delivery log</a></li><li><a href="../architecture/overview.html">Architecture</a></li><li><a href="../architecture/adr/index.html">Decision records</a></li><li><a href="../architecture/security-review.html">Security review</a></li><li><a href="../design/design-system.html">Design system</a></li><li><a href="../product/PRD.html">Specification</a></li></ul></div><p class="version">Version 1.2.0</p></aside>
+  <main id="content" class="prose">
+<h1 id="python-preview">Python (preview)</h1>
+<p>SmartTest selects and runs the tests of Python projects that use pytest or unittest. Python is a <strong>preview</strong>: it never hides a failure, but its precision is coarser than for TypeScript, since the analysis has no types. It reads the sources without running Python.</p>
+<h2 id="supported-setups">Supported setups <a class="anchor" href="#supported-setups" aria-label="Link to this section">#</a></h2>
+<div class="table"><table><thead><tr><th>Setup</th><th>How SmartTest finds and runs the tests</th></tr></thead><tbody><tr><td>pytest (<code>pytest.ini</code>, <code>[tool.pytest.ini_options]</code>, <code>[tool:pytest]</code>, a <code>conftest.py</code>, or pytest declared as a dependency)</td><td><code>python -m pytest --collect-only -q</code> lists the files; a selection runs with <code>python -m pytest &lt;files&gt;</code>, results read from its JUnit XML</td></tr><tr><td>unittest (test modules and no pytest setup)</td><td>Files named <code>test*.py</code> inside packages, as <code>unittest discover</code> finds them; a selection runs module by module through <code>unittest</code>'s own loader</td></tr></tbody></table></div>
+<p>A Python project is the project root, or any folder with a <code>pyproject.toml</code>, <code>setup.py</code>, <code>setup.cfg</code>, <code>pytest.ini</code>, <code>tox.ini</code>, <code>requirements.txt</code> or <code>conftest.py</code>; <code>smarttest doctor</code> shows <code>pytest (.) collects 12 test file(s)</code>.</p>
+<p>The interpreter is, in this order: <code>SMARTTEST_PYTHON</code>, <code>python.interpreter</code> in the config, the project's <code>.venv</code> or <code>venv</code>, the active <code>VIRTUAL_ENV</code>, then <code>python3</code> (<code>python</code> on Windows). A bare command (<code>python3.13</code>) is looked up on <code>PATH</code>; a relative path (<code>.venv/bin/python</code>) is relative to the project.</p>
+<pre data-lang="ts"><code>export default defineConfig({
+  python: { interpreter: ".venv/bin/python" }, // or { enabled: false } to turn the preview off
+});</code></pre>
+<h2 id="what-selects-a-test">What selects a test <a class="anchor" href="#what-selects-a-test" aria-label="Link to this section">#</a></h2>
+<div class="table"><table><thead><tr><th>You change</th><th>Selected</th></tr></thead><tbody><tr><td>A function or a method</td><td>The tests that reach it: through <code>from x import f</code>, <code>x.f</code> on an imported module, <code>self.f</code> inside the class</td></tr><tr><td><code>__init__</code> (or <code>__new__</code>, <code>__post_init__</code>)</td><td>Every test that reaches the class</td></tr><tr><td>Code that runs when the module loads: a statement at module level, a decorator, a class body, a module value built by a call (<code>PATTERN = re.compile(…)</code>)</td><td>Every test that imports the module</td></tr><tr><td>A fixture in <code>conftest.py</code></td><td>The tests that ask for it by name (a parameter, <code>@pytest.mark.usefixtures("db")</code>), from the nearest <code>conftest.py</code> that names it</td></tr><tr><td>Code <code>conftest.py</code> runs at load, an autouse fixture, a <code>pytest_*</code> hook</td><td>Every test in that folder and below</td></tr><tr><td>A test module</td><td>That test</td></tr><tr><td><code>pyproject.toml</code>, <code>setup.py</code>, <code>setup.cfg</code>, <code>pytest.ini</code>, <code>tox.ini</code>, <code>requirements*.txt</code>, <code>Pipfile*</code>, <code>poetry.lock</code>, <code>uv.lock</code>, <code>.python-version</code></td><td>Every test in that folder and below</td></tr></tbody></table></div>
+<p>Imports are resolved from the project root, <code>src/</code>, the <code>pythonpath</code> of the pytest configuration and the folder above a file's top package, as pytest finds them. Relative imports (<code>from ..offer import build</code>), packages (<code>__init__.py</code>) and namespace packages are followed, and so is <code>from package import submodule</code>.</p>
+<h2 id="what-is-uncertainty">What is uncertainty <a class="anchor" href="#what-is-uncertainty" aria-label="Link to this section">#</a></h2>
+<p>An import SmartTest cannot place is uncertainty: the tests that reach it are selected in BALANCED and SAFE. That covers:</p>
+<ul><li><code>importlib.import_module(name)</code> and <code>__import__(name)</code> with a name built at run time (a literal name is an import);</li><li>a module found neither in the project, nor in the standard library, nor among the packages the project declares (<code>requirements*.txt</code>, <code>pyproject.toml</code>, <code>Pipfile</code>, <code>setup.cfg</code>) or installs in its virtual environment.</li></ul>
+<p>Declare the dependencies your code imports, or keep a <code>.venv</code> in the project, and these become ordinary external packages.</p>
+<h2 id="known-limits">Known limits <a class="anchor" href="#known-limits" aria-label="Link to this section">#</a></h2>
+<ul><li>Names reached through dynamic attribute access (<code>getattr(module, name)</code>) are not seen; neither are monkeypatched functions.</li><li><code>smarttest trace</code> (observed execution, which can narrow a selection) records JavaScript only; Python selection is always static. <code>audit --traces</code> and <code>audit --mutate</code> cover Python.</li><li>A Python project beside a JavaScript one (<code>service/pyproject.toml</code> next to a Vitest app) is analysed by the same run: each side's changes select only its own tests. Its imports resolve from its own folder, as <code>python -m pytest</code> run there would.</li></ul>
+    <p class="edit"><a href="https://github.com/RemiPelloux/SmarttyTest/blob/main/documentation/guides/python.md" rel="noopener">Edit this page on GitHub</a></p>
+  </main>
+  <nav class="toc" aria-label="On this page"><p class="nav-title">On this page</p><ul><li><a href="#supported-setups">Supported setups</a></li><li><a href="#what-selects-a-test">What selects a test</a></li><li><a href="#what-is-uncertainty">What is uncertainty</a></li><li><a href="#known-limits">Known limits</a></li></ul></nav>
+</div>
+<script src="../../assets/docs.js" defer></script>
+
+</body>
+</html>

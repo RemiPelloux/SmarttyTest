@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ADR-0010: Plugin SDK v1 and edge providers · SmartTest</title>
+<meta name="description" content="1.0.0 freezes the adapter contracts so that others can extend SmartTest. Three already had implementations (five runners, three version-control adapters,…">
+<link rel="canonical" href="https://remipelloux.github.io/SmarttyTest/docs/architecture/adr/0010-plugin-sdk-v1.html">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="SmartTest">
+<meta property="og:url" content="https://remipelloux.github.io/SmarttyTest/docs/architecture/adr/0010-plugin-sdk-v1.html">
+<meta property="og:title" content="ADR-0010: Plugin SDK v1 and edge providers · SmartTest">
+<meta property="og:description" content="1.0.0 freezes the adapter contracts so that others can extend SmartTest. Three already had implementations (five runners, three version-control adapters,…">
+<meta property="og:image" content="https://remipelloux.github.io/SmarttyTest/assets/social.png">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="../../../assets/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../../../assets/site.css">
+<link rel="stylesheet" href="../../../assets/docs.css">
+</head>
+<body class="docs">
+<a class="skip" href="#content">Skip to content</a>
+<header class="bar">
+  <a class="wordmark" href="../../../index.html"><img src="../../../assets/logo.svg" alt="" width="22" height="22"> SmartTest</a>
+  <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="sidebar">Menu</button>
+  <nav class="bar-links" aria-label="Site">
+    <a href="../../index.html">Docs</a>
+    <a href="../../reference/cli.html">CLI</a>
+    <a href="../../planning/roadmap.html">Roadmap</a>
+    <a href="https://github.com/RemiPelloux/SmarttyTest" rel="noopener">GitHub</a>
+    <a href="https://github.com/sponsors/RemiPelloux" rel="noopener">Sponsor</a>
+  </nav>
+  <label class="search"><span class="sr">Search the docs</span><input type="search" placeholder="Search" data-search data-base="../../.." autocomplete="off"><span class="search-results" data-results hidden></span></label>
+</header>
+<div class="layout">
+  <aside id="sidebar" class="sidebar"><div class="nav-group"><p class="nav-title">Start</p><ul><li><a href="../../index.html">Overview</a></li><li><a href="../../guides/getting-started.html">Getting started</a></li><li><a href="../../guides/commit-hooks.html">Commit and push hooks</a></li><li><a href="../../guides/ci.html">Running in CI</a></li><li><a href="../../guides/rollout.html">Rolling out to a repository</a></li></ul></div><div class="nav-group"><p class="nav-title">Guides</p><ul><li><a href="../../guides/audit.html">Auditing selection</a></li><li><a href="../../guides/angular.html">Angular</a></li><li><a href="../../guides/python.html">Python (preview)</a></li><li><a href="../../guides/php.html">PHP (preview)</a></li><li><a href="../../guides/studio.html">Studio</a></li><li><a href="../../guides/vscode.html">VS Code</a></li><li><a href="../../guides/plugins.html">Plugins</a></li></ul></div><div class="nav-group"><p class="nav-title">Concepts</p><ul><li><a href="../../concepts/how-selection-works.html">How selection works</a></li><li><a href="../../concepts/safety-model.html">Safety model</a></li><li><a href="../../concepts/runtime-evidence.html">Runtime evidence</a></li><li><a href="../../concepts/speed.html">Running less, faster</a></li><li><a href="../../concepts/change-tracking.html">Change tracking</a></li><li><a href="../../concepts/rules.html">Rules</a></li></ul></div><div class="nav-group"><p class="nav-title">Reference</p><ul><li><a href="../../reference/cli.html">CLI</a></li><li><a href="../../reference/configuration.html">Configuration</a></li><li><a href="../../reference/contracts.html">Public contracts</a></li><li><a href="../../benchmarks.html">Benchmarks</a></li><li><a href="../../changelog.html">Changelog</a></li></ul></div><div class="nav-group"><p class="nav-title">Results</p><ul><li><a href="../../case-studies/leadsit.html">Case study: LeadsIt</a></li><li><a href="../../case-studies/benchmarks-1.0.html">Benchmarks for 1.0.0</a></li><li><a href="../../case-studies/benchmarks-1.2.html">Benchmarks for 1.2.0</a></li><li><a href="../../case-studies/external-repositories.html">External repositories</a></li></ul></div><div class="nav-group"><p class="nav-title">Project</p><ul><li><a href="../../planning/roadmap.html">Roadmap</a></li><li><a href="../../planning/roadmap-1.5.html">Roadmap 1.x</a></li><li><a href="../../planning/delivery.html">Delivery log</a></li><li><a href="../overview.html">Architecture</a></li><li><a href="index.html">Decision records</a></li><li><a href="../security-review.html">Security review</a></li><li><a href="../../design/design-system.html">Design system</a></li><li><a href="../../product/PRD.html">Specification</a></li></ul></div><p class="version">Version 1.2.0</p></aside>
+  <main id="content" class="prose">
+<h1 id="adr-0010-plugin-sdk-v1-and-edge-providers">ADR-0010: Plugin SDK v1 and edge providers</h1>
+<ul><li><strong>Status:</strong> Accepted (1.0.0)</li><li><strong>Related:</strong> roadmap 1.0.0, PRD §27, §27.7, §32.2, ADR-0004, ADR-0005, ADR-0006, <a href="../../guides/plugins.html">Plugins guide</a>, <a href="../../reference/contracts.html">Public contracts</a></li></ul>
+<h2 id="context">Context <a class="anchor" href="#context" aria-label="Link to this section">#</a></h2>
+<p>1.0.0 freezes the adapter contracts so that others can extend SmartTest. Three already had implementations (five runners, three version-control adapters, two analyzers) but no versioning and only a minimal conformance check. The PRD's language contract (§27.4 <code>LanguageAdapter</code>: whole-project <code>analyze</code> and <code>findTestTargets</code>) was never implemented: the engine is built on a per-file analyzer and a graph SmartTest owns. Other languages and cross-language relationships (§27.7) need a way to add dependencies without writing a full analyzer.</p>
+<h2 id="decision">Decision <a class="anchor" href="#decision" aria-label="Link to this section">#</a></h2>
+<ul><li>The Plugin SDK v1 exports four contracts from <code>@tkmremi/smarttest/plugin-sdk</code>: <code>TestAdapter</code>, <code>VersionControlAdapter</code>, <code>LanguageAnalyzer</code> (the per-file analyzer SmartTest uses, replacing the §27.4 sketch) and <code>EdgeProvider</code>. Each implementation declares <code>apiVersion: 1</code>. The types stay in <code>shared</code> (ADR-0006) and <code>plugin-sdk</code> re-exports them.</li><li>A plugin is a module listed in the <code>plugins</code> option; its default export is a <code>SmartTestPlugin</code>. In 1.0 it contributes edge providers. Registering runners, version control and analyzers from a plugin is a later, additive change.</li><li>An edge provider returns file-to-file edges <code>{ from, to, kind, confidence }</code> and what it could not resolve. Edges enter the graph with provenance <code>plugin</code> and only add dependents. Unresolved relationships become uncertainty. A provider that throws or returns malformed output fails the run (<code>ST_PLUGIN_FAILED</code>, exit 4), never "no edges". A change to a plugin file inside the project is a trigger for the whole suite.</li><li>Capabilities are declared (ADR-0005): a provider without <code>fileEdges</code> is not called; one without <code>unresolved</code> is used with a warning.</li><li>A test-framework-agnostic conformance kit (<code>@tkmremi/smarttest/plugin-sdk/conformance</code>) checks each contract against a fixture. Every built-in adapter runs it in SmartTest's own suite.</li></ul>
+<h2 id="consequences">Consequences <a class="anchor" href="#consequences" aria-label="Link to this section">#</a></h2>
+<ul><li>Third parties get a stable contract and a way to prove they follow it.</li><li>Plugin code runs in the SmartTest process, with the same trust as <code>smarttest.config.ts</code>. Providers are asked to stay local (ADR-0004); SmartTest cannot enforce it.</li><li>A project with plugins rebuilds the graph on every analysis (provider output is recomputed), so watch mode does not patch it incrementally.</li><li>Edges are file level. Symbol-level edges can come as a declared capability.</li></ul>
+<h2 id="alternatives-considered">Alternatives considered <a class="anchor" href="#alternatives-considered" aria-label="Link to this section">#</a></h2>
+<ul><li>Freezing the §27.4 <code>LanguageAdapter</code>: no implementation, and it would put graph construction in every adapter.</li><li>Edge providers as objects in <code>smarttest.config.ts</code>: the config is transpiled into <code>.smarttest/tmp</code>, so relative imports from it break, and JSON configs could not use them. Module paths work for both.</li><li>Treating a failing provider as having no edges: silently narrower selections, against §32.2.</li></ul>
+    <p class="edit"><a href="https://github.com/RemiPelloux/SmarttyTest/blob/main/documentation/architecture/adr/0010-plugin-sdk-v1.md" rel="noopener">Edit this page on GitHub</a></p>
+  </main>
+  <nav class="toc" aria-label="On this page"><p class="nav-title">On this page</p><ul><li><a href="#context">Context</a></li><li><a href="#decision">Decision</a></li><li><a href="#consequences">Consequences</a></li><li><a href="#alternatives-considered">Alternatives considered</a></li></ul></nav>
+</div>
+<script src="../../../assets/docs.js" defer></script>
+
+</body>
+</html>

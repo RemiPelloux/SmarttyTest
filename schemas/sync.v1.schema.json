@@ -1,0 +1,106 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://remipelloux.github.io/SmarttyTest/schemas/sync.v1.schema.json",
+  "title": "smarttest sync --json (v1)",
+  "type": "object",
+  "required": ["schemaVersion", "command", "drift", "manual", "changes"],
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "command": {
+      "const": "sync"
+    },
+    "drift": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["key", "current", "proposed", "reason"],
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "current": {
+            "type": "string"
+          },
+          "proposed": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "manual": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "changes": {
+      "type": "boolean",
+      "description": "True when the configuration drift has a patch."
+    },
+    "upgrades": {
+      "description": "Upgrade proposals (added in 1.2): what a newer SmartTest offers the configuration and the installed hooks, each shown as a diff and written only when accepted.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "key", "title", "reason"],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "key": {
+            "type": "string",
+            "description": "Stable key of the proposal (hook-block:pre-push)."
+          },
+          "title": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "file": {
+            "type": "string",
+            "description": "Project-relative file the proposal changes."
+          },
+          "diff": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "manual": {
+            "type": "string",
+            "description": "Present when the change has to be made by hand."
+          }
+        }
+      }
+    },
+    "applied": {
+      "description": "Files written (with --apply or --yes, or after accepting).",
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "skipped": {
+      "description": "Accepted changes left unwritten, with why (the file changed since the proposal).",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["key", "why"],
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "why": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Auditing selection · SmartTest</title>
+<meta name="description" content="SmartTest's promise is that a skipped test could not have failed. smarttest audit measures that promise on your project instead of asking you to trust it.…">
+<link rel="canonical" href="https://remipelloux.github.io/SmarttyTest/docs/guides/audit.html">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="SmartTest">
+<meta property="og:url" content="https://remipelloux.github.io/SmarttyTest/docs/guides/audit.html">
+<meta property="og:title" content="Auditing selection · SmartTest">
+<meta property="og:description" content="SmartTest's promise is that a skipped test could not have failed. smarttest audit measures that promise on your project instead of asking you to trust it.…">
+<meta property="og:image" content="https://remipelloux.github.io/SmarttyTest/assets/social.png">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="../../assets/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../../assets/site.css">
+<link rel="stylesheet" href="../../assets/docs.css">
+</head>
+<body class="docs">
+<a class="skip" href="#content">Skip to content</a>
+<header class="bar">
+  <a class="wordmark" href="../../index.html"><img src="../../assets/logo.svg" alt="" width="22" height="22"> SmartTest</a>
+  <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="sidebar">Menu</button>
+  <nav class="bar-links" aria-label="Site">
+    <a href="../index.html">Docs</a>
+    <a href="../reference/cli.html">CLI</a>
+    <a href="../planning/roadmap.html">Roadmap</a>
+    <a href="https://github.com/RemiPelloux/SmarttyTest" rel="noopener">GitHub</a>
+    <a href="https://github.com/sponsors/RemiPelloux" rel="noopener">Sponsor</a>
+  </nav>
+  <label class="search"><span class="sr">Search the docs</span><input type="search" placeholder="Search" data-search data-base="../.." autocomplete="off"><span class="search-results" data-results hidden></span></label>
+</header>
+<div class="layout">
+  <aside id="sidebar" class="sidebar"><div class="nav-group"><p class="nav-title">Start</p><ul><li><a href="../index.html">Overview</a></li><li><a href="getting-started.html">Getting started</a></li><li><a href="commit-hooks.html">Commit and push hooks</a></li><li><a href="ci.html">Running in CI</a></li><li><a href="rollout.html">Rolling out to a repository</a></li></ul></div><div class="nav-group"><p class="nav-title">Guides</p><ul><li><a href="audit.html" aria-current="page">Auditing selection</a></li><li><a href="angular.html">Angular</a></li><li><a href="python.html">Python (preview)</a></li><li><a href="php.html">PHP (preview)</a></li><li><a href="studio.html">Studio</a></li><li><a href="vscode.html">VS Code</a></li><li><a href="plugins.html">Plugins</a></li></ul></div><div class="nav-group"><p class="nav-title">Concepts</p><ul><li><a href="../concepts/how-selection-works.html">How selection works</a></li><li><a href="../concepts/safety-model.html">Safety model</a></li><li><a href="../concepts/runtime-evidence.html">Runtime evidence</a></li><li><a href="../concepts/speed.html">Running less, faster</a></li><li><a href="../concepts/change-tracking.html">Change tracking</a></li><li><a href="../concepts/rules.html">Rules</a></li></ul></div><div class="nav-group"><p class="nav-title">Reference</p><ul><li><a href="../reference/cli.html">CLI</a></li><li><a href="../reference/configuration.html">Configuration</a></li><li><a href="../reference/contracts.html">Public contracts</a></li><li><a href="../benchmarks.html">Benchmarks</a></li><li><a href="../changelog.html">Changelog</a></li></ul></div><div class="nav-group"><p class="nav-title">Results</p><ul><li><a href="../case-studies/leadsit.html">Case study: LeadsIt</a></li><li><a href="../case-studies/benchmarks-1.0.html">Benchmarks for 1.0.0</a></li><li><a href="../case-studies/benchmarks-1.2.html">Benchmarks for 1.2.0</a></li><li><a href="../case-studies/external-repositories.html">External repositories</a></li></ul></div><div class="nav-group"><p class="nav-title">Project</p><ul><li><a href="../planning/roadmap.html">Roadmap</a></li><li><a href="../planning/roadmap-1.5.html">Roadmap 1.x</a></li><li><a href="../planning/delivery.html">Delivery log</a></li><li><a href="../architecture/overview.html">Architecture</a></li><li><a href="../architecture/adr/index.html">Decision records</a></li><li><a href="../architecture/security-review.html">Security review</a></li><li><a href="../design/design-system.html">Design system</a></li><li><a href="../product/PRD.html">Specification</a></li></ul></div><p class="version">Version 1.2.0</p></aside>
+  <main id="content" class="prose">
+<h1 id="auditing-selection">Auditing selection</h1>
+<p>SmartTest's promise is that a skipped test could not have failed. <code>smarttest audit</code> measures that promise on your project instead of asking you to trust it. Each check reports a miss when there is one; exit code 1 means it found one.</p>
+<pre data-lang="bash"><code>smarttest audit --mutate          # fault injection: the direct measure of missed tests
+smarttest audit --resolution      # every import resolves as the TypeScript compiler resolves it
+smarttest audit --traces          # every file a test loaded can select it</code></pre>
+<p>The report is written to <code>.smarttest/reports/audit.json</code> and <code>audit.md</code> (<code>-o file.md</code> copies it).</p>
+<h2 id="fault-injection---mutate">Fault injection (<code>--mutate</code>) <a class="anchor" href="#fault-injection---mutate" aria-label="Link to this section">#</a></h2>
+<p>One function at a time is made to throw on entry (<code>throw new Error(…)</code>, or <code>raise RuntimeError(…)</code> in Python), in a temporary checkout of HEAD. SmartTest selects the tests for that change, then the full suite runs. A test that fails but was not selected is a missed test, by definition.</p>
+<div class="table"><table><thead><tr><th>Outcome</th><th>Meaning</th></tr></thead><tbody><tr><td>caught</td><td>A selected test failed</td></tr><tr><td>survived</td><td>No test failed at all: the function is not exercised by the suite (a gap in the tests, not in SmartTest)</td></tr><tr><td>missed</td><td>A test failed and was not selected: a bug in SmartTest; please report it</td></tr><tr><td>load-flaky</td><td>A test failed in the full run but passes alone with the fault in place: it fails next to other tests, not because of the change</td></tr></tbody></table></div>
+<p>Options: <code>--mutants n</code> (default 10) functions sampled with <code>--seed n</code> (default 1, so a run can be repeated), <code>--budget ms</code> to stop starting new ones. Tests that fail before any fault is injected are left out of every comparison. Your files are never changed: the faults go into the temporary checkout, which is removed afterwards. SmartTest's own configuration and local plugins are never broken.</p>
+<p>Each mutant runs the full suite, so the time is about <code>mutants × full suite</code>. On a large project, start with <code>--mutants 10 --budget 900000</code>.</p>
+<h2 id="resolution---resolution">Resolution (<code>--resolution</code>) <a class="anchor" href="#resolution---resolution" aria-label="Link to this section">#</a></h2>
+<p>For each import the TypeScript compiler resolves into the project, with the nearest <code>tsconfig.json</code>, SmartTest must point to the same file. A mismatch where SmartTest took a project file for a package means a dependency it cannot see. Imports SmartTest leaves unresolved are counted apart: they are uncertainty, which selects.</p>
+<h2 id="reachability---traces">Reachability (<code>--traces</code>) <a class="anchor" href="#reachability---traces" aria-label="Link to this section">#</a></h2>
+<p>Each test file runs alone while SmartTest records what it loads: the code it ran (V8 coverage), the files it read through <code>fs</code> (templates, JSON, fixtures), and for Python the modules it imported and the files it opened. Every such project file must reach that test: through the graph, through the runner's configuration (setup files), or because the test is uncertain and always selected. A pair the graph does not link is confirmed with the full impact analysis before it is reported. <code>--sample n</code> limits the run to n test files.</p>
+<p>A typical finding: a test reading <code>data/rates.json</code> through a path relative to the working directory. Nothing in the code ties the file to the test, so a change to it selects nothing. Read it through a path built from <code>import.meta.url</code> or <code>__dirname</code>, which SmartTest follows. Environment files are tracked by key and left out of this check. So are files version control does not list (an ignored build output a test reads can never be part of a change). Angular specs run by <code>ng test</code> execute a compiled bundle, so this check observes little of them; use <code>--mutate</code> there.</p>
+<h2 id="in-ci">In CI <a class="anchor" href="#in-ci" aria-label="Link to this section">#</a></h2>
+<p>The repository's nightly workflow runs all three checks on every fixture (<code>pnpm audit:fixtures</code>). For your project, a scheduled job is enough:</p>
+<pre data-lang="yaml"><code>- run: npx smarttest audit --mutate --mutants 20 --resolution</code></pre>
+<p><code>benchmark</code> complements it: it replays recent commits with their real changes, where <code>audit</code> injects synthetic ones. Both measure safety. For precision, <code>benchmark --traces --mode safe</code> also reports how many selected test files actually ran the changed code (<a href="../concepts/runtime-evidence.html#selection-precision">Selection precision</a>); without traces it says precision is unmeasured.</p>
+    <p class="edit"><a href="https://github.com/RemiPelloux/SmarttyTest/blob/main/documentation/guides/audit.md" rel="noopener">Edit this page on GitHub</a></p>
+  </main>
+  <nav class="toc" aria-label="On this page"><p class="nav-title">On this page</p><ul><li><a href="#fault-injection---mutate">Fault injection (--mutate)</a></li><li><a href="#resolution---resolution">Resolution (--resolution)</a></li><li><a href="#reachability---traces">Reachability (--traces)</a></li><li><a href="#in-ci">In CI</a></li></ul></nav>
+</div>
+<script src="../../assets/docs.js" defer></script>
+
+</body>
+</html>

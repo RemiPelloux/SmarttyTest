@@ -1,0 +1,86 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="540" viewBox="0 0 960 540" role="img" aria-labelledby="t d">
+  <title id="t">smarttest run --affected</title>
+  <desc id="d">Terminal session: SmartTest analyses 3 changed files, selects 12 of 486 tests, runs them with Vitest, reports 474 tests as skipped and not run, and points to smarttest explain.</desc>
+  <style>
+  .mono { font-family: ui-monospace, SFMono-Regular, 'JetBrains Mono', Menlo, Consolas, monospace; font-size: 15px; white-space: pre; }
+  .cover { animation: type 14s steps(28, end) infinite; }
+  @keyframes type { 0%, 4% { transform: translateX(0) } 18%, 100% { transform: translateX(264.56px) } }
+  .caret { animation: caretMove 14s steps(28, end) infinite, blink 1s step-end infinite; }
+  @keyframes caretMove { 0%, 4% { transform: translateX(0) } 18%, 100% { transform: translateX(256.56px) } }
+  @keyframes blink { 50% { opacity: 0 } }
+  .spinner { transform-box: fill-box; transform-origin: center; animation: spin .9s linear infinite, spinVis 14s linear infinite; opacity: 0; }
+  @keyframes spin { to { transform: rotate(360deg) } }
+  @keyframes spinVis { 0%, 19% { opacity: 0 } 20%, 60% { opacity: 1 } 61%, 100% { opacity: 0 } }
+  .fade-cmd { animation: fadeCmd 14s ease-out infinite; }
+  @keyframes fadeCmd { 0%, 90% { opacity: 1 } 97% { opacity: 0 } 100% { opacity: 1 } }
+  .ln-0 { animation: ln0 14s ease-out infinite; }
+  @keyframes ln0 { 0%, 22% { opacity: 0; transform: translateY(6px) } 24.5%, 90% { opacity: 1; transform: none } 97%, 100% { opacity: 0 } }
+  .ln-1 { animation: ln1 14s ease-out infinite; }
+  @keyframes ln1 { 0%, 26% { opacity: 0; transform: translateY(6px) } 28.5%, 90% { opacity: 1; transform: none } 97%, 100% { opacity: 0 } }
+  .ln-2 { animation: ln2 14s ease-out infinite; }
+  @keyframes ln2 { 0%, 30% { opacity: 0; transform: translateY(6px) } 32.5%, 90% { opacity: 1; transform: none } 97%, 100% { opacity: 0 } }
+  
+  .ln-4 { animation: ln4 14s ease-out infinite; }
+  @keyframes ln4 { 0%, 36% { opacity: 0; transform: translateY(6px) } 38.5%, 90% { opacity: 1; transform: none } 97%, 100% { opacity: 0 } }
+  .ln-5 { animation: ln5 14s ease-out infinite; }
+  @keyframes ln5 { 0%, 42% { opacity: 0; transform: translateY(6px) } 44.5%, 90% { opacity: 1; transform: none } 97%, 100% { opacity: 0 } }
+  .ln-6 { animation: ln6 14s ease-out infinite; }
+  @keyframes ln6 { 0%, 46% { opacity: 0; transform: translateY(6px) } 48.5%, 90% { opacity: 1; transform: none } 97%, 100% { opacity: 0 } }
+  .ln-7 { animation: ln7 14s ease-out infinite; }
+  @keyframes ln7 { 0%, 50% { opacity: 0; transform: translateY(6px) } 52.5%, 90% { opacity: 1; transform: none } 97%, 100% { opacity: 0 } }
+  .ln-8 { animation: ln8 14s ease-out infinite; }
+  @keyframes ln8 { 0%, 56% { opacity: 0; transform: translateY(6px) } 58.5%, 90% { opacity: 1; transform: none } 97%, 100% { opacity: 0 } }
+  
+  .ln-10 { animation: ln10 14s ease-out infinite; }
+  @keyframes ln10 { 0%, 62% { opacity: 0; transform: translateY(6px) } 64.5%, 90% { opacity: 1; transform: none } 97%, 100% { opacity: 0 } }
+  .ln-11 { animation: ln11 14s ease-out infinite; }
+  @keyframes ln11 { 0%, 68% { opacity: 0; transform: translateY(6px) } 70.5%, 90% { opacity: 1; transform: none } 97%, 100% { opacity: 0 } }
+  
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation: none !important; }
+    .cover { display: none } .caret { display: none }
+  }</style>
+  <defs>
+    <linearGradient id="term-bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#070B18"/>
+      <stop offset="1" stop-color="#0E1530"/>
+    </linearGradient>
+    <linearGradient id="term-brand" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#22D3EE"/>
+      <stop offset="1" stop-color="#8B5CF6"/>
+    </linearGradient>
+    <pattern id="term-grid" width="32" height="32" patternUnits="userSpaceOnUse">
+      <path d="M32 0H0V32" fill="none" stroke="#ffffff" stroke-opacity="0.045" stroke-width="1"/>
+    </pattern>
+    <filter id="term-glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="6" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter></defs>
+  <rect width="960" height="540" rx="18" fill="#070B18"/>
+  <rect x="0.5" y="0.5" width="959" height="539" rx="18" fill="none" stroke="#22305C"/>
+  <rect x="0" y="0" width="960" height="46" rx="18" fill="#0B1126"/>
+  <rect x="0" y="28" width="960" height="18" fill="#0B1126"/>
+  <line x1="0" y1="46" x2="960" y2="46" stroke="#22305C"/>
+  <circle cx="26" cy="23" r="6.5" fill="#FF5F57"/><circle cx="48" cy="23" r="6.5" fill="#FEBC2E"/><circle cx="70" cy="23" r="6.5" fill="#28C840"/>
+  <text x="480" y="28" text-anchor="middle" font-family="ui-sans-serif, -apple-system, 'Segoe UI', Inter, Roboto, Helvetica, Arial, sans-serif" font-size="13" fill="#8C97BD">~/acme-api — smarttest</text>
+
+  <g class="fade-cmd">
+    <text class="mono" x="36" y="96" fill="#22D3EE">$</text>
+    <text class="mono" x="54.04" y="96" fill="#E8ECF8">npx smarttest run --affected</text>
+    <rect class="cover" x="52.04" y="78" width="268.56" height="26" fill="#070B18"/>
+    <rect class="caret" x="54.04" y="81" width="9" height="19" fill="#22D3EE" opacity="0.9"/>
+    <g class="spinner"><circle cx="334.6" cy="91" r="7" fill="none" stroke="#8B5CF6" stroke-width="2.5" stroke-dasharray="30 14" stroke-linecap="round"/></g>
+  </g>
+  <g class="ln-0"><text class="mono" x="36" y="140" fill="#22D3EE">◇ </text><text class="mono" x="54.04" y="140" fill="#8C97BD">Changes   </text><text class="mono" x="144.23999999999998" y="140" fill="#E8ECF8">git · main…HEAD · 3 files · 5 symbols</text></g>
+  <g class="ln-1"><text class="mono" x="36" y="167" fill="#22D3EE">◇ </text><text class="mono" x="54.04" y="167" fill="#8C97BD">Analysis  </text><text class="mono" x="144.23999999999998" y="167" fill="#E8ECF8">complete · warm graph · 182 ms</text></g>
+  <g class="ln-2"><text class="mono" x="36" y="194" fill="#22D3EE">◇ </text><text class="mono" x="54.04" y="194" fill="#8C97BD">Mode      </text><text class="mono" x="144.23999999999998" y="194" fill="#8B5CF6">balanced</text><text class="mono" x="216.39999999999998" y="194" fill="#56618A">  rule: authentication-critical</text></g>
+  
+  <g class="ln-4"><rect x="48.04" y="232" width="85.18" height="22" rx="5" fill="#34D399"/><text class="mono" x="36" y="248" fill="#070B18" font-weight="700">  SELECTED </text><text class="mono" x="135.22" y="248" fill="#E8ECF8">  12 of 486 tests · 2.5%</text></g>
+  <g class="ln-5"><text class="mono" x="36" y="275" fill="#34D399">  ✓ </text><text class="mono" x="72.08" y="275" fill="#E8ECF8">src/auth/AuthService.test.ts         </text><text class="mono" x="405.82" y="275" fill="#8C97BD">8 passed  412 ms</text></g>
+  <g class="ln-6"><text class="mono" x="36" y="302" fill="#34D399">  ✓ </text><text class="mono" x="72.08" y="302" fill="#E8ECF8">src/auth/AuthController.test.ts      </text><text class="mono" x="405.82" y="302" fill="#8C97BD">3 passed  188 ms</text></g>
+  <g class="ln-7"><text class="mono" x="36" y="329" fill="#34D399">  ✓ </text><text class="mono" x="72.08" y="329" fill="#E8ECF8">test/routes/protected.test.ts        </text><text class="mono" x="405.82" y="329" fill="#8C97BD">1 passed   96 ms</text></g>
+  <g class="ln-8"><rect x="48.04" y="340" width="85.18" height="22" rx="5" fill="#3A4567"/><text class="mono" x="36" y="356" fill="#E8ECF8" font-weight="700">  SKIPPED  </text><text class="mono" x="135.22" y="356" fill="#8C97BD">  474 tests · not run · no static or observed link</text></g>
+  
+  <g class="ln-10"><text class="mono" x="36" y="410" fill="#34D399">  ✓ </text><text class="mono" x="72.08" y="410" fill="#34D399">12 passed</text><text class="mono" x="153.26" y="410" fill="#8C97BD"> · 0 failed · 474 skipped (not run) · 2.1 s</text></g>
+  <g class="ln-11"><text class="mono" x="36" y="437" fill="#56618A">  ↳ </text><text class="mono" x="72.08" y="437" fill="#8C97BD">why these tests? </text><text class="mono" x="225.42000000000002" y="437" fill="#22D3EE">smarttest explain</text></g>
+</svg>

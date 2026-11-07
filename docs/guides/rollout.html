@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rolling SmartTest out to a repository · SmartTest</title>
+<meta name="description" content="What the first rollouts (OpenPro's four JavaScript repositories, then Galdia, opal-frontend and OpenProAuto) showed: each step below catches a different…">
+<link rel="canonical" href="https://remipelloux.github.io/SmarttyTest/docs/guides/rollout.html">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="SmartTest">
+<meta property="og:url" content="https://remipelloux.github.io/SmarttyTest/docs/guides/rollout.html">
+<meta property="og:title" content="Rolling SmartTest out to a repository · SmartTest">
+<meta property="og:description" content="What the first rollouts (OpenPro's four JavaScript repositories, then Galdia, opal-frontend and OpenProAuto) showed: each step below catches a different…">
+<meta property="og:image" content="https://remipelloux.github.io/SmarttyTest/assets/social.png">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="../../assets/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../../assets/site.css">
+<link rel="stylesheet" href="../../assets/docs.css">
+</head>
+<body class="docs">
+<a class="skip" href="#content">Skip to content</a>
+<header class="bar">
+  <a class="wordmark" href="../../index.html"><img src="../../assets/logo.svg" alt="" width="22" height="22"> SmartTest</a>
+  <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="sidebar">Menu</button>
+  <nav class="bar-links" aria-label="Site">
+    <a href="../index.html">Docs</a>
+    <a href="../reference/cli.html">CLI</a>
+    <a href="../planning/roadmap.html">Roadmap</a>
+    <a href="https://github.com/RemiPelloux/SmarttyTest" rel="noopener">GitHub</a>
+    <a href="https://github.com/sponsors/RemiPelloux" rel="noopener">Sponsor</a>
+  </nav>
+  <label class="search"><span class="sr">Search the docs</span><input type="search" placeholder="Search" data-search data-base="../.." autocomplete="off"><span class="search-results" data-results hidden></span></label>
+</header>
+<div class="layout">
+  <aside id="sidebar" class="sidebar"><div class="nav-group"><p class="nav-title">Start</p><ul><li><a href="../index.html">Overview</a></li><li><a href="getting-started.html">Getting started</a></li><li><a href="commit-hooks.html">Commit and push hooks</a></li><li><a href="ci.html">Running in CI</a></li><li><a href="rollout.html" aria-current="page">Rolling out to a repository</a></li></ul></div><div class="nav-group"><p class="nav-title">Guides</p><ul><li><a href="audit.html">Auditing selection</a></li><li><a href="angular.html">Angular</a></li><li><a href="python.html">Python (preview)</a></li><li><a href="php.html">PHP (preview)</a></li><li><a href="studio.html">Studio</a></li><li><a href="vscode.html">VS Code</a></li><li><a href="plugins.html">Plugins</a></li></ul></div><div class="nav-group"><p class="nav-title">Concepts</p><ul><li><a href="../concepts/how-selection-works.html">How selection works</a></li><li><a href="../concepts/safety-model.html">Safety model</a></li><li><a href="../concepts/runtime-evidence.html">Runtime evidence</a></li><li><a href="../concepts/speed.html">Running less, faster</a></li><li><a href="../concepts/change-tracking.html">Change tracking</a></li><li><a href="../concepts/rules.html">Rules</a></li></ul></div><div class="nav-group"><p class="nav-title">Reference</p><ul><li><a href="../reference/cli.html">CLI</a></li><li><a href="../reference/configuration.html">Configuration</a></li><li><a href="../reference/contracts.html">Public contracts</a></li><li><a href="../benchmarks.html">Benchmarks</a></li><li><a href="../changelog.html">Changelog</a></li></ul></div><div class="nav-group"><p class="nav-title">Results</p><ul><li><a href="../case-studies/leadsit.html">Case study: LeadsIt</a></li><li><a href="../case-studies/benchmarks-1.0.html">Benchmarks for 1.0.0</a></li><li><a href="../case-studies/benchmarks-1.2.html">Benchmarks for 1.2.0</a></li><li><a href="../case-studies/external-repositories.html">External repositories</a></li></ul></div><div class="nav-group"><p class="nav-title">Project</p><ul><li><a href="../planning/roadmap.html">Roadmap</a></li><li><a href="../planning/roadmap-1.5.html">Roadmap 1.x</a></li><li><a href="../planning/delivery.html">Delivery log</a></li><li><a href="../architecture/overview.html">Architecture</a></li><li><a href="../architecture/adr/index.html">Decision records</a></li><li><a href="../architecture/security-review.html">Security review</a></li><li><a href="../design/design-system.html">Design system</a></li><li><a href="../product/PRD.html">Specification</a></li></ul></div><p class="version">Version 1.2.0</p></aside>
+  <main id="content" class="prose">
+<h1 id="rolling-smarttest-out-to-a-repository">Rolling SmartTest out to a repository</h1>
+<p>What the first rollouts (OpenPro's four JavaScript repositories, then Galdia, opal-frontend and OpenProAuto) showed: each step below catches a different problem before it reaches a commit hook.</p>
+<h2 id="1-install-and-look">1. Install and look <a class="anchor" href="#1-install-and-look" aria-label="Link to this section">#</a></h2>
+<pre data-lang="bash"><code>npm install -D @tkmremi/smarttest
+npx smarttest doctor
+npx smarttest scan</code></pre>
+<p><code>doctor</code> lists each runner and how many test files it collects. Compare that count with your runner's own listing. <code>scan</code> and <code>doctor</code> also report <strong>files a runner collects that SmartTest does not analyse</strong> (excluded by <code>exclude</code>, or in a build-output folder): no change can select those, so fix them first.</p>
+<h2 id="2-parity-the-full-suite-through-smarttest">2. Parity: the full suite through SmartTest <a class="anchor" href="#2-parity-the-full-suite-through-smarttest" aria-label="Link to this section">#</a></h2>
+<pre data-lang="bash"><code>npx smarttest run --all</code></pre>
+<p>It must report the same tests and failures as your runner alone. A difference here is a configuration problem (a runner started the wrong way, a missing setup file), and every later step depends on it. To compare one runner at a time, keep the others out with <code>--runner vitest</code>.</p>
+<h2 id="3-measure-on-your-history">3. Measure on your history <a class="anchor" href="#3-measure-on-your-history" aria-label="Link to this section">#</a></h2>
+<pre data-lang="bash"><code>npx smarttest benchmark --commits 20          # real commits: missed failures and time saved
+npx smarttest audit --mutate --resolution     # injected faults: missed tests, directly</code></pre>
+<p>Both must report <strong>0 missed</strong>. <code>benchmark</code> re-runs a missed failure alone on the commit and its parent, so failures that were already there, or that happen only under load, are reported apart. A failure the audit reports as missed is a SmartTest bug; please report it.</p>
+<h2 id="4-hooks">4. Hooks <a class="anchor" href="#4-hooks" aria-label="Link to this section">#</a></h2>
+<pre data-lang="bash"><code>npx smarttest init            # proposes the config and the hook; --dry-run shows the diff
+npx smarttest hook install    # pre-commit; --pre-push for pre-push</code></pre>
+<ul><li>An existing hook is kept. A test step it already runs (<code>vitest related</code>, <code>jest --findRelatedTests</code>, a full suite) is commented out and replaced <strong>in place</strong>, so the steps before it keep running first; <code>hook uninstall</code> restores it.</li><li>A hook the repository keeps in its tree and copies into <code>.git/hooks</code> (<code>cp scripts/hooks/pre-commit $(git rev-parse --git-path hooks)/</code> in <code>prepare</code>) is edited at its source; run the copy command again afterwards. <code>hook status</code> says when the installed copy is older.</li><li>A pre-push step run in the background (<code>… &amp;</code>) gets Git's refs from SmartTest's block. Without them, SmartTest compares with the upstream merge-base and says so.</li><li>When SmartTest is not installed (dependencies not installed yet), the hook stops the commit with a message; <code>--no-verify</code> skips it.</li></ul>
+<h2 id="5-what-the-hook-runs-and-what-it-leaves-to-ci">5. What the hook runs, and what it leaves to CI <a class="anchor" href="#5-what-the-hook-runs-and-what-it-leaves-to-ci" aria-label="Link to this section">#</a></h2>
+<p>End-to-end suites against a live environment rarely belong in a commit hook. Keep them in CI with <code>hook.runners</code>:</p>
+<pre data-lang="ts"><code>export default defineConfig({
+  hook: { runners: ["vitest"], budgetMs: 60_000 },
+});</code></pre>
+<p>Selected tests outside the hook's runners are reported as left to CI, never as passed. When an estimate passes <code>budgetMs</code>, the warning names what widened the selection (a lockfile, a config file, a setup file) and the files with no recorded duration. <code>benchmark</code> follows <code>hook.runners</code>, so it measures what the hook runs (<code>--runner all</code> for everything).</p>
+<h2 id="6-ci">6. CI <a class="anchor" href="#6-ci" aria-label="Link to this section">#</a></h2>
+<pre data-lang="yaml"><code>- run: npx smarttest ci</code></pre>
+<p><code>smarttest ci</code> picks the base itself on pull requests and branch builds; see <a href="ci.html">Running in CI</a>.</p>
+<h2 id="dependency-updates">Dependency updates <a class="anchor" href="#dependency-updates" aria-label="Link to this section">#</a></h2>
+<p>A lockfile or <code>package.json</code> dependency change selects the code that imports the packages that changed, and the packages depending on them. It still runs everything when a test or build tool changed, when a declared package is loaded by something other than code (a runner plugin, a CLI in a script), or when a config or stylesheet names it; the trigger's reason says which. Angular projects mostly hit the first case: the Angular builder lists the <code>@angular/*</code> packages as peers.</p>
+    <p class="edit"><a href="https://github.com/RemiPelloux/SmarttyTest/blob/main/documentation/guides/rollout.md" rel="noopener">Edit this page on GitHub</a></p>
+  </main>
+  <nav class="toc" aria-label="On this page"><p class="nav-title">On this page</p><ul><li><a href="#1-install-and-look">1. Install and look</a></li><li><a href="#2-parity-the-full-suite-through-smarttest">2. Parity: the full suite through SmartTest</a></li><li><a href="#3-measure-on-your-history">3. Measure on your history</a></li><li><a href="#4-hooks">4. Hooks</a></li><li><a href="#5-what-the-hook-runs-and-what-it-leaves-to-ci">5. What the hook runs, and what it leaves to CI</a></li><li><a href="#6-ci">6. CI</a></li><li><a href="#dependency-updates">Dependency updates</a></li></ul></nav>
+</div>
+<script src="../../assets/docs.js" defer></script>
+
+</body>
+</html>

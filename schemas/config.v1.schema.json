@@ -1,0 +1,492 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://remipelloux.github.io/SmarttyTest/schemas/config.v1.schema.json",
+  "title": "smarttest.config (v1)",
+  "description": "SmartTest configuration (smarttest.config.json, or the object passed to defineConfig in smarttest.config.ts). Every option is optional. Unknown keys are reported as warnings by SmartTest and rejected here so editors catch typos.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "description": "Editor hint; ignored by SmartTest.",
+      "type": "string"
+    },
+    "include": {
+      "description": "Globs of source files to analyse (default: every TypeScript/JavaScript file).",
+      "$ref": "#/$defs/globs"
+    },
+    "exclude": {
+      "description": "Globs excluded from analysis, added to the built-in excludes (node_modules, dist, build, coverage, .next, .smarttest).",
+      "$ref": "#/$defs/globs"
+    },
+    "mode": {
+      "description": "Safety mode (default \"balanced\").",
+      "$ref": "#/$defs/mode"
+    },
+    "adapters": {
+      "description": "Runners SmartTest may use (default: every detected runner).",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/adapter"
+      }
+    },
+    "vcs": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "provider": {
+          "description": "Version control provider (default \"auto\").",
+          "enum": ["auto", "git", "svn", "hg", "native"]
+        },
+        "base": {
+          "description": "Default base revision for comparisons.",
+          "type": "string"
+        },
+        "snapshots": {
+          "description": "Use native snapshots when no VCS is available (default true).",
+          "type": "boolean"
+        }
+      }
+    },
+    "snapshots": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "storeContent": {
+          "description": "Store file contents in snapshots, not only hashes (default false).",
+          "type": "boolean"
+        },
+        "keep": {
+          "description": "Snapshots kept before pruning (default 20).",
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "tests": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "layout": {
+          "$ref": "#/$defs/layout"
+        },
+        "directory": {
+          "description": "Test directory for the mirror layout (default \"tests\").",
+          "type": "string"
+        },
+        "naming": {
+          "description": "Test file naming pattern, e.g. \"{name}.test.{ext}\".",
+          "type": "string"
+        },
+        "match": {
+          "description": "Globs that identify test files (replaces the built-in patterns).",
+          "$ref": "#/$defs/globs"
+        },
+        "templates": {
+          "description": "Directory of custom generator templates.",
+          "type": "string"
+        },
+        "discovery": {
+          "description": "\"runner\" (default): ask each runner which files it collects. \"static\": filename patterns only.",
+          "enum": ["runner", "static"]
+        }
+      }
+    },
+    "runners": {
+      "description": "Explicit runners; when set, detection is not used.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["adapter"],
+        "properties": {
+          "adapter": {
+            "$ref": "#/$defs/adapter"
+          },
+          "dir": {
+            "description": "Project-relative directory the runner executes from (\"\" = root).",
+            "type": "string"
+          },
+          "config": {
+            "description": "Runner config file, relative to the project root.",
+            "type": "string"
+          },
+          "patterns": {
+            "description": "Test patterns (node --test).",
+            "$ref": "#/$defs/globs"
+          },
+          "project": {
+            "description": "Angular CLI project whose test target runs the tests (ng test <project>).",
+            "type": "string"
+          }
+        }
+      }
+    },
+    "generated": {
+      "description": "How generated files are treated.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "policy"],
+        "properties": {
+          "path": {
+            "description": "Glob of the generated files.",
+            "type": "string"
+          },
+          "policy": {
+            "enum": ["exclude", "test-source", "rebuild-required"]
+          },
+          "from": {
+            "description": "Generator inputs (globs). With rebuild-required, a change to an input stands for a change to the outputs.",
+            "$ref": "#/$defs/globs"
+          }
+        }
+      }
+    },
+    "triggers": {
+      "description": "Extra mandatory triggers (globs). Built-in triggers can never be removed.",
+      "$ref": "#/$defs/globs"
+    },
+    "rules": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/rule"
+      }
+    },
+    "retries": {
+      "description": "Retries for a failing test file (default 0).",
+      "type": "integer",
+      "minimum": 0
+    },
+    "adaptive": {
+      "description": "Run the whole suite without analysis when that is faster (default true).",
+      "type": "boolean"
+    },
+    "python": {
+      "description": "Python projects (preview): analyse .py files and run pytest/unittest.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean", "description": "Default true." },
+        "interpreter": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Interpreter that runs the tests."
+        }
+      }
+    },
+    "php": {
+      "description": "PHP projects (preview): analyse .php files and run PHPUnit or Pest.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean", "description": "Default true." },
+        "binary": {
+          "type": "string",
+          "minLength": 1,
+          "description": "PHP binary that runs the tests (a command on PATH or a path in the project)."
+        }
+      }
+    },
+    "projects": {
+      "description": "Per-project conventions, keyed by directory (\"backend\", \"apps/web\").",
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/project"
+      }
+    },
+    "cache": {
+      "description": "Reuse passing results whose inputs are all unchanged (default true; reported as cached-pass).",
+      "type": "boolean"
+    },
+    "parallelGroups": {
+      "description": "Runner groups run at the same time: a positive integer, or \"auto\" (default) from the CPU count.",
+      "anyOf": [
+        {
+          "type": "integer",
+          "minimum": 1
+        },
+        {
+          "const": "auto"
+        }
+      ]
+    },
+    "hook": {
+      "description": "Commit-hook behaviour (smarttest run --hook).",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "checks": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["name", "run"],
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1
+              },
+              "run": {
+                "description": "Shell command run in the project directory; {files} becomes the changed files there.",
+                "type": "string",
+                "minLength": 1
+              },
+              "projects": {
+                "description": "Only these project directories (\"\" for the root).",
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "files": {
+                "description": "Glob, relative to the project, that filters {files}.",
+                "type": "string"
+              },
+              "stage": {
+                "enum": ["pre-commit", "pre-push", "both"]
+              }
+            }
+          }
+        },
+        "budgetMs": {
+          "description": "Expected hook duration in milliseconds (default 60000).",
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "runners": {
+          "description": "Runners the hook executes (default: every runner). Selected tests of other runners are reported as left to CI, never as passed.",
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/adapter"
+          }
+        },
+        "exclude": {
+          "description": "Test-file globs the hook never runs; selected matches are reported as left to CI, never as passed.",
+          "$ref": "#/$defs/globs"
+        },
+        "trailer": {
+          "description": "Add a Tests: trailer to each commit message with what the pre-commit run did (default false). A commit whose staged tree has no passing pre-commit record gets none.",
+          "type": "boolean"
+        }
+      }
+    },
+    "plugins": {
+      "description": "Plugin modules (Plugin SDK v1): paths relative to the project root, or package names.",
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "timeoutMs": {
+      "description": "Timeout of one runner process in milliseconds (default 600000).",
+      "type": "integer",
+      "minimum": 0
+    },
+    "workers": {
+      "description": "Worker count passed to the runners.",
+      "type": "integer",
+      "minimum": 0
+    },
+    "reports": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "formats": {
+          "description": "Report formats written after a run (default html and json).",
+          "type": "array",
+          "items": {
+            "enum": ["html", "json", "junit", "markdown"]
+          }
+        },
+        "outputDir": {
+          "description": "Report directory (default .smarttest/reports).",
+          "type": "string"
+        },
+        "annotations": {
+          "description": "CI annotations on GitHub Actions, GitLab CI and Bitbucket Pipelines: selected and skipped tests with their reason, and a summary with the time saved (default true; --no-annotations turns them off for one run).",
+          "type": "boolean"
+        }
+      }
+    },
+    "storeDir": {
+      "description": "SmartTest's state directory (default .smarttest).",
+      "type": "string"
+    }
+  },
+  "$defs": {
+    "globs": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "mode": {
+      "enum": ["fast", "balanced", "safe"]
+    },
+    "adapter": {
+      "enum": [
+        "vitest",
+        "jest",
+        "node",
+        "playwright",
+        "cypress",
+        "angular",
+        "pytest",
+        "unittest",
+        "phpunit"
+      ]
+    },
+    "layout": {
+      "enum": ["mirror", "colocated", "domain", "custom"]
+    },
+    "category": {
+      "enum": ["unit", "integration", "e2e"]
+    },
+    "rule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "match"],
+      "properties": {
+        "name": {
+          "description": "Unique rule name.",
+          "type": "string",
+          "minLength": 1
+        },
+        "match": {
+          "$ref": "#/$defs/ruleMatch"
+        },
+        "require": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/category"
+          }
+        },
+        "coverage": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "lines": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 100
+            },
+            "branches": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 100
+            }
+          }
+        },
+        "risk": {
+          "enum": ["low", "medium", "high", "critical"]
+        },
+        "execution": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "alwaysRunOnAffected": {
+              "type": "boolean"
+            },
+            "mode": {
+              "$ref": "#/$defs/mode"
+            },
+            "retries": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        },
+        "generate": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "template": {
+              "type": "string"
+            },
+            "path": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "ruleMatch": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "type": "string"
+        },
+        "package": {
+          "type": "string"
+        },
+        "class": {
+          "type": "string"
+        },
+        "method": {
+          "type": "string"
+        },
+        "function": {
+          "type": "string"
+        },
+        "decorator": {
+          "type": "string"
+        },
+        "visibility": {
+          "enum": ["public", "protected", "private"]
+        },
+        "kind": {
+          "type": "string"
+        },
+        "extends": {
+          "type": "string"
+        },
+        "implements": {
+          "type": "string"
+        }
+      }
+    },
+    "project": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "tests": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "layout": {
+              "$ref": "#/$defs/layout"
+            },
+            "directory": {
+              "type": "string"
+            },
+            "naming": {
+              "type": "string"
+            },
+            "path": {
+              "description": "Custom location template, e.g. \"backend/src/__tests__/{FileName}.test.{Extension}\".",
+              "type": "string"
+            },
+            "templates": {
+              "type": "string"
+            }
+          }
+        },
+        "mode": {
+          "description": "Minimum safety mode inside this project (can only make it stricter).",
+          "$ref": "#/$defs/mode"
+        },
+        "rules": {
+          "description": "Rules scoped to this project; their paths are relative to it.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/rule"
+          }
+        }
+      }
+    }
+  }
+}

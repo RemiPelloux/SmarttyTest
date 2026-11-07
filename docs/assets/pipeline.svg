@@ -1,0 +1,114 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="250" viewBox="0 0 1280 250" role="img" aria-labelledby="t d">
+  <title id="t">The SmartTest impact pipeline</title>
+  <desc id="d">Seven stages: changes, semantic diff, symbols, dependency graph, rules and safety, selection, run and report. A pulse travels through each stage in order.</desc>
+  <style>
+  .t-sans { font-family: ui-sans-serif, -apple-system, 'Segoe UI', Inter, Roboto, Helvetica, Arial, sans-serif; } .t-mono { font-family: ui-monospace, SFMono-Regular, 'JetBrains Mono', Menlo, Consolas, monospace; }
+  .box { fill: #142049; stroke: #22D3EE; stroke-width: 1.5; }
+  .chip-6 .box { stroke: #34D399; }
+  .ttl { fill: #E8ECF8; }
+  .rail-hot { stroke: url(#pipe-brand); stroke-width: 3; stroke-linecap: round; stroke-dasharray: 1; stroke-dashoffset: 0; animation: rail 8s linear infinite; }
+  @keyframes rail { 0% { stroke-dashoffset: 1; opacity: 1 } 84%, 92% { stroke-dashoffset: 0; opacity: 1 } 98%, 100% { stroke-dashoffset: 0; opacity: 0 } }
+  .pulse { transform: translateX(1042px); opacity: 0; animation: travel 8s linear infinite; }
+  @keyframes travel { 0% { transform: translateX(0); opacity: 0 } 2% { opacity: 1 } 84% { transform: translateX(1042px); opacity: 1 } 90%, 100% { transform: translateX(1042px); opacity: 0 } }
+  
+  .chip-0 .box { animation: chip0 8s ease-out infinite; }
+  .chip-0 .ttl { animation: chipt0 8s ease-out infinite; }
+  @keyframes chip0 { 0%, 0% { stroke: #22305C; fill: #111A38 } 1%, 92% { stroke: #22D3EE; fill: #142049 } 98%, 100% { stroke: #22305C; fill: #111A38 } }
+  @keyframes chipt0 { 0%, 0% { fill: #8C97BD } 1%, 92% { fill: #E8ECF8 } 98%, 100% { fill: #8C97BD } }
+  .chip-1 .box { animation: chip1 8s ease-out infinite; }
+  .chip-1 .ttl { animation: chipt1 8s ease-out infinite; }
+  @keyframes chip1 { 0%, 13% { stroke: #22305C; fill: #111A38 } 15%, 92% { stroke: #22D3EE; fill: #142049 } 98%, 100% { stroke: #22305C; fill: #111A38 } }
+  @keyframes chipt1 { 0%, 13% { fill: #8C97BD } 15%, 92% { fill: #E8ECF8 } 98%, 100% { fill: #8C97BD } }
+  .chip-2 .box { animation: chip2 8s ease-out infinite; }
+  .chip-2 .ttl { animation: chipt2 8s ease-out infinite; }
+  @keyframes chip2 { 0%, 27% { stroke: #22305C; fill: #111A38 } 29%, 92% { stroke: #22D3EE; fill: #142049 } 98%, 100% { stroke: #22305C; fill: #111A38 } }
+  @keyframes chipt2 { 0%, 27% { fill: #8C97BD } 29%, 92% { fill: #E8ECF8 } 98%, 100% { fill: #8C97BD } }
+  .chip-3 .box { animation: chip3 8s ease-out infinite; }
+  .chip-3 .ttl { animation: chipt3 8s ease-out infinite; }
+  @keyframes chip3 { 0%, 41% { stroke: #22305C; fill: #111A38 } 43%, 92% { stroke: #22D3EE; fill: #142049 } 98%, 100% { stroke: #22305C; fill: #111A38 } }
+  @keyframes chipt3 { 0%, 41% { fill: #8C97BD } 43%, 92% { fill: #E8ECF8 } 98%, 100% { fill: #8C97BD } }
+  .chip-4 .box { animation: chip4 8s ease-out infinite; }
+  .chip-4 .ttl { animation: chipt4 8s ease-out infinite; }
+  @keyframes chip4 { 0%, 55% { stroke: #22305C; fill: #111A38 } 57%, 92% { stroke: #22D3EE; fill: #142049 } 98%, 100% { stroke: #22305C; fill: #111A38 } }
+  @keyframes chipt4 { 0%, 55% { fill: #8C97BD } 57%, 92% { fill: #E8ECF8 } 98%, 100% { fill: #8C97BD } }
+  .chip-5 .box { animation: chip5 8s ease-out infinite; }
+  .chip-5 .ttl { animation: chipt5 8s ease-out infinite; }
+  @keyframes chip5 { 0%, 69% { stroke: #22305C; fill: #111A38 } 71%, 92% { stroke: #22D3EE; fill: #142049 } 98%, 100% { stroke: #22305C; fill: #111A38 } }
+  @keyframes chipt5 { 0%, 69% { fill: #8C97BD } 71%, 92% { fill: #E8ECF8 } 98%, 100% { fill: #8C97BD } }
+  .chip-6 .box { animation: chip6 8s ease-out infinite; }
+  .chip-6 .ttl { animation: chipt6 8s ease-out infinite; }
+  @keyframes chip6 { 0%, 83% { stroke: #22305C; fill: #111A38 } 85%, 92% { stroke: #34D399; fill: #142049 } 98%, 100% { stroke: #22305C; fill: #111A38 } }
+  @keyframes chipt6 { 0%, 83% { fill: #8C97BD } 85%, 92% { fill: #E8ECF8 } 98%, 100% { fill: #8C97BD } }
+  
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation: none !important; }
+  }</style>
+  <defs>
+    <linearGradient id="pipe-bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#070B18"/>
+      <stop offset="1" stop-color="#0E1530"/>
+    </linearGradient>
+    <linearGradient id="pipe-brand" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#22D3EE"/>
+      <stop offset="1" stop-color="#8B5CF6"/>
+    </linearGradient>
+    <pattern id="pipe-grid" width="32" height="32" patternUnits="userSpaceOnUse">
+      <path d="M32 0H0V32" fill="none" stroke="#ffffff" stroke-opacity="0.045" stroke-width="1"/>
+    </pattern>
+    <filter id="pipe-glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="6" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter></defs>
+  
+  <rect width="1280" height="250" rx="24" fill="url(#pipe-bg)"/>
+  <rect width="1280" height="250" rx="24" fill="url(#pipe-grid)"/>
+  <rect x="0.5" y="0.5" width="1279" height="249" rx="24" fill="none" stroke="#22305C"/>
+  <text class="t-mono" x="40" y="42" font-size="12" letter-spacing="2" fill="#56618A">IMPACT PIPELINE</text>
+  <text class="t-sans" x="1240" y="42" font-size="13" text-anchor="end" fill="#8C97BD">deterministic · explainable · conservative fallbacks</text>
+  <line x1="119" y1="112" x2="1161" y2="112" stroke="#22305C" stroke-width="3" stroke-linecap="round"/>
+  <line class="rail-hot" pathLength="1" x1="119" y1="112" x2="1161" y2="112"/>
+  
+  <g class="chip-0">
+    <rect class="box" x="40" y="80" width="158" height="64" rx="14"/>
+    <text class="t-mono" x="54" y="102" font-size="11" fill="#56618A">01</text>
+    <text class="t-sans ttl" x="54" y="126" font-size="14.5" font-weight="650">Changes</text>
+    <text class="t-mono" x="119" y="170" font-size="11.5" text-anchor="middle" fill="#8C97BD">git · snapshots</text>
+  </g>
+  <g class="chip-1">
+    <rect class="box" x="213.66666666666666" y="80" width="158" height="64" rx="14"/>
+    <text class="t-mono" x="227.66666666666666" y="102" font-size="11" fill="#56618A">02</text>
+    <text class="t-sans ttl" x="227.66666666666666" y="126" font-size="14.5" font-weight="650">Semantic diff</text>
+    <text class="t-mono" x="292.66666666666663" y="170" font-size="11.5" text-anchor="middle" fill="#8C97BD">AST · uncertainty</text>
+  </g>
+  <g class="chip-2">
+    <rect class="box" x="387.3333333333333" y="80" width="158" height="64" rx="14"/>
+    <text class="t-mono" x="401.3333333333333" y="102" font-size="11" fill="#56618A">03</text>
+    <text class="t-sans ttl" x="401.3333333333333" y="126" font-size="14.5" font-weight="650">Symbols</text>
+    <text class="t-mono" x="466.3333333333333" y="170" font-size="11.5" text-anchor="middle" fill="#8C97BD">classes · methods</text>
+  </g>
+  <g class="chip-3">
+    <rect class="box" x="561" y="80" width="158" height="64" rx="14"/>
+    <text class="t-mono" x="575" y="102" font-size="11" fill="#56618A">04</text>
+    <text class="t-sans ttl" x="575" y="126" font-size="14.5" font-weight="650">Dependency graph</text>
+    <text class="t-mono" x="640" y="170" font-size="11.5" text-anchor="middle" fill="#8C97BD">static + observed</text>
+  </g>
+  <g class="chip-4">
+    <rect class="box" x="734.6666666666666" y="80" width="158" height="64" rx="14"/>
+    <text class="t-mono" x="748.6666666666666" y="102" font-size="11" fill="#56618A">05</text>
+    <text class="t-sans ttl" x="748.6666666666666" y="126" font-size="14.5" font-weight="650">Rules &amp; safety</text>
+    <text class="t-mono" x="813.6666666666666" y="170" font-size="11.5" text-anchor="middle" fill="#8C97BD">modes · mandatory</text>
+  </g>
+  <g class="chip-5">
+    <rect class="box" x="908.3333333333333" y="80" width="158" height="64" rx="14"/>
+    <text class="t-mono" x="922.3333333333333" y="102" font-size="11" fill="#56618A">06</text>
+    <text class="t-sans ttl" x="922.3333333333333" y="126" font-size="14.5" font-weight="650">Selection</text>
+    <text class="t-mono" x="987.3333333333333" y="170" font-size="11.5" text-anchor="middle" fill="#8C97BD">explainable</text>
+  </g>
+  <g class="chip-6">
+    <rect class="box" x="1082" y="80" width="158" height="64" rx="14"/>
+    <text class="t-mono" x="1096" y="102" font-size="11" fill="#56618A">07</text>
+    <text class="t-sans ttl" x="1096" y="126" font-size="14.5" font-weight="650">Run &amp; report</text>
+    <text class="t-mono" x="1161" y="170" font-size="11.5" text-anchor="middle" fill="#8C97BD">jest · vitest</text>
+  </g>
+  <g class="pulse"><circle cx="119" cy="79" r="5" fill="#22D3EE" filter="url(#pipe-glow)"/></g>
+</svg>

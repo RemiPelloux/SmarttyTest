@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Running in CI · SmartTest</title>
+<meta name="description" content="SmartTest is a CLI. It works in any CI system that can run Node.js 22.12 or newer. Nothing is specific to one provider.">
+<link rel="canonical" href="https://remipelloux.github.io/SmarttyTest/docs/guides/ci.html">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="SmartTest">
+<meta property="og:url" content="https://remipelloux.github.io/SmarttyTest/docs/guides/ci.html">
+<meta property="og:title" content="Running in CI · SmartTest">
+<meta property="og:description" content="SmartTest is a CLI. It works in any CI system that can run Node.js 22.12 or newer. Nothing is specific to one provider.">
+<meta property="og:image" content="https://remipelloux.github.io/SmarttyTest/assets/social.png">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="../../assets/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../../assets/site.css">
+<link rel="stylesheet" href="../../assets/docs.css">
+</head>
+<body class="docs">
+<a class="skip" href="#content">Skip to content</a>
+<header class="bar">
+  <a class="wordmark" href="../../index.html"><img src="../../assets/logo.svg" alt="" width="22" height="22"> SmartTest</a>
+  <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="sidebar">Menu</button>
+  <nav class="bar-links" aria-label="Site">
+    <a href="../index.html">Docs</a>
+    <a href="../reference/cli.html">CLI</a>
+    <a href="../planning/roadmap.html">Roadmap</a>
+    <a href="https://github.com/RemiPelloux/SmarttyTest" rel="noopener">GitHub</a>
+    <a href="https://github.com/sponsors/RemiPelloux" rel="noopener">Sponsor</a>
+  </nav>
+  <label class="search"><span class="sr">Search the docs</span><input type="search" placeholder="Search" data-search data-base="../.." autocomplete="off"><span class="search-results" data-results hidden></span></label>
+</header>
+<div class="layout">
+  <aside id="sidebar" class="sidebar"><div class="nav-group"><p class="nav-title">Start</p><ul><li><a href="../index.html">Overview</a></li><li><a href="getting-started.html">Getting started</a></li><li><a href="commit-hooks.html">Commit and push hooks</a></li><li><a href="ci.html" aria-current="page">Running in CI</a></li><li><a href="rollout.html">Rolling out to a repository</a></li></ul></div><div class="nav-group"><p class="nav-title">Guides</p><ul><li><a href="audit.html">Auditing selection</a></li><li><a href="angular.html">Angular</a></li><li><a href="python.html">Python (preview)</a></li><li><a href="php.html">PHP (preview)</a></li><li><a href="studio.html">Studio</a></li><li><a href="vscode.html">VS Code</a></li><li><a href="plugins.html">Plugins</a></li></ul></div><div class="nav-group"><p class="nav-title">Concepts</p><ul><li><a href="../concepts/how-selection-works.html">How selection works</a></li><li><a href="../concepts/safety-model.html">Safety model</a></li><li><a href="../concepts/runtime-evidence.html">Runtime evidence</a></li><li><a href="../concepts/speed.html">Running less, faster</a></li><li><a href="../concepts/change-tracking.html">Change tracking</a></li><li><a href="../concepts/rules.html">Rules</a></li></ul></div><div class="nav-group"><p class="nav-title">Reference</p><ul><li><a href="../reference/cli.html">CLI</a></li><li><a href="../reference/configuration.html">Configuration</a></li><li><a href="../reference/contracts.html">Public contracts</a></li><li><a href="../benchmarks.html">Benchmarks</a></li><li><a href="../changelog.html">Changelog</a></li></ul></div><div class="nav-group"><p class="nav-title">Results</p><ul><li><a href="../case-studies/leadsit.html">Case study: LeadsIt</a></li><li><a href="../case-studies/benchmarks-1.0.html">Benchmarks for 1.0.0</a></li><li><a href="../case-studies/benchmarks-1.2.html">Benchmarks for 1.2.0</a></li><li><a href="../case-studies/external-repositories.html">External repositories</a></li></ul></div><div class="nav-group"><p class="nav-title">Project</p><ul><li><a href="../planning/roadmap.html">Roadmap</a></li><li><a href="../planning/roadmap-1.5.html">Roadmap 1.x</a></li><li><a href="../planning/delivery.html">Delivery log</a></li><li><a href="../architecture/overview.html">Architecture</a></li><li><a href="../architecture/adr/index.html">Decision records</a></li><li><a href="../architecture/security-review.html">Security review</a></li><li><a href="../design/design-system.html">Design system</a></li><li><a href="../product/PRD.html">Specification</a></li></ul></div><p class="version">Version 1.2.0</p></aside>
+  <main id="content" class="prose">
+<h1 id="running-in-ci">Running in CI</h1>
+<p>SmartTest is a CLI. It works in any CI system that can run Node.js 22.12 or newer. Nothing is specific to one provider.</p>
+<h2 id="requirements">Requirements <a class="anchor" href="#requirements" aria-label="Link to this section">#</a></h2>
+<ul><li>Enough Git history to find the merge-base with the target branch. With shallow clones, fetch the base branch, for example <code>git fetch --depth=200 origin main</code>.</li><li>Dependencies installed (<code>npm ci</code>, <code>pnpm install --frozen-lockfile</code>, …) in every project SmartTest runs tests for.</li><li><code>--non-interactive</code>, which is implied when <code>CI</code> is set or stdout is not a terminal.</li></ul>
+<h2 id="commands">Commands <a class="anchor" href="#commands" aria-label="Link to this section">#</a></h2>
+<p><code>smarttest ci</code> does the CI-specific work for you: it detects the provider, decides what to compare against (merge-base with the target branch for merge requests, the previous revision for branch builds), deepens shallow clones until that history is there, and writes JUnit and Markdown reports.</p>
+<pre data-lang="bash"><code>npx smarttest ci</code></pre>
+<p>The same can be done by hand:</p>
+<pre data-lang="bash"><code># merge request / pull request: tests affected by the branch
+npx smarttest run --base origin/main --non-interactive --format junit --format html
+
+# main branch or nightly: everything, same pipeline and reports
+npx smarttest run --all --non-interactive --format junit --format html
+
+# nightly: refresh traces, then compare the selection with a full run and keep the record
+npx smarttest trace --stale --non-interactive
+npx smarttest shadow --non-interactive</code></pre>
+<p>Reports are written to <code>.smarttest/reports/</code> (<code>junit.xml</code>, <code>report.html</code>, <code>report.json</code>, <code>summary.md</code>). Publish them with your CI's artifact mechanism.</p>
+<h2 id="annotations-on-the-pull-request">Annotations on the pull request <a class="anchor" href="#annotations-on-the-pull-request" aria-label="Link to this section">#</a></h2>
+<p>On GitHub Actions, GitLab CI and Bitbucket Pipelines, <code>smarttest ci</code>, <code>run</code> and <code>impact</code> show the selection where the change is reviewed. SmartTest detects the CI from <code>GITHUB_ACTIONS</code>, <code>GITLAB_CI</code> or <code>BITBUCKET_BUILD_NUMBER</code>; nothing to configure. Annotations are output formats: SmartTest makes no call to the CI's API.</p>
+<div class="table"><table><thead><tr><th>CI</th><th>What appears</th></tr></thead><tbody><tr><td>GitHub</td><td>A notice on each selected test file with its reason (the closest reasons first), one notice for the files not run with their reasons and the time saved, an error per failing file, a warning for each fallback. The step summary lists every file and its reason.</td></tr><tr><td>GitLab</td><td>A Code Quality report, <code>.smarttest/reports/gl-code-quality.json</code> (selected files as <code>info</code>, failing files as <code>major</code>), shown in the merge request widget, and a collapsible "SmartTest selection" section in the job log.</td></tr><tr><td>Bitbucket</td><td>A Code Insights report, <code>.smarttest/reports/bitbucket-insights.json</code>: <code>report</code> (counts, time saved) and <code>annotations</code>. Post it from the pipeline (below).</td></tr></tbody></table></div>
+<p>GitHub shows at most 10 annotations of each level per step and drops the rest silently, so SmartTest keeps each level within 10: the last notice says how many more files were selected, and the step summary has them all. GitLab and Bitbucket reports keep 100 entries.</p>
+<p>Skipped tests are never shown as passed: they are "not run (skipped by selection)", with the reason. Time saved is an estimate from the durations SmartTest recorded on earlier runs (<code>.smarttest/state/durations.json</code>); on a fresh runner there are none and the summary says the time saved is not measured yet. Cache <code>.smarttest/state/</code> between pipelines to measure it.</p>
+<p>Turn annotations off with <code>--no-annotations</code>, or for the project with <code>reports: { annotations: false }</code>. <code>--annotations github|gitlab|bitbucket</code> forces a provider. With <code>--json</code>, stdout stays one JSON document and the annotation lines go to stderr, which GitHub reads too.</p>
+<p>GitHub Actions, selection only (nothing runs; useful next to an existing test job):</p>
+<pre data-lang="yaml"><code>- uses: actions/checkout@v5
+  with:
+    fetch-depth: 0
+- run: npm ci
+- run: npx smarttest impact --base "origin/${{ github.base_ref }}"</code></pre>
+<p>GitLab CI, with the Code Quality report:</p>
+<pre data-lang="yaml"><code>test:
+  script:
+    - npm ci
+    - npx smarttest ci
+  artifacts:
+    when: always
+    reports:
+      junit: .smarttest/reports/junit.xml
+      codequality: .smarttest/reports/gl-code-quality.json</code></pre>
+<p>Bitbucket Pipelines, posting the Code Insights report through the pipeline's authenticated proxy:</p>
+<pre data-lang="yaml"><code>- step:
+    script:
+      - npm ci
+      - npx smarttest ci || STATUS=$?
+      - &gt;-
+        curl --proxy http://localhost:29418 -s -X PUT
+        "http://api.bitbucket.org/2.0/repositories/$BITBUCKET_REPO_FULL_NAME/commit/$BITBUCKET_COMMIT/reports/smarttest"
+        -H "Content-Type: application/json" -d "$(node -p 'JSON.stringify(require(\"./.smarttest/reports/bitbucket-insights.json\").report)')"
+      - &gt;-
+        curl --proxy http://localhost:29418 -s -X POST
+        "http://api.bitbucket.org/2.0/repositories/$BITBUCKET_REPO_FULL_NAME/commit/$BITBUCKET_COMMIT/reports/smarttest/annotations"
+        -H "Content-Type: application/json" -d "$(node -p 'JSON.stringify(require(\"./.smarttest/reports/bitbucket-insights.json\").annotations)')"
+      - exit ${STATUS:-0}</code></pre>
+<p>SmartTest's own pull requests run <code>smarttest impact</code> this way (the <code>selection</code> job of <a href="https://github.com/RemiPelloux/SmarttyTest/blob/main/.github/workflows/ci.yml" rel="noopener"><code>.github/workflows/ci.yml</code></a>).</p>
+<h2 id="live-end-to-end-specs">Live end-to-end specs <a class="anchor" href="#live-end-to-end-specs" aria-label="Link to this section">#</a></h2>
+<p>A Playwright project whose <code>baseURL</code> is a deployed environment (<code>https://</code> on a host that is not <code>localhost</code>, <code>127.x</code>, <code>::1</code> or a <code>webServer</code> the config starts), or that depends on a setup project that is, runs against shared infrastructure. Its specs are <strong>live</strong>: <code>run</code>, <code>ci</code>, the commit hooks, <code>validate-selection</code>, <code>benchmark</code> and <code>audit --mutate</code> select them but run them only with <code>--live</code>. Until then each is reported as "live, not run", with its projects and the URL it targets, never as passed.</p>
+<pre data-lang="bash"><code># CI, where the deployed environment is reachable: run the live specs too
+npx smarttest ci --live</code></pre>
+<p>SmartTest reads the projects through Playwright (<code>playwright test --list</code>), so the values are the ones your config computes from the environment. With <code>E2E_BASE_URL=http://127.0.0.1:5173</code> and a matching <code>webServer</code>, the same specs are local and run everywhere. A spec in both a live and a local project is not live. On openpro-front, whose 25 projects default to <code>https://dev.openpro.ai</code>, all 78 Playwright files (specs and setup files) are live.</p>
+<h2 id="exit-codes">Exit codes <a class="anchor" href="#exit-codes" aria-label="Link to this section">#</a></h2>
+<div class="table"><table><thead><tr><th>Code</th><th>Meaning</th><th>Usual CI handling</th></tr></thead><tbody><tr><td>0</td><td>all selected tests passed</td><td>pass</td></tr><tr><td>1</td><td>a test failed or timed out</td><td>fail</td></tr><tr><td>2</td><td>invalid command or flag</td><td>fail, fix the pipeline</td></tr><tr><td>3</td><td>configuration problem</td><td>fail</td></tr><tr><td>4</td><td>infrastructure problem (runner missing, Git base not found)</td><td>fail or retry</td></tr><tr><td>5</td><td>policy failure (<code>validate-selection</code>, <code>shadow</code> or <code>benchmark</code> found a miss)</td><td>fail</td></tr><tr><td>70</td><td>internal error: a SmartTest bug, such as a report that fails its integrity check</td><td>fail, report the bug</td></tr></tbody></table></div>
+<h2 id="example-gitlab-ci">Example: GitLab CI <a class="anchor" href="#example-gitlab-ci" aria-label="Link to this section">#</a></h2>
+<pre data-lang="yaml"><code>test:
+  image: node:24
+  script:
+    - npm ci
+    - npx smarttest ci
+  artifacts:
+    when: always
+    reports:
+      junit: .smarttest/reports/junit.xml
+      codequality: .smarttest/reports/gl-code-quality.json</code></pre>
+<h2 id="example-any-shell-based-ci-jenkins-buildkite-drone">Example: any shell-based CI (Jenkins, Buildkite, Drone…) <a class="anchor" href="#example-any-shell-based-ci-jenkins-buildkite-drone" aria-label="Link to this section">#</a></h2>
+<pre data-lang="bash"><code>set -e
+npm ci
+npx smarttest ci</code></pre>
+<h2 id="traces-and-shadow-mode-in-ci">Traces and Shadow Mode in CI <a class="anchor" href="#traces-and-shadow-mode-in-ci" aria-label="Link to this section">#</a></h2>
+<p>Traces live in <code>.smarttest/state/traces.json</code>. To use them on pull requests, cache that file (or the whole <code>.smarttest/state/</code> directory) between pipeline runs, keyed on the lockfile. A trace whose loaded files changed is ignored automatically, so a stale cache is harmless.</p>
+<p>State that decides what runs is authenticated with a key outside the project: the index, the graph, test discovery, cached passes and traces. By default every runner has its own key, so a restored cache is rebuilt. To reuse it, set the same <code>SMARTTEST_STATE_KEY</code> secret (32 characters or more) in the jobs that save and restore the cache. Fork pull requests do not receive secrets, so state they write or restore is never trusted (<a href="../architecture/security-review.html">security review</a>, SR-16). <code>smarttest shadow</code> appends to <code>.smarttest/shadow/history.jsonl</code>; keep that file as an artifact or in a cache to follow drift with <code>smarttest shadow --report</code>.</p>
+<p>To check SmartTest against the full suite on your own history before relying on it in CI, run <code>npx smarttest benchmark --commits 20</code> locally.</p>
+    <p class="edit"><a href="https://github.com/RemiPelloux/SmarttyTest/blob/main/documentation/guides/ci.md" rel="noopener">Edit this page on GitHub</a></p>
+  </main>
+  <nav class="toc" aria-label="On this page"><p class="nav-title">On this page</p><ul><li><a href="#requirements">Requirements</a></li><li><a href="#commands">Commands</a></li><li><a href="#annotations-on-the-pull-request">Annotations on the pull request</a></li><li><a href="#live-end-to-end-specs">Live end-to-end specs</a></li><li><a href="#exit-codes">Exit codes</a></li><li><a href="#example-gitlab-ci">Example: GitLab CI</a></li><li><a href="#example-any-shell-based-ci-jenkins-buildkite-drone">Example: any shell-based CI (Jenkins, Buildkite, Drone…)</a></li><li><a href="#traces-and-shadow-mode-in-ci">Traces and Shadow Mode in CI</a></li></ul></nav>
+</div>
+<script src="../../assets/docs.js" defer></script>
+
+</body>
+</html>

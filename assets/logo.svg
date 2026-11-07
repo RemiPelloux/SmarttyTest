@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 64 64" role="img" aria-label="SmartTest logo">
+  <defs>
+    <linearGradient id="logo-bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#070B18"/>
+      <stop offset="1" stop-color="#0E1530"/>
+    </linearGradient>
+    <linearGradient id="logo-brand" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#22D3EE"/>
+      <stop offset="1" stop-color="#8B5CF6"/>
+    </linearGradient>
+    <pattern id="logo-grid" width="32" height="32" patternUnits="userSpaceOnUse">
+      <path d="M32 0H0V32" fill="none" stroke="#ffffff" stroke-opacity="0.045" stroke-width="1"/>
+    </pattern>
+    <filter id="logo-glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="6" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter></defs>
+  
+  <g transform="translate(0 0) scale(1)">
+    <rect width="64" height="64" rx="16" fill="url(#logo-brand)"/>
+    <path d="M17 34 L28 45 L48 21" fill="none" stroke="#fff" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round" stroke-opacity="0.95"/>
+    <circle cx="17" cy="34" r="5" fill="#fff"/>
+    <circle cx="28" cy="45" r="5" fill="#fff"/>
+    <circle cx="48" cy="21" r="6" fill="#fff"/>
+    <circle cx="48" cy="21" r="2.5" fill="#8B5CF6"/>
+  </g>
+</svg>

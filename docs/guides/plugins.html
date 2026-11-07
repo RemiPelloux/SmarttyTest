@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Plugins · SmartTest</title>
+<meta name="description" content="The Plugin SDK is SmartTest's public extension API. Version 1 is frozen at SmartTest 1.0.0 and covers four contracts:">
+<link rel="canonical" href="https://remipelloux.github.io/SmarttyTest/docs/guides/plugins.html">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="SmartTest">
+<meta property="og:url" content="https://remipelloux.github.io/SmarttyTest/docs/guides/plugins.html">
+<meta property="og:title" content="Plugins · SmartTest">
+<meta property="og:description" content="The Plugin SDK is SmartTest's public extension API. Version 1 is frozen at SmartTest 1.0.0 and covers four contracts:">
+<meta property="og:image" content="https://remipelloux.github.io/SmarttyTest/assets/social.png">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="../../assets/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../../assets/site.css">
+<link rel="stylesheet" href="../../assets/docs.css">
+</head>
+<body class="docs">
+<a class="skip" href="#content">Skip to content</a>
+<header class="bar">
+  <a class="wordmark" href="../../index.html"><img src="../../assets/logo.svg" alt="" width="22" height="22"> SmartTest</a>
+  <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="sidebar">Menu</button>
+  <nav class="bar-links" aria-label="Site">
+    <a href="../index.html">Docs</a>
+    <a href="../reference/cli.html">CLI</a>
+    <a href="../planning/roadmap.html">Roadmap</a>
+    <a href="https://github.com/RemiPelloux/SmarttyTest" rel="noopener">GitHub</a>
+    <a href="https://github.com/sponsors/RemiPelloux" rel="noopener">Sponsor</a>
+  </nav>
+  <label class="search"><span class="sr">Search the docs</span><input type="search" placeholder="Search" data-search data-base="../.." autocomplete="off"><span class="search-results" data-results hidden></span></label>
+</header>
+<div class="layout">
+  <aside id="sidebar" class="sidebar"><div class="nav-group"><p class="nav-title">Start</p><ul><li><a href="../index.html">Overview</a></li><li><a href="getting-started.html">Getting started</a></li><li><a href="commit-hooks.html">Commit and push hooks</a></li><li><a href="ci.html">Running in CI</a></li><li><a href="rollout.html">Rolling out to a repository</a></li></ul></div><div class="nav-group"><p class="nav-title">Guides</p><ul><li><a href="audit.html">Auditing selection</a></li><li><a href="angular.html">Angular</a></li><li><a href="python.html">Python (preview)</a></li><li><a href="php.html">PHP (preview)</a></li><li><a href="studio.html">Studio</a></li><li><a href="vscode.html">VS Code</a></li><li><a href="plugins.html" aria-current="page">Plugins</a></li></ul></div><div class="nav-group"><p class="nav-title">Concepts</p><ul><li><a href="../concepts/how-selection-works.html">How selection works</a></li><li><a href="../concepts/safety-model.html">Safety model</a></li><li><a href="../concepts/runtime-evidence.html">Runtime evidence</a></li><li><a href="../concepts/speed.html">Running less, faster</a></li><li><a href="../concepts/change-tracking.html">Change tracking</a></li><li><a href="../concepts/rules.html">Rules</a></li></ul></div><div class="nav-group"><p class="nav-title">Reference</p><ul><li><a href="../reference/cli.html">CLI</a></li><li><a href="../reference/configuration.html">Configuration</a></li><li><a href="../reference/contracts.html">Public contracts</a></li><li><a href="../benchmarks.html">Benchmarks</a></li><li><a href="../changelog.html">Changelog</a></li></ul></div><div class="nav-group"><p class="nav-title">Results</p><ul><li><a href="../case-studies/leadsit.html">Case study: LeadsIt</a></li><li><a href="../case-studies/benchmarks-1.0.html">Benchmarks for 1.0.0</a></li><li><a href="../case-studies/benchmarks-1.2.html">Benchmarks for 1.2.0</a></li><li><a href="../case-studies/external-repositories.html">External repositories</a></li></ul></div><div class="nav-group"><p class="nav-title">Project</p><ul><li><a href="../planning/roadmap.html">Roadmap</a></li><li><a href="../planning/roadmap-1.5.html">Roadmap 1.x</a></li><li><a href="../planning/delivery.html">Delivery log</a></li><li><a href="../architecture/overview.html">Architecture</a></li><li><a href="../architecture/adr/index.html">Decision records</a></li><li><a href="../architecture/security-review.html">Security review</a></li><li><a href="../design/design-system.html">Design system</a></li><li><a href="../product/PRD.html">Specification</a></li></ul></div><p class="version">Version 1.2.0</p></aside>
+  <main id="content" class="prose">
+<h1 id="plugins">Plugins</h1>
+<p>The Plugin SDK is SmartTest's public extension API. Version 1 is frozen at SmartTest 1.0.0 and covers four contracts:</p>
+<div class="table"><table><thead><tr><th>Contract</th><th>Interface</th><th>What it does</th><th>Loadable from a plugin in 1.0</th></tr></thead><tbody><tr><td>Edge provider</td><td><code>EdgeProvider</code></td><td>Adds dependency edges that static analysis cannot see</td><td>yes</td></tr><tr><td>Runner adapter</td><td><code>TestAdapter</code></td><td>Discovers and runs tests (Vitest, Jest, <code>node --test</code>…)</td><td>not yet</td></tr><tr><td>Version-control adapter</td><td><code>VersionControlAdapter</code></td><td>Reports what changed (Git, Subversion, Mercurial)</td><td>not yet</td></tr><tr><td>Language analyzer</td><td><code>LanguageAnalyzer</code></td><td>Turns a source file into imports, symbols and references</td><td>not yet</td></tr></tbody></table></div>
+<p>SmartTest's built-in adapters implement the last three and pass the <a href="#conformance-kit">conformance kit</a>. In 1.0 a plugin can contribute edge providers; registering runners, version control and analyzers from a plugin will come in a minor release, as new optional fields of <code>SmartTestPlugin</code>. The interfaces themselves will not change.</p>
+<p>Everything is imported from the <code>smarttest</code> package:</p>
+<pre data-lang="ts"><code>import { definePlugin, type EdgeProvider, PLUGIN_API_VERSION } from "@tkmremi/smarttest/plugin-sdk";
+import { assertConformance, checkEdgeProvider } from "@tkmremi/smarttest/plugin-sdk/conformance";</code></pre>
+<p>Every adapter, provider and plugin declares <code>apiVersion: 1</code>. SmartTest refuses a plugin built for another version (<code>ST_PLUGIN_API_VERSION</code>, exit 3).</p>
+<h2 id="edge-providers">Edge providers <a class="anchor" href="#edge-providers" aria-label="Link to this section">#</a></h2>
+<p>TypeScript and JavaScript imports, references and many conventions (environment keys, Prisma models, translation keys, routes) are understood out of the box. An edge provider covers what is left: a file read through a name built at run time, code generated from a schema, a service in another language. It returns edges between project files; <code>from</code> depends on <code>to</code>, so a change to <code>to</code> affects <code>from</code> and every test that reaches <code>from</code>.</p>
+<pre data-lang="js"><code>// tools/sql-edges.mjs
+// A call to the `query` helper: its first argument, as a string literal (group 2) or as code
+// (group 3). Further arguments are ignored. Not matched: the helper's own definition
+// (`function query(`) and other objects' methods (`pool.query(`).
+const CALL = /(?&lt;![\w.$]|function\s*)query\(\s*(?:(["'`])([\w-]+)\1|([^,)]*))/g;
+
+/** @type {import("@tkmremi/smarttest/plugin-sdk").EdgeProvider} */
+const sqlEdges = {
+  apiVersion: 1,
+  id: "sql-queries",
+  getCapabilities: () =&gt; ({ fileEdges: true, unresolved: true, nonSourceFiles: true }),
+  async provideEdges(ctx) {
+    const all = new Set(await ctx.listFiles());
+    const edges = [];
+    const unresolved = [];
+    for (const file of [...ctx.files].sort()) {
+      if (ctx.isTest(file) || !file.startsWith("src/")) continue;
+      for (const m of ((await ctx.readFile(file)) ?? "").matchAll(CALL)) {
+        const name = m[2];
+        if (!name) {
+          unresolved.push({ file, reason: `query(${m[3]?.trim()}) is not a literal name` });
+          continue;
+        }
+        const to = `sql/${name}.sql`;
+        if (all.has(to)) edges.push({ from: file, to, kind: "REFERENCES", confidence: "high" });
+        else unresolved.push({ file, reason: `query("${name}") has no ${to}` });
+      }
+    }
+    return { edges, unresolved };
+  },
+};
+
+/** @type {import("@tkmremi/smarttest/plugin-sdk").SmartTestPlugin} */
+export default { apiVersion: 1, name: "sql-edges", edgeProviders: [sqlEdges] };</code></pre>
+<p>Register it in the configuration, as a path relative to the project root or as an installed package name:</p>
+<pre data-lang="ts"><code>import { defineConfig } from "@tkmremi/smarttest";
+
+export default defineConfig({
+  plugins: ["./tools/sql-edges.mjs"],
+});</code></pre>
+<p>With this plugin, editing <code>sql/find-user.sql</code> selects only the tests that reach a file calling <code>query("find-user")</code>. Without it, SmartTest has no way to connect the SQL file to any test. The <a href="https://github.com/RemiPelloux/SmarttyTest/tree/main/fixtures/projects/plugin-edges-vitest" rel="noopener"><code>plugin-edges-vitest</code></a> fixture is this example, run by the regression harness.</p>
+<h3 id="what-smarttest-guarantees-around-a-provider">What SmartTest guarantees around a provider <a class="anchor" href="#what-smarttest-guarantees-around-a-provider" aria-label="Link to this section">#</a></h3>
+<ul><li><strong>Edges only add tests.</strong> A provider can never make SmartTest skip a test that static analysis selects.</li><li><strong>Unresolved is uncertainty.</strong> Report what you saw but could not resolve in <code>unresolved</code>. In BALANCED and SAFE mode the tests that reach those files are selected; FAST mode skips them and says so in a warning (the same as dynamic imports).</li><li><strong>A broken provider stops the run.</strong> If <code>provideEdges</code> throws, or returns an edge with an absolute or <code>..</code> path, an unknown <code>kind</code> or <code>confidence</code>, the analysis fails with <code>ST_PLUGIN_FAILED</code> (exit 4). SmartTest never treats a failure as "no edges".</li><li><strong>Plugin changes widen.</strong> A change to a plugin file inside the project selects the full suite, because the edges it computes may have changed.</li><li><strong>A plugin is code.</strong> Loading it runs it with your permissions, like loading <code>smarttest.config.ts</code>, including in CI on a pull request that adds it. A path plugin must be a file inside the project: an absolute path, <code>../</code>, or a link that leaves the project is refused (<code>ST_PLUGIN_OUTSIDE_PROJECT</code>, exit 3). A package name resolves from the project's <code>node_modules</code>.</li><li><strong>Provenance is kept.</strong> Provided edges appear in <code>smarttest graph --format json</code> with <code>"provenance": "plugin"</code>.</li></ul>
+<h3 id="contract">Contract <a class="anchor" href="#contract" aria-label="Link to this section">#</a></h3>
+<div class="table"><table><thead><tr><th>Member</th><th>Contract</th></tr></thead><tbody><tr><td><code>apiVersion</code></td><td><code>1</code></td></tr><tr><td><code>id</code></td><td>Stable, unique among providers; shown in warnings and uncertainty reasons</td></tr><tr><td><code>getCapabilities()</code></td><td><code>fileEdges</code>, <code>unresolved</code>, <code>nonSourceFiles</code>: each <code>true</code>, <code>false</code> or <code>"partial"</code>. Anything not declared <code>true</code> is unsupported</td></tr><tr><td><code>provideEdges(ctx)</code></td><td>Called once per analysis. Deterministic for the same files. Local only: no network (ADR-0004)</td></tr><tr><td><code>ctx.root</code></td><td>Absolute project root</td></tr><tr><td><code>ctx.files</code></td><td>Project-relative POSIX paths of the analysed source files, tests included</td></tr><tr><td><code>ctx.listFiles()</code></td><td>Every project file that is not excluded, non-code files included</td></tr><tr><td><code>ctx.readFile(path)</code></td><td>File content, or <code>undefined</code> when it is missing or outside the project</td></tr><tr><td><code>ctx.isTest(path)</code></td><td>Whether SmartTest treats the file as a test</td></tr><tr><td>result <code>edges[]</code></td><td><code>{ from, to, kind, confidence, reason? }</code>; <code>from</code>/<code>to</code> project-relative POSIX paths; <code>kind</code> a graph edge kind such as <code>REFERENCES</code>, <code>IMPORTS</code>, <code>DEPENDS_ON</code>, <code>CONFIGURES</code>; <code>confidence</code> <code>high</code>, <code>medium</code>, <code>low</code> or <code>unknown</code></td></tr><tr><td>result <code>unresolved[]</code></td><td><code>{ file, reason }</code></td></tr></tbody></table></div>
+<p>Capabilities, as SmartTest uses them (ADR-0005):</p>
+<ul><li><code>fileEdges</code> not declared: the provider is never called.</li><li><code>unresolved</code> not <code>true</code>: SmartTest warns that what the provider misses is invisible to it. Its edges still only add tests.</li><li><code>nonSourceFiles</code>: declare it when <code>to</code> can be a file outside <code>ctx.files</code> (SQL, GraphQL, YAML, another language). The conformance kit checks the declaration.</li></ul>
+<p>Edges are file to file in version 1: <code>to</code> changing affects all of <code>from</code>. A symbol-level edge (<code>file#Symbol</code>) can come later as an optional, declared capability.</p>
+<h2 id="runner-adapters">Runner adapters <a class="anchor" href="#runner-adapters" aria-label="Link to this section">#</a></h2>
+<pre data-lang="ts"><code>interface TestAdapter {
+  readonly apiVersion: 1;
+  id: string;
+  discover(): Promise&lt;TestCase[]&gt;;
+  execute(selection: TestSelection, options: ExecutionOptions): Promise&lt;TestRunResult&gt;;
+  collectCoverage?(): Promise&lt;CoverageArtifact&gt;;
+  getCapabilities(): TestAdapterCapabilities;
+}</code></pre>
+<ul><li>Declare all nine capabilities (<code>discovery</code>, <code>fileSelection</code>, <code>testCaseSelection</code>, <code>coverage</code>, <code>tracing</code>, <code>parallel</code>, <code>cancellation</code>, <code>retry</code>, <code>sourceMaps</code>). SmartTest adapts to what is declared, for example by selecting whole files when <code>testCaseSelection</code> is not <code>true</code>. Never emulate a missing capability.</li><li><code>TestCase.filePath</code> and test ids use project-relative POSIX paths. A test id is <code>&lt;file&gt;::&lt;full test name&gt;</code>.</li><li>Report what the runner did: <code>passed</code>, <code>failed</code>, <code>skipped</code>, <code>pending</code>, <code>cancelled</code>, <code>timed-out</code>, <code>flaky</code> or <code>infrastructure-error</code>. A skipped test is never <code>passed</code>, and an adapter never reports <code>cached-pass</code> or <code>cached-failure</code>: those belong to SmartTest's validated cache (ADR-0009).</li><li>A file that cannot run at all (syntax error, crash) is a failed execution, not an empty result.</li><li>A test the runner did not run because something else failed (a hook, a dependency project) is <code>cancelled</code>, never <code>skipped</code>: <code>skipped</code> means the test skipped itself.</li><li>Return the runner's exit code as <code>meta.exitCode</code>, and errors it reports outside any test as <code>meta.runErrors</code>. When the runner exits non-zero or reports such errors and no test failed, SmartTest fails every file of that run (exit 1). Failing results of files beyond the selection (a setup project) fail the run the same way.</li></ul>
+<h2 id="version-control-adapters">Version-control adapters <a class="anchor" href="#version-control-adapters" aria-label="Link to this section">#</a></h2>
+<pre data-lang="ts"><code>interface VersionControlAdapter {
+  readonly apiVersion: 1;
+  readonly id: string;
+  detect(root: string): Promise&lt;boolean&gt;;
+  getWorkingState(): Promise&lt;WorkingState&gt;;
+  getChanges(base: RevisionRef, target?: RevisionRef): Promise&lt;ChangeSet&gt;;
+  getFileContent(path: string, revision: RevisionRef): Promise&lt;Uint8Array | null&gt;;
+  getCapabilities(): VersionControlCapabilities;
+}</code></pre>
+<ul><li><code>RevisionRef.ref</code> is provider-specific: a Git SHA, an SVN revision and a snapshot id are not interchangeable.</li><li>Without <code>target</code>, <code>getChanges</code> compares <code>base</code> with the working copy, untracked files included when <code>untrackedFiles</code> is declared.</li><li><code>ChangeSet.completeness</code> must be honest: <code>partial</code> or <code>unknown</code> when part of the change could not be read. SmartTest runs the full suite when it is <code>unknown</code>, and SAFE mode does so for <code>partial</code> too.</li><li>Without <code>renameDetection</code>, report a rename as a deletion plus an addition.</li><li><code>getFileContent</code> returns <code>null</code> for a file absent at that revision.</li></ul>
+<h2 id="language-analyzers">Language analyzers <a class="anchor" href="#language-analyzers" aria-label="Link to this section">#</a></h2>
+<pre data-lang="ts"><code>interface LanguageAnalyzer {
+  readonly apiVersion: 1;
+  readonly id: string;
+  readonly version: string;
+  supports(path: string): boolean;
+  analyze(path: string, content: string): FileAnalysis;
+}</code></pre>
+<p><code>FileAnalysis</code> lists a file's imports, symbols (ids are <code>&lt;path&gt;#&lt;qualifiedName&gt;</code>), exports and references. Optional fields are enrichments: leaving one out makes selection coarser, never wrong. Report every import you cannot resolve statically in <code>dynamicUnresolved</code>; SmartTest turns it into uncertainty. Change <code>version</code> whenever the output can change, so cached analyses are recomputed. For a language SmartTest does not analyse, an edge provider is usually the simpler start.</p>
+<h2 id="conformance-kit">Conformance kit <a class="anchor" href="#conformance-kit" aria-label="Link to this section">#</a></h2>
+<p><code>@tkmremi/smarttest/plugin-sdk/conformance</code> checks an implementation against the contract with a fixture you provide. It does not depend on a test framework: each function returns a report, and <code>assertConformance</code> throws with every failed check listed.</p>
+<div class="table"><table><thead><tr><th>Function</th><th>Fixture</th></tr></thead><tbody><tr><td><code>checkRunnerAdapter(adapter, fixture?)</code></td><td><code>expectedFiles</code>; <code>run: { files, expect: { [file]: "passed" | "failed" } }</code></td></tr><tr><td><code>checkVcsAdapter(adapter, fixture)</code></td><td>a working copy <code>root</code> with uncommitted changes, <code>outside</code>, <code>base</code>, <code>expectedChanges</code>, <code>fileAtBase</code></td></tr><tr><td><code>checkLanguageAnalyzer(analyzer, fixture)</code></td><td><code>files: { [path]: source }</code>, <code>expect: { imports, symbols, uncertain }</code></td></tr><tr><td><code>checkEdgeProvider(provider, fixture)</code></td><td><code>root</code>, <code>files</code>, <code>allFiles</code>, <code>expectedEdges</code>, <code>expectedUnresolved</code></td></tr><tr><td><code>checkPlugin(plugin, fixtures?)</code></td><td>the default export, and an edge-provider fixture per provider id</td></tr></tbody></table></div>
+<p>The provider reads <code>files</code> from disk, relative to <code>root</code> (through <code>ctx.readFile</code>), so the fixture needs those files under <code>root</code>. <code>allFiles</code> is only the listing <code>ctx.listFiles()</code> returns: files that are listed but never read, like the SQL file here, do not need to exist. Keep a small fixture project next to the test:</p>
+<pre data-lang="text"><code>test/fixtures/sql-app/
+  src/db.ts      export function query(name: string, ...args: unknown[]) { … }
+  src/users.ts   export const findUser = (id: string) =&gt; query("find-user", id);
+  src/report.ts  export const run = (name: string) =&gt; query(name);</code></pre>
+<pre data-lang="ts"><code>// test/sql-edges.test.ts
+import { test } from "node:test";
+import { fileURLToPath } from "node:url";
+import { assertConformance, checkPlugin } from "@tkmremi/smarttest/plugin-sdk/conformance";
+import plugin from "../tools/sql-edges.mjs";
+
+test("sql-edges conforms to the plugin API", async () =&gt; {
+  const report = await checkPlugin(plugin, {
+    edgeProviders: {
+      "sql-queries": {
+        root: fileURLToPath(new URL("./fixtures/sql-app/", import.meta.url)),
+        files: ["src/db.ts", "src/users.ts", "src/report.ts"],
+        allFiles: ["src/db.ts", "src/users.ts", "src/report.ts", "sql/find-user.sql"],
+        expectedEdges: [{ from: "src/users.ts", to: "sql/find-user.sql" }],
+        // The query name in report.ts is only known at run time. db.ts defines `query`
+        // and is not reported.
+        expectedUnresolved: ["src/report.ts"],
+      },
+    },
+  });
+  assertConformance(report);
+});</code></pre>
+<p>With <code>root: process.cwd()</code> and no <code>src/users.ts</code> there, the provider reads nothing and the expected edge is missing.</p>
+<p>The kit checks identity and <code>apiVersion</code>, that every capability is declared, the shape of every result (relative POSIX paths, known kinds and statuses), determinism, the expectations of your fixture, and declarations against behaviour: a runner that discovers tests without declaring <code>discovery</code> fails, so does a provider that points outside the analysed sources without declaring <code>nonSourceFiles</code>.</p>
+<h2 id="the-semver-promise">The semver promise <a class="anchor" href="#the-semver-promise" aria-label="Link to this section">#</a></h2>
+<p>Plugin API version 1 does not change within SmartTest 1.x. Minor releases may add optional members to the interfaces you implement (SmartTest handles their absence), members to the objects SmartTest passes you, capability keys (undeclared counts as unsupported), edge kinds, and conformance checks for behaviour the contract already required. Removing or renaming anything, or adding a required member, waits for a major version together with a new <code>apiVersion</code>. See <a href="../reference/contracts.html">Public contracts</a>.</p>
+    <p class="edit"><a href="https://github.com/RemiPelloux/SmarttyTest/blob/main/documentation/guides/plugins.md" rel="noopener">Edit this page on GitHub</a></p>
+  </main>
+  <nav class="toc" aria-label="On this page"><p class="nav-title">On this page</p><ul><li><a href="#edge-providers">Edge providers</a></li><li><a href="#runner-adapters">Runner adapters</a></li><li><a href="#version-control-adapters">Version-control adapters</a></li><li><a href="#language-analyzers">Language analyzers</a></li><li><a href="#conformance-kit">Conformance kit</a></li><li><a href="#the-semver-promise">The semver promise</a></li></ul></nav>
+</div>
+<script src="../../assets/docs.js" defer></script>
+
+</body>
+</html>

@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://remipelloux.github.io/SmarttyTest/schemas/error.v1.schema.json",
+  "title": "smarttest --json error (v1)",
+  "description": "Printed on stdout instead of the command's document when a command fails with --json. The process exit code follows the category (see documentation/reference/contracts.md).",
+  "type": "object",
+  "required": ["schemaVersion", "error"],
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "error": {
+      "type": "object",
+      "required": ["code", "category", "message"],
+      "properties": {
+        "code": {
+          "description": "Stable identifier such as ST_CONFIG_INVALID.",
+          "type": "string"
+        },
+        "category": {
+          "enum": ["usage", "configuration", "infrastructure", "policy", "test-failure", "internal"]
+        },
+        "message": {
+          "type": "string"
+        },
+        "hint": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

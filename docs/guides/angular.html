@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Angular · SmartTest</title>
+<meta name="description" content="SmartTest selects and runs the specs of Angular CLI workspaces. Most of an Angular application is ordinary TypeScript, which SmartTest already analyses.…">
+<link rel="canonical" href="https://remipelloux.github.io/SmarttyTest/docs/guides/angular.html">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="SmartTest">
+<meta property="og:url" content="https://remipelloux.github.io/SmarttyTest/docs/guides/angular.html">
+<meta property="og:title" content="Angular · SmartTest">
+<meta property="og:description" content="SmartTest selects and runs the specs of Angular CLI workspaces. Most of an Angular application is ordinary TypeScript, which SmartTest already analyses.…">
+<meta property="og:image" content="https://remipelloux.github.io/SmarttyTest/assets/social.png">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="../../assets/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../../assets/site.css">
+<link rel="stylesheet" href="../../assets/docs.css">
+</head>
+<body class="docs">
+<a class="skip" href="#content">Skip to content</a>
+<header class="bar">
+  <a class="wordmark" href="../../index.html"><img src="../../assets/logo.svg" alt="" width="22" height="22"> SmartTest</a>
+  <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="sidebar">Menu</button>
+  <nav class="bar-links" aria-label="Site">
+    <a href="../index.html">Docs</a>
+    <a href="../reference/cli.html">CLI</a>
+    <a href="../planning/roadmap.html">Roadmap</a>
+    <a href="https://github.com/RemiPelloux/SmarttyTest" rel="noopener">GitHub</a>
+    <a href="https://github.com/sponsors/RemiPelloux" rel="noopener">Sponsor</a>
+  </nav>
+  <label class="search"><span class="sr">Search the docs</span><input type="search" placeholder="Search" data-search data-base="../.." autocomplete="off"><span class="search-results" data-results hidden></span></label>
+</header>
+<div class="layout">
+  <aside id="sidebar" class="sidebar"><div class="nav-group"><p class="nav-title">Start</p><ul><li><a href="../index.html">Overview</a></li><li><a href="getting-started.html">Getting started</a></li><li><a href="commit-hooks.html">Commit and push hooks</a></li><li><a href="ci.html">Running in CI</a></li><li><a href="rollout.html">Rolling out to a repository</a></li></ul></div><div class="nav-group"><p class="nav-title">Guides</p><ul><li><a href="audit.html">Auditing selection</a></li><li><a href="angular.html" aria-current="page">Angular</a></li><li><a href="python.html">Python (preview)</a></li><li><a href="php.html">PHP (preview)</a></li><li><a href="studio.html">Studio</a></li><li><a href="vscode.html">VS Code</a></li><li><a href="plugins.html">Plugins</a></li></ul></div><div class="nav-group"><p class="nav-title">Concepts</p><ul><li><a href="../concepts/how-selection-works.html">How selection works</a></li><li><a href="../concepts/safety-model.html">Safety model</a></li><li><a href="../concepts/runtime-evidence.html">Runtime evidence</a></li><li><a href="../concepts/speed.html">Running less, faster</a></li><li><a href="../concepts/change-tracking.html">Change tracking</a></li><li><a href="../concepts/rules.html">Rules</a></li></ul></div><div class="nav-group"><p class="nav-title">Reference</p><ul><li><a href="../reference/cli.html">CLI</a></li><li><a href="../reference/configuration.html">Configuration</a></li><li><a href="../reference/contracts.html">Public contracts</a></li><li><a href="../benchmarks.html">Benchmarks</a></li><li><a href="../changelog.html">Changelog</a></li></ul></div><div class="nav-group"><p class="nav-title">Results</p><ul><li><a href="../case-studies/leadsit.html">Case study: LeadsIt</a></li><li><a href="../case-studies/benchmarks-1.0.html">Benchmarks for 1.0.0</a></li><li><a href="../case-studies/benchmarks-1.2.html">Benchmarks for 1.2.0</a></li><li><a href="../case-studies/external-repositories.html">External repositories</a></li></ul></div><div class="nav-group"><p class="nav-title">Project</p><ul><li><a href="../planning/roadmap.html">Roadmap</a></li><li><a href="../planning/roadmap-1.5.html">Roadmap 1.x</a></li><li><a href="../planning/delivery.html">Delivery log</a></li><li><a href="../architecture/overview.html">Architecture</a></li><li><a href="../architecture/adr/index.html">Decision records</a></li><li><a href="../architecture/security-review.html">Security review</a></li><li><a href="../design/design-system.html">Design system</a></li><li><a href="../product/PRD.html">Specification</a></li></ul></div><p class="version">Version 1.2.0</p></aside>
+  <main id="content" class="prose">
+<h1 id="angular">Angular</h1>
+<p>SmartTest selects and runs the specs of Angular CLI workspaces. Most of an Angular application is ordinary TypeScript, which SmartTest already analyses. This guide covers what is specific to Angular: templates and styles loaded by path, <code>ng test</code>, and <code>angular.json</code>.</p>
+<h2 id="supported-setups">Supported setups <a class="anchor" href="#supported-setups" aria-label="Link to this section">#</a></h2>
+<div class="table"><table><thead><tr><th>Setup</th><th>How SmartTest runs the specs</th><th>Type errors fail the run</th></tr></thead><tbody><tr><td><code>@angular/build:unit-test</code> with Vitest (the default since Angular 21)</td><td><code>ng test &lt;project&gt; --include &lt;spec&gt;…</code></td><td>yes</td></tr><tr><td><code>@angular-builders/jest:run</code></td><td><code>ng test &lt;project&gt; --test-path-patterns &lt;spec&gt;…</code></td><td>no</td></tr><tr><td><code>jest-preset-angular</code> with a <code>jest.config.*</code> (no <code>ng test</code> target)</td><td>Jest directly</td><td>no</td></tr><tr><td><code>@analogjs/vitest-angular</code> with a <code>vite.config.*</code>/<code>vitest.config.*</code></td><td>Vitest directly</td><td>no</td></tr><tr><td>Karma (<code>@angular/build:karma</code>, <code>@angular-devkit/build-angular:karma</code>, or the unit-test builder with <code>runner: "karma"</code>)</td><td>not run: <code>ST_ANGULAR_KARMA_UNSUPPORTED</code></td><td>—</td></tr></tbody></table></div>
+<p>Each project of an <code>angular.json</code> whose <code>test</code> target uses one of the <code>ng test</code> builders is its own runner, named after the project: <code>smarttest doctor</code> shows <code>angular (angular.json) collects 12 test file(s)</code>. To declare one by hand, for example when two projects share a directory and you want only one:</p>
+<pre data-lang="ts"><code>export default defineConfig({
+  runners: [{ adapter: "angular", config: "angular.json", project: "shop" }],
+});</code></pre>
+<p><strong>Karma.</strong> Karma gives no report per test, so SmartTest cannot say which spec failed. Rather than report a run from its exit code alone, it stops with <code>ST_ANGULAR_KARMA_UNSUPPORTED</code>. Angular's migration (<code>ng generate @schematics/angular:refactor-jasmine-vitest</code>) moves a project to the unit-test builder with Vitest.</p>
+<p><strong>Nx workspaces</strong> (projects in <code>project.json</code>, run with <code>nx test</code>) are not read yet; they are part of the monorepo orchestration planned for 1.5.0.</p>
+<h2 id="what-selects-a-spec">What selects a spec <a class="anchor" href="#what-selects-a-spec" aria-label="Link to this section">#</a></h2>
+<div class="table"><table><thead><tr><th>You change</th><th>Selected</th></tr></thead><tbody><tr><td>A component's template (<code>templateUrl</code>) or stylesheet (<code>styleUrl</code>, <code>styleUrls</code>)</td><td>The specs that reach that component</td></tr><tr><td>A Sass, Less or CSS file another stylesheet imports (<code>@use</code>, <code>@forward</code>, <code>@import</code>)</td><td>The specs of every component whose stylesheet imports it, directly or through other partials</td></tr><tr><td>A component, service, pipe, guard or route file</td><td>The specs that reach the code that changed, as in any TypeScript project</td></tr><tr><td>Any file a spec reaches, on a builder that type-checks (see the table above)</td><td>That spec, whatever unit changed: a type error there fails <code>ng test</code></td></tr><tr><td><code>angular.json</code>, the test target's <code>tsConfig</code> (<code>tsconfig.spec.json</code>), <code>runnerConfig</code></td><td>Every spec of that project</td></tr><tr><td>A <code>setupFiles</code> or <code>providersFile</code>, a polyfill file, a global <code>styles</code> or <code>scripts</code> entry</td><td>Every spec of that project</td></tr><tr><td>A file in <code>fileReplacements</code> (<code>environment.development.ts</code>)</td><td>The specs that reach the file it replaces (<code>environment.ts</code>)</td></tr><tr><td>A comment or formatting only</td><td>Nothing new</td></tr></tbody></table></div>
+<p>Lazy routes are imports: <code>loadComponent: () =&gt; import("./a")</code>, <code>loadChildren: () =&gt; import("./b.routes")</code>, and the legacy string form <code>loadChildren: "./c/c.module#CModule"</code>.</p>
+<p>Dependency injection needs nothing special. <code>inject(Service)</code>, constructor parameters and <code>providers: [Service]</code> all import their token, so a change to a service selects the specs that reach it through those imports.</p>
+<h2 id="what-is-uncertainty">What is uncertainty <a class="anchor" href="#what-is-uncertainty" aria-label="Link to this section">#</a></h2>
+<p>A template or style path SmartTest cannot evaluate (<code>templateUrl: pick()</code>) is uncertainty: in BALANCED and SAFE the specs that reach that component are selected. A partial imported through a load path (<code>stylePreprocessorOptions.includePaths</code>, <code>@use "abstracts/vars"</code>) is matched by path suffix, which may select more specs than strictly needed, never fewer.</p>
+<h2 id="reading-explain">Reading <code>explain</code> <a class="anchor" href="#reading-explain" aria-label="Link to this section">#</a></h2>
+<pre data-lang="text"><code>$ smarttest explain src/app/badge/badge.spec.ts
+[SELECTED]  src/app/badge/badge.spec.ts
+Reasons
+  • Directly depends on src/app/badge/badge.ts#Badge
+  src/app/badge/badge.ts#Badge → src/app/badge/badge.spec.ts</code></pre>
+<p>After a template change, the reason names the component that loads the template (<code>badge.ts#Badge</code>), because the template belongs to that class. After a change to <code>angular.json</code> or a setup file, the reason names the option: <code>src/styles.scss changed — global stylesheet of angular (styles in angular.json)</code>.</p>
+    <p class="edit"><a href="https://github.com/RemiPelloux/SmarttyTest/blob/main/documentation/guides/angular.md" rel="noopener">Edit this page on GitHub</a></p>
+  </main>
+  <nav class="toc" aria-label="On this page"><p class="nav-title">On this page</p><ul><li><a href="#supported-setups">Supported setups</a></li><li><a href="#what-selects-a-spec">What selects a spec</a></li><li><a href="#what-is-uncertainty">What is uncertainty</a></li><li><a href="#reading-explain">Reading explain</a></li></ul></nav>
+</div>
+<script src="../../assets/docs.js" defer></script>
+
+</body>
+</html>

@@ -1,0 +1,114 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://remipelloux.github.io/SmarttyTest/schemas/validate-selection.v1.schema.json",
+  "title": "smarttest validate-selection --json (v1)",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "command",
+    "selected",
+    "skipped",
+    "failuresFound",
+    "failuresMissed",
+    "flakyInterference",
+    "fullDurationMs",
+    "selectedDurationMs",
+    "analysisOverheadMs",
+    "savedPct",
+    "decision"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "command": {
+      "const": "validate-selection"
+    },
+    "selected": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "skipped": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "failuresFound": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "failuresMissed": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["test", "note"]
+      }
+    },
+    "live": {
+      "description": "Live Playwright specs (a deployed environment) the reference run did not run without --live: neither found nor missed, never passed.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["file", "projects", "baseURL"]
+      }
+    },
+    "flakyInterference": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "fullDurationMs": {
+      "type": "number"
+    },
+    "selectedDurationMs": {
+      "type": "number"
+    },
+    "analysisOverheadMs": {
+      "type": "number"
+    },
+    "savedPct": {
+      "type": "number"
+    },
+    "decision": {
+      "type": "object",
+      "required": [
+        "selectedTests",
+        "skippedTests",
+        "affectedFiles",
+        "affectedSymbols",
+        "analysisStatus",
+        "safetyMode",
+        "reasons",
+        "warnings",
+        "fallbackApplied"
+      ],
+      "properties": {
+        "selectedTests": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["testId", "filePath", "reasons"]
+          }
+        },
+        "skippedTests": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["testId", "filePath", "reasons"]
+          }
+        },
+        "analysisStatus": {
+          "enum": ["complete", "partial", "fallback"]
+        },
+        "safetyMode": {
+          "enum": ["fast", "balanced", "safe"]
+        },
+        "fallbackApplied": {
+          "type": "boolean"
+        }
+      }
+    }
+  }
+}

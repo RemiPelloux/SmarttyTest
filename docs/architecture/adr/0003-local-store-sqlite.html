@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ADR-0003: Local intelligence store · SmartTest</title>
+<meta name="description" content="The symbol index, graph inputs, snapshots and run history must persist between runs. Installation must not require a compiler toolchain on any OS, and…">
+<link rel="canonical" href="https://remipelloux.github.io/SmarttyTest/docs/architecture/adr/0003-local-store-sqlite.html">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="SmartTest">
+<meta property="og:url" content="https://remipelloux.github.io/SmarttyTest/docs/architecture/adr/0003-local-store-sqlite.html">
+<meta property="og:title" content="ADR-0003: Local intelligence store · SmartTest">
+<meta property="og:description" content="The symbol index, graph inputs, snapshots and run history must persist between runs. Installation must not require a compiler toolchain on any OS, and…">
+<meta property="og:image" content="https://remipelloux.github.io/SmarttyTest/assets/social.png">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="../../../assets/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../../../assets/site.css">
+<link rel="stylesheet" href="../../../assets/docs.css">
+</head>
+<body class="docs">
+<a class="skip" href="#content">Skip to content</a>
+<header class="bar">
+  <a class="wordmark" href="../../../index.html"><img src="../../../assets/logo.svg" alt="" width="22" height="22"> SmartTest</a>
+  <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="sidebar">Menu</button>
+  <nav class="bar-links" aria-label="Site">
+    <a href="../../index.html">Docs</a>
+    <a href="../../reference/cli.html">CLI</a>
+    <a href="../../planning/roadmap.html">Roadmap</a>
+    <a href="https://github.com/RemiPelloux/SmarttyTest" rel="noopener">GitHub</a>
+    <a href="https://github.com/sponsors/RemiPelloux" rel="noopener">Sponsor</a>
+  </nav>
+  <label class="search"><span class="sr">Search the docs</span><input type="search" placeholder="Search" data-search data-base="../../.." autocomplete="off"><span class="search-results" data-results hidden></span></label>
+</header>
+<div class="layout">
+  <aside id="sidebar" class="sidebar"><div class="nav-group"><p class="nav-title">Start</p><ul><li><a href="../../index.html">Overview</a></li><li><a href="../../guides/getting-started.html">Getting started</a></li><li><a href="../../guides/commit-hooks.html">Commit and push hooks</a></li><li><a href="../../guides/ci.html">Running in CI</a></li><li><a href="../../guides/rollout.html">Rolling out to a repository</a></li></ul></div><div class="nav-group"><p class="nav-title">Guides</p><ul><li><a href="../../guides/audit.html">Auditing selection</a></li><li><a href="../../guides/angular.html">Angular</a></li><li><a href="../../guides/python.html">Python (preview)</a></li><li><a href="../../guides/php.html">PHP (preview)</a></li><li><a href="../../guides/studio.html">Studio</a></li><li><a href="../../guides/vscode.html">VS Code</a></li><li><a href="../../guides/plugins.html">Plugins</a></li></ul></div><div class="nav-group"><p class="nav-title">Concepts</p><ul><li><a href="../../concepts/how-selection-works.html">How selection works</a></li><li><a href="../../concepts/safety-model.html">Safety model</a></li><li><a href="../../concepts/runtime-evidence.html">Runtime evidence</a></li><li><a href="../../concepts/speed.html">Running less, faster</a></li><li><a href="../../concepts/change-tracking.html">Change tracking</a></li><li><a href="../../concepts/rules.html">Rules</a></li></ul></div><div class="nav-group"><p class="nav-title">Reference</p><ul><li><a href="../../reference/cli.html">CLI</a></li><li><a href="../../reference/configuration.html">Configuration</a></li><li><a href="../../reference/contracts.html">Public contracts</a></li><li><a href="../../benchmarks.html">Benchmarks</a></li><li><a href="../../changelog.html">Changelog</a></li></ul></div><div class="nav-group"><p class="nav-title">Results</p><ul><li><a href="../../case-studies/leadsit.html">Case study: LeadsIt</a></li><li><a href="../../case-studies/benchmarks-1.0.html">Benchmarks for 1.0.0</a></li><li><a href="../../case-studies/benchmarks-1.2.html">Benchmarks for 1.2.0</a></li><li><a href="../../case-studies/external-repositories.html">External repositories</a></li></ul></div><div class="nav-group"><p class="nav-title">Project</p><ul><li><a href="../../planning/roadmap.html">Roadmap</a></li><li><a href="../../planning/roadmap-1.5.html">Roadmap 1.x</a></li><li><a href="../../planning/delivery.html">Delivery log</a></li><li><a href="../overview.html">Architecture</a></li><li><a href="index.html">Decision records</a></li><li><a href="../security-review.html">Security review</a></li><li><a href="../../design/design-system.html">Design system</a></li><li><a href="../../product/PRD.html">Specification</a></li></ul></div><p class="version">Version 1.2.0</p></aside>
+  <main id="content" class="prose">
+<h1 id="adr-0003-local-intelligence-store">ADR-0003: Local intelligence store</h1>
+<ul><li><strong>Status:</strong> Accepted, with an amended decision (spike ST-013 closed in v0.1.0). SQLite was deferred</li><li><strong>Related:</strong> ST-013, ST-045, ST-047, PRD §4.3, §8.3</li></ul>
+<h2 id="context">Context <a class="anchor" href="#context" aria-label="Link to this section">#</a></h2>
+<p>The symbol index, graph inputs, snapshots and run history must persist between runs. Installation must not require a compiler toolchain on any OS, and <code>node:sqlite</code> is not stable across every supported Node release (22.12+).</p>
+<h2 id="decision">Decision <a class="anchor" href="#decision" aria-label="Link to this section">#</a></h2>
+<ul><li>1.0 uses a <strong>JSON file store</strong> in <code>.smarttest/</code> (write-once, atomic temp+rename):
+<ul><li><code>state/index.json</code> holds per-file analyses keyed by content hash, file stats (mtime/size) and a resolution-context key. It is written compactly and <strong>only when something changed</strong>. A run that re-parses a few files writes them to <code>state/index-delta.json</code>, which names the full write it applies to (amended in 1.0.0).</li><li><code>state/snapshots/*.json</code> and <code>state/blobs/</code> hold snapshot manifests and optional gzip content, deduplicated.</li><li><code>runs/</code> holds reports, the last decision, coverage and flaky history. <code>logs/</code> holds redacted, rotated JSON logs.</li></ul></li><li>The <strong>graph is derived</strong>. Since 1.0.0 it is also persisted as a cache (<code>state/graph.json</code>, see the amendment below); it is never a source of truth.</li><li>Corrupt or incompatible stores are <strong>rebuilt with a warning</strong>. They're a cache of derivable data, never a source of truth.</li></ul>
+<h2 id="why-not-sqlite-yet">Why not SQLite (yet) <a class="anchor" href="#why-not-sqlite-yet" aria-label="Link to this section">#</a></h2>
+<p>Measured on synthetic repos: rebuilding the graph from cached analyses takes about 1 ms at 50 modules, about 10 ms at 500 and about 70–120 ms at 2,000. A warm index load takes 5–120 ms. SQLite would add a native dependency or an experimental API with no measurable benefit at these sizes. We'll revisit when benchmarks on larger repositories show the JSON store becoming the bottleneck. The storage interface keeps that change local.</p>
+<h2 id="consequences">Consequences <a class="anchor" href="#consequences" aria-label="Link to this section">#</a></h2>
+<ul><li>Zero native dependencies. Works on every supported Node version.</li><li>Memory grows with repository size (about 320 MB RSS at 4,000 files). This is acceptable for 1.0 and tracked in the benchmarks.</li></ul>
+<h2 id="amendment-100-persisted-graph-and-index-deltas">Amendment (1.0.0): persisted graph and index deltas <a class="anchor" href="#amendment-100-persisted-graph-and-index-deltas" aria-label="Link to this section">#</a></h2>
+<p>At 10,000 modules, rebuilding the graph took 100–150 ms and rewriting the 34 MB index after a one-file edit took about 80 ms, on every warm run. Both are now incremental, and both stay caches that are rebuilt on any doubt:</p>
+<ul><li><code>state/graph.json</code> is a header line and the serialized graph. The header records the SmartTest version, the graph and store formats, hashes of the configuration and of the graph options (routes, end-to-end specs), a hash of every file's module resolution, each file's content hash with its analyzer version and a hash of its surface (imports, exports, declarations), and the SHA-256 of the graph line. The graph is used only when all of these match the current analyses. Files whose content changed while their surface did not are patched into it, as watch mode patches its in-memory graph; any other difference, a damaged file or a checksum mismatch rebuilds it. A patched graph is written back once more than 32 files differ from the stored one.</li><li><code>state/index-delta.json</code> holds the analyses and stats changed since <code>index.json</code> was written, with the id of that full write. A delta for another full write is ignored; the index's per-file stat and content-hash checks then re-parse what changed. The full index is rewritten when the delta exceeds 64 paths (or 2% of the files) or when resolution context changes.</li></ul>
+    <p class="edit"><a href="https://github.com/RemiPelloux/SmarttyTest/blob/main/documentation/architecture/adr/0003-local-store-sqlite.md" rel="noopener">Edit this page on GitHub</a></p>
+  </main>
+  <nav class="toc" aria-label="On this page"><p class="nav-title">On this page</p><ul><li><a href="#context">Context</a></li><li><a href="#decision">Decision</a></li><li><a href="#why-not-sqlite-yet">Why not SQLite (yet)</a></li><li><a href="#consequences">Consequences</a></li><li><a href="#amendment-100-persisted-graph-and-index-deltas">Amendment (1.0.0): persisted graph and index deltas</a></li></ul></nav>
+</div>
+<script src="../../../assets/docs.js" defer></script>
+
+</body>
+</html>

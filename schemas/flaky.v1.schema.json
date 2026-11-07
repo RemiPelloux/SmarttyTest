@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://remipelloux.github.io/SmarttyTest/schemas/flaky.v1.schema.json",
+  "title": "smarttest flaky --json (v1)",
+  "type": "object",
+  "required": ["schemaVersion", "command", "minRate", "tests"],
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "command": {
+      "const": "flaky"
+    },
+    "minRate": {
+      "type": "number"
+    },
+    "tests": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["testId", "file", "runs", "flakeRate", "failureRate", "recent"],
+        "properties": {
+          "testId": {
+            "type": "string"
+          },
+          "file": {
+            "type": "string"
+          },
+          "runs": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "flakeRate": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "failureRate": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "recent": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}

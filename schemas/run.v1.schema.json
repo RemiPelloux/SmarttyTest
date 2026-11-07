@@ -1,0 +1,186 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://remipelloux.github.io/SmarttyTest/schemas/run.v1.schema.json",
+  "title": "smarttest run --json (v1)",
+  "type": "object",
+  "required": ["schemaVersion", "command"],
+  "oneOf": [
+    {
+      "description": "A run that executed: the report, the written report files and the integrity check. `run --hook` adds `hook`.",
+      "required": ["report", "reports", "integrityIssues"]
+    },
+    {
+      "description": "`run --hook` only, when nothing ran: the hook was bypassed (SMARTTEST_SKIP=1, `hook.skipped` true) or the push only deleted remote refs (`hook.nothingPushed` true). No tests ran, so there is no report and nothing passed.",
+      "required": ["hook"],
+      "additionalProperties": false,
+      "properties": {
+        "schemaVersion": { "const": 1 },
+        "command": { "const": "run" },
+        "hook": {
+          "type": "object",
+          "required": ["stage", "skipped"],
+          "anyOf": [
+            { "properties": { "skipped": { "const": true } } },
+            { "required": ["nothingPushed"], "properties": { "nothingPushed": { "const": true } } }
+          ]
+        }
+      }
+    }
+  ],
+  "properties": {
+    "hook": {
+      "description": "`run --hook` only: the hook outcome (stage, bypass, checks, warnings, tests left to CI, duration).",
+      "type": "object",
+      "required": ["stage", "skipped", "checks", "warnings", "durationMs"],
+      "properties": {
+        "stage": { "enum": ["pre-commit", "pre-push"] },
+        "skipped": { "type": "boolean" },
+        "nothingPushed": { "type": "boolean" },
+        "checks": { "type": "array" },
+        "warnings": { "type": "array" }
+      }
+    },
+    "schemaVersion": {
+      "const": 1
+    },
+    "command": {
+      "const": "run"
+    },
+    "report": {
+      "type": "object",
+      "required": [
+        "schemaVersion",
+        "tool",
+        "runId",
+        "command",
+        "startedAt",
+        "finishedAt",
+        "project",
+        "mode",
+        "change",
+        "decision",
+        "executions",
+        "summary",
+        "timings",
+        "warnings"
+      ],
+      "properties": {
+        "decision": {
+          "type": "object",
+          "required": [
+            "selectedTests",
+            "skippedTests",
+            "affectedFiles",
+            "affectedSymbols",
+            "analysisStatus",
+            "safetyMode",
+            "reasons",
+            "warnings",
+            "fallbackApplied"
+          ]
+        },
+        "summary": {
+          "type": "object",
+          "required": [
+            "totalTests",
+            "selected",
+            "executed",
+            "skippedBySelection",
+            "passed",
+            "failed",
+            "flaky",
+            "timedOut",
+            "cancelled",
+            "infrastructureErrors",
+            "skippedByTests",
+            "durationMs"
+          ]
+        },
+        "executions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["file", "adapter", "status", "durationMs", "tests"]
+          }
+        },
+        "change": {
+          "type": "object",
+          "required": ["description", "changeSet"],
+          "properties": {
+            "only": {
+              "description": "Present only with --only: the change set was restricted to these paths before selection. The dependency analysis was not restricted.",
+              "type": "object",
+              "required": ["paths", "matched", "unchanged", "excluded"],
+              "properties": {
+                "paths": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "Requested project-relative files or directories."
+                },
+                "matched": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "Changed files kept for selection."
+                },
+                "unchanged": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "Requested paths with no change: no test is selected for them."
+                },
+                "excluded": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "Other changed files, left out: tests affected only by them were not selected."
+                }
+              }
+            }
+          }
+        },
+        "leftToCi": {
+          "description": "Hook runs only: selected test files the hook scope (hook.runners, hook.exclude) did not run. Never passed; summary.leftToCi counts them.",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["file", "adapter", "rule"]
+          }
+        },
+        "live": {
+          "description": "Selected Playwright specs whose projects only target a deployed environment (an https:// baseURL that is not local), not run because --live was not given. Never passed; summary.live counts them.",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["file", "projects", "baseURL"],
+            "properties": {
+              "file": {
+                "type": "string"
+              },
+              "projects": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "baseURL": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    },
+    "reports": {
+      "type": "object"
+    },
+    "integrityIssues": {
+      "type": "array"
+    }
+  }
+}

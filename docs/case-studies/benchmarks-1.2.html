@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Benchmarks for 1.2.0: OpenPro's JavaScript repositories · SmartTest</title>
+<meta name="description" content="S31 left one item undone: OpenPro's four JavaScript repositories in the published benchmarks. They were replayed on 5 November 2026 with smarttest…">
+<link rel="canonical" href="https://remipelloux.github.io/SmarttyTest/docs/case-studies/benchmarks-1.2.html">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="SmartTest">
+<meta property="og:url" content="https://remipelloux.github.io/SmarttyTest/docs/case-studies/benchmarks-1.2.html">
+<meta property="og:title" content="Benchmarks for 1.2.0: OpenPro's JavaScript repositories · SmartTest">
+<meta property="og:description" content="S31 left one item undone: OpenPro's four JavaScript repositories in the published benchmarks. They were replayed on 5 November 2026 with smarttest…">
+<meta property="og:image" content="https://remipelloux.github.io/SmarttyTest/assets/social.png">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="../../assets/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../../assets/site.css">
+<link rel="stylesheet" href="../../assets/docs.css">
+</head>
+<body class="docs">
+<a class="skip" href="#content">Skip to content</a>
+<header class="bar">
+  <a class="wordmark" href="../../index.html"><img src="../../assets/logo.svg" alt="" width="22" height="22"> SmartTest</a>
+  <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="sidebar">Menu</button>
+  <nav class="bar-links" aria-label="Site">
+    <a href="../index.html">Docs</a>
+    <a href="../reference/cli.html">CLI</a>
+    <a href="../planning/roadmap.html">Roadmap</a>
+    <a href="https://github.com/RemiPelloux/SmarttyTest" rel="noopener">GitHub</a>
+    <a href="https://github.com/sponsors/RemiPelloux" rel="noopener">Sponsor</a>
+  </nav>
+  <label class="search"><span class="sr">Search the docs</span><input type="search" placeholder="Search" data-search data-base="../.." autocomplete="off"><span class="search-results" data-results hidden></span></label>
+</header>
+<div class="layout">
+  <aside id="sidebar" class="sidebar"><div class="nav-group"><p class="nav-title">Start</p><ul><li><a href="../index.html">Overview</a></li><li><a href="../guides/getting-started.html">Getting started</a></li><li><a href="../guides/commit-hooks.html">Commit and push hooks</a></li><li><a href="../guides/ci.html">Running in CI</a></li><li><a href="../guides/rollout.html">Rolling out to a repository</a></li></ul></div><div class="nav-group"><p class="nav-title">Guides</p><ul><li><a href="../guides/audit.html">Auditing selection</a></li><li><a href="../guides/angular.html">Angular</a></li><li><a href="../guides/python.html">Python (preview)</a></li><li><a href="../guides/php.html">PHP (preview)</a></li><li><a href="../guides/studio.html">Studio</a></li><li><a href="../guides/vscode.html">VS Code</a></li><li><a href="../guides/plugins.html">Plugins</a></li></ul></div><div class="nav-group"><p class="nav-title">Concepts</p><ul><li><a href="../concepts/how-selection-works.html">How selection works</a></li><li><a href="../concepts/safety-model.html">Safety model</a></li><li><a href="../concepts/runtime-evidence.html">Runtime evidence</a></li><li><a href="../concepts/speed.html">Running less, faster</a></li><li><a href="../concepts/change-tracking.html">Change tracking</a></li><li><a href="../concepts/rules.html">Rules</a></li></ul></div><div class="nav-group"><p class="nav-title">Reference</p><ul><li><a href="../reference/cli.html">CLI</a></li><li><a href="../reference/configuration.html">Configuration</a></li><li><a href="../reference/contracts.html">Public contracts</a></li><li><a href="../benchmarks.html">Benchmarks</a></li><li><a href="../changelog.html">Changelog</a></li></ul></div><div class="nav-group"><p class="nav-title">Results</p><ul><li><a href="leadsit.html">Case study: LeadsIt</a></li><li><a href="benchmarks-1.0.html">Benchmarks for 1.0.0</a></li><li><a href="benchmarks-1.2.html" aria-current="page">Benchmarks for 1.2.0</a></li><li><a href="external-repositories.html">External repositories</a></li></ul></div><div class="nav-group"><p class="nav-title">Project</p><ul><li><a href="../planning/roadmap.html">Roadmap</a></li><li><a href="../planning/roadmap-1.5.html">Roadmap 1.x</a></li><li><a href="../planning/delivery.html">Delivery log</a></li><li><a href="../architecture/overview.html">Architecture</a></li><li><a href="../architecture/adr/index.html">Decision records</a></li><li><a href="../architecture/security-review.html">Security review</a></li><li><a href="../design/design-system.html">Design system</a></li><li><a href="../product/PRD.html">Specification</a></li></ul></div><p class="version">Version 1.2.0</p></aside>
+  <main id="content" class="prose">
+<h1 id="benchmarks-for-120-openpros-javascript-repositories">Benchmarks for 1.2.0: OpenPro's JavaScript repositories</h1>
+<p>S31 left one item undone: OpenPro's four JavaScript repositories in the published benchmarks. They were replayed on 5 November 2026 with <code>smarttest benchmark</code>, using the CLI built from <code>main</code> at <code>904ec2f</code> (1.1.1 plus the branch-push fix), packed with <code>pnpm bundle:cli</code> and installed from the tarball. Method as in <a href="benchmarks-1.0.html">1.0.0</a>: fresh clones (<code>git clone --no-hardlinks</code>), <code>node_modules</code> copied from the working copies, each repository's committed SmartTest configuration, the hook's runners (<code>hook.runners</code>), Vitest with an 8 GB heap, one benchmark at a time behind the machine-wide lock. Raw results: <a href="https://github.com/RemiPelloux/SmarttyTest/tree/main/benchmarks/releases/1.2.0" rel="noopener"><code>benchmarks/releases/1.2.0/</code></a>.</p>
+<h2 id="result-0-missed-failures-on-all-four">Result: 0 missed failures on all four <a class="anchor" href="#result-0-missed-failures-on-all-four" aria-label="Link to this section">#</a></h2>
+<div class="table"><table><thead><tr><th>Repository</th><th>Test files</th><th>Commits</th><th>Full runs</th><th>SmartTest</th><th>Saved</th><th>Test files run</th><th>Full-suite fallbacks</th><th>Missed</th><th>Already failing</th></tr></thead><tbody><tr><td>openpro-front</td><td>2,323</td><td>8</td><td>20 min 29 s</td><td>5 min 5 s</td><td>75%</td><td>2,353 / 18,553</td><td>0</td><td>0</td><td>1</td></tr><tr><td>openpro-admin</td><td>215–222</td><td>12</td><td>3 min 33 s</td><td>1 min 51 s</td><td>48%</td><td>991 / 2,604</td><td>3</td><td>0</td><td>0</td></tr><tr><td>openpro-mcp-service</td><td>16–20</td><td>12</td><td>72.8 s</td><td>60.9 s</td><td>16%</td><td>145 / 206</td><td>6</td><td>0</td><td>11</td></tr><tr><td>OpenProMonitor</td><td>7–19</td><td>12</td><td>14.3 s</td><td>9.4 s</td><td>34%</td><td>65 / 157</td><td>5</td><td>0</td><td>0</td></tr></tbody></table></div>
+<p>"Full-suite fallbacks" are commits where a mandatory trigger (a lockfile, <code>package.json</code>, a runner config) ran everything. "Test files run" counts test-file runs summed over the replayed commits. One test file in openpro-front and one in openpro-admin failed once under load and passed on rerun (<code>loadFlaky</code>), not counted as missed.</p>
+<h2 id="per-repository">Per repository <a class="anchor" href="#per-repository" aria-label="Link to this section">#</a></h2>
+<ul><li><strong>openpro-front</strong>: six ordinary commits select 124–130 of 2,323 test files and take about 20 s instead of 150 s. The two commits that touched the translation sources (<code>595ca29c</code>, <code>b13ecc26</code>, the « Candidatures par SMS » fix) select about 800 files, since every component that reads those keys is a candidate: 90 s instead of 150 s.</li><li><strong>openpro-admin</strong>: three dependency commits run everything; the others select 1–40 files.</li><li><strong>openpro-mcp-service</strong> and <strong>OpenProMonitor</strong>: small suites (6.6 s and under 2 s for everything), and half the window is dependency or configuration commits, so the saving is small. The 11 "already failing" results in openpro-mcp-service fail on the parent commit too.</li></ul>
+<p>Previous: <a href="benchmarks-1.0.html">1.0.0 benchmarks</a>.</p>
+    <p class="edit"><a href="https://github.com/RemiPelloux/SmarttyTest/blob/main/documentation/case-studies/benchmarks-1.2.md" rel="noopener">Edit this page on GitHub</a></p>
+  </main>
+  <div></div>
+</div>
+<script src="../../assets/docs.js" defer></script>
+
+</body>
+</html>
