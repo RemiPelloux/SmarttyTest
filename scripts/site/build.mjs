@@ -177,6 +177,11 @@ const NAV = [
         "Real repositories replayed at 0 missed failures.",
       ],
       [
+        "Benchmarks for 1.2.0",
+        "docs/case-studies/benchmarks-1.2.html",
+        "OpenPro's four JavaScript repositories: 0 missed failures, 16–75% less test time.",
+      ],
+      [
         "External repositories",
         "docs/case-studies/external-repositories.html",
         "The 0.6.0 adoption check on repositories never seen before.",
@@ -281,6 +286,7 @@ function docPage({ sitePath, srcFile, title, html, headings, hasMermaid }) {
     <a href="${up("docs/reference/cli.html")}">CLI</a>
     <a href="${up("docs/planning/roadmap.html")}">Roadmap</a>
     <a href="${REPO}" rel="noopener">GitHub</a>
+    <a href="https://github.com/sponsors/RemiPelloux" rel="noopener">Sponsor</a>
   </nav>
   <label class="search"><span class="sr">Search the docs</span><input type="search" placeholder="Search" data-search data-base="${up("")}" autocomplete="off"><span class="search-results" data-results hidden></span></label>
 </header>

@@ -7,6 +7,10 @@
   "bugs": {
     "url": "https://github.com/RemiPelloux/SmarttyTest/issues"
   },
+  "funding": {
+    "type": "github",
+    "url": "https://github.com/sponsors/RemiPelloux"
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/RemiPelloux/SmarttyTest.git",

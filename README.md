@@ -4,6 +4,7 @@
 
 <p align="center">
   <a href="https://www.npmjs.com/package/@tkmremi/smarttest"><img alt="npm: @tkmremi/smarttest 1.0.0" src="https://img.shields.io/badge/npm-%40tkmremi%2Fsmarttest%201.0.0-34D399?style=flat-square&amp;labelColor=0E1530"></a>
+  <a href="https://github.com/sponsors/RemiPelloux"><img alt="Sponsor SmartTest on GitHub" src="https://img.shields.io/badge/sponsor-%E2%99%A5-F472B6?style=flat-square&amp;labelColor=0E1530"></a>
   <a href="LICENSE"><img alt="License: Apache-2.0" src="https://img.shields.io/badge/license-Apache--2.0-8B5CF6?style=flat-square&amp;labelColor=0E1530"></a>
   <img alt="Node 22.12 or newer" src="https://img.shields.io/badge/node-22.12%2B-34D399?style=flat-square&amp;labelColor=0E1530">
   <img alt="Runners: Jest, Vitest, node:test, Playwright, Cypress" src="https://img.shields.io/badge/runners-Jest%20%7C%20Vitest%20%7C%20node%3Atest%20%7C%20Playwright%20%7C%20Cypress-22D3EE?style=flat-square&amp;labelColor=0E1530">
@@ -144,6 +145,10 @@ node benchmarks/run.mjs
 ```
 
 Packages live in `packages/` (32 engine/CLI/Studio packages, mapped in `scripts/packages.manifest.json`). Fixture projects used by the integration tests and the regression harness live in `fixtures/projects/`. See [CONTRIBUTING.md](CONTRIBUTING.md) and, for coding agents, [AGENTS.md](AGENTS.md).
+
+## Sponsor
+
+SmartTest is free and open source. If it saves your team test time, you can support its development through [GitHub Sponsors](https://github.com/sponsors/RemiPelloux).
 
 ## License
 

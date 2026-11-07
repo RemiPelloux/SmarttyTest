@@ -1,10 +1,12 @@
-# Delivery log: 0.3.0 to 1.0.0
+# Delivery log: 0.3.0 to 1.2.0
 
 What was actually delivered against the [roadmap](roadmap.md), sprint by sprint. The foundation sprints S0 to S10 (0.1.0 and 0.2.0) are in the [foundation backlog](foundation/sprints.md). Planning is in story points; one sprint is about 40 points. There are no dates: a sprint is a unit of work, and a version ships when its gate is met or the gap is written down.
 
 Status words: **done** (shipped and tested), **partial** (shipped with a stated gap), **moved** (re-planned in a later version), **not done** (dropped from the version, reason given).
 
 ## Summary
+
+The table covers 0.3.0 to 1.0.0. From 1.1.0 on, each sprint's status block in the [1.x roadmap](roadmap-1.5.md) records what was delivered and what moved; the sections below summarise each version.
 
 | Version                    | Sprints    | Planned | Delivered             | Moved / not done                      | Gate       | Tag                  |
 | -------------------------- | ---------- | ------- | --------------------- | ------------------------------------- | ---------- | -------------------- |
@@ -164,7 +166,6 @@ Feature review (same tag, 2026-10-30): a correctness review of every 0.9.0 featu
 - **Studio.** A run in which no test passed (nothing selected, every test skipped) was "passed"; it is now `no-tests`. Results stream per runner group. Overlapping refreshes analysed the wrong source. Runs from the terminal or a hook were never picked up. A cancelled run was shown as finished, and the run drawer could stay "Running" after the event stream reconnected. An event-stream reader that stops reading is now disconnected instead of buffering without limit, and a run that finishes before the browser learns its id is caught up.
 - **VS Code.** The run verdict now reads file and test statuses, so a run whose runner never started is no longer shown as passed. Runs exiting 4 or 70 keep their report, and the forced kill of a stuck CLI actually happens. Windows `.cmd` shims could not start, and "Run for this file" turned an explain error into "no path". A stale run verdict stayed in the status bar, CodeLens could bind to a nested function of the same name, and deactivation left processes running.
 
-
 Validation round (same tag, 2026-10-31): the limits listed after the feature review, measured or tested instead of stated.
 
 - **OpenPro's pre-push workload.** The front end (about 9,600 TypeScript files, 2,164 test files, npm) was tested in a separate clone with its existing pre-push hook: type-check, `vitest related` and a production build in parallel. Over three recent commits the hook as installed failed in 136–143 s, because `vitest related` ran out of Node's default 4 GB heap; with an 8 GB heap it passed in 125–176 s. With `hook install --pre-push --replace` the hook passed in 42–45 s, of which SmartTest took 3.4–6.0 s for 4–11 test files, the rest being type-check and build. A six-commit `benchmark` found 0 missed failures and 0 cache violations (95 failures already present in the parent commits on this machine): full runs 12 min 22 s, SmartTest 2 min 26 s, 80% less; the dependency-patch commit selected every test. Two findings: Vite refused `?url` imports of installed packages inside the temporary checkout (fixed, with a test that fails without the fix), and SmartTest conservatively selects OpenPro's 21 Playwright specs on every push because their imports cannot be resolved; those need a browser and the deployed environment, so the measurement excluded `e2e/**` with `exclude`. A hook-only runner scope does not exist yet.
@@ -203,6 +204,7 @@ Carried gates closed in this version:
 Gate: met. No open defect is known that can make a failing test be skipped. The regression harness and all six real-repository replays are at 0 missed failures.
 
 Pre-publication audit (same tag, before npm). A code audit of the release diff, a first-user audit in fresh installs, and Galdia found defects; each is fixed with a regression test ([changelog](../../CHANGELOG.md)). Three could make a failing test look fine:
+
 - a throwing initializer that a test reaches only through an import;
 - two tests with the same name in one file;
 - `--shard` advancing the native baseline.
@@ -226,6 +228,15 @@ An audit of 1.0.1 before more projects adopt it, so the fixes ship in one releas
 - Checked after the fixes: the trace oracle finds no file a test loaded that selection cannot reach (Galdia's ops scripts and LeadsIt's MCP server are now linked); resolution agrees with the compiler on 19,233 imports. Replaying 10 commits with full suites on each of the five projects gives 0 selection misses; the two failures the replay flagged (`MiaDock.test.tsx` in openpro-admin, `tournament-pool.test.ts` in Galdia) are tests that fail only under full-suite load, with no dependency on the change.
 - Faster: 400 changed files 1.18 s to 0.51 s (one `git cat-file --batch`), path rules no longer quadratic, `explain` from the last decision 86 ms, `traces.json` about 18 times smaller.
 
+## 1.2.0 · minor (delivered on `main`, not yet released)
+
+Sprints S32–S35 of the [1.x roadmap](roadmap-1.5.md) (119 points). Per-sprint status: the status blocks there.
+
+- S32 PHP preview: PHPUnit, Pest and `php artisan test`, PHP analysed in TypeScript without running PHP, Composer autoloading, Laravel facades, bindings and the application boot; `init` in a repository without `package.json`, CaptainHook actions replaced in place. openpro-backend: `php artisan test`'s 12,440 results test for test. Not met in S32: less test time (every booting test was uncertain), closed by S35.
+- S33 Rollout follow-ups and precision: a branch's first push compares with the last commit a pre-push hook passed on; Windows CI green and required; OpenPro's four JavaScript repositories published at 0 missed failures, 16–75% less test time ([benchmarks for 1.2.0](../case-studies/benchmarks-1.2.md)); barrel and namespace re-export pruning; a lazily loaded index (about 470 ms at 10,000 modules, under the §31.3 target); selection precision in `benchmark --traces`.
+- S34 Hooks and CI: live Playwright specs reported as "live, not run" unless `--live`; CI annotations and step summaries on GitHub Actions, GitLab CI and Bitbucket; `sync` proposes upgrades as diffs; an opt-in commit trailer (`hook.trailer`). Not done: openpro-backend still writes its own trailer, pending its upgrade.
+- S35 Laravel routes: routes, requests, Artisan commands and run-time class choices as edges; `parent::` calls no longer reach every subclass, in every language. openpro-backend (10 commits, on a clone with three `smarttest-loads` comments): 0 missed failures, 47% less test time; `audit --resolution --mutate`: 5 faults, 0 missed.
+
 ## 1.1.1 · patch (3 November 2026)
 
 - A file named like a test that no runner runs (a Vitest setup file under `__tests__/`, a `*.live.test.ts` the config excludes) is no longer selected as a test that cannot run. Found by openpro-front's pre-push when a push creating a branch compared with the whole history.
@@ -243,15 +254,15 @@ Sprints S28–S31 of the [1.x roadmap](roadmap-1.5.md). Per-sprint status and wh
 
 ## After 1.0.0
 
-| Item                                                                                                     | From         | Status                                                                   |
-| -------------------------------------------------------------------------------------------------------- | ------------ | ------------------------------------------------------------------------ |
-| 20% observed-execution reduction, 30% speed target                                                       | 0.5.0, 0.8.0 | re-measured at 1.0.0, not met; kept as goals, not gates                  |
-| In-process `analyze` under 500 ms at 10,000 modules (§31.3)                                              | 0.8.0        | 654 ms; next step: a slimmer or lazily loaded index                      |
-| Browser coverage through source maps (bundled or transpiled scripts), pages beyond the `page` fixture    | 1.0.0        | Chromium, unbundled files only                                           |
-| Studio: full-screen design sign-off in both themes, forced colours, text spacing, VoiceOver live regions | 0.9.0        | needs a human review; automated checks pass                              |
-| Third-party runner, VCS and language adapters as plugins                                                 | 1.0.0        | contracts frozen and conformance-tested; registration not exposed        |
-| TypeScript 7                                                                                             | 0.7.0        | 7.0.2 ships an `unstable/*` parser API; not adopted while it is unstable |
-| Type-checker resolution                                                                                  | 0.3.0, 0.8.0 | after 1.0.0                                                              |
+| Item                                                                                                     | From         | Status                                                                     |
+| -------------------------------------------------------------------------------------------------------- | ------------ | -------------------------------------------------------------------------- |
+| 20% observed-execution reduction, 30% speed target                                                       | 0.5.0, 0.8.0 | re-measured at 1.0.0, not met; kept as goals, not gates                    |
+| In-process `analyze` under 500 ms at 10,000 modules (§31.3)                                              | 0.8.0        | 466 ms with the lazily loaded index (S33), before later merges; to confirm |
+| Browser coverage through source maps (bundled or transpiled scripts), pages beyond the `page` fixture    | 1.0.0        | Chromium, unbundled files only                                             |
+| Studio: full-screen design sign-off in both themes, forced colours, text spacing, VoiceOver live regions | 0.9.0        | needs a human review; automated checks pass                                |
+| Third-party runner, VCS and language adapters as plugins                                                 | 1.0.0        | contracts frozen and conformance-tested; registration not exposed          |
+| TypeScript 7                                                                                             | 0.7.0        | 7.0.2 ships an `unstable/*` parser API; not adopted while it is unstable   |
+| Type-checker resolution                                                                                  | 0.3.0, 0.8.0 | after 1.0.0                                                                |
 
 ## Carried into 1.0.0 (closed in S27)
 

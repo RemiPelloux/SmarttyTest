@@ -8,14 +8,14 @@ Planning is in story points; one sprint is about 40 points. A version ships when
 
 ## Overview
 
-| Version | Theme                                                                                  | Sprints | Points | Gate in one line                                                                                                                                                  |
-| ------- | -------------------------------------------------------------------------------------- | ------- | ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1.1.0   | Angular, reliability, Python preview, rollout (released)                               | S28–S31 | 152    | Angular and Python selected at 0 misses; a fault-injection audit finds no missed test; `init` alone reproduces the OpenPro setups                                 |
-| 1.2.0   | PHP preview, rollout follow-ups, first precision stories, hooks and CI, Laravel routes | S32–S35 | 119    | PHP selection on OpenPro's backend at 0 misses with less test time; a branch's first push runs only its changes; live specs never run by accident; CI annotations |
-| 1.3.0   | Precision                                                                              | S36–S37 | 52     | Type-checker resolution; the 20% observed-execution target met on two benchmarks                                                                                  |
-| 1.4.0   | Browser and end-to-end                                                                 | S38–S39 | 64     | Source-mapped browser coverage; route-level selection for single-page apps                                                                                        |
-| 1.5.0   | Ecosystem                                                                              | S40–S41 | 60     | Third-party adapters installable from npm; a shared result cache                                                                                                  |
-| 1.6.0   | Backend frameworks (preview)                                                           | S42     | 28     | Laravel, Django and FastAPI edges; a migration selects the tests that touch its tables                                                                            |
+| Version | Theme                                                                                                                | Sprints | Points | Gate in one line                                                                                                                                                  |
+| ------- | -------------------------------------------------------------------------------------------------------------------- | ------- | ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1.1.0   | Angular, reliability, Python preview, rollout (released)                                                             | S28–S31 | 152    | Angular and Python selected at 0 misses; a fault-injection audit finds no missed test; `init` alone reproduces the OpenPro setups                                 |
+| 1.2.0   | PHP preview, rollout follow-ups, first precision stories, hooks and CI, Laravel routes (delivered, not yet released) | S32–S35 | 119    | PHP selection on OpenPro's backend at 0 misses with less test time; a branch's first push runs only its changes; live specs never run by accident; CI annotations |
+| 1.3.0   | Precision                                                                                                            | S36–S37 | 52     | Type-checker resolution; the 20% observed-execution target met on two benchmarks                                                                                  |
+| 1.4.0   | Browser and end-to-end                                                                                               | S38–S39 | 64     | Source-mapped browser coverage; route-level selection for single-page apps                                                                                        |
+| 1.5.0   | Ecosystem                                                                                                            | S40–S41 | 60     | Third-party adapters installable from npm; a shared result cache                                                                                                  |
+| 1.6.0   | Backend frameworks (preview)                                                                                         | S42     | 28     | Laravel, Django and FastAPI edges; a migration selects the tests that touch its tables                                                                            |
 
 Total: 475 points, fifteen sprints (S28–S42).
 
@@ -158,6 +158,15 @@ SmartTest stays an npm package. It reads PHP source in TypeScript, without runni
 
 **S33 gate:** a push creating a branch from `main` on openpro-front selects what the branch changed, not the whole history; `pnpm verify` green on Linux, macOS and Windows; the four OpenPro repositories published with 0 missed failures; barrel pruning at 0 misses on the published benchmarks, with the precision report showing the change; analysis at 10,000 modules under 500 ms in process.
 
+**S33 status (7 November 2026): delivered; gate met except the 500 ms target, not yet confirmed on the final `main`.**
+
+- First push of a branch: compares with the last commit a pre-push hook passed on; with no passed record, the whole history, as before. A commit pushed with the hook bypassed is still checked. `init` keeps openpro-front's parallel pre-push parallel (SmartTest starts as the background job the script waits for).
+- Windows CI: `pnpm verify` passes on `windows-latest` (PR #8) and the job is required on `main`, beside Linux and macOS.
+- OpenPro in the published benchmarks: openpro-front, openpro-admin, openpro-mcp-service and OpenProMonitor replayed on 5 November, 0 missed failures, 16–75% less test time ([benchmarks for 1.2.0](../case-studies/benchmarks-1.2.md)).
+- Barrel pruning: namespace re-exports read member by member; a barrel edit that only changes named re-exports selects the importers of those names. Six commits on the `barrels-vitest` history select 12 test files instead of 19, 0 missed; unjs/ufo's window is unchanged (107 of 168, its changes were already followed to the symbol); fault injection 0 missed on every fixture.
+- Lazy index: the in-process analysis at 10,000 modules took 466 ms (median of 10 runs at load about 1.2; 657 ms before on the same machine, 654 ms at 1.0.0), measured before the barrel-pruning and PHP merges. On the final `main` it measured 584–614 ms at load 12–15; a run on a quiet machine is still needed to confirm the target.
+- Precision report: `benchmark --traces` reports the share of measured selected files that ran the changed code: 55% on `barrels-vitest`, 100% on ufo's window (8 of 8 measured).
+
 ### S34: Hooks and CI (27 pts)
 
 | Story                                                                                                                                                                                                                                                                                                                                                                                                                                                                      | Pts |
@@ -168,6 +177,13 @@ SmartTest stays an npm package. It reads PHP source in TypeScript, without runni
 | **Upgrade assistant.** Moved from 1.5.0. `smarttest sync` proposes config changes for new 1.x features (lockfile selection, live specs, type-checker), shown as a diff, never applied silently.                                                                                                                                                                                                                                                                            | 6   |
 
 **S34 gate:** on openpro-front, the 78 Playwright specs that target the deployed environment are marked live and no hook, `run` or `benchmark` runs them without `--live`, while CI still can; a pull request on SmartTest's own repository shows the annotations and the summary; `sync` on each of the seven adopting repositories proposes the 1.2.0 changes as a diff and applies only what is accepted; openpro-backend's commits carry SmartTest's trailer instead of `test-trailer.sh`'s.
+
+**S34 status (6 November 2026): delivered; gate met except the trailer on openpro-backend, which needs that repository's own change.**
+
+- Live specs: on openpro-front all 78 Playwright specs target `https://dev.openpro.ai` and are classified live; with `E2E_BASE_URL` pointing at a local server, none are. `run`, `ci`, hooks, `validate-selection`, `benchmark` and `audit --mutate` report them as "live, not run" unless `--live` is given. Projects are read through `playwright test --list`, so environment variables in the config apply; a config Playwright cannot list makes no spec live and runs every selected spec.
+- CI annotations: on SmartTest's own pull request #11 the check run carried 10 notices (9 selected files and "116 more selected") and a fallback warning; GitLab and Bitbucket get report files, with no API call.
+- `sync`: dry-run on fresh clones of the seven adopting repositories proposed nothing for the five OpenPro repositories (their 1.2 setups were already made by hand), `unittest` for LeadsIt and `playwright` for Galdia (which leaves it out on purpose: noise from the existing drift check). `hook.trailer` is proposed where a repository writes its own test trailer.
+- Commit trailer: `hook.trailer` adds a `commit-msg` step for Husky, lefthook, simple-git-hooks, CaptainHook and plain hooks; no record for the committed tree, no trailer. Not done: openpro-backend still runs `scripts/test-trailer.sh`; switching it is part of its upgrade to 1.2.0.
 
 ### S35: Laravel routes (15 pts)
 

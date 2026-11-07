@@ -232,6 +232,7 @@ const manifest = {
   ],
   homepage: "https://remipelloux.github.io/SmarttyTest/",
   bugs: { url: "https://github.com/RemiPelloux/SmarttyTest/issues" },
+  funding: { type: "github", url: "https://github.com/sponsors/RemiPelloux" },
   license: "Apache-2.0",
   type: "module",
   bin: { smarttest: "dist/bin.js" },

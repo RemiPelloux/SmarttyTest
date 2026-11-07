@@ -4,7 +4,7 @@
 | --------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
 | [Roadmap to 1.6.0](roadmap-1.5.md)                              | 1.1.0 to 1.6.0: stories in points and exit gates, Angular, reliability, Python and PHP     |
 | [Roadmap to 1.0.0](roadmap.md)                                  | Every version with its stories in points, status and exit gate                             |
-| [Delivery log](delivery.md)                                     | Sprints S11 to S26 (0.3.0 to 0.9.0): what was done, partial, moved, and each gate's result |
+| [Delivery log](delivery.md)                                     | Sprints S11 to S35 (0.3.0 to 1.2.0): what was done, partial, moved, and each gate's result |
 | [Foundation backlog](foundation/README.md)                      | Sprints S0 to S10: the first 103 stories, delivered in 0.1.0 and 0.2.0                     |
 | [Definition of Ready and Done](definition-of-ready-and-done.md) | Working agreements                                                                         |
 | [Risks](risks.md)                                               | Risks, assumptions and dependencies, with their current state                              |
@@ -22,7 +22,7 @@
 | 0.9.0   | Hooks, Studio and VS Code                                        | S24–S26 | 116                     | Implemented; validation limits in delivery log |
 | 1.0.0   | Stable                                                           | S27     | 52 plus carried items   | Released, gate met                             |
 | 1.1.0   | Angular, reliability, Python preview, rollout                    | S28–S31 | 152                     | Released; S30 time target not met              |
-| 1.2.0   | PHP preview, follow-ups, precision, hooks and CI, Laravel routes | S32–S34 | 104                     | In progress                                    |
+| 1.2.0   | PHP preview, follow-ups, precision, hooks and CI, Laravel routes | S32–S35 | 119                     | Delivered on `main`, not yet released          |
 | 1.3.0   | Precision                                                        | S36–S37 | 52                      | Planned                                        |
 | 1.4.0   | Browser and end-to-end                                           | S38–S39 | 64                      | Planned                                        |
 | 1.5.0   | Ecosystem                                                        | S40–S41 | 60                      | Planned                                        |
